@@ -424,32 +424,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshData(undefined, true);
   };
 
+  // Load initial session on mount
   useEffect(() => {
     const init = async () => {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-      const currUser = session?.user ?? null;
-
-      if (currUser) {
+      try {
+        const {
+          data: { session }
+        } = await supabase.auth.getSession();
+        const currUser = session?.user ?? null;
         setUser(currUser);
-        
+      } catch (err) {
+        console.error('Error getting initial session:', err);
+      } finally {
+        setIsAuthReady(true);
+      }
+    };
+    init();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const sessionUser = session?.user ?? null;
+      if (_event === 'SIGNED_IN') {
+        setUser(sessionUser);
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } else if (_event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        setCenter(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch profile whenever user state changes
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) {
+        setProfile(null);
+        setCenter(null);
+        return;
+      }
+
+      try {
         // 1. Intentar buscar el perfil por ID del usuario
         const { data: profData } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', currUser.id)
+          .eq('id', user.id)
           .single();
 
         let activeProfile = profData;
 
         // 2. Si no se encuentra pero el email está disponible, buscar por email como fallback resiliente
-        if (!activeProfile && currUser.email) {
-          console.log('[DEBUG auth] Perfil no encontrado por ID. Buscando por email:', currUser.email);
+        if (!activeProfile && user.email) {
+          console.log('[DEBUG auth] Perfil no encontrado por ID. Buscando por email:', user.email);
           const { data: emailProf } = await supabase
             .from('profiles')
             .select('*')
-            .ilike('email', currUser.email)
+            .ilike('email', user.email)
             .maybeSingle();
           
           if (emailProf) {
@@ -458,8 +493,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
               const { error: syncError } = await supabase
                 .from('profiles')
-                .update({ id: currUser.id })
-                .ilike('email', currUser.email);
+                .update({ id: user.id })
+                .ilike('email', user.email);
               if (syncError) throw syncError;
               console.log('[DEBUG auth] ID de perfil sincronizado con éxito.');
             } catch (e) {
@@ -471,7 +506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const finalProfile = activeProfile || {
           center_id: null,
           role: 'pending',
-          email: currUser.email
+          email: user.email
         };
         setProfile(finalProfile);
 
@@ -485,30 +520,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           setState((prev) => ({ ...prev, loading: false }));
         }
+      } catch (err) {
+        console.error('Error loading profile:', err);
+        setState((prev) => ({ ...prev, loading: false }));
       }
-      setIsAuthReady(true);
     };
-    init();
 
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (_event === 'SIGNED_IN') {
-        const sessionUser = session?.user ?? null;
-        if (sessionUser && !userRef.current) {
-          if (window.location.hash) {
-            window.location.hash = '';
-          }
-          window.location.reload();
-        }
-      } else if (_event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-        setCenter(null);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    loadProfile();
+  }, [user]);
 
   // Cargar/Sincronizar datos reactivamente cuando cambie el centro o el año escolar seleccionado
   useEffect(() => {
