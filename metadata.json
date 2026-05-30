@@ -1,0 +1,5 @@
+{
+  "name": "EduGens",
+  "description": "Plataforma integral de gestión académica",
+  "requestFramePermissions": ["notifications"]
+}

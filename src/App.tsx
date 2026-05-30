@@ -1,0 +1,371 @@
+import React, { useState, useEffect } from 'react';
+import { Sidebar } from './components/layout/Sidebar';
+import { Toaster } from 'react-hot-toast';
+import { Dashboard } from './components/Dashboard';
+import { StudentDashboard } from './components/StudentDashboard';
+import { TeacherDashboard } from './components/TeacherDashboard';
+import { StudentManagement } from './components/StudentManagement';
+import { GeneralReports } from './components/GeneralReports';
+import { DigitalRegister } from './components/DigitalRegister';
+import { GradeReports } from './components/GradeReports';
+import { ScheduleViewer } from './components/ScheduleViewer';
+import { ControlDashboard } from './components/ControlDashboard';
+import { TeacherPerformanceModule } from './components/TeacherPerformanceModule';
+import { ComplianceDashboard } from './components/ComplianceDashboard';
+import { Agenda } from './components/Agenda';
+import { CommunicationGenerator } from './components/CommunicationGenerator';
+import { TeacherTaskAnnouncement } from './components/TeacherTaskAnnouncement';
+import { AdminDashboard } from './components/AdminDashboard';
+import { CourseForm } from './components/CourseForm';
+import { TeacherForm } from './components/TeacherForm';
+import { SubjectForm } from './components/SubjectForm';
+import { AssignmentForm } from './components/AssignmentForm';
+import { AcademicRequirementForm } from './components/AcademicRequirementForm';
+import { PreferencesForm } from './components/PreferencesForm';
+import { SchoolYearForm } from './components/SchoolYearForm';
+import { SaaSAdminPanel } from './components/SaaSAdminPanel';
+import { FinanceModule } from './components/finances/FinanceModule';
+import { Login } from './components/Login';
+import { InvitationForm } from './components/InvitationForm';
+import { FacilityDashboard } from './components/facility/FacilityDashboard';
+import { AppProvider, useApp, useSupabase } from './context/AppContext';
+import {
+  LayoutDashboard,
+  Users,
+  FileBarChart,
+  FileSpreadsheet,
+  CalendarDays,
+  Monitor,
+  PlusCircle,
+  Activity,
+  ClipboardCheck,
+  Calendar,
+  MessageSquare,
+  ShieldCheck,
+  BookOpen,
+  Book,
+  Link,
+  Sliders,
+  Globe,
+  Loader2,
+  DollarSign,
+  Wrench
+} from 'lucide-react';
+import { useStats } from './hooks/useStats';
+
+const ROLE_FALLBACKS: Record<string, string[]> = {
+  admin: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'finances', 'admin', 'facility'],
+  management_teacher: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'facility'],
+  finance: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'finances', 'facility'],
+  coordinator: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'facility'],
+  teacher: ['dashboard', 'schedule', 'agenda', 'digital-register', 'tasks', 'communications'],
+  student: ['dashboard', 'schedule', 'agenda'],
+  parent: ['dashboard', 'schedule', 'agenda'],
+  support: ['dashboard', 'facility', 'agenda'],
+  supervisor: ['dashboard', 'facility', 'agenda'],
+  conserje: ['dashboard', 'facility', 'agenda'],
+  pending: [],
+};
+
+import { supabase } from './lib/supabase';
+
+function AppContent() {
+  const { user, profile, isAuthReady } = useSupabase();
+  const { isSubscriptionExpired } = useApp();
+  const [activeView, setActiveView] = useState('dashboard');
+  const [dataView, setDataView] = useState('course');
+  const { data: stats } = useStats();
+
+  const studentCount = stats?.studentCount || 0;
+  const totalUserCount = stats?.totalUserCount || 0;
+
+  const isSuperAdmin = !!profile?.is_superadmin;
+
+  // Obtener paneles permitidos (del perfil o por defecto según su rol)
+  const allowed = profile?.allowed_panels && profile.allowed_panels.length > 0
+    ? profile.allowed_panels
+    : ROLE_FALLBACKS[profile?.role || 'student'] || ROLE_FALLBACKS.student;
+
+  // Redirigir al primer panel permitido si intenta acceder a uno no autorizado
+  useEffect(() => {
+    if (isAuthReady && profile) {
+      const isAuthorized = allowed.includes(activeView) || (activeView === 'saas' && isSuperAdmin);
+      if (!isAuthorized) {
+        const firstAllowed = allowed[0] || 'dashboard';
+        setActiveView(firstAllowed);
+      }
+    }
+  }, [profile, activeView, allowed, isAuthReady, isSuperAdmin]);
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center font-black animate-pulse bg-slate-950 text-white text-4xl tracking-widest">
+        EDUGEST
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  if (isSubscriptionExpired && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6 relative overflow-hidden text-center">
+        {/* Background blobs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-red-900/20 blur-[120px] rounded-full animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-800/20 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none"></div>
+
+        <div className="max-w-md w-full relative z-10 glass-premium p-12 rounded-[3.5rem] border border-white/10 backdrop-blur-3xl space-y-8">
+          <div className="space-y-4">
+            <h1 className="text-3xl font-black text-rose-500 uppercase tracking-tight">Suscripción Vencida</h1>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              El acceso de su centro educativo a Edugest ha sido suspendido debido a la falta de pago o vencimiento de la licencia.
+            </p>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              Por favor, comuníquese con el administrador del servicio para renovar su suscripción y restaurar el acceso.
+            </p>
+          </div>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl cursor-pointer"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const needsActivation = !profile || (
+    !profile.invitation_code && 
+    !profile.course_code &&
+    (!profile.parent_course_ids || profile.parent_course_ids.length === 0) &&
+    profile.role !== 'admin' && 
+    profile.role !== 'superAdmin' &&
+    profile.role !== 'finance' &&
+    profile.role !== 'coordinator'
+  );
+
+  if (needsActivation && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6 relative overflow-hidden">
+        {/* Background blobs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand-blue/20 blur-[120px] rounded-full animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-brand-accent/20 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none"></div>
+
+        <div className="max-w-md w-full relative z-10 glass-premium p-12 rounded-[3.5rem] border border-white/10 backdrop-blur-3xl text-center space-y-8">
+          <div className="space-y-4">
+            <h1 className="text-3xl font-black text-white uppercase tracking-tight">Activa tu Cuenta</h1>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              Ingresa el código de invitación proporcionado por tu administrador escolar para vincular tu perfil digital y habilitar tu acceso a la plataforma.
+            </p>
+          </div>
+          <InvitationForm />
+        </div>
+      </div>
+    );
+  }
+
+  const navItems = [
+    { id: 'dashboard', label: 'Panel Principal', icon: LayoutDashboard },
+    { id: 'students', label: 'Gestión de Alumnos', icon: Users },
+    { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
+    { id: 'data', label: 'Gestión de Datos', icon: PlusCircle },
+    { id: 'schedule', label: 'Generador de Horarios', icon: CalendarDays },
+    { id: 'agenda', label: 'Calendario Escolar', icon: Calendar },
+    { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
+    { id: 'communications', label: 'Escusas y Comunicados', icon: MessageSquare },
+    { id: 'facility', label: 'Gestión de Plantel', icon: Wrench },
+    { id: 'control', label: 'Modo Control', icon: Monitor },
+    { id: 'general-reports', label: 'Reportes', icon: FileBarChart },
+    { id: 'finances', label: 'Gestión Financiera', icon: DollarSign },
+    { id: 'admin', label: 'Administración', icon: ShieldCheck },
+    ...(isSuperAdmin ? [{ id: 'saas', label: 'Gestión SaaS', icon: Globe }] : [])
+  ];
+
+  // Filtrar los items de navegación visibles en el Sidebar
+  const filteredNavItems = navItems.filter(item => {
+    if (item.id === 'saas') return isSuperAdmin;
+    return allowed.includes(item.id);
+  });
+
+  return (
+    <div className="flex h-screen bg-brand-bg overflow-hidden transition-colors duration-300">
+      <Sidebar
+        navItems={filteredNavItems}
+        activeView={activeView}
+        onViewChange={setActiveView}
+        userData={profile || { email: user?.email, role: 'student' }}
+      />
+      <main className="flex-1 h-screen overflow-hidden relative">
+        {/* VISTAS PERSISTENTES (KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}
+        {allowed.includes('dashboard') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'dashboard' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              {profile?.role === 'student' || profile?.role === 'parent' ? (
+                <StudentDashboard userData={profile} />
+              ) : profile?.role === 'teacher' ? (
+                <TeacherDashboard userData={profile} />
+              ) : (
+                <Dashboard />
+              )}
+            </div>
+          </div>
+        )}
+        
+        {allowed.includes('students') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'students' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <StudentManagement />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('digital-register') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'digital-register' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <DigitalRegister onViewChange={setActiveView} />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('schedule') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'schedule' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <ScheduleViewer />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('agenda') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'agenda' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <Agenda readOnly={false} />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('tasks') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'tasks' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <TeacherTaskAnnouncement userData={profile} />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('communications') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'communications' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <CommunicationGenerator userData={profile} />
+            </div>
+          </div>
+        )}
+
+        { allowed.includes('control') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'control' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <ControlDashboard />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('facility') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'facility' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <FacilityDashboard userData={profile} />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('admin') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'admin' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <AdminDashboard />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('finances') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'finances' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              {profile?.role === 'admin' || profile?.role === 'finance' || profile?.role === 'superAdmin' || isSuperAdmin ? (
+                <FinanceModule />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400">
+                  <ShieldCheck size={64} className="mb-4 opacity-20" />
+                  <p className="text-xl font-black uppercase tracking-widest">Acceso Restringido</p>
+                  <p className="text-xs font-bold opacity-60">Solo el personal administrativo puede acceder al módulo de finanzas.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('general-reports') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'general-reports' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <GeneralReports />
+            </div>
+          </div>
+        )}
+
+        {isSuperAdmin && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'saas' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <SaaSAdminPanel />
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('data') && (
+          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'data' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <div className="max-w-7xl mx-auto">
+              <div className="card p-8 bg-surface rounded-[2.5rem] border border-border-main shadow-xl min-h-screen">
+                <div className="flex gap-4 mb-10 border-b border-border-main overflow-x-auto pb-2 text-[10px] font-black uppercase tracking-widest">
+                  {[
+                    { id: 'course', label: 'Cursos', icon: BookOpen },
+                    { id: 'subject', label: 'Materias', icon: Book },
+                    { id: 'teacher', label: 'Docentes', icon: Users },
+                    { id: 'assignment', label: 'Asignaciones', icon: Link },
+                    { id: 'requirement', label: 'Requisitos', icon: Sliders },
+                    { id: 'preferences', label: 'Preferencias', icon: Sliders },
+                    { id: 'year', label: 'Ciclo Escolar', icon: Calendar }
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setDataView(item.id)}
+                      className={`flex items-center gap-2 pb-4 px-2 border-b-2 transition-all ${dataView === item.id ? 'text-brand-blue border-brand-blue' : 'border-transparent text-text-muted'}`}
+                    >
+                      <item.icon size={18} /> {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-full">
+                  {dataView === 'course' && <CourseForm />}
+                  {dataView === 'teacher' && <TeacherForm />}
+                  {dataView === 'subject' && <SubjectForm />}
+                  {dataView === 'assignment' && <AssignmentForm />}
+                  {dataView === 'requirement' && <AcademicRequirementForm />}
+                  {dataView === 'preferences' && <PreferencesForm />}
+                  {dataView === 'year' && <SchoolYearForm />}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <Toaster position="top-right" />
+      <AppContent />
+    </AppProvider>
+  );
+}

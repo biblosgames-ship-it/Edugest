@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "Alexpalacio29@gmail.com");
+    }
+    function isValidExcuse(data) {
+      return hasRequiredFields(['courseId', 'teacherId', 'reason', 'timestamp']) &&
+             data.courseId is string &&
+             data.teacherId is string &&
+             data.reason is string &&
+             data.timestamp is string;
+    }
+    function isValidAttendanceRecord(data) {
+      return hasRequiredFields(['teacherId', 'date', 'status']) &&
+             data.teacherId is string &&
+             data.date is string &&
+             data.status in ['asistencia', 'tardanza', 'ausencia', 'calificaciones', 'planificacion', 'acompanamiento'];
+    }
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role', 'isActive']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'coordinator', 'teacher', 'user', 'student', 'parent'] &&
+             data.isActive is bool &&
+             (!('invitationCode' in data) || data.invitationCode is string) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('courseIds' in data) || data.courseIds is list) &&
+             (!('lastLogin' in data) || data.lastLogin is string);
+    }
+    function isValidInvitationCode(data) {
+      return hasRequiredFields(['code', 'isUsed', 'role', 'schoolId', 'createdBy']) &&
+             data.code is string &&
+             data.isUsed is bool &&
+             data.role in ['admin', 'teacher', 'student', 'parent'] &&
+             data.schoolId is string &&
+             data.createdBy is string &&
+             (!('courseId' in data) || data.courseId is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /invitationCodes/{codeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /attendanceRecords/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /activities/{activityId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); 
+    }
+
+    match /schedule/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    match /teachers/{teacherId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /grades/{gradeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /gradeRecords/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

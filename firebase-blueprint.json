@@ -1,0 +1,186 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email" },
+        "role": { "type": "string", "enum": ["admin", "coordinator", "teacher", "user", "student", "parent"], "description": "User role" },
+        "isActive": { "type": "boolean", "description": "Subscription status" },
+        "invitationCode": { "type": "string", "description": "Code used for invitation" },
+        "phone": { "type": "string", "description": "User phone number" },
+        "courseIds": { "type": "array", "items": { "type": "string" }, "description": "List of Course IDs" },
+        "lastLogin": { "type": "string", "format": "date-time", "description": "Last login timestamp" },
+        "centerId": { "type": "string", "description": "ID of the center the user belongs to" }
+      },
+      "required": ["uid", "email", "role", "isActive", "centerId"]
+    },
+    "Center": {
+      "title": "Center",
+      "description": "School/Center branding and contact information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Center name" },
+        "address": { "type": "string", "description": "Center address" },
+        "phone": { "type": "string", "description": "Center phone number" },
+        "district": { "type": "string", "description": "District" },
+        "regional": { "type": "string", "description": "Regional" },
+        "logoUrl": { "type": "string", "format": "uri", "description": "URL to center logo" },
+        "primaryColor": { "type": "string", "description": "Primary branding color" },
+        "secondaryColor": { "type": "string", "description": "Secondary branding color" }
+      },
+      "required": ["name", "address", "phone", "district", "regional"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student profile and academic information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "sex": { "type": "string", "enum": ["M", "F"] },
+        "birthDate": { "type": "string", "format": "date" },
+        "address": { "type": "string" },
+        "gradeId": { "type": "string" },
+        "section": { "type": "string" },
+        "schoolYear": { "type": "string" },
+        "enrollmentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Retired", "Graduated"] },
+        "orderNumber": { "type": "number" },
+        "parents": { "type": "array", "items": { "$ref": "ParentGuardian" } }
+      },
+      "required": ["id", "firstName", "lastName", "gradeId", "status"]
+    },
+    "ParentGuardian": {
+      "title": "ParentGuardian",
+      "description": "Parent or guardian information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "relation": { "type": "string", "enum": ["Father", "Mother", "Guardian"] },
+        "phone": { "type": "string" },
+        "secondaryPhone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "occupation": { "type": "string" }
+      },
+      "required": ["name", "relation", "phone"]
+    },
+    "Grade": {
+      "title": "Grade",
+      "description": "Academic grade/course definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Academic subject definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "name"]
+    },
+    "GradeRecord": {
+      "title": "GradeRecord",
+      "description": "Student academic grades",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "schoolYear": { "type": "string" },
+        "period1": { "type": "number" },
+        "period2": { "type": "number" },
+        "period3": { "type": "number" },
+        "finalExam": { "type": "number" },
+        "finalGrade": { "type": "number" }
+      },
+      "required": ["studentId", "subjectId", "schoolYear"]
+    },
+    "InvitationCode": {
+      "title": "InvitationCode",
+      "description": "Code for user invitation",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Invitation code" },
+        "isUsed": { "type": "boolean", "description": "Status of the code" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student", "parent"], "description": "Role for the code" },
+        "schoolId": { "type": "string", "description": "School ID" },
+        "courseId": { "type": "string", "description": "Course ID (optional)" },
+        "createdBy": { "type": "string", "description": "UID of the admin who created it" }
+      },
+      "required": ["code", "isUsed", "role", "schoolId", "createdBy"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Record of teacher attendance",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string", "description": "Teacher ID" },
+        "date": { "type": "string", "format": "date", "description": "Date of attendance" },
+        "status": { "type": "string", "enum": ["on-time", "late", "absent"], "description": "Status of attendance" },
+        "notes": { "type": "string", "description": "Optional notes" }
+      },
+      "required": ["teacherId", "date", "status"]
+    },
+    "Excuse": {
+      "title": "Excuse",
+      "description": "Excuse notification for a specific course/period",
+      "type": "object",
+      "properties": {
+        "courseId": { "type": "string", "description": "Course ID" },
+        "teacherId": { "type": "string", "description": "Teacher ID" },
+        "reason": { "type": "string", "description": "Reason for the excuse" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Time of creation" }
+      },
+      "required": ["courseId", "teacherId", "reason", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles"
+    },
+    "/centers/{centerId}": {
+      "schema": { "$ref": "Center" },
+      "description": "Center branding and contact info"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "Student" },
+      "description": "Student profiles"
+    },
+    "/grades/{gradeId}": {
+      "schema": { "$ref": "Grade" },
+      "description": "Academic grades definition"
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "Subject" },
+      "description": "Academic subjects definition"
+    },
+    "/gradeRecords/{recordId}": {
+      "schema": { "$ref": "GradeRecord" },
+      "description": "Student academic grades"
+    },
+    "/invitationCodes/{code}": {
+      "schema": { "$ref": "InvitationCode" },
+      "description": "Invitation codes"
+    },
+    "/attendanceRecords/{recordId}": {
+      "schema": { "$ref": "AttendanceRecord" },
+      "description": "Teacher attendance records"
+    },
+    "/excuses/{excuseId}": {
+      "schema": { "$ref": "Excuse" },
+      "description": "Excuse notifications"
+    }
+  }
+}
