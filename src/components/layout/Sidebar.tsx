@@ -177,6 +177,7 @@ export const Sidebar = ({
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
