@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from '../Logo';
-import { LogOut, Sun, Moon } from 'lucide-react';
+import { LogOut, Sun, Moon, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
 
@@ -8,12 +8,16 @@ export const Sidebar = ({
   navItems,
   activeView,
   onViewChange,
-  userData
+  userData,
+  isOpen,
+  onClose
 }: {
   navItems: any[];
   activeView?: string;
   onViewChange?: (id: any) => void;
   userData: any;
+  isOpen?: boolean;
+  onClose?: () => void;
 }) => {
   const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
 
@@ -37,58 +41,86 @@ export const Sidebar = ({
   };
 
   return (
-    <aside className="w-[280px] p-6 h-screen flex-shrink-0 sticky top-0 bg-brand-bg transition-colors duration-300">
-      <div className="bg-[#0f172a] rounded-[2rem] h-full flex flex-col p-6 shadow-xl shadow-slate-900/10 border border-slate-800/50 text-white relative overflow-hidden">
-        {/* Decorative gradient blur in background */}
-        <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-brand-accent/20 to-transparent blur-2xl pointer-events-none rounded-t-[2rem]"></div>
+    <>
+      {/* Backdrop overlay for mobile screens */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+        />
+      )}
 
-        <div className="flex items-center gap-3 mb-3 relative z-10 px-2 mt-2">
-          <div className="bg-gradient-to-br from-brand-blue to-brand-accent p-1.5 rounded-lg shadow-lg shadow-brand-blue/30 flex-shrink-0">
-            <Logo className="w-6 h-6 text-white" />
+      <aside
+        className={
+          isOpen
+            ? "fixed inset-y-0 left-0 w-[280px] p-6 h-screen z-50 bg-brand-bg transition-transform duration-300 translate-x-0 block"
+            : "hidden md:block md:sticky md:top-0 w-[280px] p-6 h-screen flex-shrink-0 bg-brand-bg transition-colors duration-300"
+        }
+      >
+        <div className="bg-[#0f172a] rounded-[2rem] h-full flex flex-col p-6 shadow-xl shadow-slate-900/10 border border-slate-800/50 text-white relative overflow-hidden">
+          {/* Close button for mobile screens */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden absolute top-4 right-4 z-20 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          )}
+
+          {/* Decorative gradient blur in background */}
+          <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-brand-accent/20 to-transparent blur-2xl pointer-events-none rounded-t-[2rem]"></div>
+
+          <div className="flex items-center gap-3 mb-3 relative z-10 px-2 mt-2">
+            <div className="bg-gradient-to-br from-brand-blue to-brand-accent p-1.5 rounded-lg shadow-lg shadow-brand-blue/30 flex-shrink-0">
+              <Logo className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300 leading-none">
+                EduGest
+              </h1>
+              <span className="text-[9px] text-brand-accent font-black uppercase tracking-wider mt-0.5 truncate">
+                Gestión Educativa
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300 leading-none">
-              EduGest
-            </h1>
-            <span className="text-[9px] text-brand-accent font-black uppercase tracking-wider mt-0.5 truncate">
-              Gestión Educativa
-            </span>
+
+          <div className="relative z-10 mb-2">
+            <SchoolYearSelector />
           </div>
-        </div>
 
-        <div className="relative z-10 mb-2">
-          <SchoolYearSelector />
-        </div>
-
-        <nav className="space-y-2 flex-1 overflow-y-auto relative z-10 pr-2 custom-scrollbar">
-          {navItems.map((item) => {
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onViewChange?.(item.id)}
-                aria-label={item.label}
-                aria-current={isActive ? 'page' : undefined}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
-                  isActive
-                    ? 'bg-white/10 text-white shadow-inner border border-white/10 backdrop-blur-md'
-                    : 'text-slate-300 hover:bg-white/5 hover:text-slate-200'
-                }`}
-              >
-                <div
-                  className={`transition-transform duration-300 ${isActive ? 'scale-110 text-brand-accent' : 'group-hover:scale-110 group-hover:text-white'}`}
+          <nav className="space-y-2 flex-1 overflow-y-auto relative z-10 pr-2 custom-scrollbar">
+            {navItems.map((item) => {
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    onViewChange?.(item.id);
+                    onClose?.();
+                  }}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                    isActive
+                      ? 'bg-white/10 text-white shadow-inner border border-white/10 backdrop-blur-md'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-slate-200'
+                  }`}
                 >
-                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                </div>
-                <span
-                  className={`font-semibold text-sm tracking-wide ${isActive ? 'opacity-100' : 'opacity-80'}`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+                  <div
+                    className={`transition-transform duration-300 ${isActive ? 'scale-110 text-brand-accent' : 'group-hover:scale-110 group-hover:text-white'}`}
+                  >
+                    <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+                  <span
+                    className={`font-semibold text-sm tracking-wide ${isActive ? 'opacity-100' : 'opacity-80'}`}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
 
         <div className="mt-2 pt-2 border-t border-white/10 relative z-10 space-y-1.5">
           <button
