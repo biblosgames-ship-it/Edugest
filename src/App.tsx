@@ -49,7 +49,8 @@ import {
   Globe,
   Loader2,
   DollarSign,
-  Wrench
+  Wrench,
+  Menu
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
 
@@ -74,6 +75,7 @@ function AppContent() {
   const { isSubscriptionExpired } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [dataView, setDataView] = useState('course');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
 
   const studentCount = stats?.studentCount || 0;
@@ -199,11 +201,21 @@ function AppContent() {
         activeView={activeView}
         onViewChange={setActiveView}
         userData={profile || { email: user?.email, role: 'student' }}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <main className="flex-1 h-screen overflow-hidden relative">
+        {/* Mobile menu trigger */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="md:hidden fixed top-4 left-4 z-40 bg-slate-900/80 backdrop-blur-md text-white p-3.5 rounded-2xl border border-white/10 shadow-xl hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+        >
+          <Menu size={20} />
+        </button>
+
         {/* VISTAS PERSISTENTES (KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}
         {allowed.includes('dashboard') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'dashboard' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'dashboard' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               {profile?.role === 'student' || profile?.role === 'parent' ? (
                 <StudentDashboard userData={profile} />
@@ -217,7 +229,7 @@ function AppContent() {
         )}
         
         {allowed.includes('students') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'students' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'students' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <StudentManagement />
             </div>
@@ -225,7 +237,7 @@ function AppContent() {
         )}
 
         {allowed.includes('digital-register') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'digital-register' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'digital-register' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <DigitalRegister onViewChange={setActiveView} />
             </div>
@@ -233,7 +245,7 @@ function AppContent() {
         )}
 
         {allowed.includes('schedule') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'schedule' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'schedule' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <ScheduleViewer />
             </div>
@@ -241,7 +253,7 @@ function AppContent() {
         )}
 
         {allowed.includes('agenda') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'agenda' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'agenda' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <Agenda readOnly={false} />
             </div>
@@ -249,7 +261,7 @@ function AppContent() {
         )}
 
         {allowed.includes('tasks') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'tasks' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'tasks' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <TeacherTaskAnnouncement userData={profile} />
             </div>
@@ -257,7 +269,7 @@ function AppContent() {
         )}
 
         {allowed.includes('communications') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'communications' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'communications' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <CommunicationGenerator userData={profile} />
             </div>
@@ -265,7 +277,7 @@ function AppContent() {
         )}
 
         { allowed.includes('control') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'control' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'control' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <ControlDashboard />
             </div>
@@ -273,7 +285,7 @@ function AppContent() {
         )}
 
         {allowed.includes('facility') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'facility' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'facility' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <FacilityDashboard userData={profile} />
             </div>
@@ -281,7 +293,7 @@ function AppContent() {
         )}
 
         {allowed.includes('admin') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'admin' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'admin' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <AdminDashboard />
             </div>
@@ -289,7 +301,7 @@ function AppContent() {
         )}
 
         {allowed.includes('finances') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'finances' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'finances' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               {profile?.role === 'admin' || profile?.role === 'finance' || profile?.role === 'superAdmin' || isSuperAdmin ? (
                 <FinanceModule />
@@ -305,7 +317,7 @@ function AppContent() {
         )}
 
         {allowed.includes('general-reports') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'general-reports' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'general-reports' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <GeneralReports />
             </div>
@@ -313,7 +325,7 @@ function AppContent() {
         )}
 
         {isSuperAdmin && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'saas' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'saas' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <SaaSAdminPanel />
             </div>
@@ -321,7 +333,7 @@ function AppContent() {
         )}
 
         {allowed.includes('data') && (
-          <div className={`absolute inset-0 overflow-y-auto p-4 md:p-10 transition-opacity duration-300 ${activeView === 'data' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'data' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
             <div className="max-w-7xl mx-auto">
               <div className="card p-8 bg-surface rounded-[2.5rem] border border-border-main shadow-xl min-h-screen">
                 <div className="flex gap-4 mb-10 border-b border-border-main overflow-x-auto pb-2 text-[10px] font-black uppercase tracking-widest">
