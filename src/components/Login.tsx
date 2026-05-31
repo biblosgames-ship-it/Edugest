@@ -40,8 +40,8 @@ export const Login = () => {
         <div className="glass-premium p-12 rounded-[3.5rem] text-center space-y-10 border border-white/10 backdrop-blur-3xl">
           <div className="space-y-6">
             <div className="flex justify-center">
-              <div className="bg-gradient-to-br from-brand-blue to-brand-accent p-4 rounded-3xl shadow-2xl shadow-brand-blue/20 transform hover:rotate-12 transition-transform duration-500">
-                <Logo className="w-12 h-12 text-white" />
+              <div className="bg-gradient-to-br from-brand-blue to-brand-accent p-6 rounded-[2.5rem] shadow-2xl shadow-brand-blue/30 transform hover:rotate-12 transition-transform duration-500">
+                <Logo className="w-24 h-24 text-white" />
               </div>
             </div>
 
