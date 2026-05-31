@@ -466,37 +466,8 @@ export const InvitationForm = () => {
         </form>
       )}
 
-      {/* DEV BYPASS */}
-      <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
-        <button
-          onClick={async () => {
-            if (!user || !user.email) return;
-            setIsLoading(true);
-            setError('');
-            try {
-              await createUserProfile(
-                user.id,
-                user.email,
-                'BYPASS_DEV',
-                'admin',
-                true,
-                undefined,
-                [],
-                [],
-                '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1' // Centro Educativo Cristiano Genesis
-              );
-              window.location.reload();
-            } catch (err: any) {
-              setError(err.message || 'Error al omitir la activación');
-              setIsLoading(false);
-            }
-          }}
-          disabled={isLoading}
-          className="w-full bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest hover:bg-black transition-colors shadow-sm disabled:opacity-50"
-        >
-          Omitir y Entrar como Administrador
-        </button>
-
+      {/* Cerrar sesión */}
+      <div className="border-t border-slate-100 pt-4">
         <button
           onClick={() => supabase.auth.signOut()}
           className="w-full text-slate-400 hover:text-slate-600 font-bold uppercase text-[9px] tracking-wider py-2 text-center"
