@@ -41,55 +41,98 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   } = useFinance();
   const [showProductInvoiceModal, setShowProductInvoiceModal] = useState(false);
   const [productInvoiceForm, setProductInvoiceForm] = useState({
-    product_id: '',
-    quantity: 1,
     immediate_pay: true,
     payment_method: 'cash',
     reference_number: '',
     notes: ''
   });
 
-  const handleProductInvoiceSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!productInvoiceForm.product_id) return toast.error('Selecciona un producto');
-    if (productInvoiceForm.quantity <= 0) return toast.error('La cantidad debe ser mayor a 0');
+  const [cart, setCart] = useState<
+    Array<{
+      product_id: string;
+      name: string;
+      quantity: number;
+      price: number;
+      total: number;
+    }>
+  >([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
 
-    const product = products.find((p) => p.id === productInvoiceForm.product_id);
+  const handleAddToCart = () => {
+    if (!selectedProductId) return toast.error('Selecciona un producto');
+    if (selectedQuantity <= 0) return toast.error('La cantidad debe ser mayor a 0');
+
+    const product = products.find((p) => p.id === selectedProductId);
     if (!product) return toast.error('Producto no encontrado');
 
-    if (product.stock < productInvoiceForm.quantity) {
-      if (
-        !window.confirm(
-          `El stock disponible (${product.stock}) es menor que la cantidad solicitada (${productInvoiceForm.quantity}). ¿Deseas proceder de todos modos?`
-        )
-      ) {
-        return;
-      }
+    const existingIdx = cart.findIndex((item) => item.product_id === selectedProductId);
+    const qtyInCart = existingIdx > -1 ? cart[existingIdx].quantity : 0;
+    const finalQty = qtyInCart + selectedQuantity;
+
+    if (product.stock < finalQty) {
+      toast.error(`Stock insuficiente. Solo quedan ${product.stock} unidades.`);
+      return;
     }
+
+    if (existingIdx > -1) {
+      const updatedCart = [...cart];
+      updatedCart[existingIdx].quantity = finalQty;
+      updatedCart[existingIdx].total = finalQty * Number(product.price);
+      setCart(updatedCart);
+    } else {
+      setCart([
+        ...cart,
+        {
+          product_id: selectedProductId,
+          name: product.name,
+          quantity: selectedQuantity,
+          price: Number(product.price),
+          total: selectedQuantity * Number(product.price)
+        }
+      ]);
+    }
+
+    setSelectedProductId('');
+    setSelectedQuantity(1);
+    toast.success('Producto añadido al carrito');
+  };
+
+  const handleRemoveFromCart = (prodId: string) => {
+    setCart(cart.filter((item) => item.product_id !== prodId));
+  };
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((acc, item) => acc + item.total, 0);
+  }, [cart]);
+
+  const handleProductInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cart.length === 0) return toast.error('La canasta está vacía. Añade al menos un producto.');
 
     try {
       const studentName = `${student?.names} ${student?.first_surname}`;
-      const concept = `Venta: ${product.name}`;
-      const totalAmount = Number(product.price) * productInvoiceForm.quantity;
+      const items = cart.map((item) => ({
+        product_id: item.product_id,
+        concept: `Venta: ${item.name}`,
+        amount: item.total,
+        quantity: item.quantity
+      }));
 
       await createProductInvoice({
         student_id: studentId,
-        product_id: productInvoiceForm.product_id,
-        concept: concept,
-        amount: totalAmount,
-        quantity: productInvoiceForm.quantity,
+        items,
         ...(productInvoiceForm.immediate_pay
           ? {
               payment_method: productInvoiceForm.payment_method,
               reference_number: productInvoiceForm.reference_number,
-              notes: productInvoiceForm.notes || `Cobro inmediato de producto a ${studentName}`
+              notes: productInvoiceForm.notes || `Cobro inmediato de productos a ${studentName}`
             }
           : {})
       });
       setShowProductInvoiceModal(false);
+      setCart([]);
       setProductInvoiceForm({
-        product_id: '',
-        quantity: 1,
         immediate_pay: true,
         payment_method: 'cash',
         reference_number: '',
@@ -482,7 +525,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       {/* MODAL DE FACTURAR PRODUCTO */}
       {showProductInvoiceModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[95vh] flex flex-col">
+          <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[95vh] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
               <h3 className="text-xl font-black uppercase tracking-tighter">
                 Facturar Producto a Alumno
@@ -510,57 +553,109 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                 </p>
               </div>
 
-              {/* Selector Producto */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400">Producto</label>
-                <select
-                  value={productInvoiceForm.product_id}
-                  onChange={(e) =>
-                    setProductInvoiceForm({ ...productInvoiceForm, product_id: e.target.value })
-                  }
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600"
-                  required
-                >
-                  <option value="">-- Seleccionar Producto --</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (RD$ {Number(p.price).toLocaleString()} • Stock: {p.stock})
-                    </option>
-                  ))}
-                </select>
+              {/* Sección Agregar Producto al Carrito */}
+              <div className="border border-slate-100 rounded-3xl p-5 bg-slate-50/50 space-y-4">
+                <p className="text-[10px] font-black uppercase text-slate-400">Añadir Productos</p>
+                <div className="space-y-3">
+                  <select
+                    value={selectedProductId}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    className="w-full px-6 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600"
+                  >
+                    <option value="">-- Seleccionar Producto --</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (RD$ {Number(p.price).toLocaleString()} • Stock: {p.stock})
+                      </option>
+                    ))}
+                  </select>
+
+                  {products.find((p) => p.id === selectedProductId) && (
+                    <div className="flex gap-4 items-center">
+                      <div className="w-1/3">
+                        <label className="text-[8px] font-black text-slate-400 uppercase">
+                          Cantidad
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={selectedQuantity}
+                          onChange={(e) => setSelectedQuantity(Math.max(1, Number(e.target.value)))}
+                          className="w-full px-4 py-2 bg-white border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-600"
+                        />
+                      </div>
+                      <div className="flex-1 text-right pr-2">
+                        <p className="text-[8px] font-black text-slate-400 uppercase">Subtotal</p>
+                        <p className="text-sm font-black text-slate-700">
+                          RD${' '}
+                          {(
+                            Number(products.find((p) => p.id === selectedProductId)?.price || 0) *
+                            selectedQuantity
+                          ).toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddToCart}
+                        className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all self-end"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Cantidad y Desglose */}
-              {productInvoiceForm.product_id && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">
-                      Cantidad
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={productInvoiceForm.quantity}
-                      onChange={(e) =>
-                        setProductInvoiceForm({
-                          ...productInvoiceForm,
-                          quantity: Math.max(1, Number(e.target.value))
-                        })
-                      }
-                      className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600"
-                    />
+              {/* LISTADO DE LA CANASTA (CARRITO) */}
+              <div className="space-y-2.5">
+                <p className="text-[10px] font-black uppercase text-slate-400">Canasta de Compra</p>
+                {cart.length === 0 ? (
+                  <p className="text-center text-[10px] text-slate-300 py-6 uppercase font-bold italic border border-dashed border-slate-200 rounded-2xl">
+                    La canasta está vacía
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                    {cart.map((item) => (
+                      <div
+                        key={item.product_id}
+                        className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm"
+                      >
+                        <div>
+                          <p className="text-xs font-black text-slate-800 uppercase">
+                            {item.quantity}x {item.name}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">
+                            Unit: RD$ {item.price.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <p className="text-xs font-black text-slate-900">
+                            RD$ {item.total.toLocaleString()}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFromCart(item.product_id)}
+                            className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="text-right flex flex-col justify-end p-2">
-                    <p className="text-[9px] font-black text-slate-400 uppercase">
-                      Subtotal a pagar
-                    </p>
-                    <p className="text-2xl font-black text-indigo-600">
-                      RD${' '}
-                      {(
-                        (products.find((p) => p.id === productInvoiceForm.product_id)?.price || 0) *
-                        productInvoiceForm.quantity
-                      ).toLocaleString()}
+                )}
+              </div>
+
+              {/* Total General */}
+              {cart.length > 0 && (
+                <div className="bg-slate-900 p-6 rounded-[2rem] flex justify-between items-center text-white shadow-xl shrink-0">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase opacity-50">Total Venta</p>
+                    <p className="text-xl font-black">RD$ {cartTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] font-bold uppercase opacity-50">
+                      {cart.length} Productos
                     </p>
                   </div>
                 </div>
@@ -659,7 +754,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || !productInvoiceForm.product_id}
+                  disabled={loading || cart.length === 0}
                   className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50"
                 >
                   {loading

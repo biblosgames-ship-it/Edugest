@@ -365,10 +365,12 @@ export const useFinance = () => {
 
   const createProductInvoice = async (invoiceData: {
     student_id: string;
-    product_id: string;
-    concept: string;
-    amount: number;
-    quantity: number;
+    items: Array<{
+      product_id: string;
+      concept: string;
+      amount: number;
+      quantity: number;
+    }>;
     payment_method?: string;
     reference_number?: string;
     notes?: string;
@@ -379,44 +381,52 @@ export const useFinance = () => {
       return;
     }
     try {
-      // 1. Insertar Factura
-      const invoiceObj = {
+      // 1. Preparar e Insertar Facturas
+      const invoicesToInsert = invoiceData.items.map((item) => ({
         center_id: currentCenterId,
         student_id: invoiceData.student_id,
-        product_id: invoiceData.product_id,
-        quantity: invoiceData.quantity,
-        concept: invoiceData.concept,
-        amount_original: invoiceData.amount,
-        amount_final: invoiceData.amount,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        concept: item.concept,
+        amount_original: item.amount,
+        amount_final: item.amount,
         due_date: new Date().toISOString().split('T')[0],
         status: invoiceData.payment_method ? 'paid' : 'pending',
         period: '2026-2027',
-        description: `Venta de Producto x${invoiceData.quantity}`
-      };
+        description: `Venta de Producto x${item.quantity}`
+      }));
 
       const { data: invs, error: invErr } = await supabase
         .from('finance_invoices')
-        .insert(invoiceObj)
+        .insert(invoicesToInsert)
         .select();
 
       if (invErr) throw invErr;
-      const newInvoice = invs?.[0];
 
-      // 2. Si es pago inmediato, registrar transacción y sincronizar libro
-      if (invoiceData.payment_method && newInvoice) {
-        const { error: tErr } = await supabase.from('finance_transactions').insert({
+      // 2. Si es pago inmediato, registrar transacción y sincronizar libro consolidado
+      if (invoiceData.payment_method && invs && invs.length > 0) {
+        const transactionsToInsert = invs.map((inv) => ({
           center_id: currentCenterId,
           student_id: invoiceData.student_id,
-          invoice_id: newInvoice.id,
-          amount_paid: invoiceData.amount,
+          invoice_id: inv.id,
+          amount_paid: inv.amount_final,
           payment_method: invoiceData.payment_method,
           reference_number: invoiceData.reference_number || '',
-          notes: invoiceData.notes || 'Cobro de venta de producto'
-        });
+          notes: invoiceData.notes || `Cobro de venta de producto: ${inv.concept}`
+        }));
+
+        const { error: tErr } = await supabase
+          .from('finance_transactions')
+          .insert(transactionsToInsert);
 
         if (tErr) throw tErr;
 
         try {
+          const totalCartAmount = invoiceData.items.reduce((acc, i) => acc + i.amount, 0);
+          const totalConcepts = invoiceData.items
+            .map((i) => `${i.quantity}x ${i.concept.replace('Venta: ', '')}`)
+            .join(', ');
+
           const savedEntries = localStorage.getItem('edugens_ledger_entries');
           const ledgerEntries = savedEntries ? JSON.parse(savedEntries) : [];
           const accountName = 'INGRESOS: INVENTARIO';
@@ -425,10 +435,10 @@ export const useFinance = () => {
             id: `PAY-${Date.now()}`,
             date: new Date().toISOString().split('T')[0],
             account: accountName,
-            item: `Venta de Producto`,
-            desc: `Cobro de ${invoiceData.concept} x${invoiceData.quantity} [MÉTODO: ${invoiceData.payment_method.toUpperCase()}]`,
+            item: `Venta de Productos`,
+            desc: `Cobro de: ${totalConcepts} [MÉTODO: ${invoiceData.payment_method.toUpperCase()}]`,
             type: 'income',
-            amount: invoiceData.amount,
+            amount: totalCartAmount,
             method: invoiceData.payment_method
           };
 
@@ -456,13 +466,13 @@ export const useFinance = () => {
       toast.success(
         invoiceData.payment_method
           ? '¡Venta registrada y cobrada con éxito!'
-          : '¡Factura de producto generada!'
+          : '¡Facturas de producto generadas!'
       );
       await fetchData();
-      return newInvoice;
+      return invs;
     } catch (error: any) {
       console.error('Error in createProductInvoice:', error);
-      toast.error('Error al facturar producto: ' + error.message);
+      toast.error('Error al facturar productos: ' + error.message);
       throw error;
     }
   };
