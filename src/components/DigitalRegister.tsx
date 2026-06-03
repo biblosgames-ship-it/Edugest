@@ -27,7 +27,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const { state, profile, selectedYear, center } = useApp();
 
   const currentTeacherRecord = useMemo(() => {
-    if ((profile?.role === 'teacher' || profile?.role === 'management_teacher') && profile?.teacher_id) {
+    if (
+      (profile?.role === 'teacher' || profile?.role === 'management_teacher') &&
+      profile?.teacher_id
+    ) {
       return (state.teachers || []).find((t: any) => t.id === profile.teacher_id);
     }
     return null;
@@ -62,7 +65,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
   // Estados para el resumen de notas consolidado (Boletín del alumno)
   const [selectedSummaryStudent, setSelectedSummaryStudent] = useState<any | null>(null);
-  const [studentSummaryGrades, setStudentSummaryGrades] = useState<Record<string, Record<string, any>>>({});
+  const [studentSummaryGrades, setStudentSummaryGrades] = useState<
+    Record<string, Record<string, any>>
+  >({});
   const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState<boolean>(false);
   const [summaryPeriodDivisor, setSummaryPeriodDivisor] = useState<number>(4);
@@ -80,57 +85,98 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     () => ({
       year: selectedYear || '2025-2026',
       periods: ['P1', 'P2', 'P3', 'P4'],
-      competencies: isSecundario 
+      competencies: isSecundario
         ? [
-            { id: 'c1', short: 'C1', name: 'Competencia Ética y Ciudadana', color: 'bg-indigo-100/40', rColor: 'bg-indigo-50/20' },
-            { id: 'c2', short: 'C2', name: 'Competencia Comunicativa', color: 'bg-emerald-100/40', rColor: 'bg-emerald-50/20' },
-            { id: 'c3', short: 'C3', name: 'Competencia de Pensamiento Lógico, Creativo y Crítico', color: 'bg-amber-100/40', rColor: 'bg-amber-50/20' },
-            { id: 'c4', short: 'C4', name: 'Competencia Científica y Tecnológica', color: 'bg-rose-100/40', rColor: 'bg-rose-50/20' }
+            {
+              id: 'c1',
+              short: 'C1',
+              name: 'Competencia Ética y Ciudadana',
+              color: 'bg-indigo-100/40',
+              rColor: 'bg-indigo-50/20'
+            },
+            {
+              id: 'c2',
+              short: 'C2',
+              name: 'Competencia Comunicativa',
+              color: 'bg-emerald-100/40',
+              rColor: 'bg-emerald-50/20'
+            },
+            {
+              id: 'c3',
+              short: 'C3',
+              name: 'Competencia de Pensamiento Lógico, Creativo y Crítico',
+              color: 'bg-amber-100/40',
+              rColor: 'bg-amber-50/20'
+            },
+            {
+              id: 'c4',
+              short: 'C4',
+              name: 'Competencia Científica y Tecnológica',
+              color: 'bg-rose-100/40',
+              rColor: 'bg-rose-50/20'
+            }
           ]
         : [
-            { id: 'c1', short: 'C1', name: 'Comunicativa', color: 'bg-indigo-100/40', rColor: 'bg-indigo-50/20' },
-            { id: 'c2', short: 'C2', name: 'Pensamiento Lógico, Creativo y Crítico; Resolución de Problemas; Científica y Tecnológica', color: 'bg-emerald-100/40', rColor: 'bg-emerald-50/20' },
-            { id: 'c3', short: 'C3', name: 'Ética y Ciudadana; Desarrollo Personal y Espiritual; Ambiental y de la Salud', color: 'bg-amber-100/40', rColor: 'bg-emerald-50/20' }
+            {
+              id: 'c1',
+              short: 'C1',
+              name: 'Comunicativa',
+              color: 'bg-indigo-100/40',
+              rColor: 'bg-indigo-50/20'
+            },
+            {
+              id: 'c2',
+              short: 'C2',
+              name: 'Pensamiento Lógico, Creativo y Crítico; Resolución de Problemas; Científica y Tecnológica',
+              color: 'bg-emerald-100/40',
+              rColor: 'bg-emerald-50/20'
+            },
+            {
+              id: 'c3',
+              short: 'C3',
+              name: 'Ética y Ciudadana; Desarrollo Personal y Espiritual; Ambiental y de la Salud',
+              color: 'bg-amber-100/40',
+              rColor: 'bg-emerald-50/20'
+            }
           ]
     }),
     [selectedYear, isSecundario]
   );
 
-  const filteredCourses = useMemo(
-    () => {
-      let baseCourses = allCourses || [];
-      
-      // Si el rol es docente y tiene un docente vinculado, filtrar solo sus cursos asignados
-      if (profile?.role === 'teacher' && profile?.teacher_id) {
-        const assignedCourseIds = new Set(
-          (allAssignments || [])
-            .filter((a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id)
-            .map((a: any) => a.course_id || a.courseId)
-        );
-        baseCourses = baseCourses.filter((c: any) => assignedCourseIds.has(c.id));
-      }
+  const filteredCourses = useMemo(() => {
+    let baseCourses = allCourses || [];
 
-      return baseCourses.filter(
-        (c: any) =>
-          selectedLevel === 'Todos' ||
-          (c.level && c.level.toLowerCase().includes(selectedLevel.toLowerCase().substring(0, 5)))
+    // Si el rol es docente y tiene un docente vinculado, filtrar solo sus cursos asignados
+    if (profile?.role === 'teacher' && profile?.teacher_id) {
+      const assignedCourseIds = new Set(
+        (allAssignments || [])
+          .filter((a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id)
+          .map((a: any) => a.course_id || a.courseId)
       );
-    },
-    [allCourses, selectedLevel, profile, allAssignments]
-  );
+      baseCourses = baseCourses.filter((c: any) => assignedCourseIds.has(c.id));
+    }
+
+    return baseCourses.filter(
+      (c: any) =>
+        selectedLevel === 'Todos' ||
+        (c.level && c.level.toLowerCase().includes(selectedLevel.toLowerCase().substring(0, 5)))
+    );
+  }, [allCourses, selectedLevel, profile, allAssignments]);
 
   const courseSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
-    
+
     // Si el rol es docente y tiene un docente vinculado, filtrar solo sus asignaturas asignadas en este curso
     if (profile?.role === 'teacher' && profile?.teacher_id) {
       return (allAssignments || [])
         .filter(
-          (a: any) => 
-            (a.teacher_id || a.teacherId) === profile.teacher_id && 
+          (a: any) =>
+            (a.teacher_id || a.teacherId) === profile.teacher_id &&
             (a.course_id || a.courseId) === selectedCourseId
         )
-        .map((a: any) => (allSubjects || []).find((s: any) => s.id === (a.subject_id || a.subjectId)))
+        .map((a: any) =>
+          (allSubjects || []).find((s: any) => s.id === (a.subject_id || a.subjectId))
+        )
         .filter(Boolean);
     }
 
@@ -233,7 +279,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   };
 
   const calculateAreaFinal = (studentId: string) => {
-    const compSum = config.competencies.reduce((acc, c) => acc + calculateCompAvg(studentId, c.id), 0);
+    const compSum = config.competencies.reduce(
+      (acc, c) => acc + calculateCompAvg(studentId, c.id),
+      0
+    );
     const avg = compSum > 0 ? compSum / config.competencies.length : 0;
     return avg > 0 ? Math.round(avg) : '-';
   };
@@ -273,7 +322,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         }
         // Guardar Recuperaciones de Secundaria
         if (isSecundario) {
-          ['comp', 'extra', 'esp1', 'esp2'].forEach(stage => {
+          ['comp', 'extra', 'esp1', 'esp2'].forEach((stage) => {
             const val = grades[`${student.id}_${stage}`];
             if (val !== undefined) {
               updates.push({
@@ -578,9 +627,14 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${centerData.address || '---'} | Tel: ${centerData.phone || '---'}`, pageWidth / 2, 14, {
-      align: 'center'
-    });
+    doc.text(
+      `${centerData.address || '---'} | Tel: ${centerData.phone || '---'}`,
+      pageWidth / 2,
+      14,
+      {
+        align: 'center'
+      }
+    );
 
     // Título del reporte
     doc.setFont('helvetica', 'bold');
@@ -603,9 +657,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     let parentsName = 'No registrado';
     if (family && family.length > 0) {
-      const parents = family.filter((f: any) => 
-        (f.relation || f.role)?.toLowerCase().includes('madre') || 
-        (f.relation || f.role)?.toLowerCase().includes('padre')
+      const parents = family.filter(
+        (f: any) =>
+          (f.relation || f.role)?.toLowerCase().includes('madre') ||
+          (f.relation || f.role)?.toLowerCase().includes('padre')
       );
       if (parents.length > 0) {
         parentsName = parents.map((p: any) => p.name).join(' y ');
@@ -616,13 +671,17 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     const studentCourse = (allCourses || []).find((c: any) => c.id === student.course_id);
     const isStudentSecundario = studentCourse?.level?.toLowerCase().includes('secund');
-    
-    const courseDisplay = studentCourse 
-      ? `${studentCourse.grade} - ${studentCourse.section}` 
+
+    const courseDisplay = studentCourse
+      ? `${studentCourse.grade} - ${studentCourse.section}`
       : '---';
     const levelDisplay = studentCourse?.level || '---';
-    const studentCode = student.sigerd_code || student.student_code || student.rne || student.id.substring(0, 7).toUpperCase();
-    
+    const studentCode =
+      student.sigerd_code ||
+      student.student_code ||
+      student.rne ||
+      student.id.substring(0, 7).toUpperCase();
+
     const studentIndex = (students || []).findIndex((s: any) => s.id === student.id);
     const orderNo = studentIndex !== -1 ? (studentIndex + 1).toString().padStart(2, '0') : '--';
 
@@ -641,7 +700,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    doc.text(`${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`.trim().toUpperCase(), 42, boxY + 5.5);
+    doc.text(
+      `${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`
+        .trim()
+        .toUpperCase(),
+      42,
+      boxY + 5.5
+    );
 
     // Fila 1 - Orden
     doc.setFont('helvetica', 'bold');
@@ -691,12 +756,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(0, 0, 0);
-    const truncateParents = parentsName.length > 30 ? parentsName.substring(0, 27) + '...' : parentsName;
+    const truncateParents =
+      parentsName.length > 30 ? parentsName.substring(0, 27) + '...' : parentsName;
     doc.text(truncateParents.toUpperCase(), 228, boxY + 11.5);
 
     const mainTableStartY = boxY + boxHeight + 4;
 
-    const comps = isStudentSecundario 
+    const comps = isStudentSecundario
       ? [
           { id: 'c1', short: 'C1', name: 'Ética y Ciudadana' },
           { id: 'c2', short: 'C2', name: 'Comunicativa' },
@@ -714,7 +780,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       [
         {
           content: 'DESEMPEÑO INDIVIDUAL DEL/LA ESTUDIANTE',
-          colSpan: 1 + (comps.length * 4) + comps.length + (isStudentSecundario ? 5 : 2),
+          colSpan: 1 + comps.length * 4 + comps.length + (isStudentSecundario ? 5 : 2),
           styles: {
             fillColor: [0, 112, 192],
             textColor: [255, 255, 255],
@@ -780,7 +846,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     mainHead.push(headerRow3);
 
     const body: any[] = [];
-    let sumC1 = 0, sumC2 = 0, sumC3 = 0, sumC4 = 0, sumFinal = 0;
+    let sumC1 = 0,
+      sumC2 = 0,
+      sumC3 = 0,
+      sumC4 = 0,
+      sumFinal = 0;
     let count = 0;
 
     allCourseSubjects.forEach((sub) => {
@@ -803,14 +873,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         return Math.round(sum / summaryPeriodDivisor);
       };
 
-      const cfValues = comps.map(c => getCompFinalVal(c.id));
-      cfValues.forEach(val => {
+      const cfValues = comps.map((c) => getCompFinalVal(c.id));
+      cfValues.forEach((val) => {
         row.push(val || '');
       });
 
-      const finalArea = cfValues.length > 0 
-        ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length)
-        : 0;
+      const finalArea =
+        cfValues.length > 0 ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length) : 0;
       row.push(finalArea || '');
 
       if (isStudentSecundario) {
@@ -827,11 +896,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         let defFinal = finalArea;
         if (finalArea < 70) {
           if (cp > 0) {
-            const cpFinal = Math.round((finalArea * 0.5) + (cp * 0.5));
+            const cpFinal = Math.round(finalArea * 0.5 + cp * 0.5);
             if (cpFinal >= 70) defFinal = cpFinal;
           }
           if (defFinal < 70 && ex > 0) {
-            const exFinal = Math.round((finalArea * 0.3) + (ex * 0.7));
+            const exFinal = Math.round(finalArea * 0.3 + ex * 0.7);
             if (exFinal >= 70) defFinal = exFinal;
           }
           if (defFinal < 70 && e1 >= 70) {
@@ -850,7 +919,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       } else {
         const recFinal = parseInt(sGrades['final_rec']) || 0;
         row.push(recFinal || '');
-        
+
         const defFinal = Math.max(finalArea, recFinal);
         row.push(defFinal || '');
 
@@ -872,7 +941,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       }
     });
 
-    const idxRow: any[] = [{ content: '', colSpan: 1 + (comps.length * 4), styles: { border: 0 } }];
+    const idxRow: any[] = [{ content: '', colSpan: 1 + comps.length * 4, styles: { border: 0 } }];
     if (count > 0) {
       idxRow.push((sumC1 / count / 25).toFixed(2));
       idxRow.push((sumC2 / count / 25).toFixed(2));
@@ -881,14 +950,14 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         idxRow.push((sumC4 / count / 25).toFixed(2));
       }
       idxRow.push((sumFinal / count / 25).toFixed(2));
-      const remainingCols = isStudentSecundario ? 5 : 2; 
+      const remainingCols = isStudentSecundario ? 5 : 2;
       for (let i = 0; i < remainingCols - 1; i++) {
         idxRow.push('');
       }
     } else {
       comps.forEach(() => idxRow.push('0.00'));
       idxRow.push('0.00');
-      const remainingCols = isStudentSecundario ? 5 : 2; 
+      const remainingCols = isStudentSecundario ? 5 : 2;
       for (let i = 0; i < remainingCols; i++) {
         idxRow.push('');
       }
@@ -911,16 +980,27 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       headStyles: { textColor: [0, 0, 0], lineWidth: 0.2, fontSize: 8 },
       didDrawCell: (data) => {
         if (data.section === 'head' && data.row.index === 1) {
-          const finalAreaIndex = 1 + (comps.length * 4) + comps.length;
+          const finalAreaIndex = 1 + comps.length * 4 + comps.length;
           if (isStudentSecundario) {
             if (data.column.index >= finalAreaIndex && data.column.index < finalAreaIndex + 5) {
               doc.setTextColor(0, 0, 0);
               doc.setFontSize(6);
-              const titles = ['Calif. Final', 'Completivo', 'Extraord.', 'Esp. E1/E2', 'Definitiva'];
+              const titles = [
+                'Calif. Final',
+                'Completivo',
+                'Extraord.',
+                'Esp. E1/E2',
+                'Definitiva'
+              ];
               const textIdx = data.column.index - finalAreaIndex;
-              (doc as any).text(titles[textIdx], data.cell.x + 2, data.cell.y + data.cell.height - 2, {
-                angle: 90
-              });
+              (doc as any).text(
+                titles[textIdx],
+                data.cell.x + 2,
+                data.cell.y + data.cell.height - 2,
+                {
+                  angle: 90
+                }
+              );
             }
           } else {
             if (data.column.index === finalAreaIndex || data.column.index === finalAreaIndex + 1) {
@@ -928,15 +1008,20 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               doc.setFontSize(6);
               const titles = ['Calif. Final', 'Recup. Final'];
               const textIdx = data.column.index - finalAreaIndex;
-              (doc as any).text(titles[textIdx], data.cell.x + 3.5, data.cell.y + data.cell.height - 2, {
-                angle: 90
-              });
+              (doc as any).text(
+                titles[textIdx],
+                data.cell.x + 3.5,
+                data.cell.y + data.cell.height - 2,
+                {
+                  angle: 90
+                }
+              );
             }
           }
         }
       },
       didParseCell: (data) => {
-        const finalAreaIndex = 1 + (comps.length * 4) + comps.length;
+        const finalAreaIndex = 1 + comps.length * 4 + comps.length;
         if (data.section === 'body' && data.column.index >= finalAreaIndex) {
           data.cell.styles.fillColor = [240, 240, 245];
         }
@@ -982,10 +1067,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     doc.setFontSize(6);
     doc.text(
-      `Leyenda: (P1) Periodo 1  (P2) Periodo 2  (P3) Periodo 3  (P4) Periodo 4  ` + 
-      (isStudentSecundario 
-        ? `(C1) Ética y Ciudadana (C2) Comunicativa (C3) Pensamiento Crítico (C4) Científica y Tecnológica`
-        : `(C1) Comunicativa  (C2) Pensamiento Lógico  (C3) Ética y Ciudadana`),
+      `Leyenda: (P1) Periodo 1  (P2) Periodo 2  (P3) Periodo 3  (P4) Periodo 4  ` +
+        (isStudentSecundario
+          ? `(C1) Ética y Ciudadana (C2) Comunicativa (C3) Pensamiento Crítico (C4) Científica y Tecnológica`
+          : `(C1) Comunicativa  (C2) Pensamiento Lógico  (C3) Ética y Ciudadana`),
       14,
       (doc as any).lastAutoTable.finalY + 4
     );
@@ -1059,7 +1144,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     doc.text('Maestro(a) encargado(a) del grado', 197.5, sigY + 3, { align: 'center' });
     doc.text('Director(a) del centro Educativo', 245, sigY + 3, { align: 'center' });
 
-    doc.save(`Boletin_${student.names.replace(/ /g, '_')}_${student.first_surname.replace(/ /g, '_')}.pdf`);
+    doc.save(
+      `Boletin_${student.names.replace(/ /g, '_')}_${student.first_surname.replace(/ /g, '_')}.pdf`
+    );
   };
 
   return (
@@ -1084,7 +1171,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       {!isEditable && (
         <div className="bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 px-5 py-4 rounded-[1.5rem] text-xs font-bold flex items-center gap-3 animate-pulse">
           <AlertCircle size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>La edición de calificaciones se encuentra temporalmente deshabilitada para su usuario. Por favor contacte al equipo de gestión.</span>
+          <span>
+            La edición de calificaciones se encuentra temporalmente deshabilitada para su usuario.
+            Por favor contacte al equipo de gestión.
+          </span>
         </div>
       )}
 
@@ -1247,14 +1337,18 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         {c.short}
                       </th>
                     ))}
-                    <th className="p-2 text-center bg-indigo-800 border-r border-white/10">
-                      PROM
-                    </th>
+                    <th className="p-2 text-center bg-indigo-800 border-r border-white/10">PROM</th>
                     {isSecundario ? (
                       <>
-                        <th className="p-2 text-center bg-amber-600 border-r border-white/10 w-14">CP</th>
-                        <th className="p-2 text-center bg-orange-700 border-r border-white/10 w-14">EX</th>
-                        <th className="p-2 text-center bg-rose-800 border-r border-white/10 w-14">E1</th>
+                        <th className="p-2 text-center bg-amber-600 border-r border-white/10 w-14">
+                          CP
+                        </th>
+                        <th className="p-2 text-center bg-orange-700 border-r border-white/10 w-14">
+                          EX
+                        </th>
+                        <th className="p-2 text-center bg-rose-800 border-r border-white/10 w-14">
+                          E1
+                        </th>
                         <th className="p-2 text-center bg-rose-900 w-14">E2</th>
                       </>
                     ) : (
@@ -1272,7 +1366,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                     </td>
                     <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main max-w-[220px]">
                       <div className="flex items-center justify-between gap-2 w-full">
-                        <span className="truncate">{s.first_surname} {s.names}</span>
+                        <span className="truncate">
+                          {s.first_surname} {s.names}
+                        </span>
                         <button
                           type="button"
                           onClick={() => fetchStudentConsolidatedGrades(s)}
@@ -1293,7 +1389,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             <React.Fragment key={`${s.id}_${c.id}_${p}`}>
                               <td className={`p-0 border-r border-border-main ${c.color}`}>
                                 <input
-                                  ref={(el) => { inputRefs.current[`${s.id}_${kVal}`] = el; }}
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_${kVal}`] = el;
+                                  }}
                                   type="text"
                                   maxLength={3}
                                   value={grades[`${s.id}_${kVal}`] || ''}
@@ -1306,7 +1404,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                               </td>
                               <td className={`p-0 border-r border-border-main ${c.rColor}`}>
                                 <input
-                                  ref={(el) => { inputRefs.current[`${s.id}_${kRec}`] = el; }}
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_${kRec}`] = el;
+                                  }}
                                   type="text"
                                   maxLength={3}
                                   value={grades[`${s.id}_${kRec}`] || ''}
@@ -1334,7 +1434,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         <td className="p-0 border-r border-border-main bg-indigo-50/10 text-center text-indigo-500 text-sm font-black h-8 leading-8">
                           {calculateAreaFinal(s.id)}
                         </td>
-                        
+
                         {isSecundario ? (
                           <>
                             {/* COMPLETIVO: 50/50 */}
@@ -1405,25 +1505,25 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                               const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
                               return Math.max(areaFinal, recFinal) || '-';
                             }
-                            
+
                             // LÓGICA SECUNDARIA
                             if (areaFinal >= 70) return areaFinal;
-                            
+
                             const cpExam = parseInt(grades[`${s.id}_comp`]) || 0;
                             if (cpExam > 0) {
-                              const cpFinal = Math.round((areaFinal * 0.5) + (cpExam * 0.5));
+                              const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
                               if (cpFinal >= 70) return cpFinal;
                             }
-                            
+
                             const exExam = parseInt(grades[`${s.id}_extra`]) || 0;
                             if (exExam > 0) {
-                              const exFinal = Math.round((areaFinal * 0.3) + (exExam * 0.7));
+                              const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
                               if (exFinal >= 70) return exFinal;
                             }
-                            
+
                             const esp1 = parseInt(grades[`${s.id}_esp1`]) || 0;
                             if (esp1 >= 70) return esp1;
-                            
+
                             const esp2 = parseInt(grades[`${s.id}_esp2`]) || 0;
                             if (esp2 >= 70) return esp2;
 
@@ -1458,7 +1558,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase text-text-muted">
@@ -1501,9 +1601,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 const family = selectedSummaryStudent.family || [];
                 let parentsName = 'No registrado';
                 if (family.length > 0) {
-                  const parents = family.filter((f: any) =>
-                    (f.relation || f.role)?.toLowerCase().includes('madre') ||
-                    (f.relation || f.role)?.toLowerCase().includes('padre')
+                  const parents = family.filter(
+                    (f: any) =>
+                      (f.relation || f.role)?.toLowerCase().includes('madre') ||
+                      (f.relation || f.role)?.toLowerCase().includes('padre')
                   );
                   if (parents.length > 0) {
                     parentsName = parents.map((p: any) => p.name).join(' y ');
@@ -1511,41 +1612,81 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                     parentsName = family[0].name;
                   }
                 }
-                const studentCourse = (allCourses || []).find((c: any) => c.id === selectedSummaryStudent.course_id);
+                const studentCourse = (allCourses || []).find(
+                  (c: any) => c.id === selectedSummaryStudent.course_id
+                );
                 const courseDisplay = studentCourse
                   ? `${studentCourse.grade} - ${studentCourse.section}`
                   : '';
                 const levelDisplay = studentCourse?.level || '---';
-                const studentCode = selectedSummaryStudent.sigerd_code || selectedSummaryStudent.student_code || selectedSummaryStudent.rne || selectedSummaryStudent.id.substring(0, 7).toUpperCase();
-                const studentIndex = (students || []).findIndex((s: any) => s.id === selectedSummaryStudent.id);
-                const orderNo = studentIndex !== -1 ? (studentIndex + 1).toString().padStart(2, '0') : '--';
+                const studentCode =
+                  selectedSummaryStudent.sigerd_code ||
+                  selectedSummaryStudent.student_code ||
+                  selectedSummaryStudent.rne ||
+                  selectedSummaryStudent.id.substring(0, 7).toUpperCase();
+                const studentIndex = (students || []).findIndex(
+                  (s: any) => s.id === selectedSummaryStudent.id
+                );
+                const orderNo =
+                  studentIndex !== -1 ? (studentIndex + 1).toString().padStart(2, '0') : '--';
 
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-[10px] uppercase font-black">
                     <div className="p-3 bg-surface border border-border-main rounded-2xl flex flex-col justify-center shadow-sm">
-                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">Estudiante</span>
-                      <span className="text-indigo-600 text-xs font-black truncate">
-                        {`${selectedSummaryStudent.names || ''} ${selectedSummaryStudent.first_surname || ''} ${selectedSummaryStudent.second_surname || ''}`.trim().toUpperCase()}
+                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">
+                        Estudiante
                       </span>
-                      <span className="text-text-muted text-[8px] mt-0.5">Nº de Orden: <span className="text-slate-800 dark:text-slate-200 font-black">{orderNo}</span></span>
+                      <span className="text-indigo-600 text-xs font-black truncate">
+                        {`${selectedSummaryStudent.names || ''} ${selectedSummaryStudent.first_surname || ''} ${selectedSummaryStudent.second_surname || ''}`
+                          .trim()
+                          .toUpperCase()}
+                      </span>
+                      <span className="text-text-muted text-[8px] mt-0.5">
+                        Nº de Orden:{' '}
+                        <span className="text-slate-800 dark:text-slate-200 font-black">
+                          {orderNo}
+                        </span>
+                      </span>
                     </div>
-                    
+
                     <div className="p-3 bg-surface border border-border-main rounded-2xl flex flex-col justify-center shadow-sm">
-                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">Grado / Nivel</span>
-                      <span className="text-slate-800 dark:text-slate-200 text-xs font-black truncate">{courseDisplay}</span>
+                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">
+                        Grado / Nivel
+                      </span>
+                      <span className="text-slate-800 dark:text-slate-200 text-xs font-black truncate">
+                        {courseDisplay}
+                      </span>
                       <span className="text-text-muted text-[8px] mt-0.5">{levelDisplay}</span>
                     </div>
 
                     <div className="p-3 bg-surface border border-border-main rounded-2xl flex flex-col justify-center shadow-sm">
-                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">Código SIGERD / Año</span>
-                      <span className="text-slate-800 dark:text-slate-200 text-xs font-black">{studentCode}</span>
-                      <span className="text-text-muted text-[8px] mt-0.5">Año Escolar: <span className="text-slate-800 dark:text-slate-200 font-black">{selectedYear || '2025-2026'}</span></span>
+                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">
+                        Código SIGERD / Año
+                      </span>
+                      <span className="text-slate-800 dark:text-slate-200 text-xs font-black">
+                        {studentCode}
+                      </span>
+                      <span className="text-text-muted text-[8px] mt-0.5">
+                        Año Escolar:{' '}
+                        <span className="text-slate-800 dark:text-slate-200 font-black">
+                          {selectedYear || '2025-2026'}
+                        </span>
+                      </span>
                     </div>
 
                     <div className="p-3 bg-surface border border-border-main rounded-2xl flex flex-col justify-center shadow-sm">
-                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">Padres o Tutor(a)</span>
-                      <span className="text-slate-800 dark:text-slate-200 text-xs font-black truncate" title={parentsName}>{parentsName}</span>
-                      <span className="text-text-muted text-[8px] mt-0.5">Relación: Madre/Padre</span>
+                      <span className="text-text-muted text-[8px] tracking-wider mb-0.5">
+                        Padres o Tutor(a)
+                      </span>
+                      <span
+                        className="text-slate-800 dark:text-slate-200 text-xs font-black truncate"
+                        title={parentsName}
+                      >
+                        {parentsName}
+                      </span>
+                      <span className="text-text-muted text-[8px] mt-0.5">
+                        Relación: Madre/Padre
+                      </span>
                     </div>
                   </div>
                 );
@@ -1557,17 +1698,25 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               {isLoadingSummary ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
                   <Loader2 className="animate-spin text-indigo-600" size={32} />
-                  <span className="text-[10px] font-black uppercase text-text-muted">Cargando Calificaciones Consolidadas...</span>
+                  <span className="text-[10px] font-black uppercase text-text-muted">
+                    Cargando Calificaciones Consolidadas...
+                  </span>
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
                   <thead>
                     <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-wider">
-                      <th className="p-3 border border-slate-800 w-1/4">Área Curricular (Materia)</th>
+                      <th className="p-3 border border-slate-800 w-1/4">
+                        Área Curricular (Materia)
+                      </th>
                       {(() => {
-                        const studentCourse = (allCourses || []).find((c: any) => c.id === selectedSummaryStudent.course_id);
-                        const isStudentSecundario = studentCourse?.level?.toLowerCase().includes('secund');
-                        const comps = isStudentSecundario 
+                        const studentCourse = (allCourses || []).find(
+                          (c: any) => c.id === selectedSummaryStudent.course_id
+                        );
+                        const isStudentSecundario = studentCourse?.level
+                          ?.toLowerCase()
+                          .includes('secund');
+                        const comps = isStudentSecundario
                           ? [
                               { short: 'C1', name: 'Ética y Ciudadana' },
                               { short: 'C2', name: 'Comunicativa' },
@@ -1582,22 +1731,40 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         return (
                           <>
                             {comps.map((c) => (
-                              <th key={c.short} className="p-3 border border-slate-800 text-center" title={c.name}>
+                              <th
+                                key={c.short}
+                                className="p-3 border border-slate-800 text-center"
+                                title={c.name}
+                              >
                                 {c.short}
                               </th>
                             ))}
-                            <th className="p-3 border border-slate-800 text-center bg-indigo-800">C.FA</th>
+                            <th className="p-3 border border-slate-800 text-center bg-indigo-800">
+                              C.FA
+                            </th>
                             {isStudentSecundario ? (
                               <>
-                                <th className="p-3 border border-slate-800 text-center bg-amber-700 w-12">CP</th>
-                                <th className="p-3 border border-slate-800 text-center bg-orange-700 w-12">EX</th>
-                                <th className="p-3 border border-slate-800 text-center bg-rose-800 w-12">E1</th>
-                                <th className="p-3 border border-slate-800 text-center bg-rose-900 w-12">E2</th>
+                                <th className="p-3 border border-slate-800 text-center bg-amber-700 w-12">
+                                  CP
+                                </th>
+                                <th className="p-3 border border-slate-800 text-center bg-orange-700 w-12">
+                                  EX
+                                </th>
+                                <th className="p-3 border border-slate-800 text-center bg-rose-800 w-12">
+                                  E1
+                                </th>
+                                <th className="p-3 border border-slate-800 text-center bg-rose-900 w-12">
+                                  E2
+                                </th>
                               </>
                             ) : (
-                              <th className="p-3 border border-slate-800 text-center bg-rose-800 w-16">RP</th>
+                              <th className="p-3 border border-slate-800 text-center bg-rose-800 w-16">
+                                RP
+                              </th>
                             )}
-                            <th className="p-3 border border-slate-800 text-center bg-slate-950 w-16">C.D</th>
+                            <th className="p-3 border border-slate-800 text-center bg-slate-950 w-16">
+                              C.D
+                            </th>
                           </>
                         );
                       })()}
@@ -1605,9 +1772,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-[10px] font-black text-text-main">
                     {(() => {
-                      const studentCourse = (allCourses || []).find((c: any) => c.id === selectedSummaryStudent.course_id);
-                      const isStudentSecundario = studentCourse?.level?.toLowerCase().includes('secund');
-                      const comps = isStudentSecundario 
+                      const studentCourse = (allCourses || []).find(
+                        (c: any) => c.id === selectedSummaryStudent.course_id
+                      );
+                      const isStudentSecundario = studentCourse?.level
+                        ?.toLowerCase()
+                        .includes('secund');
+                      const comps = isStudentSecundario
                         ? [
                             { id: 'c1', short: 'C1' },
                             { id: 'c2', short: 'C2' },
@@ -1619,7 +1790,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             { id: 'c2', short: 'C2' },
                             { id: 'c3', short: 'C3' }
                           ];
-                      
+
                       const getBestGradeForModal = (sGrades: any, cId: string, p: string) => {
                         const pL = p.toLowerCase();
                         const g = parseInt(sGrades[`${cId}_${pL}`]) || 0;
@@ -1637,18 +1808,27 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         return Math.round(sum / summaryPeriodDivisor) || 0;
                       };
 
-                      let sumC1 = 0, sumC2 = 0, sumC3 = 0, sumC4 = 0, sumFinal = 0;
+                      let sumC1 = 0,
+                        sumC2 = 0,
+                        sumC3 = 0,
+                        sumC4 = 0,
+                        sumFinal = 0;
                       let count = 0;
 
                       const rows = allCourseSubjects.map((sub) => {
                         const sGrades = studentSummaryGrades[sub.id] || {};
-                        const cfValues = comps.map(c => getCompFinalVal(sGrades, c.id));
-                        const finalArea = cfValues.length > 0 
-                          ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length)
-                          : 0;
+                        const cfValues = comps.map((c) => getCompFinalVal(sGrades, c.id));
+                        const finalArea =
+                          cfValues.length > 0
+                            ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length)
+                            : 0;
 
                         let defFinal = finalArea;
-                        let cp = 0, ex = 0, e1 = 0, e2 = 0, rp = 0;
+                        let cp = 0,
+                          ex = 0,
+                          e1 = 0,
+                          e2 = 0,
+                          rp = 0;
 
                         if (isStudentSecundario) {
                           cp = parseInt(sGrades['comp']) || 0;
@@ -1658,11 +1838,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
                           if (finalArea < 70) {
                             if (cp > 0) {
-                              const cpFinal = Math.round((finalArea * 0.5) + (cp * 0.5));
+                              const cpFinal = Math.round(finalArea * 0.5 + cp * 0.5);
                               if (cpFinal >= 70) defFinal = cpFinal;
                             }
                             if (defFinal < 70 && ex > 0) {
-                              const exFinal = Math.round((finalArea * 0.3) + (ex * 0.7));
+                              const exFinal = Math.round(finalArea * 0.3 + ex * 0.7);
                               if (exFinal >= 70) defFinal = exFinal;
                             }
                             if (defFinal < 70 && e1 >= 70) {
@@ -1691,23 +1871,40 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         }
 
                         return (
-                          <tr key={sub.id} className="hover:bg-slate-50 transition-all border-b border-slate-100">
-                            <td className="p-3 border border-slate-100 font-bold uppercase">{sub.name}</td>
+                          <tr
+                            key={sub.id}
+                            className="hover:bg-slate-50 transition-all border-b border-slate-100"
+                          >
+                            <td className="p-3 border border-slate-100 font-bold uppercase">
+                              {sub.name}
+                            </td>
                             {cfValues.map((val, idx) => (
-                              <td key={idx} className="p-3 border border-slate-100 text-center">{val || '-'}</td>
+                              <td key={idx} className="p-3 border border-slate-100 text-center">
+                                {val || '-'}
+                              </td>
                             ))}
                             <td className="p-3 border border-slate-100 text-center bg-indigo-50/40 text-indigo-700 font-black">
                               {finalArea || '-'}
                             </td>
                             {isStudentSecundario ? (
                               <>
-                                <td className="p-3 border border-slate-100 text-center text-amber-700">{cp || '-'}</td>
-                                <td className="p-3 border border-slate-100 text-center text-orange-700">{ex || '-'}</td>
-                                <td className="p-3 border border-slate-100 text-center text-rose-700">{e1 || '-'}</td>
-                                <td className="p-3 border border-slate-100 text-center text-rose-900">{e2 || '-'}</td>
+                                <td className="p-3 border border-slate-100 text-center text-amber-700">
+                                  {cp || '-'}
+                                </td>
+                                <td className="p-3 border border-slate-100 text-center text-orange-700">
+                                  {ex || '-'}
+                                </td>
+                                <td className="p-3 border border-slate-100 text-center text-rose-700">
+                                  {e1 || '-'}
+                                </td>
+                                <td className="p-3 border border-slate-100 text-center text-rose-900">
+                                  {e2 || '-'}
+                                </td>
                               </>
                             ) : (
-                              <td className="p-3 border border-slate-100 text-center text-rose-700">{rp || '-'}</td>
+                              <td className="p-3 border border-slate-100 text-center text-rose-700">
+                                {rp || '-'}
+                              </td>
                             )}
                             <td className="p-3 border border-slate-100 text-center bg-slate-900 text-white font-black">
                               {defFinal || '-'}
@@ -1717,8 +1914,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                       });
 
                       const idxRow = (
-                        <tr key="idx-row" className="bg-slate-50 text-[10px] font-black border-t-2 border-slate-200">
-                          <td className="p-3 border border-slate-100 text-right text-indigo-600 uppercase font-black">Índice Académico (GPA)</td>
+                        <tr
+                          key="idx-row"
+                          className="bg-slate-50 text-[10px] font-black border-t-2 border-slate-200"
+                        >
+                          <td className="p-3 border border-slate-100 text-right text-indigo-600 uppercase font-black">
+                            Índice Académico (GPA)
+                          </td>
                           <td className="p-3 border border-slate-100 text-center text-indigo-600">
                             {count > 0 ? (sumC1 / count / 25).toFixed(2) : '0.00'}
                           </td>
@@ -1762,11 +1964,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             {/* Footer */}
             <div className="p-6 border-t border-border-main bg-slate-50 flex items-center justify-between text-[9px] text-text-muted font-bold uppercase rounded-b-3xl">
               <div>
-                * Leyenda: C.FA = Calif. Final del Área | CP = Completivo | EX = Extraordinario | E1/E2 = Especial | RP = Recup. Final | C.D = Calif. Definitiva
+                * Leyenda: C.FA = Calif. Final del Área | CP = Completivo | EX = Extraordinario |
+                E1/E2 = Especial | RP = Recup. Final | C.D = Calif. Definitiva
               </div>
-              <div>
-                EduGens v41.0
-              </div>
+              <div>EduGens v41.0</div>
             </div>
           </div>
         </div>

@@ -6,9 +6,8 @@ export const SchoolYearSelector = () => {
   const { state, selectedYear, setSelectedYear } = useApp();
   const [isOpen, setIsOpen] = useState(false);
 
-  const years = state.schoolYears.length > 0 
-    ? state.schoolYears 
-    : [{ name: selectedYear, status: 'activo' }];
+  const years =
+    state.schoolYears.length > 0 ? state.schoolYears : [{ name: selectedYear, status: 'activo' }];
 
   return (
     <div className="relative px-1 mb-2">
@@ -18,16 +17,20 @@ export const SchoolYearSelector = () => {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all duration-300 border ${
-          isOpen 
-          ? 'bg-brand-blue/20 border-brand-blue/30 text-white' 
-          : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
+          isOpen
+            ? 'bg-brand-blue/20 border-brand-blue/30 text-white'
+            : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'
         }`}
       >
         <div className="flex items-center gap-2 overflow-hidden">
-          <div className={`p-1.5 rounded-lg transition-colors ${isOpen ? 'bg-brand-blue text-white' : 'bg-slate-800 text-slate-400'}`}>
+          <div
+            className={`p-1.5 rounded-lg transition-colors ${isOpen ? 'bg-brand-blue text-white' : 'bg-slate-800 text-slate-400'}`}
+          >
             <Calendar size={14} />
           </div>
-          <span className="text-xs font-black truncate tracking-tight uppercase">{selectedYear}</span>
+          <span className="text-xs font-black truncate tracking-tight uppercase">
+            {selectedYear}
+          </span>
         </div>
         <ChevronDown
           size={12}
@@ -53,7 +56,9 @@ export const SchoolYearSelector = () => {
               >
                 <span>{y.name}</span>
                 {(y.status === 'activo' || y.is_active) && (
-                  <div className={`w-1.5 h-1.5 rounded-full ${selectedYear === y.name ? 'bg-white' : 'bg-emerald-500'} shadow-[0_0_8px_rgba(16,185,129,0.5)]`}></div>
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${selectedYear === y.name ? 'bg-white' : 'bg-emerald-500'} shadow-[0_0_8px_rgba(16,185,129,0.5)]`}
+                  ></div>
                 )}
               </button>
             ))}

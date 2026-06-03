@@ -556,4 +556,3 @@ export const StudentManagement = () => {
     </div>
   );
 };
-

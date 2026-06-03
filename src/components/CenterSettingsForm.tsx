@@ -23,7 +23,8 @@ export const CenterSettingsForm = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'creator' || !!profile?.is_superadmin;
+  const isAdmin =
+    profile?.role === 'admin' || profile?.role === 'creator' || !!profile?.is_superadmin;
 
   useEffect(() => {
     const fetchCenter = async () => {
@@ -324,11 +325,15 @@ export const CenterSettingsForm = () => {
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">
-                    {center?.district_director_sex === 'M' ? 'Director del Distrito' : 'Directora del Distrito'}
+                    {center?.district_director_sex === 'M'
+                      ? 'Director del Distrito'
+                      : 'Directora del Distrito'}
                   </span>
                   <select
                     value={center?.district_director_sex || 'F'}
-                    onChange={(e) => setCenter({ ...center, district_director_sex: e.target.value })}
+                    onChange={(e) =>
+                      setCenter({ ...center, district_director_sex: e.target.value })
+                    }
                     className="text-[10px] font-black uppercase bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none"
                   >
                     <option value="F">Mujer (Directora)</option>
@@ -348,11 +353,15 @@ export const CenterSettingsForm = () => {
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">
-                    {center?.certification_officer_sex === 'M' ? 'Encargado de Certificación' : 'Encargada de Certificación'}
+                    {center?.certification_officer_sex === 'M'
+                      ? 'Encargado de Certificación'
+                      : 'Encargada de Certificación'}
                   </span>
                   <select
                     value={center?.certification_officer_sex || 'F'}
-                    onChange={(e) => setCenter({ ...center, certification_officer_sex: e.target.value })}
+                    onChange={(e) =>
+                      setCenter({ ...center, certification_officer_sex: e.target.value })
+                    }
                     className="text-[10px] font-black uppercase bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none"
                   >
                     <option value="F">Mujer (Encargada)</option>
@@ -363,7 +372,9 @@ export const CenterSettingsForm = () => {
                   type="text"
                   placeholder="Nombre completo"
                   value={center?.certification_officer_name || ''}
-                  onChange={(e) => setCenter({ ...center, certification_officer_name: e.target.value })}
+                  onChange={(e) =>
+                    setCenter({ ...center, certification_officer_name: e.target.value })
+                  }
                   className={`${inputClass} py-2 text-xs font-bold text-slate-800`}
                 />
               </div>

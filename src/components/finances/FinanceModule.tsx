@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  BarChart3, 
-  Users, 
-  CreditCard, 
-  TrendingDown, 
-  PieChart, 
+import {
+  BarChart3,
+  Users,
+  CreditCard,
+  TrendingDown,
+  PieChart,
   Settings,
   GraduationCap,
   Wallet,
-  BookOpen
+  BookOpen,
+  Package
 } from 'lucide-react';
 import { FinanceDashboard } from './FinanceDashboard';
 import { StudentAccounts } from './StudentAccounts';
@@ -17,6 +18,7 @@ import { PayrollManager } from './PayrollManager';
 import { ScholarshipsManager } from './ScholarshipsManager';
 import { FinanceSettings } from './FinanceSettings';
 import { FinanceReports } from './FinanceReports';
+import { InventoryManager } from './InventoryManager';
 
 export const FinanceModule = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -27,8 +29,9 @@ export const FinanceModule = () => {
     { id: 'expenses', label: 'Libro Contable', icon: BookOpen },
     { id: 'payroll', label: 'Nómina', icon: Wallet },
     { id: 'scholarships', label: 'Becas', icon: GraduationCap },
+    { id: 'inventory', label: 'Inventario', icon: Package },
     { id: 'reports', label: 'Reportes', icon: PieChart },
-    { id: 'settings', label: 'Configuración', icon: Settings },
+    { id: 'settings', label: 'Configuración', icon: Settings }
   ];
 
   return (
@@ -40,8 +43,8 @@ export const FinanceModule = () => {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-              activeTab === tab.id 
-                ? 'bg-slate-900 text-white shadow-xl scale-105' 
+              activeTab === tab.id
+                ? 'bg-slate-900 text-white shadow-xl scale-105'
                 : 'text-slate-400 hover:bg-slate-50'
             }`}
           >
@@ -58,6 +61,7 @@ export const FinanceModule = () => {
         {activeTab === 'expenses' && <LedgerManager />}
         {activeTab === 'payroll' && <PayrollManager />}
         {activeTab === 'scholarships' && <ScholarshipsManager />}
+        {activeTab === 'inventory' && <InventoryManager />}
         {activeTab === 'reports' && <FinanceReports />}
         {activeTab === 'settings' && <FinanceSettings />}
       </div>

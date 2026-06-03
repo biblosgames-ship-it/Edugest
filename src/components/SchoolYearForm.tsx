@@ -4,7 +4,15 @@ import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 
 export const SchoolYearForm = () => {
-  const { state, addSchoolYear, updateSchoolYear, deleteSchoolYear, setSelectedYear, refreshData, selectedYear } = useApp();
+  const {
+    state,
+    addSchoolYear,
+    updateSchoolYear,
+    deleteSchoolYear,
+    setSelectedYear,
+    refreshData,
+    selectedYear
+  } = useApp();
   const { profile } = useSupabase();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -28,7 +36,10 @@ export const SchoolYearForm = () => {
       setFormData({ name: '', start_date: '', end_date: '', status: 'planificacion' });
     } catch (error: any) {
       console.error('Error en SchoolYearForm:', error);
-      alert('Error al procesar el año escolar: ' + (error.message || error.details || 'Error desconocido'));
+      alert(
+        'Error al procesar el año escolar: ' +
+          (error.message || error.details || 'Error desconocido')
+      );
     }
   };
 
@@ -45,7 +56,9 @@ export const SchoolYearForm = () => {
 
   const handleDelete = async (id: string, name: string) => {
     if (name === selectedYear) {
-      alert('No se puede eliminar el año escolar que se encuentra seleccionado actualmente como activo.');
+      alert(
+        'No se puede eliminar el año escolar que se encuentra seleccionado actualmente como activo.'
+      );
       return;
     }
 
@@ -59,7 +72,9 @@ export const SchoolYearForm = () => {
 
       if (cErr) throw cErr;
       if (courseCount && courseCount > 0) {
-        alert(`No se puede eliminar el ciclo ${name} porque tiene ${courseCount} curso(s) registrado(s) en la base de datos. Debe eliminarlos primero.`);
+        alert(
+          `No se puede eliminar el ciclo ${name} porque tiene ${courseCount} curso(s) registrado(s) en la base de datos. Debe eliminarlos primero.`
+        );
         return;
       }
 
@@ -72,7 +87,9 @@ export const SchoolYearForm = () => {
 
       if (sErr) throw sErr;
       if (studentCount && studentCount > 0) {
-        alert(`No se puede eliminar el ciclo ${name} porque tiene ${studentCount} alumno(s) matriculado(s) en él. Debe desvincularlos o eliminarlos primero.`);
+        alert(
+          `No se puede eliminar el ciclo ${name} porque tiene ${studentCount} alumno(s) matriculado(s) en él. Debe desvincularlos o eliminarlos primero.`
+        );
         return;
       }
 
@@ -107,14 +124,25 @@ export const SchoolYearForm = () => {
   };
 
   const handleMigrateData = async (yearName: string) => {
-    if (!window.confirm(`¿Vincular todos los datos actuales (horarios, alumnos) al ciclo ${yearName}? Use esto solo si tiene datos sin año asignado.`)) return;
+    if (
+      !window.confirm(
+        `¿Vincular todos los datos actuales (horarios, alumnos) al ciclo ${yearName}? Use esto solo si tiene datos sin año asignado.`
+      )
+    )
+      return;
     try {
       // Intentamos actualizar alumnos y entradas de horario que no tengan año
-      const { error: err1 } = await supabase.from('students').update({ school_year: yearName }).or('school_year.is.null,school_year.eq.""');
-      const { error: err2 } = await supabase.from('schedule_entries').update({ school_year: yearName }).or('school_year.is.null,school_year.eq.""');
-      
+      const { error: err1 } = await supabase
+        .from('students')
+        .update({ school_year: yearName })
+        .or('school_year.is.null,school_year.eq.""');
+      const { error: err2 } = await supabase
+        .from('schedule_entries')
+        .update({ school_year: yearName })
+        .or('school_year.is.null,school_year.eq.""');
+
       if (err1 || err2) throw new Error('Error parcial en migración');
-      
+
       alert('¡Datos vinculados exitosamente!');
       await refreshData(undefined, true);
     } catch (error) {
@@ -122,12 +150,17 @@ export const SchoolYearForm = () => {
     }
   };
 
-  const inputClass = 'w-full px-4 py-2.5 rounded-xl border border-border-main bg-brand-bg focus:ring-2 focus:ring-brand-blue outline-none text-sm text-text-main transition-all';
-  const labelClass = 'block text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5 ml-1';
+  const inputClass =
+    'w-full px-4 py-2.5 rounded-xl border border-border-main bg-brand-bg focus:ring-2 focus:ring-brand-blue outline-none text-sm text-text-main transition-all';
+  const labelClass =
+    'block text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5 ml-1';
 
   return (
     <div className="space-y-10">
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-lg bg-white p-8 rounded-[2rem] border border-border-main shadow-xl">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6 max-w-lg bg-white p-8 rounded-[2rem] border border-border-main shadow-xl"
+      >
         <div className="flex items-center gap-3 mb-4 text-brand-blue">
           <Calendar size={24} />
           <h2 className="text-lg font-black uppercase tracking-tight">Gestionar Ciclo Escolar</h2>
@@ -207,7 +240,9 @@ export const SchoolYearForm = () => {
             <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
               Ciclos Registrados
             </h3>
-            <p className="text-[10px] text-text-muted uppercase font-bold mt-1">Configuración base del centro</p>
+            <p className="text-[10px] text-text-muted uppercase font-bold mt-1">
+              Configuración base del centro
+            </p>
           </div>
           <div className="px-4 py-1 bg-brand-blue/10 text-brand-blue rounded-full text-[10px] font-black uppercase tracking-widest">
             {state.schoolYears.length} Años
@@ -218,25 +253,41 @@ export const SchoolYearForm = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest">Nombre del Ciclo</th>
-                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest">Periodo</th>
-                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest text-center">Estado</th>
-                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest text-right">Acciones</th>
+                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest">
+                  Nombre del Ciclo
+                </th>
+                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest">
+                  Periodo
+                </th>
+                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest text-center">
+                  Estado
+                </th>
+                <th className="py-5 px-8 text-[9px] font-black uppercase tracking-widest text-right">
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody>
               {state.schoolYears.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400 text-sm font-medium italic">
+                  <td
+                    colSpan={4}
+                    className="py-12 text-center text-slate-400 text-sm font-medium italic"
+                  >
                     No hay ciclos escolares registrados. Comience creando uno arriba.
                   </td>
                 </tr>
               ) : (
                 state.schoolYears.map((year: any) => (
-                  <tr key={year.id} className={`border-b border-border-main hover:bg-brand-blue/5 transition-colors ${selectedYear === year.name ? 'bg-brand-blue/5' : ''}`}>
+                  <tr
+                    key={year.id}
+                    className={`border-b border-border-main hover:bg-brand-blue/5 transition-colors ${selectedYear === year.name ? 'bg-brand-blue/5' : ''}`}
+                  >
                     <td className="py-6 px-8">
                       <div className="flex items-center gap-3">
-                        <span className="font-black text-slate-900 tracking-tight text-lg">{year.name}</span>
+                        <span className="font-black text-slate-900 tracking-tight text-lg">
+                          {year.name}
+                        </span>
                         {selectedYear === year.name && (
                           <span className="flex items-center gap-1 bg-emerald-500 text-white px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter">
                             <CheckCircle2 size={10} /> Seleccionado
@@ -251,11 +302,15 @@ export const SchoolYearForm = () => {
                       </div>
                     </td>
                     <td className="py-6 px-8 text-center">
-                      <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                        year.status === 'activo' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                        year.status === 'cerrado' ? 'bg-slate-100 text-slate-500 border-slate-200' :
-                        'bg-amber-50 text-amber-600 border-amber-100'
-                      }`}>
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                          year.status === 'activo'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                            : year.status === 'cerrado'
+                              ? 'bg-slate-100 text-slate-500 border-slate-200'
+                              : 'bg-amber-50 text-amber-600 border-amber-100'
+                        }`}
+                      >
                         {year.status}
                       </span>
                     </td>

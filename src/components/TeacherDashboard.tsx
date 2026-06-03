@@ -3,17 +3,17 @@ import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
 import html2canvas from 'html2canvas-pro';
-import { 
-  Bell, 
-  Clock, 
-  Calendar as CalendarIcon, 
-  User, 
-  BookOpen, 
-  Activity, 
-  MapPin, 
-  Plus, 
-  ArrowLeft, 
-  CheckCircle2, 
+import {
+  Bell,
+  Clock,
+  Calendar as CalendarIcon,
+  User,
+  BookOpen,
+  Activity,
+  MapPin,
+  Plus,
+  ArrowLeft,
+  CheckCircle2,
   ClipboardList,
   AlertCircle,
   FileText,
@@ -28,7 +28,7 @@ import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 
 export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const { state } = useApp();
-  
+
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
     return profile?.teacher_id || localStorage.getItem('selected_teacher_id') || '';
@@ -50,7 +50,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         .from('profiles')
         .update({ teacher_id: teacherId })
         .eq('id', profile.id);
-        
+
       if (error) {
         console.warn('Supabase profiles update failed, saving locally:', error);
         localStorage.setItem('selected_teacher_id', teacherId);
@@ -59,10 +59,10 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       } else {
         localStorage.setItem('selected_teacher_id', teacherId);
         setSelectedTeacherId(teacherId);
-        
+
         // Actualizar perfil local en memoria
         profile.teacher_id = teacherId;
-        
+
         alert('¡Cuenta vinculada de forma permanente con éxito en Supabase!');
       }
     } catch (err) {
@@ -78,7 +78,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const [courseTasks, setCourseTasks] = useState<any[]>([]);
   const [courseAnnouncements, setCourseAnnouncements] = useState<any[]>([]);
   const [courseCommunications, setCourseCommunications] = useState<any[]>([]);
-  const [activeCourseTab, setActiveCourseTab] = useState<'horario' | 'tareas' | 'comunicados' | 'excusas'>('horario');
+  const [activeCourseTab, setActiveCourseTab] = useState<
+    'horario' | 'tareas' | 'comunicados' | 'excusas'
+  >('horario');
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   const [initialFormType, setInitialFormType] = useState<'task' | 'announcement'>('task');
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState<boolean>(false);
@@ -96,18 +98,22 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
   const getMinutes = (time: string) => {
     if (!time) return 0;
-    let [h, m] = time.split(':').map(s => s.trim());
+    let [h, m] = time.split(':').map((s) => s.trim());
     let hours = parseInt(h);
     let minutes = parseInt(m.substring(0, 2));
-    
+
     if (time.toUpperCase().includes('PM') && hours < 12) hours += 12;
     if (time.toUpperCase().includes('AM') && hours === 12) hours = 0;
-    
+
     return hours * 60 + minutes;
   };
 
-  const normalize = (text: string) => 
-    text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const normalize = (text: string) =>
+    text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
 
   // Persistir la selección
   const handleTeacherChange = (id: string) => {
@@ -122,7 +128,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   };
 
   const currentTeacher = useMemo(() => {
-    return state.teachers.find(t => t.id === selectedTeacherId);
+    return state.teachers.find((t) => t.id === selectedTeacherId);
   }, [state.teachers, selectedTeacherId]);
 
   // Cargar datos al entrar a un curso
@@ -139,9 +145,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
         setCourseTasks(tasksData);
         setCourseAnnouncements(annData);
-        
+
         // Filtrar comunicaciones/excusas de este curso específico
-        const courseCommsFiltered = (commsData || []).filter((c: any) => 
+        const courseCommsFiltered = (commsData || []).filter((c: any) =>
           (c.target_courses || []).includes(selectedCourse.id)
         );
         setCourseCommunications(courseCommsFiltered);
@@ -160,8 +166,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
     const normTodayClasses = state.schedule
       .filter((entry) => {
-        if (entry.teacherId !== selectedTeacherId && entry.teacher_id !== selectedTeacherId) return false;
-        
+        if (entry.teacherId !== selectedTeacherId && entry.teacher_id !== selectedTeacherId)
+          return false;
+
         const entryDay = entry.day || '';
         if (entryDay && normalize(entryDay) === normCurrentDay) return true;
 
@@ -169,34 +176,34 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         const tb = state.timeBlocks.find((b) => b.id === tbId);
         return tb && normalize(tb.day) === normCurrentDay;
       })
-      .map(entry => {
+      .map((entry) => {
         const tbId = entry.time_block_id || entry.timeBlockId;
         const subId = entry.subject_id || entry.subjectId;
         const courseId = entry.course_id || entry.courseId;
-        
-        const tb = state.timeBlocks.find(b => b.id === tbId);
-        const sub = state.subjects.find(s => s.id === subId);
-        const course = state.courses.find(c => c.id === courseId);
-        const room = state.rooms.find(r => r.id === (entry.room_id || entry.roomId));
-        
+
+        const tb = state.timeBlocks.find((b) => b.id === tbId);
+        const sub = state.subjects.find((s) => s.id === subId);
+        const course = state.courses.find((c) => c.id === courseId);
+        const room = state.rooms.find((r) => r.id === (entry.room_id || entry.roomId));
+
         const sTime = entry.start_time || entry.startTime || tb?.startTime || tb?.start_time || '';
         const eTime = entry.end_time || entry.endTime || tb?.endTime || tb?.end_time || '';
-        
+
         const start = getMinutes(sTime);
         const end = getMinutes(eTime);
         const isNow = currentTimeMinutes >= start && currentTimeMinutes < end;
 
-        return { 
-          ...entry, 
+        return {
+          ...entry,
           isBreak: false,
-          tb, 
-          sub, 
-          course, 
-          room, 
-          isNow, 
-          startMinutes: start, 
-          sTime, 
-          eTime 
+          tb,
+          sub,
+          course,
+          room,
+          isNow,
+          startMinutes: start,
+          sTime,
+          eTime
         };
       });
 
@@ -219,8 +226,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     };
 
     // Determinar tanda
-    const isMorning = normTodayClasses.some(c => c.startMinutes < 780);
-    
+    const isMorning = normTodayClasses.some((c) => c.startMinutes < 780);
+
     // Buscar recreo en breakPreferences
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
       let bpMins = toMins(bp.startTime);
@@ -229,7 +236,11 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       return isMorning === isBpMorning;
     });
 
-    const bStart = firstRelevantBreak ? toMins(firstRelevantBreak.startTime) : (isMorning ? 600 : 960); // 10:00 AM o 04:00 PM
+    const bStart = firstRelevantBreak
+      ? toMins(firstRelevantBreak.startTime)
+      : isMorning
+        ? 600
+        : 960; // 10:00 AM o 04:00 PM
     const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : 30;
     const bEnd = bStart + bDuration;
 
@@ -246,10 +257,20 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     } as any;
 
     return [...normTodayClasses, breakItem].sort((a, b) => a.startMinutes - b.startMinutes);
-  }, [selectedTeacherId, state.schedule, state.timeBlocks, state.subjects, state.courses, state.rooms, currentDay, currentTimeMinutes, state.breakPreferences]);
+  }, [
+    selectedTeacherId,
+    state.schedule,
+    state.timeBlocks,
+    state.subjects,
+    state.courses,
+    state.rooms,
+    currentDay,
+    currentTimeMinutes,
+    state.breakPreferences
+  ]);
 
   const activeClassNow = useMemo(() => {
-    return teacherTodaySchedule.find(c => c.isNow && !c.isBreak);
+    return teacherTodaySchedule.find((c) => c.isNow && !c.isBreak);
   }, [teacherTodaySchedule]);
 
   // Matriz semanal completa del docente (Lunes a Viernes)
@@ -265,14 +286,14 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         return tId === selectedTeacherId;
       })
       .map((s) => {
-        const tb = state.timeBlocks.find(b => b.id === (s.timeBlockId || s.time_block_id));
-        const sub = state.subjects.find(sub => sub.id === (s.subjectId || s.subject_id));
-        const course = state.courses.find(c => c.id === (s.courseId || s.course_id));
-        const room = state.rooms.find(r => r.id === (s.roomId || s.room_id));
+        const tb = state.timeBlocks.find((b) => b.id === (s.timeBlockId || s.time_block_id));
+        const sub = state.subjects.find((sub) => sub.id === (s.subjectId || s.subject_id));
+        const course = state.courses.find((c) => c.id === (s.courseId || s.course_id));
+        const room = state.rooms.find((r) => r.id === (s.roomId || s.room_id));
         const sTime = s.start_time || s.startTime || tb?.startTime || tb?.start_time || '';
         const eTime = s.end_time || s.endTime || tb?.endTime || tb?.end_time || '';
         const day = s.day || tb?.day || '';
-        
+
         return {
           ...s,
           day,
@@ -287,9 +308,15 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
     // 2. Extraer horas y bloques únicos
     const timeKeys = new Set<string>();
-    const timeBlocksList: { start: string; end: string; startMinutes: number; isBreak: boolean; label: string }[] = [];
+    const timeBlocksList: {
+      start: string;
+      end: string;
+      startMinutes: number;
+      isBreak: boolean;
+      label: string;
+    }[] = [];
 
-    teacherEntries.forEach(entry => {
+    teacherEntries.forEach((entry) => {
       if (entry.sTime && entry.eTime) {
         const key = `${entry.sTime}-${entry.eTime}`;
         if (!timeKeys.has(key)) {
@@ -320,8 +347,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     };
 
     // Agregar recreos generales si corresponden a los turnos del docente
-    const hasMorning = teacherEntries.some(e => e.startMinutes < 780);
-    const hasAfternoon = teacherEntries.some(e => e.startMinutes >= 780);
+    const hasMorning = teacherEntries.some((e) => e.startMinutes < 780);
+    const hasAfternoon = teacherEntries.some((e) => e.startMinutes >= 780);
 
     const addBreakForShift = (morning: boolean) => {
       const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
@@ -331,7 +358,11 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         return morning === isBpMorning;
       });
 
-      const bStart = firstRelevantBreak ? toMins(firstRelevantBreak.startTime) : (morning ? 600 : 960);
+      const bStart = firstRelevantBreak
+        ? toMins(firstRelevantBreak.startTime)
+        : morning
+          ? 600
+          : 960;
       const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : 30;
       const bEnd = bStart + bDuration;
 
@@ -364,9 +395,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     // 3. Rellenar matriz de datos por día y hora
     const matrix: Record<string, Record<string, any>> = {};
 
-    sortedSlots.forEach(slot => {
+    sortedSlots.forEach((slot) => {
       matrix[slot.start] = {};
-      weekDays.forEach(day => {
+      weekDays.forEach((day) => {
         if (slot.isBreak) {
           matrix[slot.start][day] = {
             isBreak: true,
@@ -376,7 +407,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
           };
         } else {
           // Buscar si hay clase este día a esta hora
-          const match = teacherEntries.find(e => {
+          const match = teacherEntries.find((e) => {
             const entryDay = e.day || '';
             const dayMatches = normalize(entryDay) === normalize(day);
             return dayMatches && Math.abs(e.startMinutes - slot.startMinutes) <= 25;
@@ -401,15 +432,23 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     });
 
     return { slots: sortedSlots, matrix };
-  }, [selectedTeacherId, state.schedule, state.timeBlocks, state.subjects, state.courses, state.rooms, state.breakPreferences]);
+  }, [
+    selectedTeacherId,
+    state.schedule,
+    state.timeBlocks,
+    state.subjects,
+    state.courses,
+    state.rooms,
+    state.breakPreferences
+  ]);
 
   // Obtener los cursos que dicta el docente
   const myCourses = useMemo(() => {
     if (!selectedTeacherId) return [];
-    
+
     // Obtener cursos únicos de sus schedule entries o de sus assignments
     const courseIds = new Set<string>();
-    
+
     state.schedule.forEach((s) => {
       const tId = s.teacherId || s.teacher_id;
       const cId = s.courseId || s.course_id;
@@ -426,15 +465,15 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       }
     });
 
-    return state.courses.filter(c => courseIds.has(c.id));
+    return state.courses.filter((c) => courseIds.has(c.id));
   }, [selectedTeacherId, state.schedule, state.assignments, state.courses]);
 
   // Horario del curso que está inspeccionando el docente con recreos completos y horas libres
   const selectedCourseSchedule = useMemo(() => {
     if (!selectedCourse) return [];
-    
+
     const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-    
+
     const toMins = (val: string) => {
       const [h, m] = (val || '')
         .replace(/[^0-9:]/g, '')
@@ -451,7 +490,10 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
     // 1. Obtener slots exactos del curso (igual al motor principal)
     const getSlotsForCourse = (course: any) => {
-      const isMorning = (course.tanda || '').toLowerCase().includes('mat') || (course.tanda || '').toLowerCase().includes('mañ') || !(course.tanda || '').toLowerCase().includes('ves');
+      const isMorning =
+        (course.tanda || '').toLowerCase().includes('mat') ||
+        (course.tanda || '').toLowerCase().includes('mañ') ||
+        !(course.tanda || '').toLowerCase().includes('ves');
       const startT = isMorning ? 480 : 840; // 08:00 o 14:00
       const endT = isMorning ? 720 : 1095; // 18:15 default
 
@@ -465,14 +507,28 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
       let masterStartMins = toMins(rawMasterStart);
       if (!isMorning && masterStartMins < 420) masterStartMins += 720;
-      const masterBPref = { 
-        startTime: fromMins(masterStartMins), 
-        durationMinutes: firstRelevantBreak?.durationMinutes || 30 
+      const masterBPref = {
+        startTime: fromMins(masterStartMins),
+        durationMinutes: firstRelevantBreak?.durationMinutes || 30
       };
 
       const grade = course.grade?.toLowerCase() || '';
-      const isFirstCycle = /^[1-3]/.test(grade) || grade.includes('1') || grade.includes('2') || grade.includes('3') || grade.includes('primer') || (grade.includes('segundo') && !grade.includes('ciclo')) || grade.includes('tercer');
-      const isSecondCycle = /^[4-6]/.test(grade) || grade.includes('4') || grade.includes('5') || grade.includes('6') || grade.includes('cuarto') || grade.includes('quinto') || grade.includes('sexto');
+      const isFirstCycle =
+        /^[1-3]/.test(grade) ||
+        grade.includes('1') ||
+        grade.includes('2') ||
+        grade.includes('3') ||
+        grade.includes('primer') ||
+        (grade.includes('segundo') && !grade.includes('ciclo')) ||
+        grade.includes('tercer');
+      const isSecondCycle =
+        /^[4-6]/.test(grade) ||
+        grade.includes('4') ||
+        grade.includes('5') ||
+        grade.includes('6') ||
+        grade.includes('cuarto') ||
+        grade.includes('quinto') ||
+        grade.includes('sexto');
 
       const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime);
@@ -501,10 +557,14 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       if (!isMorning && bStart < 420) bStart += 720;
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
-      const targetTotalLocal = (isMorning || (course.level || '').toLowerCase().includes('primar')) ? 5 : 6;
-      let classStart = (isMorning && startT <= 480) ? 480 : startT;
-      const totalAvailableLocal = Math.max(1, (bStart - classStart) + (endT - bEnd));
-      const preCountLocal = Math.min(targetTotalLocal - 1, Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal)));
+      const targetTotalLocal =
+        isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
+      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      const totalAvailableLocal = Math.max(1, bStart - classStart + (endT - bEnd));
+      const preCountLocal = Math.min(
+        targetTotalLocal - 1,
+        Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal))
+      );
       const postCountLocal = targetTotalLocal - preCountLocal;
 
       const slots = [];
@@ -516,8 +576,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       const preDuration = Math.floor((bStart - classStart) / preCountLocal);
       for (let i = 0; i < preCountLocal; i++) {
         let sTime = classStart + i * preDuration;
-        let eTime = (i === preCountLocal - 1) ? bStart : sTime + preDuration;
-        slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${i + 1}ra Hora` });
+        let eTime = i === preCountLocal - 1 ? bStart : sTime + preDuration;
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
       }
 
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
@@ -525,8 +590,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       const postDuration = Math.floor((endT - bEnd) / postCountLocal);
       for (let i = 0; i < postCountLocal; i++) {
         let sTime = bEnd + i * postDuration;
-        let eTime = (i === postCountLocal - 1) ? endT : sTime + postDuration;
-        slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${preCountLocal + i + 1}ra Hora` });
+        let eTime = i === postCountLocal - 1 ? endT : sTime + postDuration;
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${preCountLocal + i + 1}ra Hora`
+        });
       }
 
       return slots;
@@ -534,21 +604,21 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
     const courseSlots = getSlotsForCourse(selectedCourse);
 
-    return weekDays.map(day => {
+    return weekDays.map((day) => {
       // Filtrar materias registradas para este día
-      const dayEntries = state.schedule.filter(s => {
+      const dayEntries = state.schedule.filter((s) => {
         const cId = s.courseId || s.course_id;
         if (cId !== selectedCourse.id) return false;
-        
+
         const sDay = s.day || '';
         if (sDay && normalize(sDay) === normalize(day)) return true;
 
-        const tb = state.timeBlocks.find(b => b.id === (s.timeBlockId || s.time_block_id));
+        const tb = state.timeBlocks.find((b) => b.id === (s.timeBlockId || s.time_block_id));
         return tb && normalize(tb.day) === normalize(day);
       });
 
       // Mapear cada slot de la rejilla con la materia asignada, libre o recreo
-      const entries = courseSlots.map(slot => {
+      const entries = courseSlots.map((slot) => {
         if (slot.isBreak) {
           return {
             isBreak: true,
@@ -562,22 +632,38 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
         // Buscar si hay una clase en esta hora aproximada
         const slotMins = getMinutes(slot.start);
-        const matchingEntry = dayEntries.find(e => {
+        const matchingEntry = dayEntries.find((e) => {
           const eTime = e.start_time || e.startTime;
           if (eTime) {
             return Math.abs(getMinutes(eTime) - slotMins) <= 25;
           }
-          const tb = state.timeBlocks.find(b => b.id === (e.timeBlockId || e.time_block_id));
+          const tb = state.timeBlocks.find((b) => b.id === (e.timeBlockId || e.time_block_id));
           const tbTime = tb?.startTime || tb?.start_time;
           return tbTime && Math.abs(getMinutes(tbTime) - slotMins) <= 25;
         });
 
         if (matchingEntry) {
-          const tb = state.timeBlocks.find(b => b.id === (matchingEntry.timeBlockId || matchingEntry.time_block_id));
-          const sub = state.subjects.find(sub => sub.id === (matchingEntry.subjectId || matchingEntry.subject_id));
-          const tea = state.teachers.find(t => t.id === (matchingEntry.teacherId || matchingEntry.teacher_id));
-          const sTime = matchingEntry.start_time || matchingEntry.startTime || tb?.startTime || tb?.start_time || slot.start;
-          const eTime = matchingEntry.end_time || matchingEntry.endTime || tb?.endTime || tb?.end_time || slot.end;
+          const tb = state.timeBlocks.find(
+            (b) => b.id === (matchingEntry.timeBlockId || matchingEntry.time_block_id)
+          );
+          const sub = state.subjects.find(
+            (sub) => sub.id === (matchingEntry.subjectId || matchingEntry.subject_id)
+          );
+          const tea = state.teachers.find(
+            (t) => t.id === (matchingEntry.teacherId || matchingEntry.teacher_id)
+          );
+          const sTime =
+            matchingEntry.start_time ||
+            matchingEntry.startTime ||
+            tb?.startTime ||
+            tb?.start_time ||
+            slot.start;
+          const eTime =
+            matchingEntry.end_time ||
+            matchingEntry.endTime ||
+            tb?.endTime ||
+            tb?.end_time ||
+            slot.end;
 
           return {
             ...matchingEntry,
@@ -604,20 +690,27 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       return { day, entries };
     });
-  }, [selectedCourse, state.schedule, state.timeBlocks, state.subjects, state.teachers, state.breakPreferences]);
+  }, [
+    selectedCourse,
+    state.schedule,
+    state.timeBlocks,
+    state.subjects,
+    state.teachers,
+    state.breakPreferences
+  ]);
 
   // Próximas actividades del centro
   const upcomingActivities = useMemo(() => {
     const todayStr = currentTime.toISOString().split('T')[0];
     return (state.activities || [])
-      .filter(act => act.date >= todayStr)
+      .filter((act) => act.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
   }, [state.activities, currentTime]);
 
   const suggestedTeacher = useMemo(() => {
     if (!profile || !state.teachers) return null;
-    return state.teachers.find(t => {
+    return state.teachers.find((t) => {
       const tName = normalize(t.name);
       const pName = profile.full_name ? normalize(profile.full_name) : '';
       const tEmail = t.email ? t.email.toLowerCase().trim() : '';
@@ -628,7 +721,6 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
   return (
     <div className="space-y-8 pb-20 animate-fade-in">
-      
       {/* SELECCIONAR O CAMBIAR DOCENTE */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
@@ -640,11 +732,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               {currentTeacher ? `Hola, ${currentTeacher.name}` : 'Acceso Docente'}
             </h2>
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-              {currentTeacher ? 'Área Académica: ' + (currentTeacher.area || 'General') : 'Selecciona tu cuenta docente'}
+              {currentTeacher
+                ? 'Área Académica: ' + (currentTeacher.area || 'General')
+                : 'Selecciona tu cuenta docente'}
             </p>
           </div>
         </div>
-        
+
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto shrink-0">
           <div className="w-full md:w-64">
             <select
@@ -696,9 +790,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             <div className="bg-emerald-50 border-2 border-emerald-300 p-6 rounded-[2.5rem] text-center shadow-xl relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-xl rounded-full"></div>
               <CheckCircle2 className="mx-auto mb-4 text-emerald-600 animate-bounce" size={48} />
-              <h4 className="text-base font-black uppercase text-emerald-950 tracking-tight">¿Eres {suggestedTeacher.name}?</h4>
+              <h4 className="text-base font-black uppercase text-emerald-950 tracking-tight">
+                ¿Eres {suggestedTeacher.name}?
+              </h4>
               <p className="text-xs text-emerald-800 mt-2 leading-relaxed font-semibold">
-                Hemos detectado que tu nombre de usuario o correo coincide con este perfil docente. Vincula tu cuenta de forma permanente para acceder automáticamente en tus próximos ingresos.
+                Hemos detectado que tu nombre de usuario o correo coincide con este perfil docente.
+                Vincula tu cuenta de forma permanente para acceder automáticamente en tus próximos
+                ingresos.
               </p>
               <button
                 onClick={() => handleLinkTeacher(suggestedTeacher.id)}
@@ -709,15 +807,17 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               </button>
             </div>
           )}
-          
+
           <div className="p-12 text-center bg-white rounded-[3rem] border border-slate-100 shadow-2xl">
             <ClipboardList className="mx-auto mb-6 text-indigo-600 animate-pulse" size={64} />
             <h3 className="text-xl font-black text-slate-900 uppercase">Panel Docente</h3>
             <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-              Por favor, selecciona tu nombre del listado superior para acceder a tu agenda escolar, horarios de cursos, asignación de tareas, comunicados y control de excusas.
+              Por favor, selecciona tu nombre del listado superior para acceder a tu agenda escolar,
+              horarios de cursos, asignación de tareas, comunicados y control de excusas.
             </p>
             <p className="text-[10px] text-slate-400 mt-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-bold uppercase tracking-wider">
-              💡 Una vez seleccionado tu perfil, haz clic en "Vincular Cuenta" para guardar la configuración de forma definitiva en la nube.
+              💡 Una vez seleccionado tu perfil, haz clic en "Vincular Cuenta" para guardar la
+              configuración de forma definitiva en la nube.
             </p>
           </div>
         </div>
@@ -730,21 +830,20 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
           >
             <X size={20} />
           </button>
-          <TeacherTaskAnnouncement 
-            userData={profile} 
-            initialCourseId={selectedCourse?.id} 
+          <TeacherTaskAnnouncement
+            userData={profile}
+            initialCourseId={selectedCourse?.id}
             onClose={() => setShowCreateForm(false)}
           />
         </div>
       ) : selectedCourse ? (
         // VISTA COMPLETA DEL CURSO SELECCIONADO
         <div className="space-y-6">
-          
           {/* HEADER VISTA CURSO */}
           <div className="bg-slate-950 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-[100px] rounded-full -mr-40 -mt-40"></div>
             <div className="relative z-10 flex items-center gap-4">
-              <button 
+              <button
                 onClick={() => setSelectedCourse(null)}
                 className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center text-white transition-all"
               >
@@ -754,7 +853,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 <span className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.3em]">
                   GESTIÓN Y SEGUIMIENTO DE CURSO
                 </span>
-                <h3 className="text-3xl font-black uppercase tracking-tight mt-1">{selectedCourse.grade} {selectedCourse.section}</h3>
+                <h3 className="text-3xl font-black uppercase tracking-tight mt-1">
+                  {selectedCourse.grade} {selectedCourse.section}
+                </h3>
                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
                   {selectedCourse.level} • Tanda {selectedCourse.tanda}
                 </p>
@@ -810,18 +911,22 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
           {/* CONTENIDOS TABS */}
           <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl min-h-[400px]">
-            
             {/* HORARIO DEL CURSO */}
             {activeCourseTab === 'horario' && (
               <div className="space-y-6">
-                <h4 className="text-lg font-black uppercase text-slate-850 border-b border-slate-50 pb-3 mb-6">Horario de Clases Semanal</h4>
+                <h4 className="text-lg font-black uppercase text-slate-850 border-b border-slate-50 pb-3 mb-6">
+                  Horario de Clases Semanal
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   {selectedCourseSchedule.map((d: any) => (
-                    <div key={d.day} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col min-h-[300px]">
+                    <div
+                      key={d.day}
+                      className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col min-h-[300px]"
+                    >
                       <div className="text-center font-black text-[10px] uppercase text-indigo-600 bg-indigo-50 py-1.5 rounded-lg mb-3 tracking-widest">
                         {d.day}
                       </div>
-                      
+
                       <div className="space-y-2 flex-1">
                         {d.entries.length === 0 ? (
                           <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold italic text-[9px] py-10">
@@ -831,10 +936,17 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                           d.entries.map((c: any, index: number) => {
                             if (c.isBreak) {
                               return (
-                                <div key={index} className="bg-amber-50 p-3 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-between">
+                                <div
+                                  key={index}
+                                  className="bg-amber-50 p-3 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-between"
+                                >
                                   <div>
-                                    <p className="text-[10px] font-black text-amber-700 leading-tight uppercase">🔔 {c.label}</p>
-                                    <p className="text-[8px] font-bold text-amber-600 uppercase mt-0.5">Receso General</p>
+                                    <p className="text-[10px] font-black text-amber-700 leading-tight uppercase">
+                                      🔔 {c.label}
+                                    </p>
+                                    <p className="text-[8px] font-bold text-amber-600 uppercase mt-0.5">
+                                      Receso General
+                                    </p>
                                   </div>
                                   <span className="text-[8px] font-black text-amber-700 mt-2 block bg-amber-100/50 w-fit px-1.5 py-0.5 rounded">
                                     {c.sTime} - {c.eTime}
@@ -845,10 +957,17 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
                             if (c.isFree) {
                               return (
-                                <div key={index} className="bg-slate-55/50 p-3 rounded-xl border border-slate-200 border-dashed flex flex-col justify-between opacity-60">
+                                <div
+                                  key={index}
+                                  className="bg-slate-55/50 p-3 rounded-xl border border-slate-200 border-dashed flex flex-col justify-between opacity-60"
+                                >
                                   <div>
-                                    <p className="text-[10px] font-bold text-slate-450 leading-tight uppercase">{c.label}</p>
-                                    <p className="text-[8px] font-semibold text-slate-400 uppercase mt-0.5">Hora Libre</p>
+                                    <p className="text-[10px] font-bold text-slate-450 leading-tight uppercase">
+                                      {c.label}
+                                    </p>
+                                    <p className="text-[8px] font-semibold text-slate-400 uppercase mt-0.5">
+                                      Hora Libre
+                                    </p>
                                   </div>
                                   <span className="text-[8px] font-semibold text-slate-400 mt-2 block bg-slate-100/50 w-fit px-1.5 py-0.5 rounded">
                                     {c.sTime} - {c.eTime}
@@ -858,10 +977,17 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                             }
 
                             return (
-                              <div key={index} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                              <div
+                                key={index}
+                                className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between"
+                              >
                                 <div>
-                                  <p className="text-[10px] font-black text-slate-900 leading-tight uppercase line-clamp-2">{c.sub?.name}</p>
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">{c.tea?.name}</p>
+                                  <p className="text-[10px] font-black text-slate-900 leading-tight uppercase line-clamp-2">
+                                    {c.sub?.name}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
+                                    {c.tea?.name}
+                                  </p>
                                 </div>
                                 <span className="text-[8px] font-black text-indigo-600 mt-2 block bg-indigo-50/50 w-fit px-1.5 py-0.5 rounded">
                                   {c.sTime} - {c.eTime}
@@ -882,35 +1008,50 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3 mb-6">
                   <h4 className="text-lg font-black uppercase text-slate-850">Tareas Asignadas</h4>
-                  <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-3 py-1 rounded-full">{courseTasks.length} Tareas</span>
+                  <span className="bg-indigo-50 text-indigo-600 font-black text-[10px] px-3 py-1 rounded-full">
+                    {courseTasks.length} Tareas
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {courseTasks.length === 0 ? (
                     <div className="col-span-2 text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                       <ClipboardList className="mx-auto mb-4 text-slate-300" size={48} />
-                      <p className="text-xs font-black text-slate-900 uppercase">Sin tareas publicadas</p>
-                      <p className="text-slate-400 text-xs mt-1">Utiliza el botón superior para asignar la primera tarea al grupo.</p>
+                      <p className="text-xs font-black text-slate-900 uppercase">
+                        Sin tareas publicadas
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Utiliza el botón superior para asignar la primera tarea al grupo.
+                      </p>
                     </div>
                   ) : (
                     courseTasks.map((t: any) => {
                       const isLate = new Date(t.due_date) < new Date();
-                      const subject = state.subjects.find(s => s.id === t.subject_id);
+                      const subject = state.subjects.find((s) => s.id === t.subject_id);
                       return (
-                        <div key={t.id} className="p-5 bg-slate-50/50 rounded-2xl border-2 border-slate-100 hover:border-indigo-200 transition-all flex flex-col justify-between">
+                        <div
+                          key={t.id}
+                          className="p-5 bg-slate-50/50 rounded-2xl border-2 border-slate-100 hover:border-indigo-200 transition-all flex flex-col justify-between"
+                        >
                           <div>
                             <div className="flex justify-between items-start gap-3 mb-2">
                               <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase tracking-widest">
                                 {subject?.name || 'General'}
                               </span>
-                              <span className={`text-[8px] font-black px-2 py-0.5 rounded ${isLate ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                              <span
+                                className={`text-[8px] font-black px-2 py-0.5 rounded ${isLate ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}
+                              >
                                 {isLate ? 'VENCIDA' : 'ACTIVA'}
                               </span>
                             </div>
-                            <h5 className="text-sm font-black text-slate-900 uppercase tracking-tight mt-1">{t.title}</h5>
-                            <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-3">{t.description}</p>
+                            <h5 className="text-sm font-black text-slate-900 uppercase tracking-tight mt-1">
+                              {t.title}
+                            </h5>
+                            <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-3">
+                              {t.description}
+                            </p>
                           </div>
-                          
+
                           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-[9px] font-black text-slate-400">
                             <span>ENTREGA:</span>
                             <span>{new Date(t.due_date).toLocaleDateString()}</span>
@@ -927,23 +1068,36 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             {activeCourseTab === 'comunicados' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3 mb-6">
-                  <h4 className="text-lg font-black uppercase text-slate-850">Circulares del Curso</h4>
-                  <span className="bg-amber-50 text-amber-600 font-black text-[10px] px-3 py-1 rounded-full">{courseAnnouncements.length} Publicados</span>
+                  <h4 className="text-lg font-black uppercase text-slate-850">
+                    Circulares del Curso
+                  </h4>
+                  <span className="bg-amber-50 text-amber-600 font-black text-[10px] px-3 py-1 rounded-full">
+                    {courseAnnouncements.length} Publicados
+                  </span>
                 </div>
 
                 <div className="space-y-4">
                   {courseAnnouncements.length === 0 ? (
                     <div className="text-center py-20 bg-slate-50 rounded-2xl border border-slate-100">
                       <Bell className="mx-auto mb-4 text-slate-300 animate-bounce" size={48} />
-                      <p className="text-xs font-black text-slate-900 uppercase">Sin anuncios activos</p>
-                      <p className="text-slate-400 text-xs mt-1">Comunícales información importante de forma rápida.</p>
+                      <p className="text-xs font-black text-slate-900 uppercase">
+                        Sin anuncios activos
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Comunícales información importante de forma rápida.
+                      </p>
                     </div>
                   ) : (
                     courseAnnouncements.map((a: any) => (
-                      <div key={a.id} className="p-5 bg-slate-50/50 rounded-2xl border border-slate-150">
+                      <div
+                        key={a.id}
+                        className="p-5 bg-slate-50/50 rounded-2xl border border-slate-150"
+                      >
                         <div className="flex justify-between items-start gap-3">
                           <h5 className="text-sm font-black text-slate-900 uppercase">{a.title}</h5>
-                          <span className="text-[8px] font-black text-slate-400">{new Date(a.created_at || a.timestamp).toLocaleDateString()}</span>
+                          <span className="text-[8px] font-black text-slate-400">
+                            {new Date(a.created_at || a.timestamp).toLocaleDateString()}
+                          </span>
                         </div>
                         <p className="text-xs text-slate-600 mt-2 leading-relaxed">{a.content}</p>
                       </div>
@@ -957,20 +1111,32 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             {activeCourseTab === 'excusas' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3 mb-6">
-                  <h4 className="text-lg font-black uppercase text-slate-850">Control de Excusas y Justificaciones</h4>
-                  <span className="bg-rose-50 text-rose-600 font-black text-[10px] px-3 py-1 rounded-full">{courseCommunications.length} Reportes</span>
+                  <h4 className="text-lg font-black uppercase text-slate-850">
+                    Control de Excusas y Justificaciones
+                  </h4>
+                  <span className="bg-rose-50 text-rose-600 font-black text-[10px] px-3 py-1 rounded-full">
+                    {courseCommunications.length} Reportes
+                  </span>
                 </div>
 
                 <div className="space-y-4">
                   {courseCommunications.length === 0 ? (
                     <div className="text-center py-20 bg-slate-50 rounded-2xl border border-slate-100">
                       <AlertCircle className="mx-auto mb-4 text-slate-300" size={48} />
-                      <p className="text-xs font-black text-slate-900 uppercase">Sin justificaciones enviadas</p>
-                      <p className="text-slate-400 text-xs mt-1">Los avisos de enfermedad, inasistencia o tardanza de los padres aparecerán aquí.</p>
+                      <p className="text-xs font-black text-slate-900 uppercase">
+                        Sin justificaciones enviadas
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Los avisos de enfermedad, inasistencia o tardanza de los padres aparecerán
+                        aquí.
+                      </p>
                     </div>
                   ) : (
                     courseCommunications.map((c: any) => (
-                      <div key={c.id} className="p-5 bg-white border-2 border-rose-100 rounded-2xl shadow-sm relative">
+                      <div
+                        key={c.id}
+                        className="p-5 bg-white border-2 border-rose-100 rounded-2xl shadow-sm relative"
+                      >
                         <div className="flex items-center gap-2 mb-2">
                           <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-lg text-[8px] font-black uppercase tracking-widest">
                             {c.motive || 'Excusa'}
@@ -979,7 +1145,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                             • {new Date(c.created_at).toLocaleDateString()}
                           </span>
                         </div>
-                        <p className="text-xs font-black text-slate-900 uppercase">{c.sender_name}</p>
+                        <p className="text-xs font-black text-slate-900 uppercase">
+                          {c.sender_name}
+                        </p>
                         <p className="text-xs text-slate-600 mt-2 leading-relaxed">{c.message}</p>
                       </div>
                     ))
@@ -987,29 +1155,28 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 </div>
               </div>
             )}
-
           </div>
         </div>
       ) : (
         // DASHBOARD GENERAL DOCENTE
         <div className="space-y-8">
-          
           {/* MODO ALARMA Y NOTIFICACIONES */}
           <ExcuseAlert />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
             {/* HOY Y CLASES EN VIVO */}
             <div className="lg:col-span-8 space-y-6">
               <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-200 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-4 h-full bg-indigo-600"></div>
-                
+
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                   <h3 className="text-base font-black uppercase tracking-widest text-slate-900 flex items-center gap-3">
-                    <Activity className="text-indigo-600 animate-pulse" size={20} /> Mi Agenda Escolar ({currentDay})
+                    <Activity className="text-indigo-600 animate-pulse" size={20} /> Mi Agenda
+                    Escolar ({currentDay})
                   </h3>
                   <span className="text-[10px] font-black text-slate-500 flex items-center gap-2">
-                    <Clock size={12} className="text-indigo-600" /> {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <Clock size={12} className="text-indigo-600" />{' '}
+                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
@@ -1024,10 +1191,15 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                         {activeClassNow.room?.name || 'A'}
                       </div>
                       <div>
-                        <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">AHORA MISMO</span>
-                        <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">{activeClassNow.sub?.name}</h4>
+                        <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
+                          AHORA MISMO
+                        </span>
+                        <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
+                          {activeClassNow.sub?.name}
+                        </h4>
                         <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
-                          <BookOpen size={12} /> Curso: {activeClassNow.course?.grade} {activeClassNow.course?.section} ({activeClassNow.course?.level})
+                          <BookOpen size={12} /> Curso: {activeClassNow.course?.grade}{' '}
+                          {activeClassNow.course?.section} ({activeClassNow.course?.level})
                         </p>
                       </div>
                     </div>
@@ -1035,19 +1207,23 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 ) : (
                   <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-center text-slate-500 font-bold text-xs italic">
                     {(() => {
-                      const currentRecess = teacherTodaySchedule.find(c => c.isBreak && c.isNow);
+                      const currentRecess = teacherTodaySchedule.find((c) => c.isBreak && c.isNow);
                       if (currentRecess) {
                         return `🔔 ¡ESTÁS EN RECREO ACTUALMENTE! (${currentRecess.sTime} - ${currentRecess.eTime})`;
                       }
-                      return teacherTodaySchedule.length > 0 && currentTimeMinutes > teacherTodaySchedule[teacherTodaySchedule.length - 1].startMinutes
+                      return teacherTodaySchedule.length > 0 &&
+                        currentTimeMinutes >
+                          teacherTodaySchedule[teacherTodaySchedule.length - 1].startMinutes
                         ? '🔔 Has finalizado tu jornada escolar por hoy.'
                         : '☕ No tienes clases asignadas a esta hora exacta.';
                     })()}
                   </div>
                 )}
- 
+
                 {/* TIMELINE DE HOY */}
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Clases Asignadas para Hoy</h4>
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">
+                  Clases Asignadas para Hoy
+                </h4>
                 <div className="space-y-3">
                   {teacherTodaySchedule.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 font-bold italic bg-slate-50 rounded-2xl text-[10px]">
@@ -1057,20 +1233,24 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                     teacherTodaySchedule.map((c) => {
                       if (c.isBreak) {
                         return (
-                          <div 
-                            key={c.id} 
+                          <div
+                            key={c.id}
                             className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
-                              c.isNow 
-                                ? 'bg-amber-50 border-amber-400 shadow-lg animate-pulse' 
+                              c.isNow
+                                ? 'bg-amber-50 border-amber-400 shadow-lg animate-pulse'
                                 : 'bg-amber-50/50 border-amber-200/50'
                             }`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-600 text-white'}`}>
+                              <div
+                                className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-600 text-white'}`}
+                              >
                                 {c.sTime}
                               </div>
                               <div>
-                                <p className="text-sm font-black tracking-tight text-amber-900">🔔 {c.label}</p>
+                                <p className="text-sm font-black tracking-tight text-amber-900">
+                                  🔔 {c.label}
+                                </p>
                                 <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
                                   Receso Escolar
                                 </p>
@@ -1084,22 +1264,29 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                       }
 
                       return (
-                        <div 
-                          key={c.id} 
+                        <div
+                          key={c.id}
                           className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
-                            c.isNow 
-                              ? 'bg-emerald-50 border-emerald-400 shadow-sm' 
+                            c.isNow
+                              ? 'bg-emerald-50 border-emerald-400 shadow-sm'
                               : 'bg-white border-slate-100 hover:border-slate-300'
                           }`}
                         >
                           <div className="flex items-center gap-4">
-                            <div className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}>
+                            <div
+                              className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
+                            >
                               {c.sTime}
                             </div>
                             <div>
-                              <p className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}>{c.sub?.name}</p>
+                              <p
+                                className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
+                              >
+                                {c.sub?.name}
+                              </p>
                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                                {c.course?.level} • {c.course?.grade}{c.course?.section}
+                                {c.course?.level} • {c.course?.grade}
+                                {c.course?.section}
                               </p>
                             </div>
                           </div>
@@ -1123,19 +1310,25 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
                   <BookOpen size={16} className="text-indigo-400" /> Mis Cursos dictados
                 </h3>
-                
+
                 <div className="space-y-3">
                   {myCourses.length === 0 ? (
-                    <p className="text-xs font-bold opacity-70 italic">No tienes cursos vinculados en el horario escolar.</p>
+                    <p className="text-xs font-bold opacity-70 italic">
+                      No tienes cursos vinculados en el horario escolar.
+                    </p>
                   ) : (
                     myCourses.map((c) => (
-                      <div 
-                        key={c.id} 
+                      <div
+                        key={c.id}
                         className="bg-white/10 hover:bg-white/20 border border-white/15 p-4 rounded-2xl flex items-center justify-between transition-all group"
                       >
                         <div>
-                          <p className="text-sm font-black uppercase tracking-tight text-white">{c.grade} {c.section}</p>
-                          <p className="text-[8px] font-bold opacity-60 uppercase mt-0.5">{c.level}</p>
+                          <p className="text-sm font-black uppercase tracking-tight text-white">
+                            {c.grade} {c.section}
+                          </p>
+                          <p className="text-[8px] font-bold opacity-60 uppercase mt-0.5">
+                            {c.level}
+                          </p>
                         </div>
                         <button
                           onClick={() => {
@@ -1154,27 +1347,37 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
               {/* TENDENCIA Y ACTIVIDADES */}
               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Agenda General del Centro</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">
+                  Agenda General del Centro
+                </h4>
                 <div className="space-y-3">
                   {upcomingActivities.length === 0 ? (
-                    <p className="text-slate-400 italic text-[10px] font-bold">Sin eventos próximos programados.</p>
+                    <p className="text-slate-400 italic text-[10px] font-bold">
+                      Sin eventos próximos programados.
+                    </p>
                   ) : (
                     upcomingActivities.map((act) => (
-                      <div key={act.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                      <div
+                        key={act.id}
+                        className="p-3 bg-slate-50 border border-slate-100 rounded-xl"
+                      >
                         <div className="flex justify-between items-center mb-1">
-                          <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[70%]">{act.title}</p>
+                          <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[70%]">
+                            {act.title}
+                          </p>
                           <span className="text-[8px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
                             {act.date.split('-').reverse().slice(0, 2).join('/')}
                           </span>
                         </div>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">{act.startTime} - {act.endTime}</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+                          {act.startTime} - {act.endTime}
+                        </p>
                       </div>
                     ))
                   )}
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       )}
@@ -1182,9 +1385,10 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       {/* MODAL HORARIO SEMANAL COMPLETO DEL DOCENTE */}
       {showWeeklyScheduleModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
-          
           {/* Estilos especiales de impresión embebidos */}
-          <style dangerouslySetInnerHTML={{__html: `
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
             @media print {
               body * {
                 visibility: hidden !important;
@@ -1208,10 +1412,11 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 display: none !important;
               }
             }
-          `}} />
+          `
+            }}
+          />
 
           <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 max-w-6xl w-full overflow-hidden relative animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
-            
             {/* Cabecera del Modal con controles */}
             <div className="bg-indigo-600 p-6 md:p-8 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-indigo-700 shrink-0 no-print">
               <div>
@@ -1236,14 +1441,16 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                       scale: 2.5,
                       useCORS: true,
                       backgroundColor: '#ffffff'
-                    }).then(canvas => {
-                      const link = document.createElement('a');
-                      link.download = `Horario_Semanal_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
-                      link.href = canvas.toDataURL('image/png');
-                      link.click();
-                    }).catch(err => {
-                      console.error('Error exporting schedule image:', err);
-                    });
+                    })
+                      .then((canvas) => {
+                        const link = document.createElement('a');
+                        link.download = `Horario_Semanal_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                      })
+                      .catch((err) => {
+                        console.error('Error exporting schedule image:', err);
+                      });
                   }}
                   className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                 >
@@ -1268,20 +1475,22 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
             {/* Contenido / Cuadrícula del Horario */}
             <div className="overflow-y-auto p-6 md:p-8 flex-1 bg-slate-50/50">
-              
-              <div 
-                id="teacher-weekly-schedule-print-area" 
+              <div
+                id="teacher-weekly-schedule-print-area"
                 className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden"
               >
                 {/* Decoración del fondo premium */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/20 blur-3xl rounded-full pointer-events-none"></div>
-                
+
                 {/* Cabecera del reporte impreso */}
                 <div className="mb-6 pb-6 border-b border-slate-100 flex justify-between items-end">
                   <div>
-                    <h2 className="text-xl font-black text-indigo-950 uppercase tracking-tight">EDUGEST • HORARIO DE DOCENTE</h2>
+                    <h2 className="text-xl font-black text-indigo-950 uppercase tracking-tight">
+                      EDUGEST • HORARIO DE DOCENTE
+                    </h2>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                      Profesor(a): <span className="text-slate-805 font-black">{currentTeacher?.name}</span>
+                      Profesor(a):{' '}
+                      <span className="text-slate-805 font-black">{currentTeacher?.name}</span>
                     </p>
                   </div>
                   <div className="text-right">
@@ -1299,9 +1508,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                         <th className="p-3 text-left font-black text-[9px] uppercase tracking-widest text-slate-400 bg-slate-50 rounded-l-xl w-32">
                           Hora / Bloque
                         </th>
-                        {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(day => (
-                          <th 
-                            key={day} 
+                        {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
+                          <th
+                            key={day}
                             className="p-3 text-center font-black text-[9px] uppercase tracking-widest text-slate-500 bg-slate-50"
                           >
                             {day}
@@ -1312,23 +1521,30 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                     <tbody className="divide-y divide-slate-100">
                       {teacherWeeklyScheduleMatrix.slots.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-20 text-center text-slate-400 italic font-bold text-xs bg-slate-50/50 rounded-b-xl">
+                          <td
+                            colSpan={6}
+                            className="py-20 text-center text-slate-400 italic font-bold text-xs bg-slate-50/50 rounded-b-xl"
+                          >
                             No tienes ninguna clase o recreo asignado en el sistema escolar semanal.
                           </td>
                         </tr>
                       ) : (
-                        teacherWeeklyScheduleMatrix.slots.map(slot => (
+                        teacherWeeklyScheduleMatrix.slots.map((slot) => (
                           <tr key={slot.start} className="hover:bg-slate-50/30 transition-all">
                             {/* Celda de Hora */}
                             <td className="p-4 align-middle">
                               <span className="flex flex-col">
-                                <span className="text-xs font-black text-slate-900 tracking-tight">{slot.start.substring(0, 5)} - {slot.end.substring(0, 5)}</span>
-                                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">{slot.label}</span>
+                                <span className="text-xs font-black text-slate-900 tracking-tight">
+                                  {slot.start.substring(0, 5)} - {slot.end.substring(0, 5)}
+                                </span>
+                                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
+                                  {slot.label}
+                                </span>
                               </span>
                             </td>
 
                             {/* Celdas de Días */}
-                            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map(day => {
+                            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => {
                               const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
 
                               if (!cell) {
@@ -1351,7 +1567,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                                 return (
                                   <td key={day} className="p-2 align-middle">
                                     <div className="bg-slate-50/60 border border-dashed border-slate-200 rounded-2xl p-3 text-center text-slate-400 hover:bg-slate-50 transition-all">
-                                      <p className="text-[9px] font-black uppercase tracking-widest italic opacity-60">Hora Libre</p>
+                                      <p className="text-[9px] font-black uppercase tracking-widest italic opacity-60">
+                                        Hora Libre
+                                      </p>
                                     </div>
                                   </td>
                                 );
@@ -1370,7 +1588,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                                     </p>
                                     {cell.room && (
                                       <p className="text-[8px] font-bold text-slate-400 mt-1 flex items-center gap-1.5 uppercase">
-                                        <MapPin size={8} className="text-indigo-500" /> {cell.room.name}
+                                        <MapPin size={8} className="text-indigo-500" />{' '}
+                                        {cell.room.name}
                                       </p>
                                     )}
                                   </div>
@@ -1383,16 +1602,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                     </tbody>
                   </table>
                 </div>
-
               </div>
-
             </div>
 
             {/* Pie de página del Modal */}
             <div className="p-4 bg-slate-50 border-t border-slate-100 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0 no-print">
               Edugest • Sistema de Gestión Académica Multi-Tenant
             </div>
-            
           </div>
         </div>
       )}

@@ -44,7 +44,8 @@ export const DashboardInsights = () => {
       .filter((s) => s.timeBlockId === block.id)
       .map((s) => s.teacherId);
     const availableTeachers = state.teachers.filter(
-      (t) => (t.role === 'teacher' || t.role === 'management_teacher') && !busyTeacherIds.includes(t.id)
+      (t) =>
+        (t.role === 'teacher' || t.role === 'management_teacher') && !busyTeacherIds.includes(t.id)
     );
     return { block, availableTeachers };
   });

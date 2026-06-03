@@ -36,7 +36,11 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
   const [currentPromotingName, setCurrentPromotingName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [resultsReport, setResultsReport] = useState<{ success: number; failed: number; details: string[] }>({
+  const [resultsReport, setResultsReport] = useState<{
+    success: number;
+    failed: number;
+    details: string[];
+  }>({
     success: 0,
     failed: 0,
     details: []
@@ -66,8 +70,10 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
 
         if (sErr) throw sErr;
         const sorted = (data || []).sort((a: any, b: any) => {
-          const nameA = `${a.first_surname || ''} ${a.second_surname || ''} ${a.names || ''}`.toLowerCase();
-          const nameB = `${b.first_surname || ''} ${b.second_surname || ''} ${b.names || ''}`.toLowerCase();
+          const nameA =
+            `${a.first_surname || ''} ${a.second_surname || ''} ${a.names || ''}`.toLowerCase();
+          const nameB =
+            `${b.first_surname || ''} ${b.second_surname || ''} ${b.names || ''}`.toLowerCase();
           return nameA.localeCompare(nameB);
         });
         setStudents(sorted);
@@ -115,7 +121,9 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
 
         if (cErr) throw cErr;
         const sorted = (data || []).sort((a: any, b: any) => {
-          return `${a.level} ${a.grade} ${a.section}`.localeCompare(`${b.level} ${b.grade} ${b.section}`);
+          return `${a.level} ${a.grade} ${a.section}`.localeCompare(
+            `${b.level} ${b.grade} ${b.section}`
+          );
         });
         setTargetCourses(sorted);
 
@@ -248,7 +256,9 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
             <Sparkles size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-black uppercase text-slate-900">Promoción Masiva de Alumnos</h3>
+            <h3 className="text-lg font-black uppercase text-slate-900">
+              Promoción Masiva de Alumnos
+            </h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
               Matricular un grupo de alumnos al nuevo año escolar
             </p>
@@ -275,9 +285,13 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
           {/* Ficha origen */}
           <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl flex flex-wrap gap-4 items-center justify-between">
             <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Curso Origen</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Curso Origen
+              </span>
               <h4 className="text-sm font-black text-slate-800 uppercase mt-0.5">
-                {sourceCourse ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}"` : 'Sin Curso'}
+                {sourceCourse
+                  ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}"`
+                  : 'Sin Curso'}
               </h4>
               <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                 Año Escolar: {selectedYear}
@@ -285,7 +299,9 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
             </div>
             <div className="w-px h-8 bg-slate-200 hidden sm:block"></div>
             <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Alumnos cargados</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Alumnos cargados
+              </span>
               <h4 className="text-sm font-black text-slate-800 uppercase mt-0.5">
                 {students.length} estudiantes
               </h4>
@@ -365,7 +381,11 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
                       className={`flex items-center gap-3 py-2.5 px-4 cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'bg-indigo-50/20' : ''}`}
                     >
                       <button type="button" className="text-indigo-600 shrink-0">
-                        {isSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-slate-300" />}
+                        {isSelected ? (
+                          <CheckSquare size={16} />
+                        ) : (
+                          <Square size={16} className="text-slate-300" />
+                        )}
                       </button>
                       <span className="text-[10px] font-black text-slate-500 w-6 text-center border-r border-slate-100">
                         {idx + 1}
@@ -413,7 +433,8 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
               {currentPromotingName}
             </p>
             <p className="text-[10px] text-slate-400 font-bold uppercase">
-              Procesando: {progressIndex} de {selectedStudentIds.length} ({Math.round((progressIndex / selectedStudentIds.length) * 100)}%)
+              Procesando: {progressIndex} de {selectedStudentIds.length} (
+              {Math.round((progressIndex / selectedStudentIds.length) * 100)}%)
             </p>
             {/* Barra de progreso visual */}
             <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mt-4 border border-slate-200/50">
@@ -433,9 +454,13 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
               <CheckCircle2 size={36} />
             </div>
             <div className="space-y-1">
-              <h4 className="text-base font-black uppercase text-slate-900">¡Promoción Masiva Completada!</h4>
+              <h4 className="text-base font-black uppercase text-slate-900">
+                ¡Promoción Masiva Completada!
+              </h4>
               <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-                Año Destino: {targetYear}  |  Curso: {targetCourses.find(c => c.id === targetCourseId)?.grade} "{targetCourses.find(c => c.id === targetCourseId)?.section}"
+                Año Destino: {targetYear} | Curso:{' '}
+                {targetCourses.find((c) => c.id === targetCourseId)?.grade} "
+                {targetCourses.find((c) => c.id === targetCourseId)?.section}"
               </p>
             </div>
           </div>
@@ -451,7 +476,9 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
             </div>
             <div className="max-h-48 overflow-y-auto p-4 space-y-1.5 font-mono text-[9px] font-bold text-slate-700 bg-white">
               {resultsReport.details.map((line, idx) => (
-                <div key={idx} className="border-b border-slate-50 pb-1 last:border-0">{line}</div>
+                <div key={idx} className="border-b border-slate-50 pb-1 last:border-0">
+                  {line}
+                </div>
               ))}
             </div>
           </div>

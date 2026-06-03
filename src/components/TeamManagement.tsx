@@ -68,7 +68,13 @@ export const TeamManagement = () => {
         <h2 className="text-lg font-black uppercase text-text-main tracking-tighter">Personal</h2>
         <button
           onClick={() => {
-            setEditingUser({ full_name: '', role: 'teacher', sex: 'M', phone: '', grades_editable: true });
+            setEditingUser({
+              full_name: '',
+              role: 'teacher',
+              sex: 'M',
+              phone: '',
+              grades_editable: true
+            });
             setIsCreating(true);
           }}
           className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black uppercase text-[9px] shadow-sm hover:bg-indigo-700"
@@ -126,11 +132,17 @@ export const TeamManagement = () => {
                         {user.full_name}
                       </div>
                       <div className="text-text-muted text-[8px] font-bold uppercase mt-0.5">
-                        {user.role === 'management_teacher' ? 'Docente y Gestión' :
-                         user.role === 'teacher' ? 'Docente' :
-                         user.role === 'management' ? 'Gestión' :
-                         user.role === 'administrative' ? 'Administrativo' :
-                         user.role === 'support' ? 'Apoyo' : user.role}
+                        {user.role === 'management_teacher'
+                          ? 'Docente y Gestión'
+                          : user.role === 'teacher'
+                            ? 'Docente'
+                            : user.role === 'management'
+                              ? 'Gestión'
+                              : user.role === 'administrative'
+                                ? 'Administrativo'
+                                : user.role === 'support'
+                                  ? 'Apoyo'
+                                  : user.role}
                       </div>
                     </div>
                   </div>
@@ -230,10 +242,15 @@ export const TeamManagement = () => {
                     type="checkbox"
                     id="grades_editable"
                     checked={editingUser.grades_editable !== false}
-                    onChange={(e) => setEditingUser({ ...editingUser, grades_editable: e.target.checked })}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, grades_editable: e.target.checked })
+                    }
                     className="w-3.5 h-3.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
                   />
-                  <label htmlFor="grades_editable" className="text-[9px] font-black text-slate-600 uppercase tracking-wider cursor-pointer select-none">
+                  <label
+                    htmlFor="grades_editable"
+                    className="text-[9px] font-black text-slate-600 uppercase tracking-wider cursor-pointer select-none"
+                  >
                     Permitir Digitar Notas
                   </label>
                 </div>

@@ -7,7 +7,12 @@ export const useAssignments = () => {
   const { state, refreshData } = useApp();
   const centerId = profile?.center_id;
 
-  console.log('[DEBUG useAssignments] Hook run using context state. profile:', profile, 'centerId:', centerId);
+  console.log(
+    '[DEBUG useAssignments] Hook run using context state. profile:',
+    profile,
+    'centerId:',
+    centerId
+  );
 
   const saveAssignmentsMutation = useMutation({
     mutationFn: async ({ teacherId, assignments }: { teacherId: string; assignments: any[] }) => {
@@ -32,15 +37,22 @@ export const useAssignments = () => {
   });
 
   const addAssignmentMutation = useMutation({
-    mutationFn: async (a: { courseId: string; subjectId: string; teacherId: string; hoursPerWeek: number }) => {
+    mutationFn: async (a: {
+      courseId: string;
+      subjectId: string;
+      teacherId: string;
+      hoursPerWeek: number;
+    }) => {
       if (!centerId) throw new Error('No center ID found');
-      const { error } = await supabase.from('assignments').insert([{
-        course_id: a.courseId,
-        subject_id: a.subjectId,
-        teacher_id: a.teacherId,
-        hours_per_week: a.hoursPerWeek,
-        center_id: centerId
-      }]);
+      const { error } = await supabase.from('assignments').insert([
+        {
+          course_id: a.courseId,
+          subject_id: a.subjectId,
+          teacher_id: a.teacherId,
+          hours_per_week: a.hoursPerWeek,
+          center_id: centerId
+        }
+      ]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -49,15 +61,24 @@ export const useAssignments = () => {
   });
 
   const updateAssignmentMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: { courseId: string; subjectId: string; teacherId: string; hoursPerWeek: number } }) => {
+    mutationFn: async ({
+      id,
+      updates
+    }: {
+      id: string;
+      updates: { courseId: string; subjectId: string; teacherId: string; hoursPerWeek: number };
+    }) => {
       if (!centerId) throw new Error('No center ID found');
-      const { error } = await supabase.from('assignments').update({
-        course_id: updates.courseId,
-        subject_id: updates.subjectId,
-        teacher_id: updates.teacherId,
-        hours_per_week: updates.hoursPerWeek,
-        center_id: centerId
-      }).eq('id', id);
+      const { error } = await supabase
+        .from('assignments')
+        .update({
+          course_id: updates.courseId,
+          subject_id: updates.subjectId,
+          teacher_id: updates.teacherId,
+          hours_per_week: updates.hoursPerWeek,
+          center_id: centerId
+        })
+        .eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

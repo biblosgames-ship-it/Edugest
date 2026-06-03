@@ -183,7 +183,10 @@ export const assignPlanToLicense = async (licenseId: string, planId: string): Pr
 };
 
 export const switchActiveCenter = async (centerId: string): Promise<void> => {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError
+  } = await supabase.auth.getUser();
   if (userError || !user) throw new Error('No autenticado.');
 
   const { error } = await supabase
@@ -194,7 +197,10 @@ export const switchActiveCenter = async (centerId: string): Promise<void> => {
   if (error) throw new Error(error.message);
 };
 
-export const updateSubscriptionEndDate = async (licenseId: string, endDate: string | null): Promise<void> => {
+export const updateSubscriptionEndDate = async (
+  licenseId: string,
+  endDate: string | null
+): Promise<void> => {
   const { error } = await supabase
     .from('saas_licenses')
     .update({ subscription_end_date: endDate })
@@ -232,10 +238,6 @@ export const updatePayment = async (
     payment_date: string;
   }
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('saas_payments')
-    .update(updates)
-    .eq('id', paymentId);
+  const { error } = await supabase.from('saas_payments').update(updates).eq('id', paymentId);
   if (error) throw new Error(error.message);
 };
-

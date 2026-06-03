@@ -2,14 +2,14 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
-import { 
-  Bell, 
-  Calendar as CalendarIcon, 
-  ClipboardList, 
-  Clock, 
-  MapPin, 
-  User, 
-  BookOpen, 
+import {
+  Bell,
+  Calendar as CalendarIcon,
+  ClipboardList,
+  Clock,
+  MapPin,
+  User,
+  BookOpen,
   Activity,
   ArrowRight,
   CheckCircle2,
@@ -24,11 +24,15 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     if (profile?.role === 'parent') {
       const saved = localStorage.getItem('parent_course_ids');
       let localList: string[] = [];
-      try { localList = saved ? JSON.parse(saved) : []; } catch {}
+      try {
+        localList = saved ? JSON.parse(saved) : [];
+      } catch {}
       const firstId = profile?.parent_course_ids?.[0] || localList?.[0] || '';
       return firstId || localStorage.getItem('selected_course_id') || '';
     }
-    return profile?.course_id || profile?.course_code || localStorage.getItem('selected_course_id') || '';
+    return (
+      profile?.course_id || profile?.course_code || localStorage.getItem('selected_course_id') || ''
+    );
   });
 
   const [parentCourseIds, setParentCourseIds] = useState<string[]>(() => {
@@ -66,18 +70,22 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
   const getMinutes = (time: string) => {
     if (!time) return 0;
-    let [h, m] = time.split(':').map(s => s.trim());
+    let [h, m] = time.split(':').map((s) => s.trim());
     let hours = parseInt(h);
     let minutes = parseInt(m.substring(0, 2));
-    
+
     if (time.toUpperCase().includes('PM') && hours < 12) hours += 12;
     if (time.toUpperCase().includes('AM') && hours === 12) hours = 0;
-    
+
     return hours * 60 + minutes;
   };
 
-  const normalize = (text: string) => 
-    text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const normalize = (text: string) =>
+    text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
 
   // Cargar cursos del centro
   useEffect(() => {
@@ -122,8 +130,13 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
       try {
         setLoading(true);
-        const coursesList = allCourses.length > 0 ? allCourses : await dataService.getCourses(profile.center_id, selectedYear || '2025-2026');
-        const currentCourse = coursesList.find((c: any) => c.id === activeId || c.code === activeId);
+        const coursesList =
+          allCourses.length > 0
+            ? allCourses
+            : await dataService.getCourses(profile.center_id, selectedYear || '2025-2026');
+        const currentCourse = coursesList.find(
+          (c: any) => c.id === activeId || c.code === activeId
+        );
 
         if (currentCourse) {
           setCourse(currentCourse);
@@ -185,7 +198,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   const handleLinkParentCourse = async (courseId: string, isSilent = false) => {
     if (!profile?.id) return;
     if (parentCourseIds.includes(courseId)) return;
-    
+
     const updatedIds = [...parentCourseIds, courseId];
     try {
       setIsLinking(true);
@@ -193,7 +206,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         .from('profiles')
         .update({ parent_course_ids: updatedIds })
         .eq('id', profile.id);
-        
+
       if (error) {
         console.warn('Failed to save parent_course_ids to Supabase, saving locally:', error);
         localStorage.setItem('parent_course_ids', JSON.stringify(updatedIds));
@@ -220,14 +233,14 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   const handleUnlinkParentCourse = async (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!profile?.id) return;
-    const updatedIds = parentCourseIds.filter(id => id !== courseId);
+    const updatedIds = parentCourseIds.filter((id) => id !== courseId);
     try {
       setIsLinking(true);
       const { error } = await supabase
         .from('profiles')
         .update({ parent_course_ids: updatedIds })
         .eq('id', profile.id);
-        
+
       if (error) {
         console.warn('Failed to unlink parent_course_ids from Supabase, saving locally:', error);
         localStorage.setItem('parent_course_ids', JSON.stringify(updatedIds));
@@ -237,7 +250,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         setParentCourseIds(updatedIds);
         profile.parent_course_ids = updatedIds;
       }
-      
+
       // Si el curso desvinculado era el activo, seleccionar otro
       if (selectedCourseId === courseId) {
         setSelectedCourseId(updatedIds[0] || '');
@@ -254,20 +267,26 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
   const linkedParentCourses = useMemo(() => {
     if (!parentCourseIds.length || !allCourses.length) return [];
-    return allCourses.filter(c => parentCourseIds.includes(c.id) || parentCourseIds.includes(c.code));
+    return allCourses.filter(
+      (c) => parentCourseIds.includes(c.id) || parentCourseIds.includes(c.code)
+    );
   }, [parentCourseIds, allCourses]);
 
   const suggestedCourse = useMemo(() => {
     if (!profile || !state.students || !allCourses.length) return null;
-    const physicalStudent = state.students.find(s => {
+    const physicalStudent = state.students.find((s) => {
       const sName = normalize(s.name || s.full_name || '');
       let pName = profile.full_name ? normalize(profile.full_name) : '';
-      
+
       // Limpiar sufijos parentales para emparejar nombre del padre/tutor con el alumno
       if (pName.includes('padre/madre') || pName.includes('tutor') || pName.includes('encargado')) {
-        pName = pName.replace('(padre/madre)', '').replace('(tutor)', '').replace('(encargado)', '').trim();
+        pName = pName
+          .replace('(padre/madre)', '')
+          .replace('(tutor)', '')
+          .replace('(encargado)', '')
+          .trim();
       }
-      
+
       const sEmail = s.email ? s.email.toLowerCase().trim() : '';
       const pEmail = profile.email ? profile.email.toLowerCase().trim() : '';
       return (pName && sName === pName) || (pEmail && sEmail === pEmail);
@@ -275,7 +294,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     if (!physicalStudent) return null;
 
     const cId = physicalStudent.course_id || physicalStudent.courseId;
-    return allCourses.find(c => c.id === cId || c.code === cId);
+    return allCourses.find((c) => c.id === cId || c.code === cId);
   }, [state.students, allCourses, profile]);
 
   // Autovinculación instantánea del nuevo curso al promover alumno
@@ -283,15 +302,23 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     if (!suggestedCourse) return;
 
     if (profile?.role === 'student') {
-      const hasActiveCourseInCycle = allCourses.some(c => c.id === selectedCourseId);
+      const hasActiveCourseInCycle = allCourses.some((c) => c.id === selectedCourseId);
       if (!selectedCourseId || !hasActiveCourseInCycle) {
-        console.log('[StudentDashboard] Autovinculando estudiante al nuevo curso:', suggestedCourse.grade, suggestedCourse.section);
+        console.log(
+          '[StudentDashboard] Autovinculando estudiante al nuevo curso:',
+          suggestedCourse.grade,
+          suggestedCourse.section
+        );
         handleLinkCourse(suggestedCourse.id, true);
       }
     } else if (profile?.role === 'parent') {
       const hasActiveCourseInCycle = linkedParentCourses.length > 0;
       if (!hasActiveCourseInCycle) {
-        console.log('[StudentDashboard] Autovinculando padre al nuevo curso de su hijo:', suggestedCourse.grade, suggestedCourse.section);
+        console.log(
+          '[StudentDashboard] Autovinculando padre al nuevo curso de su hijo:',
+          suggestedCourse.grade,
+          suggestedCourse.section
+        );
         handleLinkParentCourse(suggestedCourse.id, true);
       }
     }
@@ -301,12 +328,12 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   const todaySchedule = useMemo(() => {
     if (!course) return [];
     const normCurrentDay = normalize(currentDay);
-    
+
     return state.schedule
       .filter((entry) => {
         const courseId = entry.course_id || entry.courseId;
         if (courseId !== course.id) return false;
-        
+
         const entryDay = entry.day || '';
         if (entryDay && normalize(entryDay) === normCurrentDay) return true;
 
@@ -314,19 +341,19 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         const tb = state.timeBlocks.find((b) => b.id === tbId);
         return tb && normalize(tb.day) === normCurrentDay;
       })
-      .map(entry => {
+      .map((entry) => {
         const tbId = entry.time_block_id || entry.timeBlockId;
         const subId = entry.subject_id || entry.subjectId;
         const teaId = entry.teacher_id || entry.teacherId;
-        
-        const tb = state.timeBlocks.find(b => b.id === tbId);
-        const sub = state.subjects.find(s => s.id === subId);
-        const tea = state.teachers.find(t => t.id === teaId);
-        const room = state.rooms.find(r => r.id === (entry.room_id || entry.roomId));
-        
+
+        const tb = state.timeBlocks.find((b) => b.id === tbId);
+        const sub = state.subjects.find((s) => s.id === subId);
+        const tea = state.teachers.find((t) => t.id === teaId);
+        const room = state.rooms.find((r) => r.id === (entry.room_id || entry.roomId));
+
         const sTime = entry.start_time || entry.startTime || tb?.startTime || tb?.start_time || '';
         const eTime = entry.end_time || entry.endTime || tb?.endTime || tb?.end_time || '';
-        
+
         const start = getMinutes(sTime);
         const end = getMinutes(eTime);
         const isNow = currentTimeMinutes >= start && currentTimeMinutes < end;
@@ -335,21 +362,32 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         return { ...entry, tb, sub, tea, room, isNow, isNext, startMinutes: start, sTime, eTime };
       })
       .sort((a, b) => a.startMinutes - b.startMinutes);
-  }, [course, state.schedule, state.timeBlocks, state.subjects, state.teachers, state.rooms, currentDay, currentTimeMinutes]);
+  }, [
+    course,
+    state.schedule,
+    state.timeBlocks,
+    state.subjects,
+    state.teachers,
+    state.rooms,
+    currentDay,
+    currentTimeMinutes
+  ]);
 
   const activeClassNow = useMemo(() => {
-    return todaySchedule.find(c => c.isNow);
+    return todaySchedule.find((c) => c.isNow);
   }, [todaySchedule]);
 
   const nextClass = useMemo(() => {
-    return todaySchedule.find(c => c.startMinutes > currentTimeMinutes);
+    return todaySchedule.find((c) => c.startMinutes > currentTimeMinutes);
   }, [todaySchedule, currentTimeMinutes]);
 
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-black text-slate-500 uppercase tracking-widest animate-pulse">Cargando tu aula virtual...</p>
+        <p className="text-sm font-black text-slate-500 uppercase tracking-widest animate-pulse">
+          Cargando tu aula virtual...
+        </p>
       </div>
     );
   }
@@ -358,7 +396,6 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     const isParent = profile?.role === 'parent';
     return (
       <div className="space-y-6 max-w-xl mx-auto mt-10 animate-in fade-in slide-in-from-bottom-5 duration-300">
-        
         {/* VINCULAR CURSO MEDIANTE CÓDIGO */}
         <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col gap-6 w-full text-left">
           <div className="flex items-center gap-4 w-full">
@@ -370,18 +407,22 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                 {isParent ? 'Vincular Grado de tu Hijo' : 'Vincular a tu Aula Virtual'}
               </h2>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                {isParent ? 'Ingresa el código del curso de tu hijo para vincularlo' : 'Ingresa el código de tu curso para acceder'}
+                {isParent
+                  ? 'Ingresa el código del curso de tu hijo para vincularlo'
+                  : 'Ingresa el código de tu curso para acceder'}
               </p>
             </div>
           </div>
-          
+
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              const inputVal = (e.currentTarget.elements.namedItem('courseCodeInput') as HTMLInputElement).value;
+              const inputVal = (
+                e.currentTarget.elements.namedItem('courseCodeInput') as HTMLInputElement
+              ).value;
               const sanitized = inputVal.trim().toUpperCase().replace(/\s+/g, '');
               if (!sanitized) return;
-              
+
               setIsLinking(true);
               try {
                 const { data: course, error: fetchErr } = await supabase
@@ -430,9 +471,12 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
           <div className="bg-emerald-50 border-2 border-emerald-300 p-6 rounded-[2.5rem] text-center shadow-xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-xl rounded-full"></div>
             <CheckCircle2 className="mx-auto mb-4 text-emerald-600 animate-bounce" size={48} />
-            <h4 className="text-base font-black uppercase text-emerald-950 tracking-tight">¿Estás en {suggestedCourse.grade} {suggestedCourse.section}?</h4>
+            <h4 className="text-base font-black uppercase text-emerald-950 tracking-tight">
+              ¿Estás en {suggestedCourse.grade} {suggestedCourse.section}?
+            </h4>
             <p className="text-xs text-emerald-800 mt-2 leading-relaxed font-semibold">
-              Hemos encontrado tu registro de alumno asignado a este grado en el centro. ¡Vincula tu cuenta permanentemente para entrar directamente!
+              Hemos encontrado tu registro de alumno asignado a este grado en el centro. ¡Vincula tu
+              cuenta permanentemente para entrar directamente!
             </p>
             <button
               onClick={() => {
@@ -452,7 +496,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
         <div className="p-12 text-center bg-white rounded-[3rem] border border-slate-100 shadow-2xl">
           <ClipboardList className="mx-auto mb-6 text-indigo-600 animate-pulse" size={64} />
-          <h3 className="text-xl font-black text-slate-900 uppercase">{isParent ? 'Sin Curso del Hijo' : 'Sin Aula Virtual'}</h3>
+          <h3 className="text-xl font-black text-slate-900 uppercase">
+            {isParent ? 'Sin Curso del Hijo' : 'Sin Aula Virtual'}
+          </h3>
           <p className="text-slate-500 mt-2 text-sm leading-relaxed">
             {isParent
               ? 'Por favor, selecciona el grado y sección de tu hijo en el listado superior para ver su muro de tareas, cronograma de clases de hoy y comunicados escolares.'
@@ -470,7 +516,10 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
   return (
     <div className="space-y-8 pb-20 animate-fade-in">
-      <SEO title={`Aula Virtual - ${course.grade} ${course.section}`} description="Muro virtual de tareas, anuncios y horarios para estudiantes." />
+      <SEO
+        title={`Aula Virtual - ${course.grade} ${course.section}`}
+        description="Muro virtual de tareas, anuncios y horarios para estudiantes."
+      />
 
       {/* TABS DE HIJOS PARA PADRES */}
       {profile?.role === 'parent' && linkedParentCourses.length > 0 && (
@@ -485,9 +534,11 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                     : 'bg-white text-slate-600 border border-slate-100 hover:bg-slate-50 shadow-sm'
                 }`}
               >
-                <span>Hijo: {c.grade} {c.section}</span>
-                <span 
-                  className="text-[8px] bg-slate-150 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-md p-1 transition-all cursor-pointer" 
+                <span>
+                  Hijo: {c.grade} {c.section}
+                </span>
+                <span
+                  className="text-[8px] bg-slate-150 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-md p-1 transition-all cursor-pointer"
                   onClick={(e) => handleUnlinkParentCourse(c.id, e)}
                   title="Desvincular curso"
                 >
@@ -514,13 +565,15 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
             <span>Tanda {course.tanda}</span>
           </p>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
           {profile?.role === 'parent' && (
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const inputVal = (e.currentTarget.elements.namedItem('newCourseCode') as HTMLInputElement).value;
+                const inputVal = (
+                  e.currentTarget.elements.namedItem('newCourseCode') as HTMLInputElement
+                ).value;
                 const sanitized = inputVal.trim().toUpperCase().replace(/\s+/g, '');
                 if (!sanitized) return;
 
@@ -539,7 +592,8 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                   }
 
                   await handleLinkParentCourse(course.id);
-                  (e.currentTarget.elements.namedItem('newCourseCode') as HTMLInputElement).value = '';
+                  (e.currentTarget.elements.namedItem('newCourseCode') as HTMLInputElement).value =
+                    '';
                 } catch (err) {
                   console.error('Error linking parent course:', err);
                   alert('Error al vincular el curso.');
@@ -575,18 +629,19 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
       {/* MONITOR OPERATIVO EN VIVO */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
         {/* LADO IZQUIERDO: ACTIVIDAD EN TIEMPO REAL */}
         <div className="lg:col-span-8 space-y-6">
           <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-200 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-4 h-full bg-indigo-600"></div>
-            
+
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
               <h3 className="text-base font-black uppercase tracking-widest text-slate-900 flex items-center gap-3">
-                <Activity className="text-indigo-600 animate-pulse" size={20} /> Mi Jornada de Hoy ({currentDay})
+                <Activity className="text-indigo-600 animate-pulse" size={20} /> Mi Jornada de Hoy (
+                {currentDay})
               </h3>
               <span className="text-[10px] font-black text-slate-500 flex items-center gap-2">
-                <Clock size={12} className="text-indigo-600" /> {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <Clock size={12} className="text-indigo-600" />{' '}
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
 
@@ -601,8 +656,12 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                     {activeClassNow.room?.name || 'A'}
                   </div>
                   <div>
-                    <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">AHORA MISMO</span>
-                    <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">{activeClassNow.sub?.name}</h4>
+                    <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
+                      AHORA MISMO
+                    </span>
+                    <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
+                      {activeClassNow.sub?.name}
+                    </h4>
                     <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
                       <User size={12} /> Prof. {activeClassNow.tea?.name}
                     </p>
@@ -611,14 +670,17 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
               </div>
             ) : (
               <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-center text-slate-500 font-bold text-xs italic">
-                {todaySchedule.length > 0 && currentTimeMinutes > todaySchedule[todaySchedule.length - 1].startMinutes
+                {todaySchedule.length > 0 &&
+                currentTimeMinutes > todaySchedule[todaySchedule.length - 1].startMinutes
                   ? '🔔 Jornada de clases finalizada por hoy.'
                   : '☕ Sin clases programadas en este momento.'}
               </div>
             )}
 
             {/* TIMELINE DE HOY */}
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Cronograma de Clases</h4>
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">
+              Cronograma de Clases
+            </h4>
             <div className="space-y-3">
               {todaySchedule.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 font-bold italic bg-slate-50 rounded-2xl text-[10px]">
@@ -626,20 +688,26 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                 </div>
               ) : (
                 todaySchedule.map((c) => (
-                  <div 
-                    key={c.id} 
+                  <div
+                    key={c.id}
                     className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
-                      c.isNow 
-                        ? 'bg-emerald-50 border-emerald-400 shadow-sm' 
+                      c.isNow
+                        ? 'bg-emerald-50 border-emerald-400 shadow-sm'
                         : 'bg-white border-slate-100 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}>
+                      <div
+                        className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
+                      >
                         {c.sTime}
                       </div>
                       <div>
-                        <p className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}>{c.sub?.name}</p>
+                        <p
+                          className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
+                        >
+                          {c.sub?.name}
+                        </p>
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
                           <User size={10} /> {c.tea?.name}
                         </p>
@@ -661,7 +729,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-slate-900 p-6 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 blur-xl rounded-full"></div>
-            <h4 className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-2">Próxima Clase</h4>
+            <h4 className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-2">
+              Próxima Clase
+            </h4>
             {nextClass ? (
               <div>
                 <p className="text-xl font-black tracking-tight uppercase leading-snug mb-3">
@@ -682,16 +752,22 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                 </div>
               </div>
             ) : (
-              <p className="text-xs font-bold opacity-75 italic py-4">No hay más clases por hoy 🎉</p>
+              <p className="text-xs font-bold opacity-75 italic py-4">
+                No hay más clases por hoy 🎉
+              </p>
             )}
           </div>
 
           <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
-            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-4">Resumen Escolar</h4>
+            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-4">
+              Resumen Escolar
+            </h4>
             <div className="space-y-3 text-[10px] font-black uppercase tracking-widest">
               <div className="flex justify-between p-3 bg-slate-50 rounded-xl">
                 <span className="text-slate-500">Tareas Pendientes</span>
-                <span className="text-indigo-600">{tasks.filter(t => new Date(t.due_date) >= new Date()).length}</span>
+                <span className="text-indigo-600">
+                  {tasks.filter((t) => new Date(t.due_date) >= new Date()).length}
+                </span>
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded-xl">
                 <span className="text-slate-500">Anuncios del Mes</span>
@@ -704,7 +780,6 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
       {/* COMUNICADOS Y TAREAS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
         {/* TAREAS PENDIENTES */}
         <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl">
           <h2 className="text-xl font-black mb-6 flex items-center gap-3 text-slate-900">
@@ -713,13 +788,17 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
             </div>
             TAREAS Y ASIGNACIONES
           </h2>
-          
+
           <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
             {tasks.length === 0 ? (
               <div className="text-center py-16 bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                 <CheckCircle2 className="mx-auto mb-4 text-emerald-500 animate-bounce" size={40} />
-                <p className="text-xs font-black text-slate-950 uppercase tracking-widest">¡Estás al día!</p>
-                <p className="text-slate-500 text-xs mt-1 font-medium">No tienes tareas asignadas pendientes en este curso.</p>
+                <p className="text-xs font-black text-slate-950 uppercase tracking-widest">
+                  ¡Estás al día!
+                </p>
+                <p className="text-slate-500 text-xs mt-1 font-medium">
+                  No tienes tareas asignadas pendientes en este curso.
+                </p>
               </div>
             ) : (
               tasks.map((t: any) => {
@@ -735,7 +814,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                         <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase tracking-widest">
                           {subject?.name || 'General'}
                         </span>
-                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight group-hover:text-indigo-600 transition-colors">{t.title}</h4>
+                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight group-hover:text-indigo-600 transition-colors">
+                          {t.title}
+                        </h4>
                       </div>
                       <span
                         className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
@@ -748,12 +829,12 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed mb-4">{t.description}</p>
-                    
+
                     <div className="flex flex-wrap gap-2 mb-4">
                       {t.media_url && (
-                        <a 
-                          href={t.media_url} 
-                          target="_blank" 
+                        <a
+                          href={t.media_url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-indigo-600 transition-all"
                         >
@@ -761,9 +842,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                         </a>
                       )}
                       {t.link_url && (
-                        <a 
-                          href={t.link_url} 
-                          target="_blank" 
+                        <a
+                          href={t.link_url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-indigo-600 transition-all"
                         >
@@ -771,9 +852,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                         </a>
                       )}
                       {t.classroom_url && (
-                        <a 
-                          href={t.classroom_url} 
-                          target="_blank" 
+                        <a
+                          href={t.classroom_url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-emerald-600 transition-all"
                         >
@@ -807,12 +888,16 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
             </div>
             CIRCULARES Y ANUNCIOS
           </h2>
-          
+
           <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
             {announcements.length === 0 ? (
               <div className="text-center py-16 bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                <p className="text-slate-400 italic text-[10px] font-bold uppercase tracking-widest">No hay circulares recientes</p>
-                <p className="text-slate-400 text-xs mt-1 font-medium">Cualquier comunicado urgente aparecerá aquí.</p>
+                <p className="text-slate-400 italic text-[10px] font-bold uppercase tracking-widest">
+                  No hay circulares recientes
+                </p>
+                <p className="text-slate-400 text-xs mt-1 font-medium">
+                  Cualquier comunicado urgente aparecerá aquí.
+                </p>
               </div>
             ) : (
               announcements.map((a: any) => {
@@ -829,18 +914,20 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                             {subject.name}
                           </span>
                         )}
-                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight">{a.title}</h4>
+                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight">
+                          {a.title}
+                        </h4>
                       </div>
                       <span className="text-[8px] bg-slate-50 px-2 py-1 rounded-lg text-slate-400 font-black border border-slate-100">
                         {new Date(a.created_at || a.timestamp).toLocaleDateString()}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed mb-4">{a.content}</p>
-                    
+
                     {a.link_url && (
-                      <a 
-                        href={a.link_url} 
-                        target="_blank" 
+                      <a
+                        href={a.link_url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="px-3 py-1.5 bg-slate-50 hover:bg-amber-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-amber-600 transition-all mb-4 inline-block"
                       >
@@ -862,7 +949,6 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
             )}
           </div>
         </div>
-
       </div>
     </div>
   );

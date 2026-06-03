@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  CheckCircle2, 
-  DollarSign, 
-  CreditCard, 
-  Hash, 
+import {
+  X,
+  CheckCircle2,
+  DollarSign,
+  CreditCard,
+  Hash,
   FileText,
   Save,
   Receipt,
@@ -23,29 +23,35 @@ interface Props {
   onSuccess: () => void;
 }
 
-export const PaymentModal = ({ student, courseName: initialCourseName, invoice, onClose, onSuccess }: Props) => {
+export const PaymentModal = ({
+  student,
+  courseName: initialCourseName,
+  invoice,
+  onClose,
+  onSuccess
+}: Props) => {
   const { state, profile, center } = useApp();
   const { registerPayment, loading } = useFinance();
-  
+
   // Normalizar: Siempre trabajar con un array de facturas
   const invoicesList = Array.isArray(invoice) ? invoice : [invoice];
-  
+
   // BÚSQUEDA ROBUSTA DEL GRADO (Búsqueda Universal)
   const courseId = (student.course_id || invoicesList[0]?.course_id || '').toString().trim();
-  
+
   // Buscar en CUALQUIER propiedad de los objetos de curso
-  const foundCourse = state.courses?.find(c => {
-    return Object.values(c).some(val => val && val.toString().trim() === courseId);
+  const foundCourse = state.courses?.find((c) => {
+    return Object.values(c).some((val) => val && val.toString().trim() === courseId);
   });
 
   // CONSTRUIR EL NOMBRE REAL (Nivel + Grado + Sección)
-  const fullCourseName = foundCourse 
+  const fullCourseName = foundCourse
     ? `${foundCourse.level || ''} ${foundCourse.grade || ''} ${foundCourse.section || ''}`.trim()
     : initialCourseName || student.courses?.name || 'Grado';
 
   const courseName = fullCourseName;
   const totalAmount = invoicesList.reduce((acc, inv) => acc + Number(inv.amount_final), 0);
-  const totalConcepts = invoicesList.map(inv => inv.concept).join(' + ');
+  const totalConcepts = invoicesList.map((inv) => inv.concept).join(' + ');
 
   const [formData, setFormData] = useState({
     amount_paid: totalAmount,
@@ -62,19 +68,26 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
   React.useEffect(() => {
     const fetchTutor = async () => {
       try {
-        const { data: parents } = await supabase.from('parents').select('*').eq('student_id', student.id);
-        const { data: family } = await supabase.from('student_family').select('*').eq('student_id', student.id);
-        
+        const { data: parents } = await supabase
+          .from('parents')
+          .select('*')
+          .eq('student_id', student.id);
+        const { data: family } = await supabase
+          .from('student_family')
+          .select('*')
+          .eq('student_id', student.id);
+
         let foundName = '';
         const allData = [...(parents || []), ...(family || [])];
 
         if (allData.length > 0) {
           // Priorizar Tutor, luego Madre, luego Padre
-          const relative = allData.find(f => (f.role || f.relation || '').toLowerCase().includes('tutor')) || 
-                           allData.find(f => (f.role || f.relation || '').toLowerCase().includes('madre')) || 
-                           allData.find(f => (f.role || f.relation || '').toLowerCase().includes('padre')) || 
-                           allData[0];
-          
+          const relative =
+            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('tutor')) ||
+            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('madre')) ||
+            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('padre')) ||
+            allData[0];
+
           foundName = relative.name || relative.full_name || relative.first_name;
         }
 
@@ -103,7 +116,8 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
           amount_paid: Number(inv.amount_final),
           payment_method: formData.payment_method,
           reference_number: formData.reference_number,
-          notes: formData.notes + (invoicesList.length > 1 ? ` (Pago múltiple: ${totalConcepts})` : '')
+          notes:
+            formData.notes + (invoicesList.length > 1 ? ` (Pago múltiple: ${totalConcepts})` : '')
         });
         results.push(res);
       }
@@ -112,10 +126,10 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
       try {
         const savedEntries = localStorage.getItem('edugens_ledger_entries');
         const ledgerEntries = savedEntries ? JSON.parse(savedEntries) : [];
-        
+
         const isEnrollment = totalConcepts.toLowerCase().includes('inscrip');
         const accountName = isEnrollment ? 'INGRESOS: INSCRIPCIONES' : 'INGRESOS: COLEGIATURAS';
-        
+
         const newLedgerEntry = {
           id: `PAY-${Date.now()}`,
           date: new Date().toISOString().split('T')[0],
@@ -126,9 +140,12 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
           amount: formData.amount_paid,
           method: formData.payment_method
         };
-        
-        localStorage.setItem('edugens_ledger_entries', JSON.stringify([newLedgerEntry, ...ledgerEntries]));
-        
+
+        localStorage.setItem(
+          'edugens_ledger_entries',
+          JSON.stringify([newLedgerEntry, ...ledgerEntries])
+        );
+
         // Asegurar que la categoría existe en el catálogo
         const savedCats = localStorage.getItem('edugens_ledger_categories');
         const ledgerCats = savedCats ? JSON.parse(savedCats) : [];
@@ -154,7 +171,7 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
         method: formData.payment_method,
         date: new Date().toLocaleDateString(),
         ref: formData.reference_number,
-        receiptNumbers: results.filter(r => r && r.receipt_number).map(r => r.receipt_number)
+        receiptNumbers: results.filter((r) => r && r.receipt_number).map((r) => r.receipt_number)
       });
       setIsSuccess(true);
       // No cerramos inmediatamente para permitir imprimir
@@ -194,10 +211,16 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
         <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden p-10 text-center animate-in zoom-in duration-300 my-auto">
           <div id="printable-receipt" className="text-left font-sans text-slate-900">
             <div className="flex items-center gap-4 mb-8 border-b-2 border-slate-900 pb-6">
-              {centerLogo && <img src={centerLogo} alt="Logo" className="w-16 h-16 object-contain rounded-xl" />}
+              {centerLogo && (
+                <img src={centerLogo} alt="Logo" className="w-16 h-16 object-contain rounded-xl" />
+              )}
               <div>
-                <h2 className="text-xl font-black uppercase tracking-tighter leading-tight">{centerName}</h2>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema de Gestión Escolar</p>
+                <h2 className="text-xl font-black uppercase tracking-tighter leading-tight">
+                  {centerName}
+                </h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Sistema de Gestión Escolar
+                </p>
               </div>
             </div>
 
@@ -205,33 +228,54 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
               <div className="bg-indigo-50 text-indigo-600 px-6 py-2 rounded-2xl inline-block text-xl font-black mb-2 shadow-sm border border-indigo-100">
                 Recibo No. {receiptData?.receiptNumbers?.[0]?.toString().padStart(4, '0') || '0001'}
               </div>
-              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">Comprobante de Pago Oficial</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+                Comprobante de Pago Oficial
+              </p>
             </div>
-            
+
             <div className="py-6 mb-6 space-y-5">
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Estudiante / Alumna</p>
-                <p className="text-2xl font-black text-slate-900 leading-tight">{student.names} {student.first_surname}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                  Estudiante / Alumna
+                </p>
+                <p className="text-2xl font-black text-slate-900 leading-tight">
+                  {student.names} {student.first_surname}
+                </p>
                 <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase mt-2">
-                   {courseName}
+                  {courseName}
                 </div>
               </div>
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Concepto de Pago</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                  Concepto de Pago
+                </p>
                 <p className="text-sm font-bold text-slate-700 leading-relaxed">{totalConcepts}</p>
               </div>
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Tutor / Responsable</p>
-                <p className="text-sm font-bold text-slate-900 leading-tight uppercase">{tutorName}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                  Tutor / Responsable
+                </p>
+                <p className="text-sm font-bold text-slate-900 leading-tight uppercase">
+                  {tutorName}
+                </p>
               </div>
               <div className="flex justify-between items-end pt-4 border-t border-slate-100">
                 <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Método de Pago</p>
-                  <p className="text-xs font-bold uppercase text-slate-900">{formData.payment_method} {formData.reference_number && `(Ref: ${formData.reference_number})`}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                    Método de Pago
+                  </p>
+                  <p className="text-xs font-bold uppercase text-slate-900">
+                    {formData.payment_method}{' '}
+                    {formData.reference_number && `(Ref: ${formData.reference_number})`}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Total Pagado</p>
-                  <p className="text-3xl font-black text-slate-900">RD$ {formData.amount_paid.toLocaleString()}</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                    Total Pagado
+                  </p>
+                  <p className="text-3xl font-black text-slate-900">
+                    RD$ {formData.amount_paid.toLocaleString()}
+                  </p>
                 </div>
               </div>
             </div>
@@ -242,13 +286,13 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
           </div>
 
           <div className="flex flex-col gap-3 no-print mt-8">
-            <button 
+            <button
               onClick={handlePrint}
               className="w-full bg-slate-900 text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20"
             >
               <Receipt size={20} /> Imprimir Recibo
             </button>
-            <button 
+            <button
               onClick={() => {
                 onSuccess();
                 onClose();
@@ -267,132 +311,145 @@ export const PaymentModal = ({ student, courseName: initialCourseName, invoice, 
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-start md:items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden my-auto animate-in fade-in zoom-in duration-300 max-h-[95vh] flex flex-col">
         <div className="overflow-y-auto flex-1 custom-scrollbar">
-        {/* HEADER PREMIUM */}
-        <div className="bg-slate-900 p-10 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full -ml-20 -mb-20"></div>
-          
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-6">
-              <div className="bg-indigo-600 text-[9px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full shadow-lg shadow-indigo-500/20">
-                Recibo de Pago Oficial
+          {/* HEADER PREMIUM */}
+          <div className="bg-slate-900 p-10 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full -mr-20 -mt-20"></div>
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full -ml-20 -mb-20"></div>
+
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-6">
+                <div className="bg-indigo-600 text-[9px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full shadow-lg shadow-indigo-500/20">
+                  Recibo de Pago Oficial
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-all text-slate-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-all text-slate-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
 
-            <h3 className="text-4xl font-black text-white tracking-tighter leading-none mb-4">
-              {student.names} <br />
-              <span className="text-indigo-400">{student.first_surname} {student.second_surname}</span>
-            </h3>
+              <h3 className="text-4xl font-black text-white tracking-tighter leading-none mb-4">
+                {student.names} <br />
+                <span className="text-indigo-400">
+                  {student.first_surname} {student.second_surname}
+                </span>
+              </h3>
 
-            <div className="flex flex-wrap gap-4 items-center border-t border-white/10 pt-6 mt-2">
-              <div>
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Curso / Grado</p>
-                <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-xs font-bold text-white">
-                  {courseName}
+              <div className="flex flex-wrap gap-4 items-center border-t border-white/10 pt-6 mt-2">
+                <div>
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                    Curso / Grado
+                  </p>
+                  <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-xs font-bold text-white">
+                    {courseName}
+                  </div>
+                </div>
+                <div className="w-px h-8 bg-white/10"></div>
+                <div>
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                    Tutor / Responsable
+                  </p>
+                  <p className="text-xs font-bold text-indigo-100 italic uppercase">{tutorName}</p>
                 </div>
               </div>
-              <div className="w-px h-8 bg-white/10"></div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            {/* INFO DE LA CUOTA */}
+            <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex items-center justify-between">
               <div>
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Tutor / Responsable</p>
-                <p className="text-xs font-bold text-indigo-100 italic uppercase">
-                  {tutorName}
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">
+                  {invoicesList.length > 1
+                    ? `${invoicesList.length} Cuotas Seleccionadas`
+                    : totalConcepts}
+                </p>
+                <p className="text-[9px] font-bold text-slate-500 uppercase">{totalConcepts}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] font-black text-slate-400 uppercase">Total a Liquidar</p>
+                <p className="text-xl font-black text-indigo-600">
+                  RD$ {totalAmount.toLocaleString()}
                 </p>
               </div>
             </div>
-          </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          {/* INFO DE LA CUOTA */}
-          <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">
-                {invoicesList.length > 1 ? `${invoicesList.length} Cuotas Seleccionadas` : totalConcepts}
-              </p>
-              <p className="text-[9px] font-bold text-slate-500 uppercase">{totalConcepts}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[9px] font-black text-slate-400 uppercase">Total a Liquidar</p>
-              <p className="text-xl font-black text-indigo-600">RD$ {totalAmount.toLocaleString()}</p>
-            </div>
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                  <DollarSign size={12} className="text-emerald-500" /> Monto Recibido
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={formData.amount_paid}
+                  onChange={(e) =>
+                    setFormData({ ...formData, amount_paid: Number(e.target.value) })
+                  }
+                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xl font-black focus:ring-2 focus:ring-indigo-600 transition-all"
+                />
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                  <CreditCard size={12} className="text-indigo-500" /> Método de Pago
+                </label>
+                <select
+                  value={formData.payment_method}
+                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all appearance-none uppercase tracking-widest"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="check">Cheque</option>
+                </select>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                <DollarSign size={12} className="text-emerald-500" /> Monto Recibido
+                <Hash size={12} className="text-slate-400" /> Referencia (Opcional)
               </label>
-              <input 
-                type="number"
-                required
-                value={formData.amount_paid}
-                onChange={(e) => setFormData({ ...formData, amount_paid: Number(e.target.value) })}
-                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xl font-black focus:ring-2 focus:ring-indigo-600 transition-all"
+              <input
+                type="text"
+                placeholder="Ej: # Transacción o Cheque"
+                value={formData.reference_number}
+                onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
+                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-black focus:ring-2 focus:ring-indigo-600 transition-all"
               />
             </div>
 
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                <CreditCard size={12} className="text-indigo-500" /> Método de Pago
+                <FileText size={12} className="text-slate-400" /> Notas adicionales
               </label>
-              <select 
-                value={formData.payment_method}
-                onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all appearance-none uppercase tracking-widest"
-              >
-                <option value="cash">Efectivo</option>
-                <option value="transfer">Transferencia</option>
-                <option value="card">Tarjeta</option>
-                <option value="check">Cheque</option>
-              </select>
+              <textarea
+                rows={2}
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-bold focus:ring-2 focus:ring-indigo-600 transition-all resize-none"
+              ></textarea>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-              <Hash size={12} className="text-slate-400" /> Referencia (Opcional)
-            </label>
-            <input 
-              type="text"
-              placeholder="Ej: # Transacción o Cheque"
-              value={formData.reference_number}
-              onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
-              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-black focus:ring-2 focus:ring-indigo-600 transition-all"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-              <FileText size={12} className="text-slate-400" /> Notas adicionales
-            </label>
-            <textarea 
-              rows={2}
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-bold focus:ring-2 focus:ring-indigo-600 transition-all resize-none"
-            ></textarea>
-          </div>
-
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-5 rounded-[2rem] flex items-center justify-center gap-3 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50 mt-4"
-          >
-            {loading ? (
-              <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-            ) : (
-              <>
-                <CheckCircle2 size={24} />
-                Confirmar y Liquidar {invoicesList.length} Facturas
-              </>
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-5 rounded-[2rem] flex items-center justify-center gap-3 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50 mt-4"
+            >
+              {loading ? (
+                <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <CheckCircle2 size={24} />
+                  Confirmar y Liquidar {invoicesList.length} Facturas
+                </>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 };

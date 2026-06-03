@@ -221,7 +221,7 @@ export const AdminDashboard = () => {
               { id: 'personal', label: 'Gestión de Personal' },
               { id: 'directory', label: 'Directorio de Usuarios' },
               { id: 'invitations', label: 'Códigos de Acceso' }
-            ].map(sub => (
+            ].map((sub) => (
               <button
                 key={sub.id}
                 onClick={() => setSubTab(sub.id as any)}
@@ -369,15 +369,22 @@ export const AdminDashboard = () => {
                 <FileSpreadsheet size={24} />
               </div>
               <div>
-                <h3 className="text-xl font-black uppercase text-text-main">Sincronización y Carga Inicial Completa (Excel)</h3>
+                <h3 className="text-xl font-black uppercase text-text-main">
+                  Sincronización y Carga Inicial Completa (Excel)
+                </h3>
                 <p className="text-xs text-text-muted font-medium mt-1">
-                  Exporta la base de datos actual del centro a Excel, edítala o añade información masiva y vuelve a subirla para configurar de inmediato cursos, materias, personal y estudiantes.
+                  Exporta la base de datos actual del centro a Excel, edítala o añade información
+                  masiva y vuelve a subirla para configurar de inmediato cursos, materias, personal
+                  y estudiantes.
                 </p>
               </div>
             </div>
 
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-slate-600 text-xs font-bold leading-relaxed">
-              <span className="text-indigo-600 font-black">IMPORTANTE:</span> El asistente de importación interpretará los cambios automáticamente. Si un registro ya existe, actualizará sus datos; si no existe, lo creará. Las asignaciones de materias y profesores se volverán a mapear conforme a lo indicado en el archivo de Excel.
+              <span className="text-indigo-600 font-black">IMPORTANTE:</span> El asistente de
+              importación interpretará los cambios automáticamente. Si un registro ya existe,
+              actualizará sus datos; si no existe, lo creará. Las asignaciones de materias y
+              profesores se volverán a mapear conforme a lo indicado en el archivo de Excel.
             </div>
 
             <div className="flex justify-start">
@@ -398,15 +405,22 @@ export const AdminDashboard = () => {
                 <Copy size={24} />
               </div>
               <div>
-                <h3 className="text-xl font-black uppercase text-text-main">Clonación y Traspaso de Ciclo Escolar</h3>
+                <h3 className="text-xl font-black uppercase text-text-main">
+                  Clonación y Traspaso de Ciclo Escolar
+                </h3>
                 <p className="text-xs text-text-muted font-medium mt-1">
-                  Copia los grados, secciones y materias del año anterior al nuevo año escolar. Permite también clonar la carga horaria y asignaciones docentes para no empezar de cero.
+                  Copia los grados, secciones y materias del año anterior al nuevo año escolar.
+                  Permite también clonar la carga horaria y asignaciones docentes para no empezar de
+                  cero.
                 </p>
               </div>
             </div>
 
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-slate-600 text-xs font-bold leading-relaxed">
-              <span className="text-indigo-600 font-black">INFORMACIÓN:</span> Esta operación solo crea los cursos y asignaciones en el ciclo escolar de destino. No copia a los alumnos matriculados, ya que estos se deben inscribir y registrar individualmente en el nuevo año.
+              <span className="text-indigo-600 font-black">INFORMACIÓN:</span> Esta operación solo
+              crea los cursos y asignaciones en el ciclo escolar de destino. No copia a los alumnos
+              matriculados, ya que estos se deben inscribir y registrar individualmente en el nuevo
+              año.
             </div>
 
             <div className="flex justify-start">
@@ -444,4 +458,3 @@ export const AdminDashboard = () => {
     </div>
   );
 };
-

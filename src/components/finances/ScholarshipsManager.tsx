@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  GraduationCap, 
-  Plus, 
-  Search, 
-  Trash2, 
-  UserPlus, 
-  TrendingDown, 
+import {
+  GraduationCap,
+  Plus,
+  Search,
+  Trash2,
+  UserPlus,
+  TrendingDown,
   Users,
   Award,
   AlertCircle
@@ -30,12 +30,19 @@ export const ScholarshipsManager = () => {
     return { totalCount, totalExempted };
   }, [scholarships]);
 
-  const filteredScholarships = scholarships.filter(s => 
-    `${s.students?.names} ${s.students?.first_surname} ${s.students?.second_surname}`.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredScholarships = scholarships.filter((s) =>
+    `${s.students?.names} ${s.students?.first_surname} ${s.students?.second_surname}`
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase())
   );
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta beca? Los montos de las facturas no se revertirán automáticamente por seguridad.')) return;
+    if (
+      !window.confirm(
+        '¿Estás seguro de eliminar esta beca? Los montos de las facturas no se revertirán automáticamente por seguridad.'
+      )
+    )
+      return;
     try {
       await supabase.from('finance_scholarships').delete().eq('id', id);
       toast.success('Beca eliminada');
@@ -54,7 +61,9 @@ export const ScholarshipsManager = () => {
             <Users size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alumnos Becados</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Alumnos Becados
+            </p>
             <h4 className="text-2xl font-black text-slate-900">{stats.totalCount} Estudiantes</h4>
           </div>
         </div>
@@ -64,8 +73,12 @@ export const ScholarshipsManager = () => {
             <TrendingDown size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inversión en Becas</p>
-            <h4 className="text-2xl font-black text-emerald-600">RD$ {stats.totalExempted.toLocaleString()}</h4>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Inversión en Becas
+            </p>
+            <h4 className="text-2xl font-black text-emerald-600">
+              RD$ {stats.totalExempted.toLocaleString()}
+            </h4>
           </div>
         </div>
 
@@ -75,13 +88,15 @@ export const ScholarshipsManager = () => {
               <Award size={24} />
             </div>
             <div>
-              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Exoneraciones Totales</p>
+              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                Exoneraciones Totales
+              </p>
               <h4 className="text-2xl font-black text-white">
-                {scholarships.filter(s => s.type === 'percentage' && s.value === 100).length}
+                {scholarships.filter((s) => s.type === 'percentage' && s.value === 100).length}
               </h4>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setIsModalOpen(true)}
             className="p-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all"
           >
@@ -95,7 +110,7 @@ export const ScholarshipsManager = () => {
         <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
+            <input
               type="text"
               placeholder="Buscar alumno becado..."
               value={searchTerm}
@@ -103,7 +118,7 @@ export const ScholarshipsManager = () => {
               className="w-full pl-12 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
-          <button 
+          <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:scale-105 transition-all w-full md:w-auto justify-center"
           >
@@ -129,31 +144,46 @@ export const ScholarshipsManager = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-black text-[10px]">
-                        {s.students?.names?.[0]}{s.students?.first_surname?.[0]}
+                        {s.students?.names?.[0]}
+                        {s.students?.first_surname?.[0]}
                       </div>
-                      <span className="text-xs font-black text-slate-700">{s.students?.names} {s.students?.first_surname}</span>
+                      <span className="text-xs font-black text-slate-700">
+                        {s.students?.names} {s.students?.first_surname}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-                      {s.type === 'percentage' ? (s.value === 100 ? 'Exoneración Total' : 'Beca Porcentual') : 'Beca Monto Fijo'}
+                      {s.type === 'percentage'
+                        ? s.value === 100
+                          ? 'Exoneración Total'
+                          : 'Beca Porcentual'
+                        : 'Beca Monto Fijo'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-xs font-black text-slate-900">
-                      {s.type === 'percentage' ? `${s.value}%` : `RD$ ${Number(s.value).toLocaleString()}`}
+                      {s.type === 'percentage'
+                        ? `${s.value}%`
+                        : `RD$ ${Number(s.value).toLocaleString()}`}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-[9px] font-black uppercase bg-slate-100 px-3 py-1 rounded-full text-slate-500">
-                      {s.applies_to === 'both' ? 'Inscrip. y Mens.' : s.applies_to === 'enrollment' ? 'Inscripción' : 'Mensualidad'}
+                      {s.applies_to === 'both'
+                        ? 'Inscrip. y Mens.'
+                        : s.applies_to === 'enrollment'
+                          ? 'Inscripción'
+                          : 'Mensualidad'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[9px] font-black uppercase">Activa</span>
+                    <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[9px] font-black uppercase">
+                      Activa
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button 
+                    <button
                       onClick={() => handleDelete(s.id)}
                       className="p-2 text-rose-300 hover:text-rose-600 transition-colors"
                     >
@@ -167,7 +197,9 @@ export const ScholarshipsManager = () => {
                   <td colSpan={6} className="py-20 text-center">
                     <div className="flex flex-col items-center opacity-20">
                       <GraduationCap size={64} />
-                      <p className="text-xs font-black uppercase tracking-widest mt-4">No hay alumnos becados aún</p>
+                      <p className="text-xs font-black uppercase tracking-widest mt-4">
+                        No hay alumnos becados aún
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -178,7 +210,7 @@ export const ScholarshipsManager = () => {
       </div>
 
       {isModalOpen && (
-        <ScholarshipModal 
+        <ScholarshipModal
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => {
             setIsModalOpen(false);

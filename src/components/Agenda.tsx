@@ -47,7 +47,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   });
 
   const events = (state.activities || [])
-    .filter(a => {
+    .filter((a) => {
       const type = a.type || 'event';
       if (userRole === 'admin' || userRole === 'coordinator') {
         return true;
@@ -70,7 +70,15 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
         const start = new Date(`${a.date}T${startH || '00:00:00'}`);
         const end = new Date(`${a.date}T${endH || '23:59:59'}`);
         if (isNaN(start.getTime())) throw new Error('Invalid');
-        return { id: a.id, title: a.title, start, end, desc: a.description, type: a.type || 'event', raw: a };
+        return {
+          id: a.id,
+          title: a.title,
+          start,
+          end,
+          desc: a.description,
+          type: a.type || 'event',
+          raw: a
+        };
       } catch (e) {
         return null;
       }
@@ -135,7 +143,10 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
       setShowModal(false);
     } catch (error: any) {
       console.error('Error saving activity:', error);
-      alert('Error al guardar: ' + (error.message || 'La tabla "activities" no existe o hay error de conexión'));
+      alert(
+        'Error al guardar: ' +
+          (error.message || 'La tabla "activities" no existe o hay error de conexión')
+      );
     } finally {
       setIsSaving(false);
     }
@@ -177,19 +188,27 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
       <div className="flex flex-wrap gap-4 mb-6 px-2">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#4f46e5]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Evento Público</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Evento Público
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#e11d48]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incidencia</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Incidencia
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#0891b2]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">R. Equipo Gestión</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            R. Equipo Gestión
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reunión Pedagógica</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Reunión Pedagógica
+          </span>
         </div>
       </div>
 
@@ -229,7 +248,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
             if (event.type === 'incident') color = '#e11d48'; // Incidencia (Rose)
             if (event.type === 'meeting') color = '#0891b2'; // Reunión (Cyan)
             if (event.type === 'pedagogical_group') color = '#7c3aed'; // Grupo Pedagógico (Violet)
-            
+
             return {
               style: {
                 backgroundColor: color,
@@ -290,14 +309,18 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                     className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'meeting' ? 'bg-cyan-50 border-cyan-200 text-cyan-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-16 w-full`}
                   >
                     <UsersIcon size={16} />
-                    <span className="text-[7px] font-black uppercase text-center leading-none">R. Equipo Gestión</span>
+                    <span className="text-[7px] font-black uppercase text-center leading-none">
+                      R. Equipo Gestión
+                    </span>
                   </button>
                   <button
                     onClick={() => setNewActivity({ ...newActivity, type: 'pedagogical_group' })}
                     className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'pedagogical_group' ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-16 w-full`}
                   >
                     <BookOpen size={16} />
-                    <span className="text-[7px] font-black uppercase text-center leading-none">R. Pedagógicas</span>
+                    <span className="text-[7px] font-black uppercase text-center leading-none">
+                      R. Pedagógicas
+                    </span>
                   </button>
                 </div>
               </div>

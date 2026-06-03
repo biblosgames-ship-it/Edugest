@@ -59,9 +59,13 @@ export const dataService = {
 
     const { data, error } = await supabase
       .from('students')
-      .select('id, names, first_surname, second_surname, first_name, last_name, course_id, family_id, address_sector, address_street, address_number')
+      .select(
+        'id, names, first_surname, second_surname, first_name, last_name, course_id, family_id, address_sector, address_street, address_number'
+      )
       .eq('center_id', centerId)
-      .or(`names.ilike.%${cleanQuery}%,first_surname.ilike.%${cleanQuery}%,second_surname.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%`)
+      .or(
+        `names.ilike.%${cleanQuery}%,first_surname.ilike.%${cleanQuery}%,second_surname.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%`
+      )
       .limit(10);
     if (error) {
       console.error('Search error:', error);
@@ -121,7 +125,9 @@ export const dataService = {
         if (countError) throw countError;
 
         if (count !== null && count >= maxStudents) {
-          throw new Error(`Límite de alumnos alcanzado (${maxStudents}). Por favor, actualiza tu plan SaaS.`);
+          throw new Error(
+            `Límite de alumnos alcanzado (${maxStudents}). Por favor, actualiza tu plan SaaS.`
+          );
         }
       }
     }
@@ -225,16 +231,25 @@ export const dataService = {
       const { error } = await supabase.from('communications').insert([data]);
       if (error) throw error;
     } catch (err: any) {
-      const isMissingTable = err.code === '42P01' || 
-                             err.code === 'PGRST205' ||
-                             (err.message && err.message.includes('communications') && err.message.includes('schema cache')) ||
-                             (err.message && err.message.includes('relation "communications" does not exist'));
+      const isMissingTable =
+        err.code === '42P01' ||
+        err.code === 'PGRST205' ||
+        (err.message &&
+          err.message.includes('communications') &&
+          err.message.includes('schema cache')) ||
+        (err.message && err.message.includes('relation "communications" does not exist'));
       if (isMissingTable) {
-        console.warn('[dataService] La tabla "communications" no existe. Usando fallback en "announcements".');
-        
+        console.warn(
+          '[dataService] La tabla "communications" no existe. Usando fallback en "announcements".'
+        );
+
         let senderRole = 'admin';
         try {
-          const { data: prof } = await supabase.from('profiles').select('role').eq('id', data.sender_id).single();
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.sender_id)
+            .single();
           if (prof?.role) senderRole = prof.role;
         } catch (e) {}
 
@@ -252,7 +267,9 @@ export const dataService = {
             target_teachers: data.target_teachers
           })}`
         };
-        const { error: fallbackError } = await supabase.from('announcements').insert([fallbackData]);
+        const { error: fallbackError } = await supabase
+          .from('announcements')
+          .insert([fallbackData]);
         if (fallbackError) throw fallbackError;
       } else {
         throw err;
@@ -270,22 +287,27 @@ export const dataService = {
       if (error) throw error;
       rawComms = data || [];
     } catch (err: any) {
-      const isMissingTable = err.code === '42P01' || 
-                             err.code === 'PGRST205' ||
-                             (err.message && err.message.includes('communications') && err.message.includes('schema cache')) ||
-                             (err.message && err.message.includes('relation "communications" does not exist'));
+      const isMissingTable =
+        err.code === '42P01' ||
+        err.code === 'PGRST205' ||
+        (err.message &&
+          err.message.includes('communications') &&
+          err.message.includes('schema cache')) ||
+        (err.message && err.message.includes('relation "communications" does not exist'));
       if (isMissingTable) {
-        console.warn('[dataService] La tabla "communications" no existe. Cargando fallback de "announcements".');
+        console.warn(
+          '[dataService] La tabla "communications" no existe. Cargando fallback de "announcements".'
+        );
         const { data, error: announcementsError } = await supabase
           .from('announcements')
           .select('*')
           .order('created_at', { ascending: false });
-          
+
         if (announcementsError) {
           console.error('[dataService] Error al cargar fallback de anuncios:', announcementsError);
           return [];
         }
-        
+
         const reconstructed: any[] = [];
         (data || []).forEach((ann: any) => {
           if (ann.content && ann.content.startsWith('__COM_DATA__:')) {
@@ -319,19 +341,21 @@ export const dataService = {
     if (role === 'admin' || role === 'coordinator') {
       return rawComms;
     }
-    
+
     if (role === 'teacher') {
-      return rawComms.filter((c: any) => 
-        (c.target_roles || []).includes('Docentes') || 
-        (c.target_teachers || []).includes(userId) ||
-        (c.target_roles || []).includes('Toda la comunidad')
+      return rawComms.filter(
+        (c: any) =>
+          (c.target_roles || []).includes('Docentes') ||
+          (c.target_teachers || []).includes(userId) ||
+          (c.target_roles || []).includes('Toda la comunidad')
       );
     }
-    
-    return rawComms.filter((c: any) => 
-      (c.target_roles || []).includes('Alumnos') || 
-      (c.target_roles || []).includes('Padres') || 
-      (c.target_roles || []).includes('Toda la comunidad')
+
+    return rawComms.filter(
+      (c: any) =>
+        (c.target_roles || []).includes('Alumnos') ||
+        (c.target_roles || []).includes('Padres') ||
+        (c.target_roles || []).includes('Toda la comunidad')
     );
   },
 
@@ -340,10 +364,13 @@ export const dataService = {
       const { error } = await supabase.from('communications').delete().eq('id', id);
       if (error) throw error;
     } catch (err: any) {
-      const isMissingTable = err.code === '42P01' || 
-                             err.code === 'PGRST205' ||
-                             (err.message && err.message.includes('communications') && err.message.includes('schema cache')) ||
-                             (err.message && err.message.includes('relation "communications" does not exist'));
+      const isMissingTable =
+        err.code === '42P01' ||
+        err.code === 'PGRST205' ||
+        (err.message &&
+          err.message.includes('communications') &&
+          err.message.includes('schema cache')) ||
+        (err.message && err.message.includes('relation "communications" does not exist'));
       if (isMissingTable) {
         // Fallback: delete from announcements
         const { error: fallbackError } = await supabase.from('announcements').delete().eq('id', id);
@@ -439,26 +466,33 @@ export const dataService = {
 
     for (const c of data.courses) {
       const key = `${c.level}_${c.grade}_${c.section}`.toLowerCase().trim();
-      const match = (existingCourses || []).find((ec: any) =>
-        `${ec.level}_${ec.grade}_${ec.section}`.toLowerCase().trim() === key
+      const match = (existingCourses || []).find(
+        (ec: any) => `${ec.level}_${ec.grade}_${ec.section}`.toLowerCase().trim() === key
       );
 
       let courseId = '';
       if (match) {
         courseId = match.id;
-        const { error } = await supabase.from('courses').update({
-          tanda: c.shift || match.tanda
-        }).eq('id', courseId);
+        const { error } = await supabase
+          .from('courses')
+          .update({
+            tanda: c.shift || match.tanda
+          })
+          .eq('id', courseId);
         if (error) throw error;
       } else {
-        const { data: newCourse, error } = await supabase.from('courses').insert({
-          center_id: centerId,
-          school_year: schoolYear,
-          level: c.level,
-          grade: c.grade,
-          section: c.section,
-          tanda: c.shift || 'Matutina'
-        }).select().single();
+        const { data: newCourse, error } = await supabase
+          .from('courses')
+          .insert({
+            center_id: centerId,
+            school_year: schoolYear,
+            level: c.level,
+            grade: c.grade,
+            section: c.section,
+            tanda: c.shift || 'Matutina'
+          })
+          .select()
+          .single();
         if (error) throw error;
         courseId = newCourse.id;
       }
@@ -475,26 +509,33 @@ export const dataService = {
 
     for (const s of data.subjects) {
       const key = `${s.name}_${s.level}`.toLowerCase().trim();
-      const match = (existingSubjects || []).find((es: any) =>
-        `${es.name}_${es.level}`.toLowerCase().trim() === key
+      const match = (existingSubjects || []).find(
+        (es: any) => `${es.name}_${es.level}`.toLowerCase().trim() === key
       );
 
       let subjectId = '';
       if (match) {
         subjectId = match.id;
-        const { error } = await supabase.from('subjects').update({
-          area: s.area || match.area,
-          weekly_hours: s.weekly_hours || match.weekly_hours
-        }).eq('id', subjectId);
+        const { error } = await supabase
+          .from('subjects')
+          .update({
+            area: s.area || match.area,
+            weekly_hours: s.weekly_hours || match.weekly_hours
+          })
+          .eq('id', subjectId);
         if (error) throw error;
       } else {
-        const { data: newSubject, error } = await supabase.from('subjects').insert({
-          center_id: centerId,
-          name: s.name,
-          level: s.level,
-          area: s.area || 'General',
-          weekly_hours: s.weekly_hours || 4
-        }).select().single();
+        const { data: newSubject, error } = await supabase
+          .from('subjects')
+          .insert({
+            center_id: centerId,
+            name: s.name,
+            level: s.level,
+            area: s.area || 'General',
+            weekly_hours: s.weekly_hours || 4
+          })
+          .select()
+          .single();
         if (error) throw error;
         subjectId = newSubject.id;
       }
@@ -512,9 +553,10 @@ export const dataService = {
     for (const p of data.staff) {
       if (!p.name || !p.name.trim()) continue;
       const nameKey = p.name.toLowerCase().trim();
-      const match = (existingStaff || []).find((es: any) =>
-        (es.full_name || es.name || '').toLowerCase().trim() === nameKey ||
-        (p.email && es.email && es.email.toLowerCase().trim() === p.email.toLowerCase().trim())
+      const match = (existingStaff || []).find(
+        (es: any) =>
+          (es.full_name || es.name || '').toLowerCase().trim() === nameKey ||
+          (p.email && es.email && es.email.toLowerCase().trim() === p.email.toLowerCase().trim())
       );
 
       let staffId = '';
@@ -536,7 +578,11 @@ export const dataService = {
         const { error } = await supabase.from('staff').update(staffPayload).eq('id', staffId);
         if (error) throw error;
       } else {
-        const { data: newStaff, error } = await supabase.from('staff').insert(staffPayload).select().single();
+        const { data: newStaff, error } = await supabase
+          .from('staff')
+          .insert(staffPayload)
+          .select()
+          .single();
         if (error) throw error;
         staffId = newStaff.id;
       }
@@ -562,12 +608,21 @@ export const dataService = {
       .eq('center_id', centerId);
 
     for (const s of data.students) {
-      const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}`.toLowerCase().trim();
+      const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}`
+        .toLowerCase()
+        .trim();
       const courseId = courseMap.get(courseKey) || null;
 
-      const studentNameKey = `${s.first_surname || ''} ${s.second_surname || ''} ${s.names || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+      const studentNameKey = `${s.first_surname || ''} ${s.second_surname || ''} ${s.names || ''}`
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
       const match = (existingStudents || []).find((es: any) => {
-        const dbName = `${es.first_surname || es.last_name || ''} ${es.second_surname || ''} ${es.names || es.first_name || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+        const dbName =
+          `${es.first_surname || es.last_name || ''} ${es.second_surname || ''} ${es.names || es.first_name || ''}`
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
         return dbName === studentNameKey || (s.sigerd_code && es.sigerd_code === s.sigerd_code);
       });
 
@@ -592,10 +647,17 @@ export const dataService = {
       let studentId = '';
       if (match) {
         studentId = match.id;
-        const { error } = await supabase.from('students').update(studentPayload).eq('id', studentId);
+        const { error } = await supabase
+          .from('students')
+          .update(studentPayload)
+          .eq('id', studentId);
         if (error) throw error;
       } else {
-        const { data: newStudent, error } = await supabase.from('students').insert(studentPayload).select().single();
+        const { data: newStudent, error } = await supabase
+          .from('students')
+          .insert(studentPayload)
+          .select()
+          .single();
         if (error) throw error;
         studentId = newStudent.id;
       }
@@ -609,11 +671,17 @@ export const dataService = {
           relation: s.tutor_parentesco || 'Tutor',
           phone: s.tutor_telefono || null
         };
-        
+
         // Buscar tutor existente para este estudiante
-        const { data: existingTutors } = await supabase.from('parents').select('id').eq('student_id', studentId);
+        const { data: existingTutors } = await supabase
+          .from('parents')
+          .select('id')
+          .eq('student_id', studentId);
         if (existingTutors && existingTutors.length > 0) {
-          const { error: pErr } = await supabase.from('parents').update(tutorPayload).eq('id', existingTutors[0].id);
+          const { error: pErr } = await supabase
+            .from('parents')
+            .update(tutorPayload)
+            .eq('id', existingTutors[0].id);
           if (pErr) console.error('Error actualizando tutor:', pErr);
         } else {
           const { error: pErr } = await supabase.from('parents').insert(tutorPayload);
@@ -638,7 +706,9 @@ export const dataService = {
 
       // Si alguno no se encuentra, se omite de forma flexible de acuerdo con la decisión de diseño
       if (!teacherId || !subjectId || !courseId) {
-        console.warn(`Omitiendo asignación inválida: docente=${a.docente}, materia=${a.materia}, curso=${a.grade} ${a.section}`);
+        console.warn(
+          `Omitiendo asignación inválida: docente=${a.docente}, materia=${a.materia}, curso=${a.grade} ${a.section}`
+        );
         continue;
       }
 
@@ -729,7 +799,7 @@ export const dataService = {
 
       if (taErr) throw taErr;
 
-      for (const sa of (sourceAssignments || [])) {
+      for (const sa of sourceAssignments || []) {
         const newCourseId = courseMap.get(sa.course_id);
         if (!newCourseId) continue;
 
@@ -741,26 +811,20 @@ export const dataService = {
         );
 
         if (!exists) {
-          const { error: insAErr } = await supabase
-            .from('assignments')
-            .insert({
-              center_id: centerId,
-              course_id: newCourseId,
-              subject_id: sa.subject_id,
-              teacher_id: sa.teacher_id,
-              hours_per_week: sa.hours_per_week
-            });
+          const { error: insAErr } = await supabase.from('assignments').insert({
+            center_id: centerId,
+            course_id: newCourseId,
+            subject_id: sa.subject_id,
+            teacher_id: sa.teacher_id,
+            hours_per_week: sa.hours_per_week
+          });
           if (insAErr) console.error('Error clonando asignación:', insAErr);
         }
       }
     }
   },
 
-  async promoteStudent(
-    studentId: string,
-    targetYear: string,
-    targetCourseId: string
-  ) {
+  async promoteStudent(studentId: string, targetYear: string, targetCourseId: string) {
     // 1. Obtener la ficha del estudiante origen
     const { data: sourceStudent, error: sErr } = await supabase
       .from('students')
@@ -884,4 +948,3 @@ export const dataService = {
     return newStudentId;
   }
 };
-

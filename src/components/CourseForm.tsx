@@ -28,22 +28,22 @@ export const CourseForm = () => {
   });
 
   const handleGradeChange = (val: string) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newGrade = val;
       const cleanGrade = newGrade.trim().replace(/[^a-zA-Z0-9]/g, '');
-      const suggestedCode = isCodeManuallyEdited 
-        ? prev.code 
+      const suggestedCode = isCodeManuallyEdited
+        ? prev.code
         : `${cleanGrade}-${prev.section.trim()}`.toUpperCase();
       return { ...prev, grade: newGrade, code: suggestedCode };
     });
   };
 
   const handleSectionChange = (val: string) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newSection = val;
       const cleanGrade = prev.grade.trim().replace(/[^a-zA-Z0-9]/g, '');
-      const suggestedCode = isCodeManuallyEdited 
-        ? prev.code 
+      const suggestedCode = isCodeManuallyEdited
+        ? prev.code
         : `${cleanGrade}-${newSection.trim()}`.toUpperCase();
       return { ...prev, section: newSection, code: suggestedCode };
     });
@@ -206,7 +206,9 @@ export const CourseForm = () => {
         <input
           type="number"
           value={formData.studentCount}
-          onChange={(e) => setFormData({ ...formData, studentCount: parseInt(e.target.value) || 0 })}
+          onChange={(e) =>
+            setFormData({ ...formData, studentCount: parseInt(e.target.value) || 0 })
+          }
           className={inputClass}
           required
         />
@@ -305,13 +307,14 @@ export const CourseForm = () => {
                             </div>
                           </div>
 
-
-
                           {/* Derecha: Info y Acciones */}
                           <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto">
                             <div className="flex items-center gap-4 text-[10px] text-text-muted font-bold uppercase">
                               <span>
-                                Estudiantes: <strong className="text-brand-blue">{course.studentCount || course.student_count || 0}</strong>
+                                Estudiantes:{' '}
+                                <strong className="text-brand-blue">
+                                  {course.studentCount || course.student_count || 0}
+                                </strong>
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider ${isFull ? 'bg-emerald-500/20 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}
@@ -319,7 +322,7 @@ export const CourseForm = () => {
                                 {assignedHours} / 25h
                               </span>
                             </div>
-                            
+
                             <div className="flex gap-1 border-l border-border-main pl-4">
                               <button
                                 type="button"
@@ -349,8 +352,6 @@ export const CourseForm = () => {
           )}
         </div>
       </div>
-
-
     </form>
   );
 };

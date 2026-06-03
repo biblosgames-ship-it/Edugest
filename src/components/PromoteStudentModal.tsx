@@ -2,14 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase';
-import {
-  Sparkles,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  X
-} from 'lucide-react';
+import { Sparkles, ArrowRight, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface PromoteStudentModalProps {
@@ -73,7 +66,9 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
 
         if (cErr) throw cErr;
         const sorted = (data || []).sort((a: any, b: any) => {
-          return `${a.level} ${a.grade} ${a.section}`.localeCompare(`${b.level} ${b.grade} ${b.section}`);
+          return `${a.level} ${a.grade} ${a.section}`.localeCompare(
+            `${b.level} ${b.grade} ${b.section}`
+          );
         });
         setTargetCourses(sorted);
 
@@ -81,7 +76,7 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
         if (currentCourse) {
           const nextGrade = getNextGradeName(currentCourse.grade);
           const nextLevel = getNextLevelName(currentCourse.level, currentCourse.grade);
-          
+
           const suggested = sorted.find(
             (tc: any) =>
               tc.level.toLowerCase().trim() === nextLevel.toLowerCase().trim() &&
@@ -164,7 +159,9 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
             <Sparkles size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-black uppercase text-slate-900">Reinscribir / Promover Alumno</h3>
+            <h3 className="text-lg font-black uppercase text-slate-900">
+              Reinscribir / Promover Alumno
+            </h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
               Promoción individual y generación de expediente para nuevo ciclo
             </p>
@@ -191,12 +188,17 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
           {/* Ficha rápida del estudiante */}
           <div className="p-5 bg-slate-50 border border-slate-200/50 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estudiante Seleccionado</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Estudiante Seleccionado
+              </p>
               <h4 className="text-sm font-black text-slate-800 uppercase mt-0.5">
                 {student.first_surname} {student.second_surname || ''}, {student.names}
               </h4>
               <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">
-                Año Actual: {student.school_year}  |  Curso: {currentCourse ? `${currentCourse.level} ${currentCourse.grade} "${currentCourse.section}"` : 'Sin Curso'}
+                Año Actual: {student.school_year} | Curso:{' '}
+                {currentCourse
+                  ? `${currentCourse.level} ${currentCourse.grade} "${currentCourse.section}"`
+                  : 'Sin Curso'}
               </p>
             </div>
             <div className="flex items-center gap-2 px-3.5 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 text-[10px] font-black uppercase tracking-wider shrink-0">
@@ -247,7 +249,9 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
           {currentCourse && targetCourseId && (
             <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 w-full justify-center text-xs font-black uppercase text-indigo-950">
-                <span>{currentCourse.grade} "{currentCourse.section}"</span>
+                <span>
+                  {currentCourse.grade} "{currentCourse.section}"
+                </span>
                 <ArrowRight className="text-indigo-500 shrink-0" size={16} />
                 <span>
                   {targetCourses.find((tc: any) => tc.id === targetCourseId)?.grade || ''} "
@@ -260,7 +264,10 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
           <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-[9px] font-bold uppercase leading-relaxed flex items-start gap-2.5">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
             <span>
-              Nota: La promoción creará una nueva matrícula para el ciclo escolar {targetYear} y copiará automáticamente los datos de contacto y tutores asociados a su perfil. Esto permite facturar y gestionar pagos del ciclo nuevo de forma independiente sin alterar el año pasado.
+              Nota: La promoción creará una nueva matrícula para el ciclo escolar {targetYear} y
+              copiará automáticamente los datos de contacto y tutores asociados a su perfil. Esto
+              permite facturar y gestionar pagos del ciclo nuevo de forma independiente sin alterar
+              el año pasado.
             </span>
           </div>
 
@@ -297,7 +304,11 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
           <div className="space-y-2">
             <h4 className="text-lg font-black uppercase text-slate-900">¡Promoción Completada!</h4>
             <p className="text-xs text-slate-500 font-medium max-w-sm">
-              El alumno <strong>{student.first_surname} {student.names}</strong> ha sido reinscrito con éxito en el ciclo {targetYear} en su grado correspondiente.
+              El alumno{' '}
+              <strong>
+                {student.first_surname} {student.names}
+              </strong>{' '}
+              ha sido reinscrito con éxito en el ciclo {targetYear} en su grado correspondiente.
             </p>
           </div>
           <button

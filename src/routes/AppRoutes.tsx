@@ -34,12 +34,7 @@ export const AppRoutes = () => {
   return (
     <Routes>
       <Route element={<MainLayout />}>
-        <Route
-          index
-          element={
-            <Dashboard />
-          }
-        />
+        <Route index element={<Dashboard />} />
         <Route path="students" element={<StudentManagement />} />
         <Route path="reports" element={<GeneralReports />} />
         <Route

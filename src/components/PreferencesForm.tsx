@@ -534,7 +534,9 @@ export const PreferencesForm = () => {
                     });
                   } catch (err: any) {
                     console.error('Error guardando recreo:', err);
-                    alert('No se pudo guardar el recreo. Error: ' + (err.message || 'Error desconocido'));
+                    alert(
+                      'No se pudo guardar el recreo. Error: ' + (err.message || 'Error desconocido')
+                    );
                   }
                 }}
                 className={`flex-1 py-3 ${breakPref.id ? 'bg-orange-500 hover:bg-orange-600' : 'bg-slate-900 hover:bg-black'} text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all`}
@@ -937,7 +939,8 @@ export const PreferencesForm = () => {
                 const levelInput = document.getElementById('fixed-level') as HTMLSelectElement;
                 const cycleInput = document.getElementById('fixed-cycle') as HTMLSelectElement;
 
-                if (!nameInput.value) return alert('Por favor, asigne un nombre al evento (ej. Acto de Bandera)');
+                if (!nameInput.value)
+                  return alert('Por favor, asigne un nombre al evento (ej. Acto de Bandera)');
 
                 try {
                   const { error } = await supabase.from('fixed_events').insert({
@@ -951,7 +954,7 @@ export const PreferencesForm = () => {
                   });
 
                   if (error) throw error;
-                  
+
                   alert('✓ Evento institucional guardado correctamente');
                   nameInput.value = '';
                   await refreshData(undefined, true);

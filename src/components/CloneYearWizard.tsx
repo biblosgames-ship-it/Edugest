@@ -59,7 +59,9 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
 
         if (cErr) throw cErr;
         const sorted = (data || []).sort((a: any, b: any) => {
-          return `${a.level} ${a.grade} ${a.section}`.localeCompare(`${b.level} ${b.grade} ${b.section}`);
+          return `${a.level} ${a.grade} ${a.section}`.localeCompare(
+            `${b.level} ${b.grade} ${b.section}`
+          );
         });
         setCourses(sorted);
         setSelectedCourseIds(sorted.map((c: any) => c.id)); // Seleccionar todos por defecto
@@ -129,7 +131,9 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
             <CalendarRange size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-black uppercase text-slate-900">Clonar Estructura de Ciclo</h3>
+            <h3 className="text-lg font-black uppercase text-slate-900">
+              Clonar Estructura de Ciclo
+            </h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
               Duplicar cursos y asignaciones de materias de un ciclo anterior
             </p>
@@ -206,7 +210,9 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
                     disabled={isProcessing}
                     className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest"
                   >
-                    {selectedCourseIds.length === courses.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                    {selectedCourseIds.length === courses.length
+                      ? 'Desmarcar Todos'
+                      : 'Marcar Todos'}
                   </button>
                 )}
               </div>
@@ -269,7 +275,8 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
                 Clonar asignaciones de profesores a materias
               </p>
               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5">
-                Si un docente impartía una materia en un curso, se creará esa misma asignación para el nuevo año escolar.
+                Si un docente impartía una materia en un curso, se creará esa misma asignación para
+                el nuevo año escolar.
               </p>
             </div>
           </button>
@@ -284,7 +291,9 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
             </button>
             <button
               onClick={handleClone}
-              disabled={isProcessing || !sourceYear || !targetYear || selectedCourseIds.length === 0}
+              disabled={
+                isProcessing || !sourceYear || !targetYear || selectedCourseIds.length === 0
+              }
               className="flex-2 px-10 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
             >
               {isProcessing ? (
@@ -307,7 +316,8 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
           <div className="space-y-2">
             <h4 className="text-lg font-black uppercase text-slate-900">¡Clonación Completada!</h4>
             <p className="text-xs text-slate-500 font-medium max-w-sm">
-              La estructura de cursos seleccionada y las asignaciones del ciclo {sourceYear} han sido clonadas correctamente hacia el ciclo {targetYear}.
+              La estructura de cursos seleccionada y las asignaciones del ciclo {sourceYear} han
+              sido clonadas correctamente hacia el ciclo {targetYear}.
             </p>
           </div>
           <button

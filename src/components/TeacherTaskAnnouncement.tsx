@@ -15,14 +15,14 @@ import {
   X
 } from 'lucide-react';
 
-export const TeacherTaskAnnouncement = ({ 
-  userData: profile, 
-  initialCourseId, 
-  onClose 
-}: { 
-  userData: any; 
-  initialCourseId?: string; 
-  onClose?: () => void; 
+export const TeacherTaskAnnouncement = ({
+  userData: profile,
+  initialCourseId,
+  onClose
+}: {
+  userData: any;
+  initialCourseId?: string;
+  onClose?: () => void;
 }) => {
   const { state } = useApp();
   const [title, setTitle] = useState('');

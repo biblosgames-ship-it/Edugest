@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { createInvitationCode, getActiveInvitationCodes, deleteInvitationCode } from '../services/userService';
+import {
+  createInvitationCode,
+  getActiveInvitationCodes,
+  deleteInvitationCode
+} from '../services/userService';
 import { useSupabase } from '../context/AppContext';
 import { useCourses } from '../hooks/useCourses';
-import { 
-  KeyRound, 
-  UserPlus, 
-  CheckCircle2, 
-  Trash2, 
-  Copy, 
-  Check, 
-  Lock, 
-  Unlock, 
-  Layers, 
+import {
+  KeyRound,
+  UserPlus,
+  CheckCircle2,
+  Trash2,
+  Copy,
+  Check,
+  Lock,
+  Unlock,
+  Layers,
   ShieldAlert,
   Pencil,
   X,
@@ -22,27 +26,99 @@ import {
 import toast from 'react-hot-toast';
 
 const AVAILABLE_PANELS = [
-  { id: 'dashboard', label: 'Panel Principal', desc: 'Panel de métricas y vista general del centro.' },
-  { id: 'students', label: 'Gestión de Alumnos', desc: 'Matrícula de alumnos, expedientes y certificados.' },
-  { id: 'digital-register', label: 'Calificaciones', desc: 'Registro digital de notas por períodos y grados.' },
-  { id: 'data', label: 'Gestión de Datos', desc: 'Configuración de cursos, asignaturas y ciclo escolar.' },
+  {
+    id: 'dashboard',
+    label: 'Panel Principal',
+    desc: 'Panel de métricas y vista general del centro.'
+  },
+  {
+    id: 'students',
+    label: 'Gestión de Alumnos',
+    desc: 'Matrícula de alumnos, expedientes y certificados.'
+  },
+  {
+    id: 'digital-register',
+    label: 'Calificaciones',
+    desc: 'Registro digital de notas por períodos y grados.'
+  },
+  {
+    id: 'data',
+    label: 'Gestión de Datos',
+    desc: 'Configuración de cursos, asignaturas y ciclo escolar.'
+  },
   { id: 'schedule', label: 'Horarios', desc: 'Visualización y creador automático de horarios.' },
   { id: 'agenda', label: 'Calendario Escolar', desc: 'Planificador de eventos y efemérides.' },
   { id: 'tasks', label: 'Tareas', desc: 'Asignación, seguimiento y envío de tareas escolares.' },
-  { id: 'communications', label: 'Comunicaciones', desc: 'Envío de comunicados oficiales y justificación de excusas.' },
-  { id: 'control', label: 'Modo Control', desc: 'Seguimiento en tiempo real de actividades del centro.' },
-  { id: 'general-reports', label: 'Reportes', desc: 'Reportes académicos, demográficos y consolidados.' },
-  { id: 'finances', label: 'Gestión Financiera', desc: 'Control de nómina, gastos, becas y cuentas de estudiantes.' },
-  { id: 'admin', label: 'Administración', desc: 'Control de usuarios, configuración del centro y auditoría.' },
+  {
+    id: 'communications',
+    label: 'Comunicaciones',
+    desc: 'Envío de comunicados oficiales y justificación de excusas.'
+  },
+  {
+    id: 'control',
+    label: 'Modo Control',
+    desc: 'Seguimiento en tiempo real de actividades del centro.'
+  },
+  {
+    id: 'general-reports',
+    label: 'Reportes',
+    desc: 'Reportes académicos, demográficos y consolidados.'
+  },
+  {
+    id: 'finances',
+    label: 'Gestión Financiera',
+    desc: 'Control de nómina, gastos, becas y cuentas de estudiantes.'
+  },
+  {
+    id: 'admin',
+    label: 'Administración',
+    desc: 'Control de usuarios, configuración del centro y auditoría.'
+  }
 ];
 
 const ROLE_DEFAULTS: Record<string, string[]> = {
-  admin: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'finances', 'admin'],
-  finance: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports', 'finances'],
-  coordinator: ['dashboard', 'students', 'digital-register', 'data', 'schedule', 'agenda', 'tasks', 'communications', 'control', 'general-reports'],
+  admin: [
+    'dashboard',
+    'students',
+    'digital-register',
+    'data',
+    'schedule',
+    'agenda',
+    'tasks',
+    'communications',
+    'control',
+    'general-reports',
+    'finances',
+    'admin'
+  ],
+  finance: [
+    'dashboard',
+    'students',
+    'digital-register',
+    'data',
+    'schedule',
+    'agenda',
+    'tasks',
+    'communications',
+    'control',
+    'general-reports',
+    'finances'
+  ],
+  coordinator: [
+    'dashboard',
+    'students',
+    'digital-register',
+    'data',
+    'schedule',
+    'agenda',
+    'tasks',
+    'communications',
+    'control',
+    'general-reports'
+  ],
   teacher: ['dashboard', 'schedule', 'agenda', 'digital-register', 'tasks', 'communications'],
   conserje: ['dashboard', 'facility', 'agenda'],
-  support: ['dashboard', 'facility', 'agenda'],
+  support: ['dashboard', 'facility', 'agenda']
 };
 
 export const InvitationGenerator = ({
@@ -55,7 +131,7 @@ export const InvitationGenerator = ({
   courseId?: string;
 }) => {
   const [activeTab, setActiveTab] = useState<'admin' | 'courses'>('admin');
-  
+
   // States for administrative invitations
   const [code, setCode] = useState('');
   const [selectedRole, setSelectedRole] = useState(role || 'teacher');
@@ -89,10 +165,8 @@ export const InvitationGenerator = ({
   };
 
   const handleTogglePanel = (panelId: string) => {
-    setSelectedPanels(prev => 
-      prev.includes(panelId) 
-        ? prev.filter(id => id !== panelId) 
-        : [...prev, panelId]
+    setSelectedPanels((prev) =>
+      prev.includes(panelId) ? prev.filter((id) => id !== panelId) : [...prev, panelId]
     );
   };
 
@@ -102,7 +176,13 @@ export const InvitationGenerator = ({
     setIsCreating(true);
     try {
       const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
-      await createInvitationCode(sanitizedCode, selectedRole, courseId, profile.center_id, selectedPanels);
+      await createInvitationCode(
+        sanitizedCode,
+        selectedRole,
+        courseId,
+        profile.center_id,
+        selectedPanels
+      );
 
       toast.success(`Código de acceso "${sanitizedCode}" generado exitosamente.`);
       setCode('');
@@ -182,8 +262,12 @@ export const InvitationGenerator = ({
                   <KeyRound size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black uppercase text-slate-800 tracking-tighter">Generador de Invitaciones</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Configura códigos y limita el acceso a la plataforma</p>
+                  <h2 className="text-lg font-black uppercase text-slate-800 tracking-tighter">
+                    Generador de Invitaciones
+                  </h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                    Configura códigos y limita el acceso a la plataforma
+                  </p>
                 </div>
               </div>
 
@@ -242,11 +326,15 @@ export const InvitationGenerator = ({
                         onClick={() => handleTogglePanel(p.id)}
                         className={`flex items-start text-left p-3 rounded-2xl border-2 transition-all gap-3 ${isChecked ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 hover:border-slate-200'}`}
                       >
-                        <div className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'}`}>
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'}`}
+                        >
                           {isChecked && <Check size={10} strokeWidth={4} />}
                         </div>
                         <div>
-                          <div className={`text-[10px] font-black uppercase leading-tight ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`}>
+                          <div
+                            className={`text-[10px] font-black uppercase leading-tight ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`}
+                          >
                             {p.label}
                           </div>
                           <div className="text-[8px] font-medium text-slate-400 uppercase mt-0.5 leading-tight">
@@ -281,8 +369,12 @@ export const InvitationGenerator = ({
                   <Layers size={16} />
                 </div>
                 <div>
-                  <h3 className="text-xs font-black uppercase text-slate-700 tracking-tighter">Códigos Generados</h3>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">Invitaciones activas del centro</p>
+                  <h3 className="text-xs font-black uppercase text-slate-700 tracking-tighter">
+                    Códigos Generados
+                  </h3>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                    Invitaciones activas del centro
+                  </p>
                 </div>
               </div>
 
@@ -290,54 +382,79 @@ export const InvitationGenerator = ({
                 {activeCodes.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400">
                     <Lock size={32} className="opacity-20 mb-2" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-center">No hay códigos activos</p>
-                    <p className="text-[8px] font-medium text-center uppercase mt-1 leading-tight px-6">Genera códigos personalizados para compartir con el personal</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-center">
+                      No hay códigos activos
+                    </p>
+                    <p className="text-[8px] font-medium text-center uppercase mt-1 leading-tight px-6">
+                      Genera códigos personalizados para compartir con el personal
+                    </p>
                   </div>
                 ) : (
                   activeCodes.map((c) => (
-                    <div 
+                    <div
                       key={c.code}
                       className={`p-4 bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col space-y-3 relative group transition-all ${c.is_used ? 'opacity-60 bg-slate-50/50' : 'hover:border-indigo-100'}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-black text-xs text-indigo-600 tracking-wide uppercase">{c.code}</span>
-                          <button 
+                          <span className="font-mono font-black text-xs text-indigo-600 tracking-wide uppercase">
+                            {c.code}
+                          </span>
+                          <button
                             onClick={() => handleCopy(c.code)}
                             className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors"
                             title="Copiar Código"
                           >
-                            {copiedCode === c.code ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                            {copiedCode === c.code ? (
+                              <Check size={12} className="text-emerald-500" />
+                            ) : (
+                              <Copy size={12} />
+                            )}
                           </button>
                         </div>
-                        
-                        <span className={`px-2 py-0.5 text-[8px] font-black rounded-full uppercase tracking-wider ${c.is_used ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'}`}>
+
+                        <span
+                          className={`px-2 py-0.5 text-[8px] font-black rounded-full uppercase tracking-wider ${c.is_used ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'}`}
+                        >
                           {c.is_used ? 'Usado' : 'Disponible'}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-[9px] border-t border-slate-50 pt-2">
                         <div>
-                          <span className="text-[8px] font-black text-slate-400 uppercase block leading-none">Rol Inicial</span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase block leading-none">
+                            Rol Inicial
+                          </span>
                           <span className="font-black text-slate-700 uppercase">{c.role}</span>
                         </div>
                         <div>
-                          <span className="text-[8px] font-black text-slate-400 uppercase block leading-none">Creado</span>
-                          <span className="font-bold text-slate-500">{new Date(c.created_at).toLocaleDateString('es-DO')}</span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase block leading-none">
+                            Creado
+                          </span>
+                          <span className="font-bold text-slate-500">
+                            {new Date(c.created_at).toLocaleDateString('es-DO')}
+                          </span>
                         </div>
                       </div>
 
                       <div className="text-[8px] bg-slate-50 p-2 rounded-xl border border-slate-100">
-                        <span className="font-black text-slate-400 uppercase block mb-1">Módulos ({c.allowed_panels?.length || 0})</span>
+                        <span className="font-black text-slate-400 uppercase block mb-1">
+                          Módulos ({c.allowed_panels?.length || 0})
+                        </span>
                         <div className="flex flex-wrap gap-1">
                           {c.allowed_panels && c.allowed_panels.length > 0 ? (
                             c.allowed_panels.map((pId: string) => (
-                              <span key={pId} className="bg-white border border-slate-200/60 text-slate-600 font-bold px-1.5 py-0.5 rounded uppercase text-[7px]">
+                              <span
+                                key={pId}
+                                className="bg-white border border-slate-200/60 text-slate-600 font-bold px-1.5 py-0.5 rounded uppercase text-[7px]"
+                              >
                                 {pId}
                               </span>
                             ))
                           ) : (
-                            <span className="text-slate-400 font-bold uppercase text-[7px]">Ninguno</span>
+                            <span className="text-slate-400 font-bold uppercase text-[7px]">
+                              Ninguno
+                            </span>
                           )}
                         </div>
                       </div>
@@ -358,9 +475,10 @@ export const InvitationGenerator = ({
         ) : (
           <div className="lg:col-span-3 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="bg-amber-50 border border-amber-200 p-5 rounded-[2.5rem] text-[10px] text-amber-800 font-bold leading-relaxed uppercase">
-              💡 INSTRUCCIONES: Los alumnos y padres no requieren códigos individuales.
-              Asigna un código único por curso (ej: <code>GEN-5A</code>) y compártelo con todos los alumnos y padres de esa sección.
-              Ellos lo ingresarán al registrarse para vincularse automáticamente a su curso correspondiente.
+              💡 INSTRUCCIONES: Los alumnos y padres no requieren códigos individuales. Asigna un
+              código único por curso (ej: <code>GEN-5A</code>) y compártelo con todos los alumnos y
+              padres de esa sección. Ellos lo ingresarán al registrarse para vincularse
+              automáticamente a su curso correspondiente.
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -404,7 +522,8 @@ export const InvitationGenerator = ({
                                     {course.grade}
                                   </span>
                                   <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">
-                                    Tanda: {course.tanda} | {course.studentCount || course.student_count || 0} Alum.
+                                    Tanda: {course.tanda} |{' '}
+                                    {course.studentCount || course.student_count || 0} Alum.
                                   </span>
                                 </div>
                               </div>
@@ -421,15 +540,23 @@ export const InvitationGenerator = ({
                                   <input
                                     type="text"
                                     value={editCodeValue}
-                                    onChange={(e) => setEditCodeValue(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                                    onChange={(e) =>
+                                      setEditCodeValue(
+                                        e.target.value.toUpperCase().replace(/\s+/g, '')
+                                      )
+                                    }
                                     className="bg-white border border-indigo-300 rounded-xl px-2 py-0.5 font-mono font-black text-[11px] text-indigo-700 outline-none w-24 uppercase text-center"
                                     placeholder="CÓDIGO"
                                     autoFocus
                                   />
                                   <button
                                     onClick={() => {
-                                      const cleanGrade = course.grade.trim().replace(/[^a-zA-Z0-9]/g, '');
-                                      setEditCodeValue(`${cleanGrade}-${course.section.trim()}`.toUpperCase());
+                                      const cleanGrade = course.grade
+                                        .trim()
+                                        .replace(/[^a-zA-Z0-9]/g, '');
+                                      setEditCodeValue(
+                                        `${cleanGrade}-${course.section.trim()}`.toUpperCase()
+                                      );
                                     }}
                                     className="p-1 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
                                     title="Sugerir Código"

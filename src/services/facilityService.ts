@@ -85,13 +85,13 @@ export const facilityService = {
   async createArea(area: FacilityArea): Promise<FacilityArea> {
     const cleanArea = { ...area };
     if (cleanArea.assignee_id === '') cleanArea.assignee_id = undefined;
-    
+
     const { data, error } = await supabase
       .from('facility_areas')
       .insert(cleanArea)
       .select()
       .single();
-      
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanArea.assignee_id) {
         delete cleanArea.assignee_id;
@@ -111,12 +111,9 @@ export const facilityService = {
   async updateArea(id: string, updates: Partial<FacilityArea>): Promise<void> {
     const cleanUpdates = { ...updates };
     if (cleanUpdates.assignee_id === '') cleanUpdates.assignee_id = undefined;
-    
-    const { error } = await supabase
-      .from('facility_areas')
-      .update(cleanUpdates)
-      .eq('id', id);
-      
+
+    const { error } = await supabase.from('facility_areas').update(cleanUpdates).eq('id', id);
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanUpdates.assignee_id) {
         delete cleanUpdates.assignee_id;
@@ -132,10 +129,7 @@ export const facilityService = {
   },
 
   async deleteArea(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('facility_areas')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('facility_areas').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -153,13 +147,13 @@ export const facilityService = {
   async createTask(task: FacilityTask): Promise<FacilityTask> {
     const cleanTask = { ...task };
     if (cleanTask.assignee_id === '') cleanTask.assignee_id = undefined;
-    
+
     const { data, error } = await supabase
       .from('facility_tasks')
       .insert(cleanTask)
       .select()
       .single();
-      
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanTask.assignee_id) {
         delete cleanTask.assignee_id;
@@ -179,12 +173,9 @@ export const facilityService = {
   async updateTask(id: string, updates: Partial<FacilityTask>): Promise<void> {
     const cleanUpdates = { ...updates };
     if (cleanUpdates.assignee_id === '') cleanUpdates.assignee_id = undefined;
-    
-    const { error } = await supabase
-      .from('facility_tasks')
-      .update(cleanUpdates)
-      .eq('id', id);
-      
+
+    const { error } = await supabase.from('facility_tasks').update(cleanUpdates).eq('id', id);
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanUpdates.assignee_id) {
         delete cleanUpdates.assignee_id;
@@ -200,10 +191,7 @@ export const facilityService = {
   },
 
   async deleteTask(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('facility_tasks')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('facility_tasks').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -221,13 +209,13 @@ export const facilityService = {
   async createIncident(incident: FacilityIncident): Promise<FacilityIncident> {
     const cleanIncident = { ...incident };
     if (cleanIncident.assignee_id === '') cleanIncident.assignee_id = undefined;
-    
+
     const { data, error } = await supabase
       .from('facility_incidents')
       .insert(cleanIncident)
       .select()
       .single();
-      
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanIncident.assignee_id) {
         delete cleanIncident.assignee_id;
@@ -247,12 +235,9 @@ export const facilityService = {
   async updateIncident(id: string, updates: Partial<FacilityIncident>): Promise<void> {
     const cleanUpdates = { ...updates };
     if (cleanUpdates.assignee_id === '') cleanUpdates.assignee_id = undefined;
-    
-    const { error } = await supabase
-      .from('facility_incidents')
-      .update(cleanUpdates)
-      .eq('id', id);
-      
+
+    const { error } = await supabase.from('facility_incidents').update(cleanUpdates).eq('id', id);
+
     if (error) {
       if ((error.code === '23503' || error.code === '22P02') && cleanUpdates.assignee_id) {
         delete cleanUpdates.assignee_id;
@@ -268,10 +253,7 @@ export const facilityService = {
   },
 
   async deleteIncident(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('facility_incidents')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('facility_incidents').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -297,18 +279,12 @@ export const facilityService = {
   },
 
   async updateInventoryItem(id: string, updates: Partial<FacilityInventory>): Promise<void> {
-    const { error } = await supabase
-      .from('facility_inventory')
-      .update(updates)
-      .eq('id', id);
+    const { error } = await supabase.from('facility_inventory').update(updates).eq('id', id);
     if (error) throw error;
   },
 
   async deleteInventoryItem(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('facility_inventory')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('facility_inventory').delete().eq('id', id);
     if (error) throw error;
   },
 
@@ -324,28 +300,18 @@ export const facilityService = {
   },
 
   async createAsset(asset: FacilityAsset): Promise<FacilityAsset> {
-    const { data, error } = await supabase
-      .from('facility_assets')
-      .insert(asset)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('facility_assets').insert(asset).select().single();
     if (error) throw error;
     return data;
   },
 
   async updateAsset(id: string, updates: Partial<FacilityAsset>): Promise<void> {
-    const { error } = await supabase
-      .from('facility_assets')
-      .update(updates)
-      .eq('id', id);
+    const { error } = await supabase.from('facility_assets').update(updates).eq('id', id);
     if (error) throw error;
   },
 
   async deleteAsset(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('facility_assets')
-      .delete()
-      .eq('id', id);
+    const { error } = await supabase.from('facility_assets').delete().eq('id', id);
     if (error) throw error;
   }
 };

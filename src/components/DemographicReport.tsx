@@ -1,25 +1,25 @@
 import React from 'react';
-import { 
-  Users, 
-  Download, 
-  Activity, 
-  MapPin, 
+import {
+  Users,
+  Download,
+  Activity,
+  MapPin,
   PieChart as PieIcon,
   BarChart as BarIcon,
   X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { 
-  PieChart, 
-  Pie, 
-  Cell, 
-  Tooltip, 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Legend,
   TooltipProps
 } from 'recharts';
@@ -39,9 +39,9 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
 
   // 1. Distribución por Sexo
   const sexData = [
-    { name: 'Masculino', value: students.filter(s => s.sex === 'M').length, color: '#6366f1' },
-    { name: 'Femenino', value: students.filter(s => s.sex === 'F').length, color: '#f43f5e' }
-  ].filter(d => d.value > 0);
+    { name: 'Masculino', value: students.filter((s) => s.sex === 'M').length, color: '#6366f1' },
+    { name: 'Femenino', value: students.filter((s) => s.sex === 'F').length, color: '#f43f5e' }
+  ].filter((d) => d.value > 0);
 
   // 2. Distribución por Edad
   const ageRanges = [
@@ -52,8 +52,8 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
     { label: '17+ años', min: 17, max: 100 }
   ];
 
-  const ageData = ageRanges.map(range => {
-    const count = students.filter(s => {
+  const ageData = ageRanges.map((range) => {
+    const count = students.filter((s) => {
       if (!s.birth_date) return false;
       const age = differenceInYears(new Date(), new Date(s.birth_date));
       return age >= range.min && age <= range.max;
@@ -63,7 +63,7 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
 
   // 3. Distribución por Procedencia (Sector)
   const originMap: Record<string, number> = {};
-  students.forEach(s => {
+  students.forEach((s) => {
     const sector = s.address_sector || 'No especificado';
     originMap[sector] = (originMap[sector] || 0) + 1;
   });
@@ -79,7 +79,7 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
 
     doc.setFontSize(20);
     doc.text('REPORTE ESTADÍSTICO DEMOGRÁFICO', 14, 22);
-    
+
     doc.setFontSize(10);
     doc.text(`Centro Educativo: ${center?.name || 'Sistema Edugest'}`, 14, 30);
     doc.text(`Fecha: ${now}`, 14, 35);
@@ -89,9 +89,9 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
     autoTable(doc, {
       startY: 50,
       head: [['DISTRIBUCIÓN POR SEXO', 'CANTIDAD', 'PORCENTAJE']],
-      body: sexData.map(d => [
-        d.name.toUpperCase(), 
-        d.value, 
+      body: sexData.map((d) => [
+        d.name.toUpperCase(),
+        d.value,
         `${((d.value / students.length) * 100).toFixed(1)}%`
       ]),
       theme: 'grid',
@@ -102,9 +102,9 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
     autoTable(doc, {
       startY: (doc as any).lastAutoTable.finalY + 15,
       head: [['RANGOS DE EDAD', 'ESTUDIANTES', 'PORCENTAJE']],
-      body: ageData.map(d => [
-        d.name.toUpperCase(), 
-        d.value, 
+      body: ageData.map((d) => [
+        d.name.toUpperCase(),
+        d.value,
         `${((d.value / students.length) * 100).toFixed(1)}%`
       ]),
       theme: 'grid',
@@ -115,7 +115,7 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
     autoTable(doc, {
       startY: (doc as any).lastAutoTable.finalY + 15,
       head: [['PRINCIPALES SECTORES (PROCEDENCIA)', 'ESTUDIANTES']],
-      body: originData.map(d => [d.name.toUpperCase(), d.value]),
+      body: originData.map((d) => [d.name.toUpperCase(), d.value]),
       theme: 'striped',
       headStyles: { fillColor: [244, 63, 94] }
     });
@@ -138,7 +138,7 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
             Análisis de la población escolar por edad, género y procedencia geográfica
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={exportPDF}
@@ -180,14 +180,16 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
                   ))}
                 </Pie>
                 <Tooltip />
-                <Legend verticalAlign="bottom" height={36}/>
+                <Legend verticalAlign="bottom" height={36} />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-2 gap-10 mt-6 w-full max-w-xs">
-            {sexData.map(d => (
+            {sexData.map((d) => (
               <div key={d.name} className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{d.name}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {d.name}
+                </p>
                 <p className="text-2xl font-black text-slate-800">{d.value}</p>
                 <p className="text-[10px] font-bold text-slate-400">
                   {((d.value / students.length) * 100).toFixed(1)}%
@@ -206,15 +208,20 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ageData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fontWeight: 'bold' }}
+                />
                 <YAxis hide />
-                <Tooltip cursor={{fill: '#f8fafc'}} />
+                <Tooltip cursor={{ fill: '#f8fafc' }} />
                 <Bar dataKey="value" fill="#10b981" radius={[10, 10, 0, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="flex justify-between mt-6 px-4">
-            {ageData.map(d => (
+            {ageData.map((d) => (
               <div key={d.name} className="text-center">
                 <p className="text-xs font-black text-slate-800">{d.value}</p>
                 <p className="text-[8px] font-black text-slate-400 uppercase">{d.name}</p>
@@ -233,26 +240,33 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart layout="vertical" data={originData}>
                   <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="name" 
-                    type="category" 
-                    width={100} 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fontSize: 10, fontWeight: 'black', fill: '#64748b'}} 
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    width={100}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 'black', fill: '#64748b' }}
                   />
                   <Tooltip />
                   <Bar dataKey="value" fill="#f43f5e" radius={[0, 10, 10, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            
+
             <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Tabla de sectores</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">
+                Tabla de sectores
+              </p>
               <div className="max-h-[220px] overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                 {originData.map((d, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                    <span className="text-xs font-black text-slate-700 uppercase truncate max-w-[70%]">{d.name}</span>
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+                  >
+                    <span className="text-xs font-black text-slate-700 uppercase truncate max-w-[70%]">
+                      {d.name}
+                    </span>
                     <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-rose-600">
                       {d.value}
                     </span>
@@ -272,11 +286,15 @@ const DemographicReport: React.FC<DemographicReportProps> = ({ onClose }) => {
             <Users size={40} className="text-pink-300" />
           </div>
           <div>
-            <h4 className="text-xl font-black uppercase tracking-tight mb-2 text-pink-400">¿Cómo se calcula esto?</h4>
+            <h4 className="text-xl font-black uppercase tracking-tight mb-2 text-pink-400">
+              ¿Cómo se calcula esto?
+            </h4>
             <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-2xl">
-              Los datos demográficos se generan en tiempo real basándose en la información registrada en los expedientes de los alumnos. 
-              La <strong>Edad</strong> se calcula dinámicamente según la fecha de nacimiento y la <strong>Procedencia</strong> se agrupa por el campo de sector. 
-              Mantener estos campos actualizados garantiza la precisión de tus reportes administrativos.
+              Los datos demográficos se generan en tiempo real basándose en la información
+              registrada en los expedientes de los alumnos. La <strong>Edad</strong> se calcula
+              dinámicamente según la fecha de nacimiento y la <strong>Procedencia</strong> se agrupa
+              por el campo de sector. Mantener estos campos actualizados garantiza la precisión de
+              tus reportes administrativos.
             </p>
           </div>
         </div>

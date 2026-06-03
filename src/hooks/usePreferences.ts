@@ -7,7 +7,12 @@ export function usePreferences() {
   const { state, refreshData } = useApp();
   const centerId = profile?.center_id;
 
-  console.log('[DEBUG usePreferences] Hook run using context state. profile:', profile, 'centerId:', centerId);
+  console.log(
+    '[DEBUG usePreferences] Hook run using context state. profile:',
+    profile,
+    'centerId:',
+    centerId
+  );
 
   // Mutations
   const addTeacherPreference = useMutation({
@@ -118,7 +123,8 @@ export function usePreferences() {
     teacherPreferences: mappedTeacherPrefs,
     breakPreferences: mappedBreakPrefs,
     winterPreference: mappedWinterPref,
-    isLoading: state.loading && (!state.teacherPreferences || state.teacherPreferences.length === 0),
+    isLoading:
+      state.loading && (!state.teacherPreferences || state.teacherPreferences.length === 0),
     addTeacherPreference: addTeacherPreference.mutateAsync,
     deleteTeacherPreference: deleteTeacherPreference.mutateAsync,
     addBreakPreference: addBreakPreference.mutateAsync,

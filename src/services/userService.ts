@@ -53,12 +53,10 @@ export const createUserProfile = async (
       if (error) throw error;
     } else {
       // Si no existe, creamos uno nuevo con el UID
-      const { error } = await supabase
-        .from('profiles')
-        .insert({
-          id: uid,
-          ...profilePayload
-        });
+      const { error } = await supabase.from('profiles').insert({
+        id: uid,
+        ...profilePayload
+      });
 
       if (error) throw error;
     }
@@ -145,10 +143,7 @@ export const getActiveInvitationCodes = async (centerId: string) => {
 
 export const deleteInvitationCode = async (code: string) => {
   try {
-    const { error } = await supabase
-      .from('invitation_codes')
-      .delete()
-      .eq('code', code);
+    const { error } = await supabase.from('invitation_codes').delete().eq('code', code);
 
     if (error) throw error;
   } catch (error) {
@@ -168,7 +163,13 @@ export const updateUserStatus = async (uid: string, isActive: boolean) => {
   }
 };
 
-export const registerMemberWithCode = async (code: string, fullName: string, phone?: string, role?: string, staffId?: string) => {
+export const registerMemberWithCode = async (
+  code: string,
+  fullName: string,
+  phone?: string,
+  role?: string,
+  staffId?: string
+) => {
   const { data, error } = await supabase.rpc('register_member_with_code', {
     p_code: code,
     p_full_name: fullName,

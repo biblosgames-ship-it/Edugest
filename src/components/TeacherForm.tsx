@@ -41,7 +41,11 @@ export const TeacherForm = () => {
 
   // FILTRO CRÍTICO: Solo mostrar personal cuyo rol sea 'teacher', 'docente', 'Maestro' o 'management_teacher'
   const actualTeachers = (allPersonnel || []).filter(
-    (t: any) => t.role === 'teacher' || t.role === 'docente' || t.role === 'Maestro' || t.role === 'management_teacher'
+    (t: any) =>
+      t.role === 'teacher' ||
+      t.role === 'docente' ||
+      t.role === 'Maestro' ||
+      t.role === 'management_teacher'
   );
 
   const handleEdit = (teacher: any) => {
@@ -66,7 +70,7 @@ export const TeacherForm = () => {
 
   const handleAddPending = () => {
     if (!currentBuilder.courseId || !currentBuilder.subjectId || !currentBuilder.hours) return;
-    
+
     if (editingIdx !== null) {
       const updated = [...pendingAssignments];
       updated[editingIdx] = { ...currentBuilder, hoursPerWeek: currentBuilder.hours };
@@ -96,7 +100,11 @@ export const TeacherForm = () => {
     const draft = localStorage.getItem('teacher_form_draft');
     if (draft) {
       try {
-        const { formData: dForm, pendingAssignments: dPending, editingTeacherId: dId } = JSON.parse(draft);
+        const {
+          formData: dForm,
+          pendingAssignments: dPending,
+          editingTeacherId: dId
+        } = JSON.parse(draft);
         setFormData(dForm);
         setPendingAssignments(dPending);
         setEditingTeacherId(dId);
@@ -108,11 +116,14 @@ export const TeacherForm = () => {
 
   useEffect(() => {
     if (formData.name || pendingAssignments.length > 0) {
-      localStorage.setItem('teacher_form_draft', JSON.stringify({
-        formData,
-        pendingAssignments,
-        editingTeacherId
-      }));
+      localStorage.setItem(
+        'teacher_form_draft',
+        JSON.stringify({
+          formData,
+          pendingAssignments,
+          editingTeacherId
+        })
+      );
     }
   }, [formData, pendingAssignments, editingTeacherId]);
 
@@ -125,7 +136,9 @@ export const TeacherForm = () => {
       let teacherId = editingTeacherId;
 
       // 1. Guardar en STAFF (Datos Generales)
-      const existingUser = editingTeacherId ? (allPersonnel || []).find((p: any) => p.id === editingTeacherId) : null;
+      const existingUser = editingTeacherId
+        ? (allPersonnel || []).find((p: any) => p.id === editingTeacherId)
+        : null;
 
       const staffData = {
         full_name: formData.name,
@@ -275,12 +288,16 @@ export const TeacherForm = () => {
               >
                 <option value="">Seleccionar...</option>
                 {courses
-                  .filter(c => courseFilterLevel === 'Todos' || (c.level && c.level.includes(courseFilterLevel)))
+                  .filter(
+                    (c) =>
+                      courseFilterLevel === 'Todos' ||
+                      (c.level && c.level.includes(courseFilterLevel))
+                  )
                   .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.grade} {c.section} ({c.level} - {c.tanda})
-                  </option>
-                ))}
+                    <option key={c.id} value={c.id}>
+                      {c.grade} {c.section} ({c.level} - {c.tanda})
+                    </option>
+                  ))}
               </select>
             </div>
             <div>

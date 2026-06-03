@@ -25,7 +25,8 @@ import { scheduleService } from '../services/scheduleService';
 export const ScheduleViewer = () => {
   const { state, profile, refreshData, selectedYear } = useApp();
 
-  const isAdminOrStaff = profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
+  const isAdminOrStaff =
+    profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
   const isStudentOrParent = profile?.role === 'student' || profile?.role === 'parent';
 
   const [selectedShift, setSelectedShift] = useState<'Matutina' | 'Vespertina'>('Matutina');
@@ -38,7 +39,9 @@ export const ScheduleViewer = () => {
     if (profile?.role === 'parent') {
       const saved = localStorage.getItem('parent_course_ids');
       let localList: string[] = [];
-      try { localList = saved ? JSON.parse(saved) : []; } catch {}
+      try {
+        localList = saved ? JSON.parse(saved) : [];
+      } catch {}
       const firstId = profile?.parent_course_ids?.[0] || localList?.[0] || '';
       return firstId || localStorage.getItem('selected_course_id') || '';
     }
@@ -55,9 +58,10 @@ export const ScheduleViewer = () => {
   useEffect(() => {
     if (isStudentOrParent) {
       setFilterType('course');
-      const activeId = profile?.role === 'student'
-        ? (profile.course_id || profile.course_code || '')
-        : (localStorage.getItem('selected_course_id') || profile?.parent_course_ids?.[0] || '');
+      const activeId =
+        profile?.role === 'student'
+          ? profile.course_id || profile.course_code || ''
+          : localStorage.getItem('selected_course_id') || profile?.parent_course_ids?.[0] || '';
       setFilterId(activeId);
     }
   }, [profile, isStudentOrParent]);
@@ -71,7 +75,7 @@ export const ScheduleViewer = () => {
         setFilterId(customEvent.detail);
       }
     };
-    
+
     window.addEventListener('selectedCourseChanged', handleCourseChange);
     return () => {
       window.removeEventListener('selectedCourseChanged', handleCourseChange);
@@ -81,11 +85,12 @@ export const ScheduleViewer = () => {
   // Sincronizar la tanda del curso de manera automática para alumnos y padres
   useEffect(() => {
     if (isStudentOrParent && filterId) {
-      const activeCourse = state.courses.find(c => c.id === filterId);
+      const activeCourse = state.courses.find((c) => c.id === filterId);
       if (activeCourse) {
         const tStr = (activeCourse.tanda || '').toLowerCase();
         const lvlStr = (activeCourse.level || '').toLowerCase();
-        const isVespertina = tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+        const isVespertina =
+          tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
         setSelectedShift(isVespertina ? 'Vespertina' : 'Matutina');
       }
     }
@@ -131,7 +136,7 @@ export const ScheduleViewer = () => {
 
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
-      const course = state.courses.find(c => c.id === filterId);
+      const course = state.courses.find((c) => c.id === filterId);
       if (course) {
         const official = (state.levelSchedules || []).find(
           (ls: any) => ls.level === course.level && ls.shift === selectedShift
@@ -164,15 +169,29 @@ export const ScheduleViewer = () => {
     const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
     let masterStartMins = toMins(rawMasterStart);
     if (!isMorning && masterStartMins < 420) masterStartMins += 720;
-    const masterBPref = { 
-      startTime: fromMins(masterStartMins), 
-      durationMinutes: firstRelevantBreak?.durationMinutes || 30 
+    const masterBPref = {
+      startTime: fromMins(masterStartMins),
+      durationMinutes: firstRelevantBreak?.durationMinutes || 30
     };
 
     const getSlotsForCourse = (course: any) => {
       const grade = course.grade?.toLowerCase() || '';
-      const isFirstCycle = /^[1-3]/.test(grade) || grade.includes('1') || grade.includes('2') || grade.includes('3') || grade.includes('primer') || (grade.includes('segundo') && !grade.includes('ciclo')) || grade.includes('tercer');
-      const isSecondCycle = /^[4-6]/.test(grade) || grade.includes('4') || grade.includes('5') || grade.includes('6') || grade.includes('cuarto') || grade.includes('quinto') || grade.includes('sexto');
+      const isFirstCycle =
+        /^[1-3]/.test(grade) ||
+        grade.includes('1') ||
+        grade.includes('2') ||
+        grade.includes('3') ||
+        grade.includes('primer') ||
+        (grade.includes('segundo') && !grade.includes('ciclo')) ||
+        grade.includes('tercer');
+      const isSecondCycle =
+        /^[4-6]/.test(grade) ||
+        grade.includes('4') ||
+        grade.includes('5') ||
+        grade.includes('6') ||
+        grade.includes('cuarto') ||
+        grade.includes('quinto') ||
+        grade.includes('sexto');
 
       const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime);
@@ -182,7 +201,7 @@ export const ScheduleViewer = () => {
 
         const levelNormBP = (bp.level || '').toLowerCase();
         const levelNormCourse = (course.level || '').toLowerCase();
-        
+
         // Coincidencia permisiva (Primario vs Primaria)
         return levelNormBP.substring(0, 4) === levelNormCourse.substring(0, 4);
       });
@@ -204,10 +223,14 @@ export const ScheduleViewer = () => {
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
       // DURACIONES UNIFICADAS CON EL MOTOR
-      const targetTotalLocal = (isMorning || (course.level || '').toLowerCase().includes('primar')) ? 5 : 6;
-      let classStart = (isMorning && startT <= 480) ? 480 : startT;
-      const totalAvailableLocal = Math.max(1, (bStart - classStart) + (endT - bEnd));
-      const preCountLocal = Math.min(targetTotalLocal - 1, Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal)));
+      const targetTotalLocal =
+        isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
+      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      const totalAvailableLocal = Math.max(1, bStart - classStart + (endT - bEnd));
+      const preCountLocal = Math.min(
+        targetTotalLocal - 1,
+        Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal))
+      );
       const postCountLocal = targetTotalLocal - preCountLocal;
 
       const slots = [];
@@ -221,8 +244,13 @@ export const ScheduleViewer = () => {
       const preDuration = Math.floor((bStart - classStart) / preCountLocal);
       for (let i = 0; i < preCountLocal; i++) {
         let sTime = classStart + i * preDuration;
-        let eTime = (i === preCountLocal - 1) ? bStart : sTime + preDuration;
-        slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${i + 1}ra Hora` });
+        let eTime = i === preCountLocal - 1 ? bStart : sTime + preDuration;
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
       }
 
       // EL RECREO
@@ -232,8 +260,13 @@ export const ScheduleViewer = () => {
       const postDuration = Math.floor((endT - bEnd) / postCountLocal);
       for (let i = 0; i < postCountLocal; i++) {
         let sTime = bEnd + i * postDuration;
-        let eTime = (i === postCountLocal - 1) ? endT : sTime + postDuration;
-        slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${preCountLocal + i + 1}ra Hora` });
+        let eTime = i === postCountLocal - 1 ? endT : sTime + postDuration;
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${preCountLocal + i + 1}ra Hora`
+        });
       }
 
       return slots;
@@ -241,7 +274,7 @@ export const ScheduleViewer = () => {
 
     // Si estamos filtrando por un curso específico, usamos sus slots exactos
     if (filterType === 'course' && filterId) {
-      const course = state.courses.find(c => c.id === filterId);
+      const course = state.courses.find((c) => c.id === filterId);
       if (course) {
         const slotsForCourse = getSlotsForCourse(course);
         return { slots: slotsForCourse, startT, endT, masterBPref };
@@ -254,19 +287,34 @@ export const ScheduleViewer = () => {
     if (filterType === 'teacher' && filterId) {
       const shiftBaseTeacher = selectedShift.toLowerCase().substring(0, 3);
       // Obtener los cursos asignados a este docente en este turno
-      const teacherAssignmentCourseIds = [...new Set(
-        (state.assignments || []).filter((a: any) => a.teacher_id === filterId)
-          .map((a: any) => a.course_id || a.courseId)
-      )];
+      const teacherAssignmentCourseIds = [
+        ...new Set(
+          (state.assignments || [])
+            .filter((a: any) => a.teacher_id === filterId)
+            .map((a: any) => a.course_id || a.courseId)
+        )
+      ];
       const teacherCourses = (state.courses || []).filter((c: any) => {
         if (!teacherAssignmentCourseIds.includes(c.id)) return false;
         const tStr = (c.tanda || '').toLowerCase();
         const lvlStr = (c.level || '').toLowerCase();
         if (shiftBaseTeacher === 'mat') {
-          return tStr.includes('mat') || tStr.includes('mañ') || tStr.includes('ext') || tStr.includes('com') || tStr === '' ||
-                 ((lvlStr.includes('primar') || lvlStr.includes('ini')) && !tStr.includes('ves') && !tStr.includes('tar'));
+          return (
+            tStr.includes('mat') ||
+            tStr.includes('mañ') ||
+            tStr.includes('ext') ||
+            tStr.includes('com') ||
+            tStr === '' ||
+            ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
+              !tStr.includes('ves') &&
+              !tStr.includes('tar'))
+          );
         } else {
-          return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+          return (
+            tStr.includes('ves') ||
+            tStr.includes('tar') ||
+            (tStr === '' && lvlStr.includes('secun'))
+          );
         }
       });
 
@@ -287,20 +335,27 @@ export const ScheduleViewer = () => {
           });
         });
         // Ordenar cronológicamente
-        let mergedSlots = [...mergedSlotsMap.values()].sort((a, b) => toMins(a.start) - toMins(b.start));
+        let mergedSlots = [...mergedSlotsMap.values()].sort(
+          (a, b) => toMins(a.start) - toMins(b.start)
+        );
 
         // Vista Compacta para Docentes: solo conservar slots con clases programadas o recreos
         const teacherSchedule = (state.schedule || []).filter(
-          (s: any) => s.teacher_id === filterId && s.shift === selectedShift && s.school_year === selectedYear
+          (s: any) =>
+            s.teacher_id === filterId && s.shift === selectedShift && s.school_year === selectedYear
         );
         if (teacherSchedule.length > 0) {
           mergedSlots = mergedSlots.filter((slot) => {
             const hasEntry = teacherSchedule.some((entry) => {
               const eMins = toMins(entry.start_time);
-              let closest = mergedSlots[0], bestDiff = Infinity;
+              let closest = mergedSlots[0],
+                bestDiff = Infinity;
               mergedSlots.forEach((temp) => {
                 const diff = Math.abs(toMins(temp.start) - eMins);
-                if (diff < bestDiff) { bestDiff = diff; closest = temp; }
+                if (diff < bestDiff) {
+                  bestDiff = diff;
+                  closest = temp;
+                }
               });
               return closest.start === slot.start && bestDiff <= 25;
             });
@@ -324,36 +379,62 @@ export const ScheduleViewer = () => {
     }
 
     // Inicio de clases a las 08:00 (Mañana) o Hora Oficial (Tarde)
-    let classStart = (isMorning && startT <= 480) ? 480 : startT;
+    let classStart = isMorning && startT <= 480 ? 480 : startT;
     const targetTotalGen = isMorning ? 5 : 6;
-    const totalAvailableGen = Math.max(1, (bStartMaster - classStart) + (endT - bEndMaster));
-    const preCountGen = Math.min(targetTotalGen - 1, Math.max(1, Math.round(((bStartMaster - classStart) / totalAvailableGen) * targetTotalGen)));
+    const totalAvailableGen = Math.max(1, bStartMaster - classStart + (endT - bEndMaster));
+    const preCountGen = Math.min(
+      targetTotalGen - 1,
+      Math.max(1, Math.round(((bStartMaster - classStart) / totalAvailableGen) * targetTotalGen))
+    );
     const postCountGen = targetTotalGen - preCountGen;
 
     const preDuration = Math.floor((bStartMaster - classStart) / preCountGen);
     for (let i = 0; i < preCountGen; i++) {
       let sTime = classStart + i * preDuration;
-      let eTime = (i === preCountGen - 1) ? bStartMaster : sTime + preDuration;
-      slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${i + 1}ra Hora` });
+      let eTime = i === preCountGen - 1 ? bStartMaster : sTime + preDuration;
+      slots.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        isBreak: false,
+        label: `${i + 1}ra Hora`
+      });
     }
 
-    slots.push({ start: fromMins(bStartMaster), end: fromMins(bEndMaster), isBreak: true, label: 'RECREO' });
+    slots.push({
+      start: fromMins(bStartMaster),
+      end: fromMins(bEndMaster),
+      isBreak: true,
+      label: 'RECREO'
+    });
 
     const postDuration = Math.floor((endT - bEndMaster) / postCountGen);
     for (let i = 0; i < postCountGen; i++) {
       let sTime = bEndMaster + i * postDuration;
-      let eTime = (i === postCountGen - 1) ? endT : sTime + postDuration;
-      slots.push({ start: fromMins(sTime), end: fromMins(eTime), isBreak: false, label: `${preCountGen + i + 1}ra Hora` });
+      let eTime = i === postCountGen - 1 ? endT : sTime + postDuration;
+      slots.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        isBreak: false,
+        label: `${preCountGen + i + 1}ra Hora`
+      });
     }
 
     return { slots, startT, endT, masterBPref };
-  }, [state.levelSchedules, state.breakPreferences, state.assignments, selectedShift, filterType, filterId, state.courses]);
+  }, [
+    state.levelSchedules,
+    state.breakPreferences,
+    state.assignments,
+    selectedShift,
+    filterType,
+    filterId,
+    state.courses
+  ]);
 
   const { slots, startT, endT, masterBPref } = timeSlots;
 
   const entriesBySlotAndDay = useMemo(() => {
     const map = new Map<string, any[]>();
-    
+
     // Initialize map keys for all days and slots to ensure they are always arrays
     days.forEach((day) => {
       slots.forEach((slot) => {
@@ -363,13 +444,13 @@ export const ScheduleViewer = () => {
 
     filteredSchedule.forEach((entry) => {
       if (!entry.day || !entry.start_time) return;
-      
+
       const eMins = toMins(entry.start_time);
-      
+
       // Find the slot that is closest to entry's start time
       let closestSlot = null;
       let minDiff = Infinity;
-      
+
       slots.forEach((slot) => {
         const slotMins = toMins(slot.start);
         const diff = Math.abs(eMins - slotMins);
@@ -378,14 +459,14 @@ export const ScheduleViewer = () => {
           closestSlot = slot;
         }
       });
-      
+
       // We only assign it to the closest slot if the difference is within 25 minutes
       if (closestSlot && minDiff <= 25) {
         const key = `${entry.day}-${closestSlot.start}`;
         map.get(key)?.push(entry);
       }
     });
-    
+
     return map;
   }, [filteredSchedule, slots, days]);
 
@@ -458,9 +539,12 @@ export const ScheduleViewer = () => {
   };
 
   const handleDeepRepair = async () => {
-    if (!confirm(
-      `¿Ajustar horas faltantes del horario ${selectedShift} moviendo lo necesario?\n\nEl sistema ejecutará hasta 5 intentos sucesivos de reparación para intentar colocar todas las horas pendientes.`
-    )) return;
+    if (
+      !confirm(
+        `¿Ajustar horas faltantes del horario ${selectedShift} moviendo lo necesario?\n\nEl sistema ejecutará hasta 5 intentos sucesivos de reparación para intentar colocar todas las horas pendientes.`
+      )
+    )
+      return;
     setIsDeepRepairing(true);
     setDeepRepairAttempt(0);
     let lastDiagnostics: string[] = [];
@@ -476,9 +560,7 @@ export const ScheduleViewer = () => {
         );
         lastDiagnostics = diagnostics || [];
         await refreshData(undefined, true);
-        allDone = lastDiagnostics.some(
-          (d) => d.includes('100%') || d.includes('Exitosa al 100')
-        );
+        allDone = lastDiagnostics.some((d) => d.includes('100%') || d.includes('Exitosa al 100'));
         if (allDone) break;
       }
     } catch (e: any) {
@@ -521,7 +603,8 @@ export const ScheduleViewer = () => {
       let filename = `Horario_${selectedShift}`;
       if (filterType === 'course' && filterId) {
         const course = state.courses.find((c) => c.id === filterId);
-        if (course) filename = `Horario_Curso_${course.grade}_${course.section || ''}`.replace(/\s+/g, '_');
+        if (course)
+          filename = `Horario_Curso_${course.grade}_${course.section || ''}`.replace(/\s+/g, '_');
       } else if (filterType === 'teacher' && filterId) {
         const teacher = state.teachers.find((t) => t.id === filterId);
         if (teacher) filename = `Horario_Docente_${teacher.name}`.replace(/\s+/g, '_');
@@ -556,7 +639,8 @@ export const ScheduleViewer = () => {
             const course = state.courses.find((c) => c.id === e.course_id);
             const courseName = course ? `${course.grade} ${course.section || ''}`.trim() : '';
             if (filterType === 'teacher') return `${subject?.name || 'Materia'} (${courseName})`;
-            if (filterType === 'course') return `${subject?.name || 'Materia'} - ${teacher?.name || 'Docente'}`;
+            if (filterType === 'course')
+              return `${subject?.name || 'Materia'} - ${teacher?.name || 'Docente'}`;
             return `${subject?.name || 'Materia'} | ${courseName} | ${teacher?.name || 'Docente'}`;
           });
           rowData.push(texts.join(' / '));
@@ -574,7 +658,8 @@ export const ScheduleViewer = () => {
     let filename = `Horario_${selectedShift}`;
     if (filterType === 'course' && filterId) {
       const course = state.courses.find((c) => c.id === filterId);
-      if (course) filename = `Horario_Curso_${course.grade}_${course.section || ''}`.replace(/\s+/g, '_');
+      if (course)
+        filename = `Horario_Curso_${course.grade}_${course.section || ''}`.replace(/\s+/g, '_');
     } else if (filterType === 'teacher' && filterId) {
       const teacher = state.teachers.find((t) => t.id === filterId);
       if (teacher) filename = `Horario_Docente_${teacher.name}`.replace(/\s+/g, '_');
@@ -589,7 +674,9 @@ export const ScheduleViewer = () => {
         title="Generador de Horarios"
         description="Gestiona y genera horarios escolares de forma inteligente y automática."
       />
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media print {
           aside, nav, header, footer, .no-print, button, select, input {
             display: none !important;
@@ -645,7 +732,9 @@ export const ScheduleViewer = () => {
             display: none !important;
           }
         }
-      `}} />
+      `
+        }}
+      />
       {/* Header Panel */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
         <div className="flex flex-wrap items-center gap-4">
@@ -710,7 +799,7 @@ export const ScheduleViewer = () => {
             </>
           ) : (
             (() => {
-              const activeCourse = state.courses.find(c => c.id === filterId);
+              const activeCourse = state.courses.find((c) => c.id === filterId);
               return activeCourse ? (
                 <div className="px-6 py-2.5 rounded-2xl bg-indigo-50 border border-indigo-150 text-indigo-700 text-[10px] font-black uppercase tracking-widest">
                   Curso: {activeCourse.grade} "{activeCourse.section}"
@@ -780,32 +869,40 @@ export const ScheduleViewer = () => {
                 ) : (
                   <AlertCircle size={16} />
                 )}
-                {isDeepRepairing ? `Ajustando (${deepRepairAttempt}/5)...` : 'Ajustar Horas Faltantes'}
+                {isDeepRepairing
+                  ? `Ajustando (${deepRepairAttempt}/5)...`
+                  : 'Ajustar Horas Faltantes'}
               </button>
             </>
           )}
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 shadow-sm mb-8 no-print">
         <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Inicio Centro</span>
+          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
+            Inicio Centro
+          </span>
           <span className="text-xl font-black text-indigo-900">{fromMins(startT)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Inicio Recreo</span>
-          <span className="text-xl font-black text-indigo-900">
-            {masterBPref.startTime}
+          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
+            Inicio Recreo
           </span>
+          <span className="text-xl font-black text-indigo-900">{masterBPref.startTime}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Duración Clase</span>
+          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
+            Duración Clase
+          </span>
           <span className="text-xl font-black text-indigo-900">{isMorning ? 45 : 40} min</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">1ra Hora (Calculada)</span>
+          <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
+            1ra Hora (Calculada)
+          </span>
           <span className="text-xl font-black text-indigo-600">
-            {slots.find(s => !s.isBreak && s.label?.includes('1'))?.start || '---'}
+            {slots.find((s) => !s.isBreak && s.label?.includes('1'))?.start || '---'}
           </span>
         </div>
       </div>
@@ -819,7 +916,9 @@ export const ScheduleViewer = () => {
                 <ShieldCheck size={36} className="text-indigo-400" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-white tracking-tighter">Estado del Centro</h2>
+                <h2 className="text-2xl font-black text-white tracking-tighter">
+                  Estado del Centro
+                </h2>
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
                   Monitoreo de Carga Total
                 </p>
@@ -838,10 +937,22 @@ export const ScheduleViewer = () => {
                   const tStr = (c.tanda || '').toLowerCase();
                   const lvlStr = (c.level || '').toLowerCase();
                   if (shiftBaseVal === 'mat') {
-                    return tStr.includes('mat') || tStr.includes('mañ') || tStr.includes('ext') || tStr.includes('com') || tStr === '' ||
-                           ((lvlStr.includes('primar') || lvlStr.includes('ini')) && !tStr.includes('ves') && !tStr.includes('tar'));
+                    return (
+                      tStr.includes('mat') ||
+                      tStr.includes('mañ') ||
+                      tStr.includes('ext') ||
+                      tStr.includes('com') ||
+                      tStr === '' ||
+                      ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
+                        !tStr.includes('ves') &&
+                        !tStr.includes('tar'))
+                    );
                   } else {
-                    return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+                    return (
+                      tStr.includes('ves') ||
+                      tStr.includes('tar') ||
+                      (tStr === '' && lvlStr.includes('secun'))
+                    );
                   }
                 })
                 .forEach((course) => {
@@ -851,7 +962,9 @@ export const ScheduleViewer = () => {
                   let courseHasMissing = false;
                   let courseMissingCount = 0;
                   courseAssignments.forEach((assign) => {
-                    const weeklyHours = Number(assign.hours_per_week || assign.hoursPerWeek || assign.weekly_hours) || 0;
+                    const weeklyHours =
+                      Number(assign.hours_per_week || assign.hoursPerWeek || assign.weekly_hours) ||
+                      0;
                     if (weeklyHours === 0) return; // ignorar asignaciones sin horas definidas
                     totalAssigned += weeklyHours;
                     const placedHours = state.schedule.filter(
@@ -869,7 +982,7 @@ export const ScheduleViewer = () => {
                   });
                   if (courseHasMissing) {
                     const cKey = `${course.grade} ${course.section || ''}`.trim();
-                    if (!coursesWithMissingHours.find(x => x.name === cKey)) {
+                    if (!coursesWithMissingHours.find((x) => x.name === cKey)) {
                       coursesWithMissingHours.push({ name: cKey, missing: courseMissingCount });
                     }
                   }
@@ -897,7 +1010,8 @@ export const ScheduleViewer = () => {
               const missingCount = coursesWithMissingHours.length;
               const conflictCount = teachersWithConflicts.size;
               const totalMissingHours = totalAssigned - totalPlaced;
-              const coveragePct = totalAssigned > 0 ? Math.round((totalPlaced / totalAssigned) * 100) : null;
+              const coveragePct =
+                totalAssigned > 0 ? Math.round((totalPlaced / totalAssigned) * 100) : null;
 
               // CASO 1: Sin carga académica registrada
               if (totalAssigned === 0) {
@@ -908,8 +1022,12 @@ export const ScheduleViewer = () => {
                         <Clock size={24} className="text-slate-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-white uppercase tracking-tighter">Sin Carga Académica</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">No hay asignaciones registradas para esta tanda</p>
+                        <p className="text-sm font-black text-white uppercase tracking-tighter">
+                          Sin Carga Académica
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">
+                          No hay asignaciones registradas para esta tanda
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -918,7 +1036,6 @@ export const ScheduleViewer = () => {
 
               return (
                 <div className="flex-1 md:max-w-2xl w-full flex flex-col gap-3">
-
                   {/* ALERTA: Horas Faltantes */}
                   {missingCount > 0 && (
                     <div className="bg-amber-500/10 border border-amber-500/30 p-5 rounded-[2rem] space-y-3">
@@ -927,10 +1044,12 @@ export const ScheduleViewer = () => {
                           <AlertTriangle className="text-amber-400 shrink-0" size={22} />
                           <div>
                             <p className="text-sm font-black text-white uppercase tracking-tighter">
-                              {totalMissingHours} Hora{totalMissingHours !== 1 ? 's' : ''} Pendiente{totalMissingHours !== 1 ? 's' : ''} — {coveragePct}% cubierto
+                              {totalMissingHours} Hora{totalMissingHours !== 1 ? 's' : ''} Pendiente
+                              {totalMissingHours !== 1 ? 's' : ''} — {coveragePct}% cubierto
                             </p>
                             <p className="text-[10px] text-amber-400 font-bold uppercase">
-                              {totalPlaced} de {totalAssigned} horas colocadas en {missingCount} curso{missingCount !== 1 ? 's' : ''}
+                              {totalPlaced} de {totalAssigned} horas colocadas en {missingCount}{' '}
+                              curso{missingCount !== 1 ? 's' : ''}
                             </p>
                           </div>
                         </div>
@@ -939,7 +1058,9 @@ export const ScheduleViewer = () => {
                           disabled={isRepairing || isGenerating || isDeepRepairing}
                           className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black uppercase text-[9px] tracking-widest transition-all disabled:opacity-50 whitespace-nowrap"
                         >
-                          {isDeepRepairing ? `Ajustando (${deepRepairAttempt}/5)...` : 'Ajustar Horas Faltantes'}
+                          {isDeepRepairing
+                            ? `Ajustando (${deepRepairAttempt}/5)...`
+                            : 'Ajustar Horas Faltantes'}
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-1.5 pt-2 border-t border-amber-500/10">
@@ -980,7 +1101,10 @@ export const ScheduleViewer = () => {
                       </div>
                       <div className="flex flex-wrap gap-1.5 pt-2 border-t border-rose-500/10">
                         {[...teachersWithConflicts].map((tName) => (
-                          <span key={tName} className="px-3 py-1 bg-rose-500/10 text-rose-300 rounded-lg text-[8px] font-black uppercase border border-rose-500/20">
+                          <span
+                            key={tName}
+                            className="px-3 py-1 bg-rose-500/10 text-rose-300 rounded-lg text-[8px] font-black uppercase border border-rose-500/20"
+                          >
                             ⚡ Choque: {tName}
                           </span>
                         ))}
@@ -995,14 +1119,15 @@ export const ScheduleViewer = () => {
                         <CheckCircle size={24} className="text-emerald-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-white uppercase tracking-tighter">Horario Perfecto</p>
+                        <p className="text-sm font-black text-white uppercase tracking-tighter">
+                          Horario Perfecto
+                        </p>
                         <p className="text-[10px] font-bold text-emerald-400 uppercase">
                           {totalPlaced}/{totalAssigned} horas — 100% de cobertura lograda
                         </p>
                       </div>
                     </div>
                   )}
-
                 </div>
               );
             })()}
@@ -1021,15 +1146,19 @@ export const ScheduleViewer = () => {
             Horario de Clases - Tanda {selectedShift}
           </h1>
           <p className="text-sm font-bold text-slate-600 mt-1 uppercase">
-            {filterType === 'course' && filterId && (() => {
-              const course = state.courses.find((c: any) => c.id === filterId);
-              return `Curso: ${course?.grade || ''} ${course?.section || ''}`;
-            })()}
-            {filterType === 'teacher' && filterId && (() => {
-              const teacher = state.teachers.find((t: any) => t.id === filterId);
-              return `Docente: ${teacher?.name || ''}`;
-            })()}
-            {filterType === 'all' && "Vista General (Todos los Cursos)"}
+            {filterType === 'course' &&
+              filterId &&
+              (() => {
+                const course = state.courses.find((c: any) => c.id === filterId);
+                return `Curso: ${course?.grade || ''} ${course?.section || ''}`;
+              })()}
+            {filterType === 'teacher' &&
+              filterId &&
+              (() => {
+                const teacher = state.teachers.find((t: any) => t.id === filterId);
+                return `Docente: ${teacher?.name || ''}`;
+              })()}
+            {filterType === 'all' && 'Vista General (Todos los Cursos)'}
             {` | Año Escolar: ${selectedYear}`}
           </p>
         </div>
@@ -1075,9 +1204,23 @@ export const ScheduleViewer = () => {
                         const course = state.courses.find((c) => c.id === filterId);
                         const grade = course?.grade?.toLowerCase() || '';
                         const level = course?.level?.toLowerCase() || '';
-                        
-                        const isFirstCycle = /^[1-3]/.test(grade) || grade.includes('1') || grade.includes('2') || grade.includes('3') || grade.includes('primer') || (grade.includes('segundo') && !grade.includes('ciclo')) || grade.includes('tercer');
-                        const isSecondCycle = /^[4-6]/.test(grade) || grade.includes('4') || grade.includes('5') || grade.includes('6') || grade.includes('cuarto') || grade.includes('quinto') || grade.includes('sexto');
+
+                        const isFirstCycle =
+                          /^[1-3]/.test(grade) ||
+                          grade.includes('1') ||
+                          grade.includes('2') ||
+                          grade.includes('3') ||
+                          grade.includes('primer') ||
+                          (grade.includes('segundo') && !grade.includes('ciclo')) ||
+                          grade.includes('tercer');
+                        const isSecondCycle =
+                          /^[4-6]/.test(grade) ||
+                          grade.includes('4') ||
+                          grade.includes('5') ||
+                          grade.includes('6') ||
+                          grade.includes('cuarto') ||
+                          grade.includes('quinto') ||
+                          grade.includes('sexto');
 
                         const feLevel = fe.level?.toLowerCase() || '';
                         const feCycle = fe.cycle?.toLowerCase() || '';
@@ -1109,7 +1252,8 @@ export const ScheduleViewer = () => {
                     // que enseña en varios ciclos con distintos recreos), las clases tienen
                     // prioridad sobre el recreo — nunca se ocultan detrás del banner de recreo.
                     const isRecreoRaw = slot.isBreak;
-                    const isRecreo = isRecreoRaw && !(filterType === 'teacher' && entries.length > 0);
+                    const isRecreo =
+                      isRecreoRaw && !(filterType === 'teacher' && entries.length > 0);
                     const blockName = fixedEvent ? fixedEvent.name : isRecreo ? 'RECREO' : null;
 
                     return (
@@ -1205,7 +1349,7 @@ export const ScheduleViewer = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {state.assignments
-              .filter((a) => (a.course_id === filterId || a.courseId === filterId))
+              .filter((a) => a.course_id === filterId || a.courseId === filterId)
               .map((a) => {
                 const subject = state.subjects.find((s) => s.id === a.subject_id);
 

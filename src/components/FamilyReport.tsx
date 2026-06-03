@@ -1,13 +1,5 @@
 import React from 'react';
-import { 
-  Users, 
-  Download, 
-  FileText, 
-  TrendingUp, 
-  Home,
-  CheckCircle2,
-  X
-} from 'lucide-react';
+import { Users, Download, FileText, TrendingUp, Home, CheckCircle2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -23,7 +15,7 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
 
   // Agrupar estudiantes por familia
   const familyGroups: { [key: string]: any[] } = {};
-  students.forEach(s => {
+  students.forEach((s) => {
     const fid = s.family_id || s.id; // Fallback por si acaso
     if (!familyGroups[fid]) familyGroups[fid] = [];
     familyGroups[fid].push(s);
@@ -31,15 +23,15 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
 
   const familyIds = Object.keys(familyGroups);
   const totalFamilies = familyIds.length;
-  const multipleChildFamilies = familyIds.filter(fid => familyGroups[fid].length > 1).length;
+  const multipleChildFamilies = familyIds.filter((fid) => familyGroups[fid].length > 1).length;
 
   // Estadísticas por Nivel
   const levels = ['Inicial', 'Primario', 'Secundario'];
-  const statsByLevel = levels.map(level => {
+  const statsByLevel = levels.map((level) => {
     // Familias que tienen al menos un hijo en este nivel
-    const familiesInLevel = familyIds.filter(fid => {
-      return familyGroups[fid].some(student => {
-        const course = courses.find(c => c.id === student.course_id);
+    const familiesInLevel = familyIds.filter((fid) => {
+      return familyGroups[fid].some((student) => {
+        const course = courses.find((c) => c.id === student.course_id);
         return course?.level?.toLowerCase().includes(level.toLowerCase());
       });
     });
@@ -47,8 +39,8 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
     return {
       name: level,
       count: familiesInLevel.length,
-      students: students.filter(s => {
-        const c = courses.find(course => course.id === s.course_id);
+      students: students.filter((s) => {
+        const c = courses.find((course) => course.id === s.course_id);
         return c?.level?.toLowerCase().includes(level.toLowerCase());
       }).length
     };
@@ -60,13 +52,13 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
 
     doc.setFontSize(20);
     doc.text('REPORTE CONSOLIDADO DE FAMILIAS', 14, 22);
-    
+
     doc.setFontSize(10);
     doc.text(`Fecha: ${now}`, 14, 30);
     doc.text(`Total Estudiantes: ${students.length}`, 14, 35);
     doc.text(`Total Familias Únicas: ${totalFamilies}`, 14, 40);
 
-    const tableData = statsByLevel.map(s => [
+    const tableData = statsByLevel.map((s) => [
       s.name.toUpperCase(),
       s.count,
       s.students,
@@ -78,21 +70,23 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
       head: [['NIVEL ACADÉMICO', 'FAMILIAS', 'ESTUDIANTES', 'PROM. HIJOS/FAM']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: [79, 70, 229] }
     });
 
     // Listado de familias con hermanos
     const siblingFamilies = familyIds
-      .filter(fid => familyGroups[fid].length > 1)
-      .map(fid => {
+      .filter((fid) => familyGroups[fid].length > 1)
+      .map((fid) => {
         const members = familyGroups[fid];
         return [
           `${members[0].first_surname} ${members[0].second_surname}`.toUpperCase(),
           members.length,
-          members.map(m => {
-            const c = courses.find(course => course.id === m.course_id);
-            return `${m.names} (${c?.grade || 'N/A'})`;
-          }).join(', ')
+          members
+            .map((m) => {
+              const c = courses.find((course) => course.id === m.course_id);
+              return `${m.names} (${c?.grade || 'N/A'})`;
+            })
+            .join(', ')
         ];
       });
 
@@ -100,7 +94,7 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
       doc.addPage();
       doc.setFontSize(16);
       doc.text('DETALLE DE FAMILIAS CON HERMANOS', 14, 22);
-      
+
       autoTable(doc, {
         startY: 30,
         head: [['FAMILIA (APELLIDOS)', 'CANT. HERMANOS', 'DETALLE DE ALUMNOS']],
@@ -127,7 +121,7 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
             Análisis de núcleos familiares y vinculación de hermanos
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={exportPDF}
@@ -151,7 +145,9 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full group-hover:scale-110 transition-transform duration-500"></div>
           <Users className="text-indigo-600 mb-4 relative" size={32} />
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Familias</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            Total Familias
+          </p>
           <h3 className="text-4xl font-black text-slate-800">{totalFamilies}</h3>
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full w-fit">
             <CheckCircle2 size={12} /> DATOS CONSOLIDADOS
@@ -161,7 +157,9 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full group-hover:scale-110 transition-transform duration-500"></div>
           <Users className="text-amber-500 mb-4 relative" size={32} />
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Familias con Hermanos</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            Familias con Hermanos
+          </p>
           <h3 className="text-4xl font-black text-slate-800">{multipleChildFamilies}</h3>
           <p className="text-[10px] font-bold text-amber-600 mt-2 uppercase">
             {((multipleChildFamilies / totalFamilies) * 100).toFixed(1)}% del total
@@ -171,11 +169,15 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full group-hover:scale-110 transition-transform duration-500"></div>
           <TrendingUp className="text-emerald-500 mb-4 relative" size={32} />
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Promedio Hijos/Familia</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            Promedio Hijos/Familia
+          </p>
           <h3 className="text-4xl font-black text-slate-800">
             {(students.length / totalFamilies).toFixed(2)}
           </h3>
-          <p className="text-[10px] font-bold text-emerald-600 mt-2 uppercase tracking-widest">Ratio de Crecimiento</p>
+          <p className="text-[10px] font-bold text-emerald-600 mt-2 uppercase tracking-widest">
+            Ratio de Crecimiento
+          </p>
         </div>
       </div>
 
@@ -190,10 +192,18 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50">
-                <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Nivel Académico</th>
-                <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias Únicas</th>
-                <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estudiantes</th>
-                <th className="px-8 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Prom. Hijos</th>
+                <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Nivel Académico
+                </th>
+                <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Familias Únicas
+                </th>
+                <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Estudiantes
+                </th>
+                <th className="px-8 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Prom. Hijos
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -207,9 +217,7 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
                       {lvl.count}
                     </span>
                   </td>
-                  <td className="px-8 py-6 text-center font-bold text-slate-600">
-                    {lvl.students}
-                  </td>
+                  <td className="px-8 py-6 text-center font-bold text-slate-600">{lvl.students}</td>
                   <td className="px-8 py-6 text-right">
                     <span className="text-sm font-black text-slate-800">
                       {(lvl.students / (lvl.count || 1)).toFixed(2)}
@@ -230,11 +238,14 @@ const FamilyReport: React.FC<FamilyReportProps> = ({ onClose }) => {
             <Users size={40} className="text-indigo-200" />
           </div>
           <div>
-            <h4 className="text-xl font-black uppercase tracking-tight mb-2">Nota sobre la vinculación</h4>
+            <h4 className="text-xl font-black uppercase tracking-tight mb-2">
+              Nota sobre la vinculación
+            </h4>
             <p className="text-indigo-100 text-sm font-medium leading-relaxed max-w-2xl">
-              Este reporte utiliza el sistema de <strong>Identificación Familiar (Family ID)</strong>. 
-              Si un hermano no aparece vinculado, el sistema lo contará como una familia independiente. 
-              Asegúrate de vincular a los hermanos en el registro de alumnos para mantener la precisión de estos datos.
+              Este reporte utiliza el sistema de{' '}
+              <strong>Identificación Familiar (Family ID)</strong>. Si un hermano no aparece
+              vinculado, el sistema lo contará como una familia independiente. Asegúrate de vincular
+              a los hermanos en el registro de alumnos para mantener la precisión de estos datos.
             </p>
           </div>
         </div>

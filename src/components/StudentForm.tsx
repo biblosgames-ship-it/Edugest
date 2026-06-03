@@ -27,7 +27,6 @@ import { generateStudentPDF } from '../utils/pdfGenerator';
 import { format, differenceInYears } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
 
-
 interface StudentFormProps {
   gradeId?: string;
   studentId?: string;
@@ -49,10 +48,10 @@ export const StudentForm = ({
   const [activeTab, setActiveTab] = useState('general');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
-  const [customSchoolYear, setCustomSchoolYear] = useState(initialData?.school_year || selectedYear || '2025-2026');
+  const [customSchoolYear, setCustomSchoolYear] = useState(
+    initialData?.school_year || selectedYear || '2025-2026'
+  );
   const [canEditSchoolYear, setCanEditSchoolYear] = useState(false);
-
-
 
   // ESTADO MAESTRO
   const [selectedGradeId, setSelectedGradeId] = useState(gradeId || initialData?.course_id || '');
@@ -119,7 +118,7 @@ export const StudentForm = ({
     has_vaccine_card: false,
     has_medical_certification: false
   });
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSiblingSearch, setShowSiblingSearch] = useState(false);
@@ -237,8 +236,8 @@ export const StudentForm = ({
       const getUnique = (field: string): string[] => {
         const values = allStudents
           .map((s: any) => s[field] as string)
-          .filter(v => v && v.trim().length > 0)
-          .map(v => v.trim());
+          .filter((v) => v && v.trim().length > 0)
+          .map((v) => v.trim());
         return (Array.from(new Set(values)) as string[]).sort();
       };
 
@@ -332,18 +331,19 @@ export const StudentForm = ({
         medical,
         history,
         documents
-      };      const sid = studentId || initialData?.id;
+      };
+      const sid = studentId || initialData?.id;
       if (sid) {
         await dataService.updateStudent(sid, studentData, extraData, customSchoolYear);
         alert('¡Expediente actualizado exitosamente!');
       } else {
         const savedStudent = await dataService.addStudent(studentData, extraData, customSchoolYear);
         alert('¡Alumno registrado exitosamente!');
-        
+
         // Si el usuario quiere registrar un hermano inmediatamente
         if ((e.nativeEvent as any).submitter?.name === 'save-and-sibling') {
           // Limpiar solo datos personales, mantener familia y dirección
-          setStudent(prev => ({
+          setStudent((prev) => ({
             ...prev,
             names: '',
             secondSurname: '',
@@ -358,11 +358,11 @@ export const StudentForm = ({
           return; // No cerrar ni llamar a onSave aún
         }
       }
-      
+
       // Invalidar caché de React Query para refrescar la lista de alumnos de inmediato
       queryClient.invalidateQueries({ queryKey: ['students'] });
       queryClient.invalidateQueries({ queryKey: ['center-stats'] });
-      
+
       if (refreshData) {
         await refreshData(undefined, true);
       }
@@ -411,7 +411,7 @@ export const StudentForm = ({
     setIsLoadingFull(true);
     try {
       const full = await dataService.getFullStudent(sibling.id);
-      
+
       // Importar Familia
       const familyList = full.family || [];
       const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
@@ -422,17 +422,17 @@ export const StudentForm = ({
       setFamily({
         padre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbPadre },
         madre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbMadre },
-        tutor: { 
-          name: dbTutor?.name || '', 
-          relation: dbTutor?.relation || '', 
-          id_card: dbTutor?.id_card || '', 
-          phone: dbTutor?.phone || '', 
-          address: dbTutor?.address || '' 
+        tutor: {
+          name: dbTutor?.name || '',
+          relation: dbTutor?.relation || '',
+          id_card: dbTutor?.id_card || '',
+          phone: dbTutor?.phone || '',
+          address: dbTutor?.address || ''
         }
       });
 
       // Importar datos comunes
-      setStudent(prev => ({
+      setStudent((prev) => ({
         ...prev,
         firstSurname: full.first_surname || prev.firstSurname,
         addressSector: full.address_sector || prev.addressSector,
@@ -485,10 +485,7 @@ export const StudentForm = ({
 
   return (
     <div className="w-full">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-surface text-left"
-      >
+      <form onSubmit={handleSubmit} className="bg-surface text-left">
         <div className="bg-brand-bg/50 flex overflow-x-auto no-scrollbar border-b border-border-main">
           <TabButton id="general" icon={User} label="General" />
           <TabButton id="family" icon={Users} label="Familia" />
@@ -501,7 +498,9 @@ export const StudentForm = ({
           {activeTab === 'general' && (
             <div className="space-y-8 animate-fade-in">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-black text-text-main uppercase tracking-widest">Información Básica</h3>
+                <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
+                  Información Básica
+                </h3>
                 <button
                   type="button"
                   onClick={() => setShowSiblingSearch(true)}
@@ -601,19 +600,21 @@ export const StudentForm = ({
                     className={inputClass}
                   />
                 </div>
-                 <div>
-                   <label className={labelClass}>Nacionalidad</label>
-                   <input
-                     list="list-nationalities"
-                     type="text"
-                     value={student.nationality}
-                     onChange={(e) => setStudent({ ...student, nationality: e.target.value })}
-                     className={inputClass}
-                   />
-                   <datalist id="list-nationalities">
-                     {suggestions.nationalities.map(v => <option key={v} value={v} />)}
-                   </datalist>
-                 </div>
+                <div>
+                  <label className={labelClass}>Nacionalidad</label>
+                  <input
+                    list="list-nationalities"
+                    type="text"
+                    value={student.nationality}
+                    onChange={(e) => setStudent({ ...student, nationality: e.target.value })}
+                    className={inputClass}
+                  />
+                  <datalist id="list-nationalities">
+                    {suggestions.nationalities.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
               <div className="grid md:grid-cols-3 gap-6">
@@ -713,7 +714,11 @@ export const StudentForm = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm('⚠️ ADVERTENCIA: Modificar el año escolar de un alumno ya registrado puede desvincular sus notas históricas de los boletines del año pasado.\n\n¿Realmente necesitas cambiar este año por un error de registro inicial? (Para promover un alumno al nuevo año utiliza el botón Promover)')) {
+                            if (
+                              window.confirm(
+                                '⚠️ ADVERTENCIA: Modificar el año escolar de un alumno ya registrado puede desvincular sus notas históricas de los boletines del año pasado.\n\n¿Realmente necesitas cambiar este año por un error de registro inicial? (Para promover un alumno al nuevo año utiliza el botón Promover)'
+                              )
+                            ) {
                               setCanEditSchoolYear(true);
                             }
                           }}
@@ -727,7 +732,8 @@ export const StudentForm = ({
                       <p className="mt-2 text-[10px] text-amber-600 font-bold leading-normal flex items-start gap-1">
                         <span>💡</span>
                         <span>
-                          Para inscribir en el año siguiente, no cambies el año aquí. Cancela y usa el botón <strong>"Promover Alumno"</strong>.
+                          Para inscribir en el año siguiente, no cambies el año aquí. Cancela y usa
+                          el botón <strong>"Promover Alumno"</strong>.
                         </span>
                       </p>
                     )}
@@ -750,7 +756,9 @@ export const StudentForm = ({
                       className={inputClass}
                     />
                     <datalist id="list-sectors">
-                      {suggestions.sectors.map(v => <option key={v} value={v} />)}
+                      {suggestions.sectors.map((v) => (
+                        <option key={v} value={v} />
+                      ))}
                     </datalist>
                   </div>
                   <div>
@@ -783,7 +791,9 @@ export const StudentForm = ({
                       className={inputClass}
                     />
                     <datalist id="list-municipalities">
-                      {suggestions.municipalities.map(v => <option key={v} value={v} />)}
+                      {suggestions.municipalities.map((v) => (
+                        <option key={v} value={v} />
+                      ))}
                     </datalist>
                   </div>
                   <div>
@@ -796,7 +806,9 @@ export const StudentForm = ({
                       className={inputClass}
                     />
                     <datalist id="list-provinces">
-                      {suggestions.provinces.map(v => <option key={v} value={v} />)}
+                      {suggestions.provinces.map((v) => (
+                        <option key={v} value={v} />
+                      ))}
                     </datalist>
                   </div>
                   <div>
@@ -1301,7 +1313,7 @@ export const StudentForm = ({
           >
             <Printer size={20} /> Imprimir PDF
           </button>
-          
+
           <div className="flex items-center gap-4">
             {!studentId && !initialData?.id && (
               <button
@@ -1340,18 +1352,28 @@ export const StudentForm = ({
                   <SearchIcon size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Vincular Hermano</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Busca para importar datos familiares</p>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+                    Vincular Hermano
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Busca para importar datos familiares
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setShowSiblingSearch(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                onClick={() => setShowSiblingSearch(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
                 <X size={24} />
               </button>
             </div>
-            
+
             <div className="p-8 space-y-6">
               <div className="relative">
-                <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <SearchIcon
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={18}
+                />
                 <input
                   autoFocus
                   type="text"
@@ -1364,7 +1386,9 @@ export const StudentForm = ({
               <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
                 {searchResults.length === 0 ? (
                   <p className="text-center py-10 text-slate-400 text-xs font-bold uppercase tracking-widest">
-                    {searchQuery.length < 3 ? 'Escribe al menos 3 letras...' : 'No se encontraron resultados'}
+                    {searchQuery.length < 3
+                      ? 'Escribe al menos 3 letras...'
+                      : 'No se encontraron resultados'}
                   </p>
                 ) : (
                   searchResults.map((res) => (
@@ -1379,10 +1403,14 @@ export const StudentForm = ({
                           {res.first_surname} {res.second_surname}, {res.names}
                         </p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">
-                          {state.courses.find((c: any) => c.id === res.course_id)?.grade || 'Sin Grado'}
+                          {state.courses.find((c: any) => c.id === res.course_id)?.grade ||
+                            'Sin Grado'}
                         </p>
                       </div>
-                      <ChevronRight size={18} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                      <ChevronRight
+                        size={18}
+                        className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all"
+                      />
                     </button>
                   ))
                 )}

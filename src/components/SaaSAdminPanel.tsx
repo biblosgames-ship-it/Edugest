@@ -331,7 +331,7 @@ export const SaaSAdminPanel: React.FC = () => {
         max_teachers: Number(planMaxTeachers),
         max_managers: Number(planMaxManagers),
         max_support: Number(planMaxSupport),
-        max_users: Number(planMaxUsers),
+        max_users: Number(planMaxUsers)
       };
 
       if (editingPlan) {
@@ -380,7 +380,9 @@ export const SaaSAdminPanel: React.FC = () => {
         amount: Number(editPayAmount),
         method: editPayMethod,
         reference_note: editPayRef || null,
-        payment_date: editPayDate ? new Date(editPayDate + 'T12:00:00').toISOString() : new Date().toISOString(),
+        payment_date: editPayDate
+          ? new Date(editPayDate + 'T12:00:00').toISOString()
+          : new Date().toISOString()
       });
       alert('Pago actualizado exitosamente.');
       setEditingPayment(null);
@@ -615,10 +617,16 @@ export const SaaSAdminPanel: React.FC = () => {
                             <td className="py-4 px-4 text-sm text-slate-600">
                               <input
                                 type="date"
-                                value={license.subscription_end_date ? license.subscription_end_date.split('T')[0] : ''}
+                                value={
+                                  license.subscription_end_date
+                                    ? license.subscription_end_date.split('T')[0]
+                                    : ''
+                                }
                                 onChange={async (e) => {
                                   const val = e.target.value;
-                                  const newDate = val ? new Date(val + 'T23:59:59').toISOString() : null;
+                                  const newDate = val
+                                    ? new Date(val + 'T23:59:59').toISOString()
+                                    : null;
                                   try {
                                     await updateSubscriptionEndDate(license.id, newDate);
                                     await fetchData();
@@ -644,14 +652,24 @@ export const SaaSAdminPanel: React.FC = () => {
                               {centerId && (
                                 <div className="flex justify-end gap-1.5">
                                   <button
-                                    onClick={() => handleSwitchCenter(centerId, license.center_name || 'este centro')}
+                                    onClick={() =>
+                                      handleSwitchCenter(
+                                        centerId,
+                                        license.center_name || 'este centro'
+                                      )
+                                    }
                                     className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                                     title="Acceder a la Escuela (Impersonar)"
                                   >
                                     <Eye size={18} />
                                   </button>
                                   <button
-                                    onClick={() => handleExportBackup(centerId, license.center_name || 'este centro')}
+                                    onClick={() =>
+                                      handleExportBackup(
+                                        centerId,
+                                        license.center_name || 'este centro'
+                                      )
+                                    }
                                     className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
                                     title="Exportar Respaldo (Descargar JSON)"
                                   >
@@ -778,7 +796,9 @@ export const SaaSAdminPanel: React.FC = () => {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">Planes de Suscripción</h3>
-                  <p className="text-slate-500 text-xs">Crea o edita los planes comerciales, precios y límites de estudiantes/docentes.</p>
+                  <p className="text-slate-500 text-xs">
+                    Crea o edita los planes comerciales, precios y límites de estudiantes/docentes.
+                  </p>
                 </div>
                 {!editingPlan && !isCreatingPlan && (
                   <button
@@ -792,7 +812,7 @@ export const SaaSAdminPanel: React.FC = () => {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Lista de Planes (Toma todo si no hay form activo, toma 2/3 si lo hay) */}
-                <div className={(editingPlan || isCreatingPlan) ? 'lg:col-span-2' : 'lg:col-span-3'}>
+                <div className={editingPlan || isCreatingPlan ? 'lg:col-span-2' : 'lg:col-span-3'}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {plans.map((plan) => (
                       <div
@@ -831,19 +851,21 @@ export const SaaSAdminPanel: React.FC = () => {
                             <div className="flex justify-between text-sm">
                               <span className="text-slate-500">Max. Gestores:</span>
                               <span className="font-bold text-slate-700">
-                                {plan.max_managers > 1000 ? 'Ilimitado' : (plan.max_managers || 'N/A')}
+                                {plan.max_managers > 1000
+                                  ? 'Ilimitado'
+                                  : plan.max_managers || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-slate-500">Max. Apoyo:</span>
                               <span className="font-bold text-slate-700">
-                                {plan.max_support > 1000 ? 'Ilimitado' : (plan.max_support || 'N/A')}
+                                {plan.max_support > 1000 ? 'Ilimitado' : plan.max_support || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between text-sm text-indigo-600 font-semibold">
                               <span className="text-slate-500">Max. Usuarios:</span>
                               <span className="font-bold">
-                                {plan.max_users > 10000 ? 'Ilimitado' : (plan.max_users || 'N/A')}
+                                {plan.max_users > 10000 ? 'Ilimitado' : plan.max_users || 'N/A'}
                               </span>
                             </div>
                           </div>
@@ -1306,7 +1328,9 @@ export const SaaSAdminPanel: React.FC = () => {
                   <div>
                     <h3 className="text-xl font-bold text-slate-800 mb-2">Exportar Respaldo</h3>
                     <p className="text-slate-500 text-sm">
-                      Descarga una copia completa en formato JSON con toda la información operativa del colegio seleccionado: alumnos, personal, cursos, materias, horarios y calificaciones.
+                      Descarga una copia completa en formato JSON con toda la información operativa
+                      del colegio seleccionado: alumnos, personal, cursos, materias, horarios y
+                      calificaciones.
                     </p>
                   </div>
 
@@ -1319,14 +1343,16 @@ export const SaaSAdminPanel: React.FC = () => {
                         onChange={(e) => {
                           const cid = e.target.value;
                           if (!cid) return;
-                          const lic = licenses.find(l => l.used_by_center === cid);
+                          const lic = licenses.find((l) => l.used_by_center === cid);
                           handleExportBackup(cid, lic?.center_name || 'centro');
                           e.target.value = ''; // Reset option
                         }}
                         defaultValue=""
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:border-brand-blue transition-all cursor-pointer"
                       >
-                        <option value="" disabled>Seleccione un colegio para descargar...</option>
+                        <option value="" disabled>
+                          Seleccione un colegio para descargar...
+                        </option>
                         {activeLicenses.map((l) => (
                           <option key={l.id} value={l.used_by_center || ''}>
                             {l.center_name} ({l.linked_email})
@@ -1343,12 +1369,16 @@ export const SaaSAdminPanel: React.FC = () => {
                     <Upload size={24} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">Importar / Restaurar Respaldo</h3>
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">
+                      Importar / Restaurar Respaldo
+                    </h3>
                     <p className="text-slate-500 text-sm">
-                      Sube un archivo de respaldo `.json` generado previamente para restaurar o clonar todos los datos sobre una escuela destino seleccionada.
+                      Sube un archivo de respaldo `.json` generado previamente para restaurar o
+                      clonar todos los datos sobre una escuela destino seleccionada.
                     </p>
                     <p className="text-red-500 text-xs font-bold mt-2">
-                      ⚠️ ¡ATENCIÓN! Esta acción borrará de forma permanente los datos actuales de la escuela destino antes de inyectar el respaldo.
+                      ⚠️ ¡ATENCIÓN! Esta acción borrará de forma permanente los datos actuales de la
+                      escuela destino antes de inyectar el respaldo.
                     </p>
                   </div>
 
@@ -1363,7 +1393,9 @@ export const SaaSAdminPanel: React.FC = () => {
                         onChange={(e) => setImportTargetId(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:border-brand-blue transition-all cursor-pointer"
                       >
-                        <option value="" disabled hidden>Seleccione el colegio destino...</option>
+                        <option value="" disabled hidden>
+                          Seleccione el colegio destino...
+                        </option>
                         {activeLicenses.map((l) => (
                           <option key={l.id} value={l.used_by_center || ''}>
                             {l.center_name} ({l.linked_email})
@@ -1393,7 +1425,8 @@ export const SaaSAdminPanel: React.FC = () => {
                     >
                       {isImporting ? (
                         <>
-                          <RefreshCw className="animate-spin" size={18} /> Procesando Restauración...
+                          <RefreshCw className="animate-spin" size={18} /> Procesando
+                          Restauración...
                         </>
                       ) : (
                         'Restaurar e Importar Datos'

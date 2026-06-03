@@ -7,7 +7,12 @@ export const useSubjects = () => {
   const { state, refreshData } = useApp();
   const centerId = profile?.center_id;
 
-  console.log('[DEBUG useSubjects] Hook run using context state. profile:', profile, 'centerId:', centerId);
+  console.log(
+    '[DEBUG useSubjects] Hook run using context state. profile:',
+    profile,
+    'centerId:',
+    centerId
+  );
 
   const addSubjectMutation = useMutation({
     mutationFn: async (newSubject: any) => {

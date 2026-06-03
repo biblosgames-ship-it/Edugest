@@ -183,7 +183,10 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     fetchAnalytics();
   }, [selectedCourseId]);
 
-  const isSecundario = React.useMemo(() => selectedCourse?.level?.toLowerCase().includes('secund'), [selectedCourse]);
+  const isSecundario = React.useMemo(
+    () => selectedCourse?.level?.toLowerCase().includes('secund'),
+    [selectedCourse]
+  );
 
   const computedAnalytics = React.useMemo(() => {
     if (!analyticsData) return null;
@@ -208,19 +211,28 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
             );
           let grade = 0;
           if (analyticsPeriod === 'FINAL') {
-            const compAverages = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(cId => {
-              return Math.round((
-                getBestGrade(cId, 'P1') + 
-                getBestGrade(cId, 'P2') + 
-                getBestGrade(cId, 'P3') + 
-                getBestGrade(cId, 'P4')
-              ) / 4);
-            });
-            const finalArea = Math.round(compAverages.reduce((a, b) => a + b, 0) / compAverages.length);
+            const compAverages = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(
+              (cId) => {
+                return Math.round(
+                  (getBestGrade(cId, 'P1') +
+                    getBestGrade(cId, 'P2') +
+                    getBestGrade(cId, 'P3') +
+                    getBestGrade(cId, 'P4')) /
+                    4
+                );
+              }
+            );
+            const finalArea = Math.round(
+              compAverages.reduce((a, b) => a + b, 0) / compAverages.length
+            );
             grade = Math.max(finalArea, parseInt(sGrades['final_rec']) || 0);
           } else {
-            const currentPeriodComps = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(cId => getBestGrade(cId, analyticsPeriod));
-            grade = Math.round(currentPeriodComps.reduce((a, b) => a + b, 0) / currentPeriodComps.length);
+            const currentPeriodComps = (
+              isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']
+            ).map((cId) => getBestGrade(cId, analyticsPeriod));
+            grade = Math.round(
+              currentPeriodComps.reduce((a, b) => a + b, 0) / currentPeriodComps.length
+            );
           }
           if (grade > 0) {
             total += grade;
@@ -247,19 +259,28 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           );
         let grade = 0;
         if (analyticsPeriod === 'FINAL') {
-          const compAverages = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(cId => {
-            return Math.round((
-              getBestGrade(cId, 'P1') + 
-              getBestGrade(cId, 'P2') + 
-              getBestGrade(cId, 'P3') + 
-              getBestGrade(cId, 'P4')
-            ) / 4);
-          });
-          const finalArea = Math.round(compAverages.reduce((a, b) => a + b, 0) / compAverages.length);
+          const compAverages = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(
+            (cId) => {
+              return Math.round(
+                (getBestGrade(cId, 'P1') +
+                  getBestGrade(cId, 'P2') +
+                  getBestGrade(cId, 'P3') +
+                  getBestGrade(cId, 'P4')) /
+                  4
+              );
+            }
+          );
+          const finalArea = Math.round(
+            compAverages.reduce((a, b) => a + b, 0) / compAverages.length
+          );
           grade = Math.max(finalArea, parseInt(sGrades['final_rec']) || 0);
         } else {
-          const currentPeriodComps = (isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']).map(cId => getBestGrade(cId, analyticsPeriod));
-          grade = Math.round(currentPeriodComps.reduce((a, b) => a + b, 0) / currentPeriodComps.length);
+          const currentPeriodComps = (
+            isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3']
+          ).map((cId) => getBestGrade(cId, analyticsPeriod));
+          grade = Math.round(
+            currentPeriodComps.reduce((a, b) => a + b, 0) / currentPeriodComps.length
+          );
         }
         if (grade > 0) {
           totalGrade += grade;
@@ -427,7 +448,8 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         }
       });
 
-      const percent = totalExpected > 0 ? Math.min(100, Math.round((completed / totalExpected) * 100)) : 0;
+      const percent =
+        totalExpected > 0 ? Math.min(100, Math.round((completed / totalExpected) * 100)) : 0;
       return {
         subject: sub.name.substring(0, 10),
         percent,
@@ -555,7 +577,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         const comps = isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3'];
 
         // 1. Calcular promedio de área (Media de las competencias)
-        const compAverages = comps.map(cId => Math.round(calculateCompAvg(sGrades, cId)));
+        const compAverages = comps.map((cId) => Math.round(calculateCompAvg(sGrades, cId)));
         const avg = compAverages.reduce((a, b) => a + b, 0) / comps.length;
         const areaFinal = avg > 0 ? Math.round(avg) : 0;
 
@@ -570,21 +592,21 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         // CP: Completivo (50/50)
         const cpExam = parseInt(sGrades['COMP_sec']) || 0; // Usamos el prefijo de periodo para las recuperaciones
         if (cpExam > 0) {
-          const cpFinal = Math.round((areaFinal * 0.5) + (cpExam * 0.5));
+          const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
           if (cpFinal >= 70) return cpFinal;
         }
 
         // EX: Extraordinario (30/70)
         const exExam = parseInt(sGrades['EXTRA_sec']) || 0;
         if (exExam > 0) {
-          const exFinal = Math.round((areaFinal * 0.3) + (exExam * 0.7));
+          const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
           if (exFinal >= 70) return exFinal;
         }
 
         // E1 / E2: Especiales
         const esp1 = parseInt(sGrades['ESP1_sec']) || 0;
         if (esp1 >= 70) return esp1;
-        
+
         const esp2 = parseInt(sGrades['ESP2_sec']) || 0;
         if (esp2 >= 70) return esp2;
 
@@ -852,7 +874,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const getFinalSubjectGrade = (studentId: string, subjectId: string) => {
         const sGrades = gradesMap[studentId]?.[subjectId] || {};
         const compsList = isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3'];
-        const compAverages = compsList.map(cId => Math.round(calculateCompAvg(sGrades, cId)));
+        const compAverages = compsList.map((cId) => Math.round(calculateCompAvg(sGrades, cId)));
         const avg = compAverages.reduce((a, b) => a + b, 0) / compsList.length;
         const areaFinal = avg > 0 ? Math.round(avg) : 0;
 
@@ -864,12 +886,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         if (areaFinal >= 70) return areaFinal;
         const cpExam = parseInt(sGrades['COMP_sec']) || 0;
         if (cpExam > 0) {
-          const cpFinal = Math.round((areaFinal * 0.5) + (cpExam * 0.5));
+          const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
           if (cpFinal >= 70) return cpFinal;
         }
         const exExam = parseInt(sGrades['EXTRA_sec']) || 0;
         if (exExam > 0) {
-          const exFinal = Math.round((areaFinal * 0.3) + (exExam * 0.7));
+          const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
           if (exFinal >= 70) return exFinal;
         }
         const esp1 = parseInt(sGrades['ESP1_sec']) || 0;
@@ -902,7 +924,9 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text(`${center.address || ''}   |   Tel: ${center.phone || ''}`, pageWidth / 2, 16, { align: 'center' });
+        doc.text(`${center.address || ''}   |   Tel: ${center.phone || ''}`, pageWidth / 2, 16, {
+          align: 'center'
+        });
 
         doc.setDrawColor(0);
         doc.line(15, 19, pageWidth - 15, 19);
@@ -911,30 +935,53 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         const tandaStr = 'M';
-        doc.text(`Curso : ${selectedCourse?.grade || ''} ${selectedCourse?.level || ''}   Sección : ${selectedCourse?.section || ''}   Tanda : ${tandaStr}   Año Escolar : ${forceYear}`, pageWidth / 2, 24, { align: 'center' });
+        doc.text(
+          `Curso : ${selectedCourse?.grade || ''} ${selectedCourse?.level || ''}   Sección : ${selectedCourse?.section || ''}   Tanda : ${tandaStr}   Año Escolar : ${forceYear}`,
+          pageWidth / 2,
+          24,
+          { align: 'center' }
+        );
 
         // 3. Título de la materia y docente
         doc.setFontSize(10);
         doc.text(`ASIGNATURA: ${sub.name.toUpperCase()}`, 15, 30);
 
-        const assignment = state.assignments?.find(a => a.course_id === selectedCourseId && a.subject_id === sub.id);
-        const teacher = state.teachers?.find(t => t.id === assignment?.teacher_id);
+        const assignment = state.assignments?.find(
+          (a) => a.course_id === selectedCourseId && a.subject_id === sub.id
+        );
+        const teacher = state.teachers?.find((t) => t.id === assignment?.teacher_id);
         if (teacher) {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
-          doc.text(`DOCENTE TITULAR: ${teacher.name.toUpperCase()}`, pageWidth - 15, 30, { align: 'right' });
+          doc.text(`DOCENTE TITULAR: ${teacher.name.toUpperCase()}`, pageWidth - 15, 30, {
+            align: 'right'
+          });
         }
 
         // 4. Construcción de la matriz de columnas
         const compsList = isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3'];
 
         const headRowsConfig: any[] = [
-          registroSoloNumeros ? [
-            { content: 'Nº', rowSpan: 2, styles: { halign: 'center', valign: 'middle', cellWidth: 7 } }
-          ] : [
-            { content: 'Nº', rowSpan: 2, styles: { halign: 'center', valign: 'middle', cellWidth: 6 } },
-            { content: 'NOMBRES Y APELLIDOS', rowSpan: 2, styles: { halign: 'center', valign: 'middle', cellWidth: isSecundario ? 38 : 45 } }
-          ],
+          registroSoloNumeros
+            ? [
+                {
+                  content: 'Nº',
+                  rowSpan: 2,
+                  styles: { halign: 'center', valign: 'middle', cellWidth: 7 }
+                }
+              ]
+            : [
+                {
+                  content: 'Nº',
+                  rowSpan: 2,
+                  styles: { halign: 'center', valign: 'middle', cellWidth: 6 }
+                },
+                {
+                  content: 'NOMBRES Y APELLIDOS',
+                  rowSpan: 2,
+                  styles: { halign: 'center', valign: 'middle', cellWidth: isSecundario ? 38 : 45 }
+                }
+              ],
           []
         ];
 
@@ -942,15 +989,20 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         compsList.forEach((cId, cIdx) => {
           const colors = [
             { fill: [235, 244, 255], text: [30, 58, 138] }, // C1: Azul claro
-            { fill: [240, 253, 244], text: [20, 83, 45] },  // C2: Verde claro
+            { fill: [240, 253, 244], text: [20, 83, 45] }, // C2: Verde claro
             { fill: [254, 242, 242], text: [127, 29, 29] }, // C3: Rojo claro
-            { fill: [250, 245, 255], text: [88, 28, 135] }  // C4: Púrpura claro
+            { fill: [250, 245, 255], text: [88, 28, 135] } // C4: Púrpura claro
           ][cIdx];
 
           headRowsConfig[0].push({
             content: `COMPETENCIA ${cIdx + 1}`,
             colSpan: 8,
-            styles: { halign: 'center', fillColor: colors.fill, textColor: colors.text, fontStyle: 'bold' }
+            styles: {
+              halign: 'center',
+              fillColor: colors.fill,
+              textColor: colors.text,
+              fontStyle: 'bold'
+            }
           });
         });
 
@@ -958,14 +1010,25 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         headRowsConfig[0].push({
           content: 'PROMEDIOS CE',
           colSpan: compsList.length,
-          styles: { halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' }
+          styles: {
+            halign: 'center',
+            fillColor: [30, 41, 59],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          }
         });
 
         // Fila 1: CF (Calificación Final)
         headRowsConfig[0].push({
           content: 'CF',
           rowSpan: 2,
-          styles: { halign: 'center', valign: 'middle', fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' }
+          styles: {
+            halign: 'center',
+            valign: 'middle',
+            fillColor: [79, 70, 229],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          }
         });
 
         // Fila 2: Sub-columnas P1, RP1, P2, RP2... para cada cuadro de competencia
@@ -987,23 +1050,30 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         compsList.forEach((cId, cIdx) => {
           headRowsConfig[1].push({
             content: `PC${cIdx + 1}`,
-            styles: { halign: 'center', fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [15, 23, 42] }
+            styles: {
+              halign: 'center',
+              fillColor: [241, 245, 249],
+              fontStyle: 'bold',
+              textColor: [15, 23, 42]
+            }
           });
         });
 
         // Mapeo de datos del cuerpo de la tabla
         const bodyData = students.map((s, idx) => {
           const sGrades = gradesMap[s.id]?.[sub.id] || {};
-          const row: any[] = [
-            (idx + 1).toString().padStart(2, '0')
-          ];
+          const row: any[] = [(idx + 1).toString().padStart(2, '0')];
 
           if (!registroSoloNumeros) {
-            row.push(`${s.first_surname || ''} ${s.second_surname || ''}, ${s.names || ''}`.toUpperCase().trim());
+            row.push(
+              `${s.first_surname || ''} ${s.second_surname || ''}, ${s.names || ''}`
+                .toUpperCase()
+                .trim()
+            );
           }
 
           // Columnas P1, RP1, P2, RP2... por competencia
-          compsList.forEach(cId => {
+          compsList.forEach((cId) => {
             ['p1', 'p2', 'p3', 'p4'].forEach((p, pIdx) => {
               const gVal = sGrades[`${cId}_${p}`];
               const rVal = sGrades[`${cId}_rp${pIdx + 1}`];
@@ -1013,7 +1083,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           });
 
           // Columnas de promedios por competencia específica
-          compsList.forEach(cId => {
+          compsList.forEach((cId) => {
             const avgVal = Math.round(calculateCompAvg(sGrades, cId));
             row.push(avgVal > 0 ? avgVal.toString() : '');
           });
@@ -1025,9 +1095,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           return row;
         });
 
-        const fontSizeNum = registroSoloNumeros 
-          ? (isSecundario ? 6 : 7)  // Más grande en vertical sin nombres
-          : (isSecundario ? 5 : 6); // Estándar en horizontal con nombres
+        const fontSizeNum = registroSoloNumeros
+          ? isSecundario
+            ? 6
+            : 7 // Más grande en vertical sin nombres
+          : isSecundario
+            ? 5
+            : 6; // Estándar en horizontal con nombres
 
         const colStylesConfig: any = {
           0: { halign: 'center', cellWidth: registroSoloNumeros ? 7 : 6 }
@@ -1079,7 +1153,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           doc.setFontSize(7);
           doc.setFont('helvetica', 'bold');
           doc.line(30, finalY, 100, finalY);
-          doc.text(`DOCENTE: ${teacher?.name?.toUpperCase() || 'FIRMA DEL DOCENTE'}`, 65, finalY + 4, { align: 'center' });
+          doc.text(
+            `DOCENTE: ${teacher?.name?.toUpperCase() || 'FIRMA DEL DOCENTE'}`,
+            65,
+            finalY + 4,
+            { align: 'center' }
+          );
 
           doc.line(pageWidth - 100, finalY, pageWidth - 30, finalY);
           doc.text(`COORDINACIÓN DOCENTE / SELLO`, pageWidth - 65, finalY + 4, { align: 'center' });
@@ -1087,7 +1166,9 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       });
 
       const fileSuffix = registroSoloNumeros ? 'Solo_Numeros_Vertical' : 'Completo_Horizontal';
-      doc.save(`Registro_Grado_${selectedCourse?.grade}_${selectedCourse?.section}_${fileSuffix}.pdf`);
+      doc.save(
+        `Registro_Grado_${selectedCourse?.grade}_${selectedCourse?.section}_${fileSuffix}.pdf`
+      );
     } catch (error) {
       console.error(error);
       alert('Error al generar el Registro de Grado.');
@@ -2927,7 +3008,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
   return (
     <div className="space-y-6 text-slate-900 pb-20 animate-fade-in">
-
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
@@ -3000,7 +3080,14 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                           const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
                           const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
                           return (
-                            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" style={{ fontSize: '10px', fontWeight: 'bold' }}>
+                            <text
+                              x={x}
+                              y={y}
+                              fill="white"
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              style={{ fontSize: '10px', fontWeight: 'bold' }}
+                            >
                               {`${(percent * 100).toFixed(0)}%`}
                             </text>
                           );
@@ -3020,7 +3107,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                   </ResponsiveContainer>
                 </div>
               </div>
-
               {/* Desempeño por Competencia */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-72 flex flex-col">
                 <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest text-center mb-2">
@@ -3058,7 +3144,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                   </ResponsiveContainer>
                 </div>
               </div>
-
               {/* Casos de Riesgo */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-72 flex flex-col">
                 <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest text-center mb-2">
@@ -3079,7 +3164,14 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                           const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
                           const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
                           return (
-                            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" style={{ fontSize: '10px', fontWeight: 'bold' }}>
+                            <text
+                              x={x}
+                              y={y}
+                              fill="white"
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              style={{ fontSize: '10px', fontWeight: 'bold' }}
+                            >
                               {`${(percent * 100).toFixed(0)}%`}
                             </text>
                           );
@@ -3099,7 +3191,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                   </ResponsiveContainer>
                 </div>
               </div>
-
               {/* Promedios por Materia */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-72 flex flex-col">
                 <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest text-center mb-2">
@@ -3132,7 +3223,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                   </ResponsiveContainer>
                 </div>
               </div>
-
               {/* Tasa de Aprobación Global */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-72 flex flex-col">
                 <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest text-center mb-2">
@@ -3168,7 +3258,6 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                   </ResponsiveContainer>
                 </div>
               </div>
-
               {/* Progreso de Digitado */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-72 flex flex-col">
                 <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest text-center mb-2">
@@ -3185,12 +3274,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                       <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} />
                       <YAxis dataKey="subject" type="category" tick={{ fontSize: 8, width: 60 }} />
                       <Tooltip cursor={{ fill: '#f1f5f9' }} />
-                      <Bar
-                        dataKey="percent"
-                        name="Avance %"
-                        radius={[0, 4, 4, 0]}
-                      >
-                        <LabelList dataKey="percent" position="right" style={{ fontSize: '9px', fontWeight: 'bold', fill: '#64748b' }} formatter={(v: any) => `${v}%`} />
+                      <Bar dataKey="percent" name="Avance %" radius={[0, 4, 4, 0]}>
+                        <LabelList
+                          dataKey="percent"
+                          position="right"
+                          style={{ fontSize: '9px', fontWeight: 'bold', fill: '#64748b' }}
+                          formatter={(v: any) => `${v}%`}
+                        />
                         {computedAnalytics.digitizingChart.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
@@ -3198,7 +3288,8 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </div>            </div>
+              </div>{' '}
+            </div>
           ) : (
             <div className="flex justify-center items-center h-24 text-slate-400 text-sm font-bold">
               No hay suficientes calificaciones registradas en este periodo.
@@ -3249,7 +3340,8 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                 Registro de Grado Oficial
               </h3>
               <p className="text-xs text-slate-500">
-                Libro de calificaciones desglosado por competencias de cada materia, con historial de recuperaciones.
+                Libro de calificaciones desglosado por competencias de cada materia, con historial
+                de recuperaciones.
               </p>
 
               {/* Selector de modo: Horizontal con nombres vs Vertical solo números */}
@@ -3333,10 +3425,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                 <h3 className="text-lg font-black uppercase text-slate-800">
                   Récord Académico Detallado
                 </h3>
-                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] font-black rounded-full uppercase">Nuevo</span>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] font-black rounded-full uppercase">
+                  Nuevo
+                </span>
               </div>
               <p className="text-xs text-slate-500">
-                Análisis de riesgo, promedios por competencias y materias pendientes con exportación PDF.
+                Análisis de riesgo, promedios por competencias y materias pendientes con exportación
+                PDF.
               </p>
               <button
                 onClick={() => setShowCourseRecord(true)}
@@ -3465,42 +3560,50 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
             </div>
           </div>
 
-
           {/* CERTIFICACIONES FINALES (6TO PRIMARIA) */}
-          {(selectedCourse?.level === 'Primario' && 
-            (selectedCourse?.grade?.toLowerCase().trim().startsWith('6') || 
-             selectedCourse?.grade?.toLowerCase().trim().includes('sexto'))) && (
-            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all duration-300 border-t-4 border-t-amber-500">
-              <div className="h-32 bg-amber-600 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent"></div>
-                <ScrollIcon size={48} className="text-white relative z-10" />
-              </div>
-              <div className="p-6 text-center space-y-4">
-                <h3 className="text-lg font-black uppercase text-slate-800">Certificaciones 6to Primaria</h3>
-                <p className="text-xs text-slate-500">
-                  Certificación oficial de conclusión del Nivel Primario para estudiantes de 6to grado.
-                </p>
-                <div className="space-y-2">
-                  <select 
-                    className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none"
-                    onChange={(e) => setCertStudentId(e.target.value)}
-                    value={certStudentId || ''}
-                  >
-                    <option value="">-- Seleccionar Estudiante --</option>
-                    {analyticsData?.students?.map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.first_surname} {s.names}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => certStudentId ? setShowCertificateModal(true) : alert('Seleccione un estudiante')}
-                    className="w-full py-3 bg-amber-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-700 transition-colors shadow-lg flex items-center justify-center gap-2"
-                  >
-                    <ScrollIcon size={14} /> Configurar Certificado
-                  </button>
+          {selectedCourse?.level === 'Primario' &&
+            (selectedCourse?.grade?.toLowerCase().trim().startsWith('6') ||
+              selectedCourse?.grade?.toLowerCase().trim().includes('sexto')) && (
+              <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all duration-300 border-t-4 border-t-amber-500">
+                <div className="h-32 bg-amber-600 flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent"></div>
+                  <ScrollIcon size={48} className="text-white relative z-10" />
+                </div>
+                <div className="p-6 text-center space-y-4">
+                  <h3 className="text-lg font-black uppercase text-slate-800">
+                    Certificaciones 6to Primaria
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Certificación oficial de conclusión del Nivel Primario para estudiantes de 6to
+                    grado.
+                  </p>
+                  <div className="space-y-2">
+                    <select
+                      className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none"
+                      onChange={(e) => setCertStudentId(e.target.value)}
+                      value={certStudentId || ''}
+                    >
+                      <option value="">-- Seleccionar Estudiante --</option>
+                      {analyticsData?.students?.map((s: any) => (
+                        <option key={s.id} value={s.id}>
+                          {s.first_surname} {s.names}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() =>
+                        certStudentId
+                          ? setShowCertificateModal(true)
+                          : alert('Seleccione un estudiante')
+                      }
+                      className="w-full py-3 bg-amber-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-700 transition-colors shadow-lg flex items-center justify-center gap-2"
+                    >
+                      <ScrollIcon size={14} /> Configurar Certificado
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       )}
 
@@ -3988,8 +4091,8 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         </div>
       )}
       {showCourseRecord && (
-        <CourseRecordReport 
-          onClose={() => setShowCourseRecord(false)} 
+        <CourseRecordReport
+          onClose={() => setShowCourseRecord(false)}
           period={analyticsPeriod}
           initialCourseId={selectedCourseId}
         />
@@ -3997,9 +4100,9 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       {showCertificateModal && certStudentId && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
           <div className="w-full max-w-5xl">
-            <PrimaryCertificate 
-              studentId={certStudentId} 
-              onClose={() => setShowCertificateModal(false)} 
+            <PrimaryCertificate
+              studentId={certStudentId}
+              onClose={() => setShowCertificateModal(false)}
             />
           </div>
         </div>

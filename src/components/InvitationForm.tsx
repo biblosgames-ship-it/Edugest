@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { useSupabase } from '../context/AppContext';
-import { validateInvitationCode, registerMemberWithCode, getStaffForInvitation, createUserProfile } from '../services/userService';
+import {
+  validateInvitationCode,
+  registerMemberWithCode,
+  getStaffForInvitation,
+  createUserProfile
+} from '../services/userService';
 import { supabase } from '../lib/supabase';
 
 export const InvitationForm = () => {
@@ -73,7 +78,11 @@ export const InvitationForm = () => {
           targetTeam = 'support';
         } else if (normalizedRole.includes('teacher') || normalizedRole.includes('docente')) {
           targetTeam = 'teacher';
-        } else if (normalizedRole.includes('coord') || normalizedRole.includes('admin') || normalizedRole.includes('finance')) {
+        } else if (
+          normalizedRole.includes('coord') ||
+          normalizedRole.includes('admin') ||
+          normalizedRole.includes('finance')
+        ) {
           targetTeam = 'management';
         }
 
@@ -86,9 +95,18 @@ export const InvitationForm = () => {
           if (targetTeam === 'support') {
             return t.includes('support') || t.includes('apoyo') || t.includes('cons');
           } else if (targetTeam === 'teacher') {
-            return t.includes('teacher') || t.includes('docente') || t.includes('management_teacher');
+            return (
+              t.includes('teacher') || t.includes('docente') || t.includes('management_teacher')
+            );
           } else if (targetTeam === 'management') {
-            return t.includes('management') || t.includes('gest') || t.includes('admin') || t.includes('secret') || t.includes('coord') || t.includes('management_teacher');
+            return (
+              t.includes('management') ||
+              t.includes('gest') ||
+              t.includes('admin') ||
+              t.includes('secret') ||
+              t.includes('coord') ||
+              t.includes('management_teacher')
+            );
           }
           return true;
         });
@@ -143,7 +161,9 @@ export const InvitationForm = () => {
       // 3. Validar límite (3 usuarios por alumno registrado en el curso)
       const maxAllowed = (studentCount || 0) * 3;
       if ((profilesCount || 0) >= maxAllowed) {
-        throw new Error(`Límite de registros alcanzado. El límite es de 3 cuentas (padres/alumnos) por cada alumno registrado en la lista oficial del curso. Actualmente hay ${studentCount || 0} alumnos registrados en la lista.`);
+        throw new Error(
+          `Límite de registros alcanzado. El límite es de 3 cuentas (padres/alumnos) por cada alumno registrado en la lista oficial del curso. Actualmente hay ${studentCount || 0} alumnos registrados en la lista.`
+        );
       }
 
       // 4. Validar límite general de usuarios según el plan SaaS
@@ -167,20 +187,18 @@ export const InvitationForm = () => {
           if (usersErr) throw usersErr;
 
           if (centerUsersCount !== null && centerUsersCount >= maxUsers) {
-            throw new Error(`Se ha alcanzado el límite de usuarios creados permitido por el plan SaaS de este centro (${centerUsersCount} de ${maxUsers} permitidos).`);
+            throw new Error(
+              `Se ha alcanzado el límite de usuarios creados permitido por el plan SaaS de este centro (${centerUsersCount} de ${maxUsers} permitidos).`
+            );
           }
         }
       }
 
-      const finalFullName = role === 'parent' ? `${studentName.trim()} (Padre/Madre)` : studentName.trim();
+      const finalFullName =
+        role === 'parent' ? `${studentName.trim()} (Padre/Madre)` : studentName.trim();
 
       // Completar el registro de forma segura usando el RPC
-      await registerMemberWithCode(
-        sanitizedCode,
-        finalFullName,
-        undefined,
-        role
-      );
+      await registerMemberWithCode(sanitizedCode, finalFullName, undefined, role);
 
       // Si es un padre, actualizamos campos adicionales en su perfil (como parent_course_ids)
       if (role === 'parent') {
@@ -190,7 +208,7 @@ export const InvitationForm = () => {
             parent_course_ids: [detectedCourse.course_id]
           })
           .eq('id', user.id);
-          
+
         if (updateErr) throw updateErr;
       }
 
@@ -220,7 +238,7 @@ export const InvitationForm = () => {
         finalName = manualStaffName.trim();
         if (!finalName) throw new Error('Debes escribir un nombre válido.');
       } else {
-        matchedStaffObj = staffList.find(s => s.id === selectedStaffId);
+        matchedStaffObj = staffList.find((s) => s.id === selectedStaffId);
         if (!matchedStaffObj) throw new Error('El empleado seleccionado no es válido.');
         finalName = matchedStaffObj.name;
       }
@@ -247,7 +265,9 @@ export const InvitationForm = () => {
             if (usersErr) throw usersErr;
 
             if (centerUsersCount !== null && centerUsersCount >= maxUsers) {
-              throw new Error(`Se ha alcanzado el límite de usuarios creados permitido por el plan SaaS de este centro (${centerUsersCount} de ${maxUsers} permitidos).`);
+              throw new Error(
+                `Se ha alcanzado el límite de usuarios creados permitido por el plan SaaS de este centro (${centerUsersCount} de ${maxUsers} permitidos).`
+              );
             }
           }
         }
@@ -307,7 +327,12 @@ export const InvitationForm = () => {
               Invitación Confirmada
             </span>
             <h3 className="text-base font-black text-indigo-950 uppercase mt-2">
-              Rol: {detectedStaffRole === 'support' || detectedStaffRole === 'conserje' ? 'Personal de Apoyo (Conserje)' : detectedStaffRole === 'teacher' ? 'Docente' : detectedStaffRole}
+              Rol:{' '}
+              {detectedStaffRole === 'support' || detectedStaffRole === 'conserje'
+                ? 'Personal de Apoyo (Conserje)'
+                : detectedStaffRole === 'teacher'
+                  ? 'Docente'
+                  : detectedStaffRole}
             </h3>
             <p className="text-[10px] text-indigo-700 font-bold uppercase mt-1">
               Vincular perfil de usuario
@@ -318,15 +343,17 @@ export const InvitationForm = () => {
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
               Selecciona tu Nombre Registrado
             </label>
-            <select 
-              required 
+            <select
+              required
               className="w-full px-4 py-3.5 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
               value={selectedStaffId}
-              onChange={e => setSelectedStaffId(e.target.value)}
+              onChange={(e) => setSelectedStaffId(e.target.value)}
             >
               <option value="">-- Selecciona tu nombre --</option>
               {staffList.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.position || s.team})</option>
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.position || s.team})
+                </option>
               ))}
               <option value="manual">Mi nombre no está en la lista (Escribir manualmente)</option>
             </select>

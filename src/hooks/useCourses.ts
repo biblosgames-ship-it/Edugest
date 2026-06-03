@@ -7,19 +7,24 @@ export const useCourses = () => {
   const { state, refreshData, selectedYear } = useApp();
   const centerId = profile?.center_id;
 
-  console.log('[DEBUG useCourses] Hook run using context state. profile:', profile, 'centerId:', centerId);
+  console.log(
+    '[DEBUG useCourses] Hook run using context state. profile:',
+    profile,
+    'centerId:',
+    centerId
+  );
 
   const addCourseMutation = useMutation({
     mutationFn: async (newCourse: any) => {
       const { studentCount, ...rest } = newCourse;
-      const { error } = await supabase
-        .from('courses')
-        .insert([{ 
+      const { error } = await supabase.from('courses').insert([
+        {
           ...rest,
           student_count: studentCount, // Mapeo de camelCase a snake_case
           center_id: centerId,
           school_year: selectedYear
-        }]);
+        }
+      ]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -35,10 +40,7 @@ export const useCourses = () => {
         finalUpdates.student_count = studentCount;
       }
 
-      const { error } = await supabase
-        .from('courses')
-        .update(finalUpdates)
-        .eq('id', id);
+      const { error } = await supabase.from('courses').update(finalUpdates).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

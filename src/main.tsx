@@ -8,7 +8,6 @@ import { registerSW } from 'virtual:pwa-register';
 // Registro automático de la PWA
 registerSW({ immediate: true });
 
-
 // Crear el cliente de React Query
 const queryClient = new QueryClient({
   defaultOptions: {

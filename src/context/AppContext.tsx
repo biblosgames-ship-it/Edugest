@@ -91,7 +91,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     activities: [],
     loading: true,
     error: null
-  });  const [user, setUser] = useState<any | null>(null);
+  });
+  const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [center, setCenter] = useState<any | null>(null);
   const [license, setLicense] = useState<any | null>(null);
@@ -129,7 +130,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const yearChanged = lastFetchedYearRef.current !== selectedYear;
 
       // Si no es forzado ni cambió el año, y ya hay datos cargados, evitamos recargar
-      if (!force && !yearChanged && latestState.courses.length > 0 && latestState.teachers.length > 0) {
+      if (
+        !force &&
+        !yearChanged &&
+        latestState.courses.length > 0 &&
+        latestState.teachers.length > 0
+      ) {
         setState((prev) => ({ ...prev, loading: false }));
         return;
       }
@@ -162,7 +168,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             centRes,
             licRes
           ] = await Promise.all([
-            supabase.from('courses').select('*').eq('center_id', targetCid).eq('school_year', selectedYear),
+            supabase
+              .from('courses')
+              .select('*')
+              .eq('center_id', targetCid)
+              .eq('school_year', selectedYear),
             supabase.from('subjects').select('*').eq('center_id', targetCid),
             supabase.from('profiles').select('*').eq('center_id', targetCid),
             supabase.from('assignments').select('*').eq('center_id', targetCid),
@@ -187,12 +197,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase.from('performance_alerts').select('*').eq('center_id', targetCid),
             supabase.from('level_schedules').select('*').eq('center_id', targetCid),
             supabase.from('fixed_events').select('*').eq('center_id', targetCid),
-            supabase.from('school_years').select('*').eq('center_id', targetCid).order('name', { ascending: false }),
-            supabase.from('students').select('*').eq('center_id', targetCid).eq('school_year', selectedYear),
-            supabase.from('student_grades').select('*').eq('center_id', targetCid).eq('school_year', selectedYear),
+            supabase
+              .from('school_years')
+              .select('*')
+              .eq('center_id', targetCid)
+              .order('name', { ascending: false }),
+            supabase
+              .from('students')
+              .select('*')
+              .eq('center_id', targetCid)
+              .eq('school_year', selectedYear),
+            supabase
+              .from('student_grades')
+              .select('*')
+              .eq('center_id', targetCid)
+              .eq('school_year', selectedYear),
             supabase.from('activities').select('*').eq('center_id', targetCid),
             supabase.from('centers').select('*').eq('id', targetCid).single(),
-            supabase.from('saas_licenses').select('*, plan:saas_plans(*)').eq('used_by_center', targetCid).maybeSingle()
+            supabase
+              .from('saas_licenses')
+              .select('*, plan:saas_plans(*)')
+              .eq('used_by_center', targetCid)
+              .maybeSingle()
           ]);
 
           if (centRes.data) setCenter(centRes.data);
@@ -211,13 +237,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const normalize = (t: any, priority: number) => {
             const name = (t.name || t.full_name || 'Sin Nombre').trim();
             let rawRole = (t.team || t.role || t.cargo || t.position || '').toLowerCase();
-            
-            const isManagement = 
+
+            const isManagement =
               rawRole.includes('gest') ||
               rawRole.includes('direc') ||
               rawRole.includes('coord') ||
               rawRole.includes('management');
-            
+
             const isTeacher =
               rawRole.includes('docente') ||
               rawRole.includes('teach') ||
@@ -227,7 +253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               rawRole.includes('fisic') ||
               rawRole.includes('deport') ||
               rawRole.includes('teacher');
-            
+
             let finalRole = 'teacher';
             if (rawRole.includes('management_teacher')) {
               finalRole = 'management_teacher';
@@ -405,9 +431,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addSchoolYear = async (year: any) => {
     if (!profile?.center_id) return;
-    const { error } = await supabase.from('school_years').upsert([
-      { ...year, center_id: profile.center_id }
-    ], { onConflict: 'center_id,name' });
+    const { error } = await supabase
+      .from('school_years')
+      .upsert([{ ...year, center_id: profile.center_id }], { onConflict: 'center_id,name' });
     if (error) throw error;
     await refreshData(undefined, true);
   };
@@ -486,10 +512,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .select('*')
             .ilike('email', user.email)
             .maybeSingle();
-          
+
           if (emailProf) {
             activeProfile = emailProf;
-            console.log('[DEBUG auth] Perfil encontrado por email. Intentando sincronizar ID de Auth...');
+            console.log(
+              '[DEBUG auth] Perfil encontrado por email. Intentando sincronizar ID de Auth...'
+            );
             try {
               const { error: syncError } = await supabase
                 .from('profiles')
@@ -498,7 +526,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (syncError) throw syncError;
               console.log('[DEBUG auth] ID de perfil sincronizado con éxito.');
             } catch (e) {
-              console.warn('[DEBUG auth] No se pudo sincronizar el ID en la tabla profiles (puede deberse a RLS):', e);
+              console.warn(
+                '[DEBUG auth] No se pudo sincronizar el ID en la tabla profiles (puede deberse a RLS):',
+                e
+              );
             }
           }
         }
@@ -538,7 +569,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCourse = async (c: any) => {
     if (!profile?.center_id) return;
-    await supabase.from('courses').insert([{ ...c, center_id: profile.center_id, school_year: c.school_year || selectedYear }]);
+    await supabase
+      .from('courses')
+      .insert([{ ...c, center_id: profile.center_id, school_year: c.school_year || selectedYear }]);
     await refreshData(undefined, true);
   };
   const deleteCourse = async (id: string) => {
@@ -635,7 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? current.map((c: any) => (c.id === p.id ? newPref : c))
       : [...current, newPref];
     localStorage.setItem('edugens_priority_prefs', JSON.stringify(updated));
-    
+
     setState((prev) => ({
       ...prev,
       priorityPreferences: updated
@@ -646,7 +679,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const current = JSON.parse(localStorage.getItem('edugens_priority_prefs') || '[]');
     const updated = current.filter((c: any) => c.id !== id);
     localStorage.setItem('edugens_priority_prefs', JSON.stringify(updated));
-    
+
     setState((prev) => ({
       ...prev,
       priorityPreferences: updated

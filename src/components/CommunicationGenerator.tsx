@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
-import { Send, Users, UserPlus, Info, ClipboardList, History, Trash2, Calendar } from 'lucide-react';
+import {
+  Send,
+  Users,
+  UserPlus,
+  Info,
+  ClipboardList,
+  History,
+  Trash2,
+  Calendar
+} from 'lucide-react';
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
   const { state } = useApp();
@@ -345,7 +354,8 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                     </p>
 
                     <p className="text-xs text-slate-400">
-                      <strong className="text-slate-600">Destinatarios:</strong> {renderTargets(comm)}
+                      <strong className="text-slate-600">Destinatarios:</strong>{' '}
+                      {renderTargets(comm)}
                     </p>
 
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/50 mt-2">
