@@ -37,7 +37,10 @@ export const useFinance = () => {
             .eq('center_id', centerId)
             .order('created_at', { ascending: false })
             .limit(5000),
-          supabase.from('finance_scholarships').select('*').eq('center_id', centerId),
+          supabase
+            .from('finance_scholarships')
+            .select('*, students(names, first_surname, second_surname)')
+            .eq('center_id', centerId),
           supabase
             .from('finance_expenses')
             .select('*, finance_suppliers(name)')

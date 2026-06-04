@@ -20,7 +20,7 @@ import { StudentAccountDetails } from './StudentAccountDetails';
 
 export const StudentAccounts = () => {
   const { state, profile, selectedYear } = useApp();
-  const { invoices, paymentPlans, refresh, loading } = useFinance();
+  const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -71,6 +71,27 @@ export const StudentAccounts = () => {
         const newInvoices = [];
         const currentCenterId = profile?.center_id || student.center_id;
 
+        // Buscar si el alumno tiene beca
+        const studentScholarship = scholarships.find((s) => s.student_id === student.id);
+
+        // Calcular Inscripción con beca si corresponde
+        let enrollmentOriginal = Number(plan.enrollment_fee);
+        let enrollmentFinal = enrollmentOriginal;
+        let enrollmentDiscount = 0;
+
+        if (
+          studentScholarship &&
+          (studentScholarship.applies_to === 'both' ||
+            studentScholarship.applies_to === 'enrollment')
+        ) {
+          if (studentScholarship.type === 'percentage') {
+            enrollmentDiscount = enrollmentOriginal * (Number(studentScholarship.value) / 100);
+          } else {
+            enrollmentDiscount = Number(studentScholarship.value);
+          }
+          enrollmentFinal = Math.max(0, enrollmentOriginal - enrollmentDiscount);
+        }
+
         // Inscripción
         newInvoices.push({
           center_id: currentCenterId,
@@ -78,8 +99,9 @@ export const StudentAccounts = () => {
           course_id: student.course_id,
           period: currentYear,
           concept: 'Inscripción',
-          amount_original: plan.enrollment_fee,
-          amount_final: plan.enrollment_fee,
+          amount_original: enrollmentOriginal,
+          amount_final: enrollmentFinal,
+          discount_applied: enrollmentDiscount,
           due_date: new Date().toISOString().split('T')[0],
           status: 'pending'
         });
@@ -107,6 +129,24 @@ export const StudentAccounts = () => {
           const yOffset = new Date().getFullYear() + (startMonthIdx + i >= 12 ? 1 : 0);
           const dueDate = new Date(yOffset, mIdx, paymentEndDay);
 
+          // Calcular Mensualidad con beca si corresponde
+          let monthlyOriginal = Number(plan.monthly_fee);
+          let monthlyFinal = monthlyOriginal;
+          let monthlyDiscount = 0;
+
+          if (
+            studentScholarship &&
+            (studentScholarship.applies_to === 'both' ||
+              studentScholarship.applies_to === 'monthly')
+          ) {
+            if (studentScholarship.type === 'percentage') {
+              monthlyDiscount = monthlyOriginal * (Number(studentScholarship.value) / 100);
+            } else {
+              monthlyDiscount = Number(studentScholarship.value);
+            }
+            monthlyFinal = Math.max(0, monthlyOriginal - monthlyDiscount);
+          }
+
           newInvoices.push({
             center_id: currentCenterId,
             student_id: student.id,
@@ -115,8 +155,9 @@ export const StudentAccounts = () => {
             concept: `Cuota ${(i + 1).toString().padStart(2, '0')}`,
             month_number: i + 1,
             description: monthNames[mIdx],
-            amount_original: Number(plan.monthly_fee),
-            amount_final: Number(plan.monthly_fee),
+            amount_original: monthlyOriginal,
+            amount_final: monthlyFinal,
+            discount_applied: monthlyDiscount,
             due_date: dueDate.toISOString().split('T')[0],
             status: 'pending'
           });
