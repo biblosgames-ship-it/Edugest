@@ -33,7 +33,7 @@ export const useFinance = () => {
             .limit(5000),
           supabase
             .from('finance_transactions')
-            .select('*')
+            .select('*, students(names, first_surname)')
             .eq('center_id', centerId)
             .order('created_at', { ascending: false })
             .limit(5000),
@@ -424,6 +424,20 @@ export const useFinance = () => {
 
         if (tErr) throw tErr;
 
+        let studentName = 'Venta de Productos';
+        try {
+          const { data: std } = await supabase
+            .from('students')
+            .select('names, first_surname')
+            .eq('id', invoiceData.student_id)
+            .single();
+          if (std) {
+            studentName = `${std.names} ${std.first_surname || ''}`.trim();
+          }
+        } catch (err) {
+          console.error('Error fetching student name for ledger:', err);
+        }
+
         try {
           const totalCartAmount = invoiceData.items.reduce((acc, i) => acc + i.amount, 0);
           const totalConcepts = invoiceData.items
@@ -438,7 +452,7 @@ export const useFinance = () => {
             id: `PAY-${Date.now()}`,
             date: new Date().toISOString().split('T')[0],
             account: accountName,
-            item: `Venta de Productos`,
+            item: studentName,
             desc: `Cobro de: ${totalConcepts} [MÉTODO: ${invoiceData.payment_method.toUpperCase()}]`,
             type: 'income',
             amount: totalCartAmount,

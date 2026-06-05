@@ -440,11 +440,11 @@ export const FinanceDashboard = () => {
                   <td className="py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-black text-[10px]">
-                        {t.students?.name?.[0]}
-                        {t.students?.last_name?.[0]}
+                        {t.students?.names?.[0] || 'A'}
+                        {t.students?.first_surname?.[0] || ''}
                       </div>
                       <span className="text-xs font-black text-slate-700">
-                        {t.students?.name} {t.students?.last_name}
+                        {t.students?.names ? `${t.students.names} ${t.students.first_surname || ''}` : 'Alumno'}
                       </span>
                     </div>
                   </td>
