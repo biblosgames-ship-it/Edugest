@@ -15,6 +15,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
+import { PaymentModal } from './PaymentModal';
 
 export const InventoryManager = () => {
   const { state } = useApp();
@@ -62,6 +63,8 @@ export const InventoryManager = () => {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [receiptStudent, setReceiptStudent] = useState<any>(null);
+  const [receiptInvoices, setReceiptInvoices] = useState<any[] | null>(null);
 
   // Estadísticas del Inventario
   const stats = useMemo(() => {
@@ -215,7 +218,7 @@ export const InventoryManager = () => {
         quantity: item.quantity
       }));
 
-      await createProductInvoice({
+      const invs = await createProductInvoice({
         student_id: saleForm.student_id,
         items,
         ...(saleForm.immediate_pay
@@ -227,6 +230,15 @@ export const InventoryManager = () => {
           : {})
       });
       setShowSaleModal(false);
+      setCart([]);
+      
+      if (saleForm.immediate_pay && invs && invs.length > 0) {
+        const studentObj = state.students.find((s) => s.id === saleForm.student_id);
+        if (studentObj) {
+          setReceiptStudent(studentObj);
+          setReceiptInvoices(invs);
+        }
+      }
     } catch (err) {
       // Error se maneja en el hook
     }
@@ -864,6 +876,26 @@ export const InventoryManager = () => {
             </form>
           </div>
         </div>
+      )}
+      {receiptStudent && receiptInvoices && (
+        <PaymentModal
+          student={receiptStudent}
+          courseName={
+            receiptStudent.courses?.name ||
+            receiptStudent.course_name ||
+            state.courses?.find((c) => c.id === receiptStudent.course_id)?.name ||
+            'Grado'
+          }
+          invoice={receiptInvoices}
+          onClose={() => {
+            setReceiptStudent(null);
+            setReceiptInvoices(null);
+          }}
+          onSuccess={() => {
+            setReceiptStudent(null);
+            setReceiptInvoices(null);
+          }}
+        />
       )}
     </div>
   );

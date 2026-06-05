@@ -103,6 +103,66 @@ export const PaymentModal = ({
     fetchTutor();
   }, [student.id, student.authorized_person]);
 
+  // DETECTAR FACTURAS YA PAGADAS PARA IR DIRECTO AL RECIBO
+  React.useEffect(() => {
+    const loadReceiptForPaidInvoices = async () => {
+      const allPaid = invoicesList.length > 0 && invoicesList.every((inv) => inv.status === 'paid');
+      if (!allPaid) return;
+
+      try {
+        const invoiceIds = invoicesList.map((inv) => inv.id);
+        const { data: txs, error } = await supabase
+          .from('finance_transactions')
+          .select('*')
+          .in('invoice_id', invoiceIds);
+
+        if (error) throw error;
+
+        if (txs && txs.length > 0) {
+          const totalPaid = txs.reduce((acc, t) => acc + Number(t.amount_paid), 0);
+          const methods = Array.from(new Set(txs.map((t) => t.payment_method))).join(', ');
+          const refs = txs.map((t) => t.reference_number).filter(Boolean).join(', ');
+          const receiptNums = txs.map((t) => t.receipt_number).filter(Boolean);
+
+          setReceiptData({
+            student,
+            courseName,
+            concepts: totalConcepts,
+            amount: totalPaid,
+            method: methods || 'cash',
+            date: new Date(txs[0].created_at).toLocaleDateString(),
+            ref: refs,
+            receiptNumbers: receiptNums.length > 0 ? receiptNums : [1]
+          });
+          setFormData({
+            amount_paid: totalPaid,
+            payment_method: txs[0].payment_method || 'cash',
+            reference_number: txs[0].reference_number || '',
+            notes: txs[0].notes || ''
+          });
+          setIsSuccess(true);
+        } else {
+          // Fallback en caso de latencia de guardado
+          setReceiptData({
+            student,
+            courseName,
+            concepts: totalConcepts,
+            amount: totalAmount,
+            method: 'cash',
+            date: new Date().toLocaleDateString(),
+            ref: '',
+            receiptNumbers: [1]
+          });
+          setIsSuccess(true);
+        }
+      } catch (err) {
+        console.error('Error loading receipt for paid invoices:', err);
+      }
+    };
+
+    loadReceiptForPaidInvoices();
+  }, [invoice, student.id, courseName, totalConcepts, totalAmount]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.amount_paid <= 0) return toast.error('El monto debe ser mayor a 0');
@@ -245,11 +305,49 @@ export const PaymentModal = ({
                   {courseName}
                 </div>
               </div>
-              <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
-                  Concepto de Pago
+              {/* Desglose de Productos / Conceptos */}
+              <div className="border-t border-b border-slate-100 py-4 my-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-3 tracking-widest">
+                  Detalle del Recibo
                 </p>
-                <p className="text-sm font-bold text-slate-700 leading-relaxed">{totalConcepts}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px] text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[8px] font-black uppercase tracking-wider text-slate-400">
+                        <th className="pb-2 font-black">Detalle</th>
+                        <th className="pb-2 text-center font-black">Cant.</th>
+                        <th className="pb-2 text-right font-black">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoicesList.map((inv, idx) => {
+                        const conceptName = inv.concept.startsWith('Venta: ')
+                          ? inv.concept.replace('Venta: ', '')
+                          : inv.concept;
+                        const qty = inv.quantity || 1;
+                        const price = Number(inv.amount_final) / qty;
+                        return (
+                          <tr key={inv.id || idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 text-slate-700 font-bold pr-2 leading-tight">
+                              {conceptName}
+                              {qty > 1 && (
+                                <span className="text-[9px] font-normal text-slate-400 block mt-0.5">
+                                  Precio unitario: RD$ {price.toLocaleString()}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 text-center text-slate-500 font-black">
+                              {qty}
+                            </td>
+                            <td className="py-2.5 text-right text-slate-900 font-black">
+                              RD$ {Number(inv.amount_final).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               <div>
                 <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
