@@ -343,11 +343,36 @@ export const dataService = {
     }
 
     if (role === 'teacher') {
+      let teacherCourseIds: string[] = [];
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('teacher_id')
+          .eq('id', userId)
+          .single();
+
+        const tId = prof?.teacher_id || userId;
+
+        const [assigns, scheds] = await Promise.all([
+          supabase.from('assignments').select('course_id').eq('teacher_id', tId),
+          supabase.from('schedule_entries').select('course_id').eq('teacher_id', tId)
+        ]);
+
+        const ids = new Set<string>();
+        (assigns.data || []).forEach((a) => { if (a.course_id) ids.add(a.course_id); });
+        (scheds.data || []).forEach((s) => { if (s.course_id) ids.add(s.course_id); });
+        teacherCourseIds = Array.from(ids);
+      } catch (err) {
+        console.error('Error fetching teacher courses for communications:', err);
+      }
+
       return rawComms.filter(
         (c: any) =>
+          c.sender_id === userId ||
           (c.target_roles || []).includes('Docentes') ||
           (c.target_teachers || []).includes(userId) ||
-          (c.target_roles || []).includes('Toda la comunidad')
+          (c.target_roles || []).includes('Toda la comunidad') ||
+          (c.target_courses || []).some((courseId: string) => teacherCourseIds.includes(courseId))
       );
     }
 
