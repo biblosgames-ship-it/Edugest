@@ -762,145 +762,234 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     const mainTableStartY = boxY + boxHeight + 4;
 
-    const comps = isStudentSecundario
-      ? [
-          { id: 'c1', short: 'C1', name: 'Ética y Ciudadana' },
-          { id: 'c2', short: 'C2', name: 'Comunicativa' },
-          { id: 'c3', short: 'C3', name: 'Pensamiento Crítico' },
-          { id: 'c4', short: 'C4', name: 'Científica y Tec.' }
-        ]
-      : [
-          { id: 'c1', short: 'C1', name: 'Comunicativa' },
-          { id: 'c2', short: 'C2', name: 'Pensamiento Lógico' },
-          { id: 'c3', short: 'C3', name: 'Ética y Ciudadana' }
-        ];
-
-    // TABLA PRINCIPAL (Dynamic Columns)
-    const mainHead: any[] = [
-      [
-        {
-          content: 'DESEMPEÑO INDIVIDUAL DEL/LA ESTUDIANTE',
-          colSpan: 1 + comps.length * 4 + comps.length + (isStudentSecundario ? 5 : 2),
-          styles: {
-            fillColor: [0, 112, 192],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            fontSize: 10
-          }
-        }
-      ],
-      [
-        {
-          content: 'Competencias\nFundamentales',
-          rowSpan: 2,
-          styles: { fillColor: [173, 216, 230], cellWidth: 35, fontSize: 7 }
-        }
-      ]
-    ];
-
-    comps.forEach((c) => {
-      mainHead[1].push({
-        content: c.name,
-        colSpan: 4,
-        styles: { fillColor: [173, 216, 230], fontSize: 7 }
-      });
-    });
-
-    mainHead[1].push({
-      content: 'Calificación final\npor Competencia',
-      colSpan: comps.length,
-      styles: { fillColor: [173, 216, 230], fontSize: 7 }
-    });
-
     if (isStudentSecundario) {
-      mainHead[1].push(
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } }
-      );
-    } else {
-      mainHead[1].push(
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
-        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } }
-      );
-    }
-
-    const headerRow3: any[] = [];
-    comps.forEach(() => {
-      headerRow3.push(
-        { content: 'P1', styles: { fillColor: [240, 240, 240] } },
-        { content: 'P2', styles: { fillColor: [240, 240, 240] } },
-        { content: 'P3', styles: { fillColor: [240, 240, 240] } },
-        { content: 'P4', styles: { fillColor: [240, 240, 240] } }
-      );
-    });
-    comps.forEach((c) => {
-      headerRow3.push({
-        content: c.short,
-        styles: { fillColor: [240, 240, 240] }
-      });
-    });
-
-    mainHead.push(headerRow3);
-
-    const body: any[] = [];
-    let sumC1 = 0,
-      sumC2 = 0,
-      sumC3 = 0,
-      sumC4 = 0,
-      sumFinal = 0;
-    let count = 0;
-
-    allCourseSubjects.forEach((sub) => {
-      const sGrades = studentSummaryGrades[sub.id] || {};
-      const row: any[] = [{ content: sub.name.toUpperCase(), styles: { halign: 'left' } }];
-
-      comps.forEach((c) => {
-        config.periods.forEach((p) => {
-          row.push(getBestGradeForPDF(sGrades, c.id, p) || '');
-        });
-      });
-
-      const getCompFinalVal = (cId: string) => {
-        let sum = 0;
-        config.periods.forEach((p, idx) => {
-          if (summaryPeriodDivisor > idx) {
-            sum += getBestGradeForPDF(sGrades, cId, p);
+      // --- LOGICA SECUNDARIA (34 Columnas) ---
+      const mainHeadSecondary: any[] = [
+        [
+          {
+            content: 'DESEMPEÑO INDIVIDUAL DEL/LA ESTUDIANTE',
+            colSpan: 34,
+            styles: {
+              fillColor: [0, 112, 192],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              fontSize: 10
+            }
           }
-        });
-        return Math.round(sum / summaryPeriodDivisor);
-      };
+        ],
+        [
+          {
+            content: 'Competencias\nFundamentales',
+            rowSpan: 2,
+            styles: { fillColor: [173, 216, 230], cellWidth: 32, fontSize: 6.5, halign: 'center', valign: 'middle' }
+          },
+          {
+            content: 'Comunicativa',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6.5, halign: 'center' }
+          },
+          {
+            content: 'Pensamiento Lógico, Creativo y Crítico\nResolución de Problemas',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Científica y Tecnológicas\nAmbiental y de la Salud',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Desarrollo Personal y Espiritua\nÉtica y Ciudadania',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Promedio Grupo De\nCompetencias\nEspecíficas',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: '', // Calificación final de Área (Vertical text in didDrawCell)
+            rowSpan: 2,
+            styles: { fillColor: [173, 216, 230], cellWidth: 6.5 }
+          },
+          {
+            content: 'Calificación Completivo',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Calificación Extraordinaria',
+            colSpan: 4,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Evaluación\nEspecial',
+            colSpan: 2,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          },
+          {
+            content: 'Situación\nFinal en la\nAsignatura',
+            colSpan: 2,
+            styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
+          }
+        ],
+        [
+          // Sub-columnas C1-C4 (16 col)
+          { content: 'P1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P4', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P4', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P4', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P4', styles: { fillColor: [240, 240, 240] } },
+          // PC1-PC4 (4 col)
+          { content: 'PC1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'PC2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'PC3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'PC4', styles: { fillColor: [240, 240, 240] } },
+          // Completivo (4 col) - minCellHeight to ensure height for rotated text
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          // Extraordinaria (4 col)
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          // Especial (2 col)
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          // Situación Final (2 col)
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } },
+          { content: '', styles: { fillColor: [240, 240, 240], minCellHeight: 18 } }
+        ]
+      ];
 
-      const cfValues = comps.map((c) => getCompFinalVal(c.id));
-      cfValues.forEach((val) => {
-        row.push(val || '');
-      });
+      const bodySecondary: any[] = [];
+      let sumC1 = 0,
+        sumC2 = 0,
+        sumC3 = 0,
+        sumC4 = 0,
+        sumFinal = 0;
+      let count = 0;
 
-      const finalArea =
-        cfValues.length > 0 ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length) : 0;
-      row.push(finalArea || '');
+      allCourseSubjects.forEach((sub) => {
+        const sGrades = studentSummaryGrades[sub.id] || {};
+        const row: any[] = [{ content: sub.name.toUpperCase(), styles: { halign: 'left' } }];
 
-      if (isStudentSecundario) {
+        // Competencia 1 (Comunicativa) -> database c2
+        let p1c1 = getBestGradeForPDF(sGrades, 'c2', 'P1');
+        row.push(p1c1 || '');
+        let p2c1 = getBestGradeForPDF(sGrades, 'c2', 'P2');
+        row.push(p2c1 || '');
+        let p3c1 = getBestGradeForPDF(sGrades, 'c2', 'P3');
+        row.push(p3c1 || '');
+        let p4c1 = getBestGradeForPDF(sGrades, 'c2', 'P4');
+        row.push(p4c1 || '');
+
+        // Competencia 2 (Pensamiento Lógico...) -> database c3
+        let p1c2 = getBestGradeForPDF(sGrades, 'c3', 'P1');
+        row.push(p1c2 || '');
+        let p2c2 = getBestGradeForPDF(sGrades, 'c3', 'P2');
+        row.push(p2c2 || '');
+        let p3c2 = getBestGradeForPDF(sGrades, 'c3', 'P3');
+        row.push(p3c2 || '');
+        let p4c2 = getBestGradeForPDF(sGrades, 'c3', 'P4');
+        row.push(p4c2 || '');
+
+        // Competencia 3 (Científica...) -> database c4
+        let p1c3 = getBestGradeForPDF(sGrades, 'c4', 'P1');
+        row.push(p1c3 || '');
+        let p2c3 = getBestGradeForPDF(sGrades, 'c4', 'P2');
+        row.push(p2c3 || '');
+        let p3c3 = getBestGradeForPDF(sGrades, 'c4', 'P3');
+        row.push(p3c3 || '');
+        let p4c3 = getBestGradeForPDF(sGrades, 'c4', 'P4');
+        row.push(p4c3 || '');
+
+        // Competencia 4 (Desarrollo Personal...) -> database c1
+        let p1c4 = getBestGradeForPDF(sGrades, 'c1', 'P1');
+        row.push(p1c4 || '');
+        let p2c4 = getBestGradeForPDF(sGrades, 'c1', 'P2');
+        row.push(p2c4 || '');
+        let p3c4 = getBestGradeForPDF(sGrades, 'c1', 'P3');
+        row.push(p3c4 || '');
+        let p4c4 = getBestGradeForPDF(sGrades, 'c1', 'P4');
+        row.push(p4c4 || '');
+
+        const getCompFinalVal = (p1: number, p2: number, p3: number, p4: number) => {
+          let s = 0;
+          if (summaryPeriodDivisor >= 1) s += p1;
+          if (summaryPeriodDivisor >= 2) s += p2;
+          if (summaryPeriodDivisor >= 3) s += p3;
+          if (summaryPeriodDivisor >= 4) s += p4;
+          return Math.round(s / summaryPeriodDivisor);
+        };
+
+        let fC1 = getCompFinalVal(p1c1, p2c1, p3c1, p4c1);
+        let fC2 = getCompFinalVal(p1c2, p2c2, p3c2, p4c2);
+        let fC3 = getCompFinalVal(p1c3, p2c3, p3c3, p4c3);
+        let fC4 = getCompFinalVal(p1c4, p2c4, p3c4, p4c4);
+
+        // Agregar promedios PC1-PC4
+        row.push(fC1 || '');
+        row.push(fC2 || '');
+        row.push(fC3 || '');
+        row.push(fC4 || '');
+
+        // Calificación final de Área (promedio de las 4 competencias)
+        let areaFinal = Math.round((fC1 + fC2 + fC3 + fC4) / 4);
+        row.push(areaFinal || '');
+
+        // Recuperación de Secundaria
         const cp = parseInt(sGrades['comp']) || 0;
         const ex = parseInt(sGrades['extra']) || 0;
         const e1 = parseInt(sGrades['esp1']) || 0;
         const e2 = parseInt(sGrades['esp2']) || 0;
 
-        row.push(cp || '');
-        row.push(ex || '');
-        row.push(e1 || '');
-        row.push(e2 || '');
+        // Completivo (50% CF, CEC, 50% CEC, CCF)
+        let cp50 = areaFinal < 70 ? Math.round(areaFinal * 0.5) : '';
+        let cpExam = cp || '';
+        let cpExam50 = cp > 0 ? Math.round(cp * 0.5) : '';
+        let ccFinal = cp > 0 ? Math.round(areaFinal * 0.5 + cp * 0.5) : '';
 
-        let defFinal = finalArea;
-        if (finalArea < 70) {
+        row.push(cp50);
+        row.push(cpExam);
+        row.push(cpExam50);
+        row.push(ccFinal || '');
+
+        // Extraordinario (30% CF, CEEX, 70% CEEX, CEXF)
+        let ex30 = areaFinal < 70 ? Math.round(areaFinal * 0.3) : '';
+        let exExam = ex || '';
+        let exExam70 = ex > 0 ? Math.round(ex * 0.7) : '';
+        let cexFinal = ex > 0 ? Math.round(areaFinal * 0.3 + ex * 0.7) : '';
+
+        row.push(ex30);
+        row.push(exExam);
+        row.push(exExam70);
+        row.push(cexFinal || '');
+
+        // Especial (C.F, C.E)
+        let espExam = e1 || e2 || '';
+        let defFinal = areaFinal;
+        if (areaFinal < 70) {
           if (cp > 0) {
-            const cpFinal = Math.round(finalArea * 0.5 + cp * 0.5);
+            const cpFinal = Math.round(areaFinal * 0.5 + cp * 0.5);
             if (cpFinal >= 70) defFinal = cpFinal;
           }
           if (defFinal < 70 && ex > 0) {
-            const exFinal = Math.round(finalArea * 0.3 + ex * 0.7);
+            const exFinal = Math.round(areaFinal * 0.3 + ex * 0.7);
             if (exFinal >= 70) defFinal = exFinal;
           }
           if (defFinal < 70 && e1 >= 70) {
@@ -910,99 +999,258 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             defFinal = e2;
           }
         }
-        row.push(defFinal || '');
+
+        let espFinal = (e1 > 0 || e2 > 0) ? defFinal : '';
+        row.push(espFinal);
+        row.push(espExam);
+
+        // Situación Final (A / R)
+        let sitA = defFinal >= 70 ? defFinal : '';
+        let sitR = (defFinal > 0 && defFinal < 70) ? defFinal : '';
+        row.push(sitA);
+        row.push(sitR);
+
+        bodySecondary.push(row);
 
         if (defFinal > 0) {
+          sumC1 += fC1;
+          sumC2 += fC2;
+          sumC3 += fC3;
+          sumC4 += fC4;
           sumFinal += defFinal;
           count++;
         }
+      });
+
+      // Fila de Indice
+      const idxRowSecondary: any[] = [{ content: 'Indice', colSpan: 17, styles: { halign: 'right', fontStyle: 'bold' } }];
+      if (count > 0) {
+        idxRowSecondary.push((sumC1 / count / 25).toFixed(2));
+        idxRowSecondary.push((sumC2 / count / 25).toFixed(2));
+        idxRowSecondary.push((sumC3 / count / 25).toFixed(2));
+        idxRowSecondary.push((sumC4 / count / 25).toFixed(2));
+        idxRowSecondary.push((sumFinal / count / 25).toFixed(2));
+        for (let i = 0; i < 12; i++) {
+          idxRowSecondary.push('');
+        }
       } else {
+        idxRowSecondary.push('0.00', '0.00', '0.00', '0.00', '0.00');
+        for (let i = 0; i < 12; i++) {
+          idxRowSecondary.push('');
+        }
+      }
+      bodySecondary.push(idxRowSecondary);
+
+      autoTable(doc, {
+        startY: mainTableStartY,
+        head: mainHeadSecondary,
+        body: bodySecondary,
+        theme: 'grid',
+        styles: {
+          fontSize: 5.5,
+          halign: 'center',
+          valign: 'middle',
+          cellPadding: 0.5,
+          textColor: [0, 0, 0],
+          lineWidth: 0.15
+        },
+        headStyles: { textColor: [0, 0, 0], lineWidth: 0.15, fontSize: 6.5 },
+        columnStyles: {
+          0: { halign: 'left', cellWidth: 32 }
+        },
+        didDrawCell: (data) => {
+          if (data.section === 'head') {
+            if (data.row.index === 1 && data.column.index === 21) {
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(5.5);
+              doc.setFont('helvetica', 'bold');
+              const x = data.cell.x + data.cell.width / 2 + 1;
+              const y = data.cell.y + data.cell.height - 2;
+              (doc as any).text('Calificación final de Área', x, y, { angle: 90 });
+            } else if (data.row.index === 2) {
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(5.5);
+              doc.setFont('helvetica', 'bold');
+              let text = '';
+              const x = data.cell.x + data.cell.width / 2 + 1;
+              const y = data.cell.y + data.cell.height - 2;
+
+              if (data.column.index === 22) text = '50% C.F.';
+              else if (data.column.index === 23) text = 'C.E.C';
+              else if (data.column.index === 24) text = '50% C.E.C';
+              else if (data.column.index === 25) text = 'C.C.F';
+              else if (data.column.index === 26) text = '30% C.F.';
+              else if (data.column.index === 27) text = 'C.E.EX';
+              else if (data.column.index === 28) text = '70% C.E.EX';
+              else if (data.column.index === 29) text = 'C.EX.F';
+              else if (data.column.index === 30) text = 'C.F';
+              else if (data.column.index === 31) text = 'C.E';
+              else if (data.column.index === 32) text = 'A';
+              else if (data.column.index === 33) text = 'R';
+
+              if (text) {
+                (doc as any).text(text, x, y, { angle: 90 });
+              }
+            }
+          }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body') {
+            if (data.column.index >= 17) {
+              data.cell.styles.fillColor = [240, 240, 245];
+            }
+          }
+        }
+      });
+    } else {
+      // --- LOGICA PRIMARIA (18 Columnas - Original) ---
+      const compsPrimary = [
+        { id: 'c1', short: 'C1', name: 'Comunicativa' },
+        { id: 'c2', short: 'C2', name: 'Pensamiento Lógico' },
+        { id: 'c3', short: 'C3', name: 'Ética y Ciudadana' }
+      ];
+
+      const mainHeadPrimary: any[] = [
+        [
+          {
+            content: 'DESEMPEÑO INDIVIDUAL DEL/LA ESTUDIANTE',
+            colSpan: 18,
+            styles: {
+              fillColor: [0, 112, 192],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              fontSize: 10
+            }
+          }
+        ],
+        [
+          {
+            content: 'Competencias\nFundamentales',
+            rowSpan: 2,
+            styles: { fillColor: [173, 216, 230], cellWidth: 35, fontSize: 7 }
+          }
+        ]
+      ];
+
+      compsPrimary.forEach((c) => {
+        mainHeadPrimary[1].push({
+          content: c.name,
+          colSpan: 4,
+          styles: { fillColor: [173, 216, 230], fontSize: 7 }
+        });
+      });
+
+      mainHeadPrimary[1].push({
+        content: 'Calificación final\npor Competencia',
+        colSpan: compsPrimary.length,
+        styles: { fillColor: [173, 216, 230], fontSize: 7 }
+      });
+
+      mainHeadPrimary[1].push(
+        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } },
+        { content: '', rowSpan: 2, styles: { fillColor: [173, 216, 230], cellWidth: 8 } }
+      );
+
+      const headerRow3Primary: any[] = [];
+      compsPrimary.forEach(() => {
+        headerRow3Primary.push(
+          { content: 'P1', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P2', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P3', styles: { fillColor: [240, 240, 240] } },
+          { content: 'P4', styles: { fillColor: [240, 240, 240] } }
+        );
+      });
+      compsPrimary.forEach((c) => {
+        headerRow3Primary.push({
+          content: c.short,
+          styles: { fillColor: [240, 240, 240] }
+        });
+      });
+
+      mainHeadPrimary.push(headerRow3Primary);
+
+      const bodyPrimary: any[] = [];
+      let sumC1 = 0,
+        sumC2 = 0,
+        sumC3 = 0,
+        sumFinal = 0;
+      let count = 0;
+
+      allCourseSubjects.forEach((sub) => {
+        const sGrades = studentSummaryGrades[sub.id] || {};
+        const row: any[] = [{ content: sub.name.toUpperCase(), styles: { halign: 'left' } }];
+
+        compsPrimary.forEach((c) => {
+          config.periods.forEach((p) => {
+            row.push(getBestGradeForPDF(sGrades, c.id, p) || '');
+          });
+        });
+
+        const getCompFinalVal = (cId: string) => {
+          let sum = 0;
+          config.periods.forEach((p, idx) => {
+            if (summaryPeriodDivisor > idx) {
+              sum += getBestGradeForPDF(sGrades, cId, p);
+            }
+          });
+          return Math.round(sum / summaryPeriodDivisor);
+        };
+
+        const cfValues = compsPrimary.map((c) => getCompFinalVal(c.id));
+        cfValues.forEach((val) => {
+          row.push(val || '');
+        });
+
+        const finalArea =
+          cfValues.length > 0 ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length) : 0;
+        row.push(finalArea || '');
+
         const recFinal = parseInt(sGrades['final_rec']) || 0;
         row.push(recFinal || '');
 
         const defFinal = Math.max(finalArea, recFinal);
         row.push(defFinal || '');
 
+        bodyPrimary.push(row);
+
         if (defFinal > 0) {
+          sumC1 += cfValues[0] || 0;
+          sumC2 += cfValues[1] || 0;
+          sumC3 += cfValues[2] || 0;
           sumFinal += defFinal;
           count++;
         }
-      }
+      });
 
-      body.push(row);
+      const idxRowPrimary: any[] = [{ content: 'Indice', colSpan: 13, styles: { halign: 'right', fontStyle: 'bold' } }];
+      if (count > 0) {
+        idxRowPrimary.push((sumC1 / count / 25).toFixed(2));
+        idxRowPrimary.push((sumC2 / count / 25).toFixed(2));
+        idxRowPrimary.push((sumC3 / count / 25).toFixed(2));
+        idxRowPrimary.push((sumFinal / count / 25).toFixed(2));
+        idxRowPrimary.push('');
+      } else {
+        idxRowPrimary.push('0.00', '0.00', '0.00', '0.00', '');
+      }
+      bodyPrimary.push(idxRowPrimary);
 
-      if (finalArea > 0) {
-        sumC1 += cfValues[0] || 0;
-        sumC2 += cfValues[1] || 0;
-        sumC3 += cfValues[2] || 0;
-        if (isStudentSecundario) {
-          sumC4 += cfValues[3] || 0;
-        }
-      }
-    });
-
-    const idxRow: any[] = [{ content: '', colSpan: 1 + comps.length * 4, styles: { border: 0 } }];
-    if (count > 0) {
-      idxRow.push((sumC1 / count / 25).toFixed(2));
-      idxRow.push((sumC2 / count / 25).toFixed(2));
-      idxRow.push((sumC3 / count / 25).toFixed(2));
-      if (isStudentSecundario) {
-        idxRow.push((sumC4 / count / 25).toFixed(2));
-      }
-      idxRow.push((sumFinal / count / 25).toFixed(2));
-      const remainingCols = isStudentSecundario ? 5 : 2;
-      for (let i = 0; i < remainingCols - 1; i++) {
-        idxRow.push('');
-      }
-    } else {
-      comps.forEach(() => idxRow.push('0.00'));
-      idxRow.push('0.00');
-      const remainingCols = isStudentSecundario ? 5 : 2;
-      for (let i = 0; i < remainingCols; i++) {
-        idxRow.push('');
-      }
-    }
-    body.push(idxRow);
-
-    autoTable(doc, {
-      startY: mainTableStartY,
-      head: mainHead,
-      body: body,
-      theme: 'grid',
-      styles: {
-        fontSize: 8,
-        halign: 'center',
-        valign: 'middle',
-        cellPadding: 1,
-        textColor: [0, 0, 0],
-        lineWidth: 0.2
-      },
-      headStyles: { textColor: [0, 0, 0], lineWidth: 0.2, fontSize: 8 },
-      didDrawCell: (data) => {
-        if (data.section === 'head' && data.row.index === 1) {
-          const finalAreaIndex = 1 + comps.length * 4 + comps.length;
-          if (isStudentSecundario) {
-            if (data.column.index >= finalAreaIndex && data.column.index < finalAreaIndex + 5) {
-              doc.setTextColor(0, 0, 0);
-              doc.setFontSize(6);
-              const titles = [
-                'Calif. Final',
-                'Completivo',
-                'Extraord.',
-                'Esp. E1/E2',
-                'Definitiva'
-              ];
-              const textIdx = data.column.index - finalAreaIndex;
-              (doc as any).text(
-                titles[textIdx],
-                data.cell.x + 2,
-                data.cell.y + data.cell.height - 2,
-                {
-                  angle: 90
-                }
-              );
-            }
-          } else {
+      autoTable(doc, {
+        startY: mainTableStartY,
+        head: mainHeadPrimary,
+        body: bodyPrimary,
+        theme: 'grid',
+        styles: {
+          fontSize: 8,
+          halign: 'center',
+          valign: 'middle',
+          cellPadding: 1,
+          textColor: [0, 0, 0],
+          lineWidth: 0.2
+        },
+        headStyles: { textColor: [0, 0, 0], lineWidth: 0.2, fontSize: 8 },
+        didDrawCell: (data) => {
+          if (data.section === 'head' && data.row.index === 1) {
+            const finalAreaIndex = 1 + compsPrimary.length * 4 + compsPrimary.length;
             if (data.column.index === finalAreaIndex || data.column.index === finalAreaIndex + 1) {
               doc.setTextColor(0, 0, 0);
               doc.setFontSize(6);
@@ -1018,15 +1266,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               );
             }
           }
+        },
+        didParseCell: (data) => {
+          const finalAreaIndex = 1 + compsPrimary.length * 4 + compsPrimary.length;
+          if (data.section === 'body' && data.column.index >= finalAreaIndex) {
+            data.cell.styles.fillColor = [240, 240, 245];
+          }
         }
-      },
-      didParseCell: (data) => {
-        const finalAreaIndex = 1 + comps.length * 4 + comps.length;
-        if (data.section === 'body' && data.column.index >= finalAreaIndex) {
-          data.cell.styles.fillColor = [240, 240, 245];
-        }
-      }
-    });
+      });
+    }
 
     let finalY = (doc as any).lastAutoTable.finalY + 5;
 
@@ -1065,56 +1313,80 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       }
     });
 
-    doc.setFontSize(6);
-    doc.text(
-      `Leyenda: (P1) Periodo 1  (P2) Periodo 2  (P3) Periodo 3  (P4) Periodo 4  ` +
-        (isStudentSecundario
-          ? `(C1) Ética y Ciudadana (C2) Comunicativa (C3) Pensamiento Crítico (C4) Científica y Tecnológica`
-          : `(C1) Comunicativa  (C2) Pensamiento Lógico  (C3) Ética y Ciudadana`),
-      14,
-      (doc as any).lastAutoTable.finalY + 4
-    );
+    // 2. Panel Central (Leyenda para Secundaria / Escala Numérica para Primaria)
+    if (isStudentSecundario) {
+      autoTable(doc, {
+        startY: finalY,
+        margin: { left: 100, right: 90 },
+        body: [
+          [
+            {
+              content: 'LEYENDA',
+              colSpan: 2,
+              styles: { fillColor: [173, 216, 230], fontStyle: 'bold', halign: 'center' }
+            }
+          ],
+          [{ content: '(P1) / (P2) / (P3) / (P4)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Periodo 1 / Periodo 2 / Periodo 3 / Periodo 4', styles: { fontSize: 5.5 } }],
+          [{ content: '(P.C.)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Promedio grupo de competencias específicas', styles: { fontSize: 5.5 } }],
+          [{ content: '(C.F.)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Calificación Final', styles: { fontSize: 5.5 } }],
+          [{ content: '(C.E.C.) / (C.C.F.)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Calif. Eval. Competencia / Calif. Completiva Final', styles: { fontSize: 5.5 } }],
+          [{ content: '(C.E.EX) / (C.EX.F)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Calif. Eval. Extraordinaria / Calif. Extraordinaria Final', styles: { fontSize: 5.5 } }],
+          [{ content: '(C.E.) / (A) / (R)', styles: { fontStyle: 'bold', fontSize: 5.5 } }, { content: 'Calificación Especial / Aprobado / Reprobado', styles: { fontSize: 5.5 } }]
+        ],
+        theme: 'grid',
+        styles: {
+          fontSize: 5.5,
+          halign: 'left',
+          valign: 'middle',
+          cellPadding: 0.5,
+          textColor: [0, 0, 0],
+          lineWidth: 0.2
+        },
+        columnStyles: { 0: { cellWidth: 32, halign: 'center' } }
+      });
+    } else {
+      autoTable(doc, {
+        startY: finalY,
+        margin: { left: 100, right: 90 },
+        body: [
+          [
+            {
+              content: 'Escala\nNumérica',
+              styles: { fillColor: [173, 216, 230], fontStyle: 'bold' }
+            },
+            { content: 'Descripción', styles: { fillColor: [173, 216, 230], fontStyle: 'bold' } }
+          ],
+          [
+            '89-100',
+            'Evidencia de que el estudiante ha alcanzado un desempeño destacado con relación a los aspectos evaluados...'
+          ],
+          [
+            '77-88',
+            'Evidencia de que el estudiante ha logrado los aprendizajes esperados con relación a los aspectos evaluados...'
+          ],
+          [
+            '65-76',
+            'Evidencia de que el estudiante aún se encuentra en proceso con relación a los aspectos evaluados...'
+          ],
+          [
+            'Menos de\n65',
+            'Evidencia que el estudiante ha alcanzado un desempeño insuficiente con relación a los aspectos evaluados...'
+          ]
+        ],
+        theme: 'grid',
+        styles: {
+          fontSize: 7,
+          halign: 'center',
+          valign: 'middle',
+          cellPadding: 1,
+          textColor: [0, 0, 0],
+          lineWidth: 0.2
+        },
+        columnStyles: { 1: { halign: 'left' } }
+      });
+    }
 
-    autoTable(doc, {
-      startY: finalY,
-      margin: { left: 100, right: 90 },
-      body: [
-        [
-          {
-            content: 'Escala\nNumérica',
-            styles: { fillColor: [173, 216, 230], fontStyle: 'bold' }
-          },
-          { content: 'Descripción', styles: { fillColor: [173, 216, 230], fontStyle: 'bold' } }
-        ],
-        [
-          '89-100',
-          'Evidencia de que el estudiante ha alcanzado un desempeño destacado con relación a los aspectos evaluados...'
-        ],
-        [
-          '77-88',
-          'Evidencia de que el estudiante ha logrado los aprendizajes esperados con relación a los aspectos evaluados...'
-        ],
-        [
-          '65-76',
-          'Evidencia de que el estudiante aún se encuentra en proceso con relación a los aspectos evaluados...'
-        ],
-        [
-          'Menos de\n65',
-          'Evidencia que el estudiante ha alcanzado un desempeño insuficiente con relación a los aspectos evaluados...'
-        ]
-      ],
-      theme: 'grid',
-      styles: {
-        fontSize: 7,
-        halign: 'center',
-        valign: 'middle',
-        cellPadding: 1,
-        textColor: [0, 0, 0],
-        lineWidth: 0.2
-      },
-      columnStyles: { 1: { halign: 'left' } }
-    });
-
+    // 3. Situación y Observaciones
     doc.setDrawColor(0);
     doc.setLineWidth(0.2);
     doc.rect(195, finalY, 70, 36);

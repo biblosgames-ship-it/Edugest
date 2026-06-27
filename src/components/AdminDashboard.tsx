@@ -75,6 +75,36 @@ export const AdminDashboard = () => {
     }
   };
 
+  const handleRoleChange = async (uid: string, newRole: string) => {
+    try {
+      const targetUser = users.find((u) => u.id === uid);
+      const updates: any = { role: newRole };
+
+      // Si el usuario es nuevo/pendiente (no tiene center_id) y lo estamos asignando a un rol real,
+      // lo vinculamos al centro del administrador actual y lo activamos automáticamente.
+      if (!targetUser?.center_id && newRole !== 'pending' && profile?.center_id) {
+        updates.center_id = profile.center_id;
+        updates.is_active = true;
+      }
+
+      const { error } = await supabase.from('profiles').update(updates).eq('id', uid);
+      if (error) throw error;
+
+      setUsers(
+        users.map((u) =>
+          u.id === uid
+            ? { ...u, ...updates }
+            : u
+        )
+      );
+      alert('Rol actualizado correctamente');
+    } catch (error: any) {
+      console.error('Error updating user role:', error);
+      alert('Error al actualizar el rol: ' + (error.message || error));
+    }
+  };
+
+
   const handleDeleteUser = async (uid: string) => {
     if (uid === user?.id) {
       alert('No puedes eliminar tu propio usuario.');
@@ -269,9 +299,20 @@ export const AdminDashboard = () => {
                       >
                         <td className="py-4 text-text-main font-bold">{u.email}</td>
                         <td className="py-4">
-                          <span className="px-3 py-1 bg-brand-bg rounded-lg text-[9px] font-black text-text-muted uppercase tracking-widest">
-                            {u.role}
-                          </span>
+                          <select
+                            value={u.role || 'pending'}
+                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                            disabled={u.id === user?.id}
+                            className="bg-brand-bg rounded-lg text-[9px] font-black text-text-muted uppercase tracking-widest px-2 py-1 border border-border-main focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="pending">PENDING</option>
+                            <option value="teacher">TEACHER</option>
+                            <option value="coordinator">COORDINATOR</option>
+                            <option value="admin">ADMIN</option>
+                            <option value="student">STUDENT</option>
+                            <option value="parent">PARENT</option>
+                            <option value="creator">CREATOR</option>
+                          </select>
                         </td>
                         <td className="py-4">
                           <div className="flex items-center gap-2">

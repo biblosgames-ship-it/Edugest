@@ -163,6 +163,18 @@ export const updateUserStatus = async (uid: string, isActive: boolean) => {
   }
 };
 
+export const updateUserRole = async (uid: string, role: string) => {
+  try {
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', uid);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    throw error;
+  }
+};
+
+
 export const registerMemberWithCode = async (
   code: string,
   fullName: string,
