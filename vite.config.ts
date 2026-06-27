@@ -17,8 +17,8 @@ export default defineConfig(({mode}) => {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 // Aumenta el límite a 5 MB
         },
         manifest: {
-          name: 'Edugens',
-          short_name: 'Edugens',
+          name: 'Edugest',
+          short_name: 'Edugest',
           description: 'Plataforma Digital de Gestión Escolar para Centros Educativos',
           theme_color: '#3b82f6', // Color azul de Tailwind por defecto
           background_color: '#ffffff',

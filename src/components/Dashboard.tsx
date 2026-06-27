@@ -63,7 +63,6 @@ export const Dashboard = React.memo(() => {
 
   const [dbStats, setDbStats] = useState<any>(null);
   const [loadingDbStats, setLoadingDbStats] = useState(false);
-  const [updatingStats, setUpdatingStats] = useState(false);
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'director' || profile?.role === 'management' || profile?.role === 'management_teacher';
 
@@ -94,213 +93,6 @@ export const Dashboard = React.memo(() => {
 
     fetchDbStats();
   }, [center?.id, selectedYear, selectedPeriod]);
-
-  const handleUpdateStats = async () => {
-    if (!center?.id) return;
-    setUpdatingStats(true);
-    const loadingToast = toast.loading('Calculando estadísticas generales...');
-    try {
-      const grades = await loadAllGrades();
-      if (!grades || grades.length === 0) {
-        toast.dismiss(loadingToast);
-        toast.error('No hay calificaciones registradas para procesar.');
-        setUpdatingStats(false);
-        return;
-      }
-
-      const subjects = state.subjects || [];
-      const students = state.students || [];
-      const courses = state.courses || [];
-      const periods = ['P1', 'P2', 'P3', 'P4'];
-
-      const courseLevelMap: Record<string, string> = {};
-      courses.forEach((c) => {
-        courseLevelMap[c.id] = (c.level || '').toLowerCase();
-      });
-
-      for (const p of periods) {
-        const statsObj: Record<string, any> = {};
-
-        for (const level of ['Todos', 'Primaria', 'Secundaria']) {
-          const filteredStudents =
-            level === 'Todos'
-              ? students
-              : students.filter((s) => {
-                  const lvl = courseLevelMap[s.course_id] || '';
-                  return lvl.includes(level === 'Primaria' ? 'prim' : 'sec');
-                });
-
-          const studentIds = new Set(filteredStudents.map((s) => s.id));
-          const filteredGrades = grades.filter(
-            (g) => g.period === p && studentIds.has(g.student_id)
-          );
-
-          const studentAverages = filteredStudents
-            .map((student) => {
-              const studentGrades = filteredGrades.filter(
-                (g) => g.student_id === student.id && g.grade !== null
-              );
-              if (studentGrades.length === 0) return null;
-              return studentGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / studentGrades.length;
-            })
-            .filter((a) => a !== null) as number[];
-
-          const distribution = [
-            { name: 'Deficiente', value: studentAverages.filter((a) => a < 70).length, color: '#ef4444' },
-            { name: 'Regular', value: studentAverages.filter((a) => a >= 70 && a < 80).length, color: '#f59e0b' },
-            { name: 'Bueno', value: studentAverages.filter((a) => a >= 80 && a < 90).length, color: '#3b82f6' },
-            { name: 'Muy Bueno', value: studentAverages.filter((a) => a >= 90 && a < 95).length, color: '#6366f1' },
-            { name: 'Excelente', value: studentAverages.filter((a) => a >= 95).length, color: '#10b981' }
-          ].filter((d) => d.value > 0);
-
-          const compIds = level === 'Primaria' ? ['c1', 'c2', 'c3'] : ['c1', 'c2', 'c3', 'c4'];
-          const compLabels: any = {
-            c1: 'Comunicativa (C1)',
-            c2: 'Pensamiento Crítico (C2)',
-            c3: 'Ética y Ciudadana (C3)',
-            c4: 'Personal y Social (C4)'
-          };
-
-          const competencies = compIds.map((id) => {
-            const compGrades = filteredGrades.filter((g) => g.competency_id === id && g.grade !== null);
-            const avg =
-              compGrades.length > 0
-                ? Math.round(compGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / compGrades.length)
-                : 0;
-            return { subject: compLabels[id] || id.toUpperCase(), A: avg };
-          });
-
-          const subjectAverages = subjects
-            .map((s) => {
-              const sGrades = filteredGrades.filter((g) => g.subject_id === s.id && g.grade !== null);
-              const avg =
-                sGrades.length > 0
-                  ? Math.round(sGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / sGrades.length)
-                  : 0;
-              return { name: s.name.substring(0, 10), nota: avg, fullName: s.name };
-            })
-            .filter((s) => s.nota > 0)
-            .sort((a, b) => b.nota - a.nota)
-            .slice(0, 8);
-
-          const trend = periods.map((tp) => {
-            const pGrades = grades.filter(
-              (g) => g.period === tp && g.grade !== null && studentIds.has(g.student_id)
-            );
-            const pAvg =
-              pGrades.length > 0
-                ? Math.round(pGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / pGrades.length)
-                : 0;
-
-            const compStats: any = { name: tp, promedio: pAvg };
-            ['c1', 'c2', 'c3', 'c4'].forEach((cId) => {
-              const cGrades = pGrades.filter((g) => g.competency_id === cId);
-              compStats[cId] =
-                cGrades.length > 0
-                  ? Math.round(cGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / cGrades.length)
-                  : 0;
-            });
-            return compStats;
-          });
-
-          const subjectsTrend = subjects
-            .map((s) => {
-              const data: any = { name: s.name.substring(0, 8), fullName: s.name };
-              periods.forEach((tp) => {
-                const sg = grades.filter(
-                  (g) =>
-                    g.subject_id === s.id &&
-                    g.period === tp &&
-                    g.grade !== null &&
-                    studentIds.has(g.student_id)
-                );
-                data[tp] =
-                  sg.length > 0
-                    ? Math.round(sg.reduce((acc, g) => acc + (g.grade || 0), 0) / sg.length)
-                    : 0;
-              });
-              return data;
-            })
-            .filter((s) => periods.some((tp) => s[tp] > 0));
-
-          const academicStudents = filteredStudents.filter((s) => {
-            const course = courses.find((c) => c.id === s.course_id || c.id === s.courseId);
-            return !course?.level?.toLowerCase().includes('inicial');
-          });
-
-          const riskDist = { '0 Pendientes': 0, '1 Pendiente': 0, '2 Pendientes': 0, '3+ Pendientes': 0 };
-          academicStudents.forEach((student) => {
-            const studentGrades = filteredGrades.filter(
-              (g) => g.student_id === student.id && g.grade !== null
-            );
-            const subjectGradesMap: Record<string, number[]> = {};
-            studentGrades.forEach((g) => {
-              if (!subjectGradesMap[g.subject_id]) subjectGradesMap[g.subject_id] = [];
-              subjectGradesMap[g.subject_id].push(g.grade || 0);
-            });
-
-            let failedCount = 0;
-            Object.values(subjectGradesMap).forEach((gradesArr) => {
-              const avg = gradesArr.reduce((a, b) => a + b, 0) / gradesArr.length;
-              if (avg < 70) failedCount++;
-            });
-
-            if (failedCount === 0) riskDist['0 Pendientes']++;
-            else if (failedCount === 1) riskDist['1 Pendiente']++;
-            else if (failedCount === 2) riskDist['2 Pendientes']++;
-            else riskDist['3+ Pendientes']++;
-          });
-
-          const riskChart = Object.entries(riskDist)
-            .map(([name, value]) => ({
-              name,
-              value,
-              fill: name.includes('0')
-                ? '#10b981'
-                : name.includes('1')
-                  ? '#facc15'
-                  : name.includes('2')
-                    ? '#f97316'
-                    : '#ef4444'
-            }))
-            .filter((d) => d.value > 0);
-
-          statsObj[level] = { distribution, competencies, subjectAverages, trend, subjectsTrend, riskChart };
-        }
-
-        const { error } = await supabase
-          .from('school_statistics')
-          .upsert({
-            center_id: center.id,
-            school_year: selectedYear,
-            period: p,
-            stats: statsObj,
-            updated_by: profile?.id
-          }, { onConflict: 'center_id,school_year,period' });
-
-        if (error) throw error;
-      }
-
-      toast.dismiss(loadingToast);
-      toast.success('Estadísticas actualizadas con éxito.');
-
-      const { data } = await supabase
-        .from('school_statistics')
-        .select('*')
-        .eq('center_id', center.id)
-        .eq('school_year', selectedYear)
-        .eq('period', selectedPeriod)
-        .maybeSingle();
-      if (data && data.stats) setDbStats(data.stats);
-
-    } catch (err: any) {
-      console.error('Error updating stats:', err);
-      toast.dismiss(loadingToast);
-      toast.error('Error al actualizar: ' + err.message);
-    } finally {
-      setUpdatingStats(false);
-    }
-  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -684,16 +476,9 @@ export const Dashboard = React.memo(() => {
           <p className="text-xs text-slate-500 max-w-md leading-relaxed">
             Las estadísticas de rendimiento académico para el periodo <strong>{selectedPeriod}</strong> del año <strong>{selectedYear}</strong> no han sido procesadas aún en la base de datos.
           </p>
-          {isAdmin && (
-            <button
-              onClick={handleUpdateStats}
-              disabled={updatingStats}
-              className="mt-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-2xl shadow-xl shadow-indigo-100 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <Activity size={14} className={updatingStats ? 'animate-spin' : ''} />
-              {updatingStats ? 'Calculando estadísticas...' : 'Calcular Estadísticas del Centro'}
-            </button>
-          )}
+          <p className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full mt-2">
+            Por favor, calcule las estadísticas de este periodo en la sección de Reportes Generales.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -1001,7 +786,7 @@ export const Dashboard = React.memo(() => {
       )}
 
       {/* 2.1 SELECTOR DE PERIODO Y NIVEL (FILTRO DE ANALÍTICA) */}
-      <div className="flex flex-col md:flex-row items-center justify-center gap-6 bg-white/50 backdrop-blur-sm p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="flex flex-col lg:flex-row flex-wrap items-center justify-center gap-6 bg-white/50 backdrop-blur-sm p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
         <div className="flex items-center gap-4 border-r border-slate-200 pr-6">
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
             Nivel Académico:
@@ -1021,7 +806,7 @@ export const Dashboard = React.memo(() => {
           ))}
         </div>
 
-        <div className="flex items-center gap-4 border-r border-slate-200 pr-6">
+        <div className="flex items-center gap-4 border-slate-200 pr-6">
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
             Analizar Periodo:
           </span>
@@ -1039,21 +824,6 @@ export const Dashboard = React.memo(() => {
             </button>
           ))}
         </div>
-
-        {isAdmin && (
-          <button
-            onClick={handleUpdateStats}
-            disabled={updatingStats}
-            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 cursor-pointer ${
-              updatingStats
-                ? 'bg-slate-100 text-slate-400 border border-slate-200'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-100'
-            }`}
-          >
-            <Activity size={12} className={updatingStats ? 'animate-spin' : ''} />
-            {updatingStats ? 'Procesando...' : 'Calcular Estadísticas'}
-          </button>
-        )}
       </div>
 
       {/* 3. MONITOREO EN TIEMPO REAL - REDISEÑO ALTO CONTRASTE */}
