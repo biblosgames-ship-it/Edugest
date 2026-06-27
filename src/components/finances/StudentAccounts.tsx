@@ -20,7 +20,11 @@ import { StudentAccountDetails } from './StudentAccountDetails';
 
 export const StudentAccounts = () => {
   const { state, profile, selectedYear } = useApp();
-  const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance();
+  const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance({
+    invoices: true,
+    paymentPlans: true,
+    scholarships: true
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);

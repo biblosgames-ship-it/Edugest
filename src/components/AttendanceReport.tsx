@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 
 export const AttendanceReport = () => {
-  const { state } = useApp();
+  const { state, center } = useApp();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredRecords = state.attendanceRecords.filter((record) => {
-    return record.date >= startDate && record.date <= endDate;
-  });
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      if (!startDate || !endDate || !center?.id) return;
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('center_id', center.id)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: false });
+
+        if (error) throw error;
+        setFilteredRecords(data || []);
+      } catch (e) {
+        console.error('Error loading attendance records:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAttendance();
+  }, [startDate, endDate, center?.id]);
 
   const synthesis = filteredRecords.reduce(
     (acc, record) => {
@@ -36,7 +59,11 @@ export const AttendanceReport = () => {
         />
       </div>
 
-      {startDate && endDate && (
+      {loading && (
+        <p className="text-slate-500 text-sm animate-pulse">Cargando registros...</p>
+      )}
+
+      {!loading && startDate && endDate && (
         <div className="space-y-4">
           <div className="bg-slate-100 p-4 rounded-lg">
             <h4 className="font-semibold">Síntesis</h4>
@@ -54,7 +81,7 @@ export const AttendanceReport = () => {
             </thead>
             <tbody>
               {filteredRecords.map((record) => {
-                const teacher = state.teachers.find((t) => t.id === record.teacherId);
+                const teacher = state.teachers.find((t) => t.id === record.teacher_id || t.id === record.teacherId);
                 return (
                   <tr key={record.id}>
                     <td className="border border-slate-300 px-4 py-2">{teacher?.name}</td>

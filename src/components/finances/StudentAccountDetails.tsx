@@ -39,7 +39,13 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     products,
     createProductInvoice,
     scholarships
-  } = useFinance();
+  } = useFinance({
+    invoices: true,
+    transactions: true,
+    paymentPlans: true,
+    scholarships: true,
+    products: true
+  });
   const [showProductInvoiceModal, setShowProductInvoiceModal] = useState(false);
   const [productInvoiceForm, setProductInvoiceForm] = useState({
     immediate_pay: true,

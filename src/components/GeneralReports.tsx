@@ -23,7 +23,9 @@ import {
   Home,
   ScrollText as ScrollIcon,
   X,
-  Plus
+  Plus,
+  Target,
+  TrendingUp as LineIcon
 } from 'lucide-react';
 import PrimaryCertificate from './PrimaryCertificate';
 import ConductBalanceCertificate from './ConductBalanceCertificate';
@@ -238,7 +240,7 @@ export const GeneralReports = () => {
     ]
   };
 
-  const { state, selectedYear, center } = useApp();
+  const { state, selectedYear, center, loadAllGrades } = useApp();
   const { profile } = useSupabase();
   const [selectedPeriod, setSelectedPeriod] = useState('P1');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState('TODO');
@@ -253,6 +255,41 @@ export const GeneralReports = () => {
   const [showSummaryReport, setShowSummaryReport] = useState(false);
   const [showInstitutionalRecord, setShowInstitutionalRecord] = useState(false);
   const [showCourseRecord, setShowCourseRecord] = useState(false);
+
+  const [dbStats, setDbStats] = useState<any>(null);
+  const [loadingDbStats, setLoadingDbStats] = useState(false);
+  const [isGradesLoading, setIsGradesLoading] = useState(false);
+  const [gradesLoaded, setGradesLoaded] = useState(false);
+
+  // Fetch precalculated stats
+  useEffect(() => {
+    const fetchDbStats = async () => {
+      if (!center?.id || !selectedYear) return;
+      setLoadingDbStats(true);
+      try {
+        const { data, error } = await supabase
+          .from('school_statistics')
+          .select('*')
+          .eq('center_id', center.id)
+          .eq('school_year', selectedYear)
+          .eq('period', selectedPeriod)
+          .maybeSingle();
+
+        if (data && data.stats) {
+          setDbStats(data.stats);
+        } else {
+          setDbStats(null);
+        }
+      } catch (err) {
+        console.error('Error fetching general reports statistics:', err);
+      } finally {
+        setLoadingDbStats(false);
+      }
+    };
+
+    fetchDbStats();
+  }, [center?.id, selectedYear, selectedPeriod]);
+
   const [showMassDigitizing, setShowMassDigitizing] = useState(false);
   const [showPerformanceComparison, setShowPerformanceComparison] = useState(false);
   const [showHonorRoll, setShowHonorRoll] = useState(false);
@@ -270,8 +307,38 @@ export const GeneralReports = () => {
   const [selectedConductStudentId, setSelectedConductStudentId] = useState<string | null>(null);
   const [showMasterDirectory, setShowMasterDirectory] = useState(false);
 
-  const handleBackupData = () => {
+  // Load raw grades on-demand for detailed reports
+  const needsGrades = showInstitutionalRecord || showCourseRecord || showMassDigitizing || showPerformanceComparison || showHonorRoll || showTeacherPerformance;
+
+  useEffect(() => {
+    const loadGradesIfNeeded = async () => {
+      if (needsGrades && !gradesLoaded) {
+        setIsGradesLoading(true);
+        try {
+          await loadAllGrades();
+          setGradesLoaded(true);
+        } catch (e) {
+          console.error("Error loading grades on-demand for reports:", e);
+        } finally {
+          setIsGradesLoading(false);
+        }
+      }
+    };
+    loadGradesIfNeeded();
+  }, [needsGrades, gradesLoaded, loadAllGrades]);
+
+  const handleBackupData = async () => {
     try {
+      let attendanceData: any[] = [];
+      if (center?.id) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('center_id', center.id);
+        if (error) throw error;
+        attendanceData = data || [];
+      }
+
       const backupObj = {
         center: center,
         schoolYear: selectedYear,
@@ -282,7 +349,7 @@ export const GeneralReports = () => {
         students: state.students || [],
         grades: state.grades || [],
         schedules: state.schedule || [],
-        attendance: state.attendanceRecords || [],
+        attendance: attendanceData,
         activities: state.activities || []
       };
       const dataStr =
@@ -540,9 +607,8 @@ export const GeneralReports = () => {
     runGlobalAudit();
   }, [activeCategory, selectedPeriod, selectedYear]);
 
-  // --- ANALÍTICA GLOBAL ---
+  // --- ANALÍTICA GLOBAL (PRECALCULADA CON AUDITORÍA EN VIVO) ---
   const globalAnalytics = React.useMemo(() => {
-    const rawGrades = state.grades || [];
     const rawSubjects = state.subjects || [];
     const rawStudents = state.students || [];
     const rawCourses = state.courses || [];
@@ -561,168 +627,27 @@ export const GeneralReports = () => {
       return true;
     });
 
-    const subjects = rawSubjects.filter((s) => {
-      const lvl = (s.level || '').toLowerCase();
-      if (selectedLevelFilter === 'PRIMARIA') return lvl.includes('prim');
-      if (selectedLevelFilter === 'SECUNDARIA') return lvl.includes('sec');
-      return true;
-    });
+    // 1. Obtener datos precalculados de school_statistics si están disponibles
+    const lvlKey = selectedLevelFilter === 'PRIMARIA' ? 'Primaria' : selectedLevelFilter === 'SECUNDARIA' ? 'Secundaria' : 'Todos';
+    const computed = dbStats && dbStats[lvlKey] ? dbStats[lvlKey] : null;
 
-    const validStudentIds = new Set(students.map((s) => s.id));
-    const grades = rawGrades.filter((g) => validStudentIds.has(g.student_id));
+    const distribution = computed?.distribution || [];
+    const competencies = computed?.competencies || [];
+    const subjectAverages = computed?.subjectAverages || [];
+    const trend = computed?.trend || [];
+    const subjectsTrend = computed?.subjectsTrend || [];
+    const riskChart = computed?.riskChart || [];
 
-    const filteredGrades = grades.filter(
-      (g) => g.period && g.period.toLowerCase() === selectedPeriod.toLowerCase()
-    );
-
-    const studentAverages = students
-      .map((student) => {
-        const studentGrades = filteredGrades.filter(
-          (g) => g.student_id === student.id && g.grade !== null
-        );
-        if (studentGrades.length === 0) return null;
-        const avg =
-          studentGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / studentGrades.length;
-        return avg;
-      })
-      .filter((a) => a !== null) as number[];
-
-    const distribution = [
-      { name: 'Deficiente', value: studentAverages.filter((a) => a < 70).length, color: '#ef4444' },
-      {
-        name: 'Regular',
-        value: studentAverages.filter((a) => a >= 70 && a < 80).length,
-        color: '#f59e0b'
-      },
-      {
-        name: 'Bueno',
-        value: studentAverages.filter((a) => a >= 80 && a < 90).length,
-        color: '#3b82f6'
-      },
-      {
-        name: 'Muy Bueno',
-        value: studentAverages.filter((a) => a >= 90 && a < 95).length,
-        color: '#6366f1'
-      },
-      { name: 'Excelente', value: studentAverages.filter((a) => a >= 95).length, color: '#10b981' }
-    ].filter((d) => d.value > 0);
-
-    const competencies = [
-      { subject: 'C1', A: 0 },
-      { subject: 'C2', A: 0 },
-      { subject: 'C3', A: 0 },
-      { subject: 'C4', A: 0 }
-    ];
-    ['c1', 'c2', 'c3', 'c4'].forEach((id, idx) => {
-      const compGrades = filteredGrades.filter((g) => g.competency_id === id && g.grade !== null);
-      competencies[idx].A =
-        compGrades.length > 0
-          ? Math.round(compGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / compGrades.length)
-          : 0;
-    });
-
-    const subjectAverages = subjects
-      .map((s) => {
-        const sGrades = filteredGrades.filter((g) => g.subject_id === s.id && g.grade !== null);
-        const avg =
-          sGrades.length > 0
-            ? Math.round(sGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / sGrades.length)
-            : 0;
-        return { name: s.name.substring(0, 10), nota: avg, fullName: s.name };
-      })
-      .filter((s) => s.nota > 0)
-      .sort((a, b) => b.nota - a.nota)
-      .slice(0, 8);
-
-    const trend = periods.map((p) => {
-      const pGrades = grades.filter((g) => g.period === p && g.grade !== null);
-      const pAvg =
-        pGrades.length > 0
-          ? Math.round(pGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / pGrades.length)
-          : 0;
-      const compStats: any = { name: p, promedio: pAvg };
-      ['c1', 'c2', 'c3', 'c4'].forEach((cId) => {
-        const cGrades = pGrades.filter((g) => g.competency_id === cId);
-        compStats[cId] =
-          cGrades.length > 0
-            ? Math.round(cGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / cGrades.length)
-            : 0;
-      });
-      return compStats;
-    });
-
-    const subjectsTrend = subjects
-      .map((s) => {
-        const data: any = { name: s.name.substring(0, 8), fullName: s.name };
-        periods.forEach((p) => {
-          const sg = grades.filter(
-            (g) => g.subject_id === s.id && g.period === p && g.grade !== null
-          );
-          data[p] =
-            sg.length > 0
-              ? Math.round(sg.reduce((acc, g) => acc + (g.grade || 0), 0) / sg.length)
-              : 0;
-        });
-        return data;
-      })
-      .filter((s) => periods.some((p) => s[p] > 0));
-
-    // 5. MATERIAS PENDIENTES GLOBAL (Excluyendo Inicial)
-    const academicStudents = students.filter((s) => {
-      const course = rawCourses.find((c) => c.id === s.course_id);
-      return !course?.level?.toLowerCase().includes('inicial');
-    });
-
-    const riskDist = { '0 Pendientes': 0, '1 Pendiente': 0, '2 Pendientes': 0, '3+ Pendientes': 0 };
-    academicStudents.forEach((student) => {
-      const studentGrades = filteredGrades.filter(
-        (g) => g.student_id === student.id && g.grade !== null
-      );
-      // Agrupar por materia para ver si reprobó el promedio de la materia en este periodo
-      const subjectGradesMap: Record<string, number[]> = {};
-      studentGrades.forEach((g) => {
-        if (!subjectGradesMap[g.subject_id]) subjectGradesMap[g.subject_id] = [];
-        subjectGradesMap[g.subject_id].push(g.grade || 0);
-      });
-
-      let failedCount = 0;
-      Object.values(subjectGradesMap).forEach((gradesArr) => {
-        const avg = gradesArr.reduce((a, b) => a + b, 0) / gradesArr.length;
-        if (avg < 70) failedCount++;
-      });
-
-      if (failedCount === 0) riskDist['0 Pendientes']++;
-      else if (failedCount === 1) riskDist['1 Pendiente']++;
-      else if (failedCount === 2) riskDist['2 Pendientes']++;
-      else riskDist['3+ Pendientes']++;
-    });
-
-    const riskChart = Object.entries(riskDist)
-      .map(([name, value]) => ({
-        name,
-        value,
-        fill: name.includes('0')
-          ? '#10b981'
-          : name.includes('1')
-            ? '#facc15'
-            : name.includes('2')
-              ? '#f97316'
-              : '#ef4444'
-      }))
-      .filter((d) => d.value > 0);
-
-    // 6. AVANCE DE CARGA GLOBAL (Excluyendo Inicial)
-    const academicSubjects = subjects.filter(
+    // 2. Calcular AVANCE DE CARGA GLOBAL (Digitado) - EN VIVO Y EN TIEMPO REAL
+    const academicSubjects = rawSubjects.filter(
       (s) => s.level && !s.level.toLowerCase().includes('inicial')
     );
 
     const digitizingProgress = academicSubjects
       .map((sub) => {
-        // 1. Obtener conteo real de notas desde la auditoría
         const actualGradesCount =
           auditStats.gradeCounts[sub.id] || auditStats.gradeCounts[sub.subject_id] || 0;
 
-        // 2. Obtener total de alumnos del nivel de esta materia
         const subLevel = (sub.level || '').toLowerCase();
         let studentsInLevel = 0;
 
@@ -739,7 +664,6 @@ export const GeneralReports = () => {
           }
         }
 
-        // Cada estudiante debe tener 3 (Primaria) o 4 (Secundaria) calificaciones por materia por periodo
         const isSec = subLevel.includes('sec');
         const totalExpected = studentsInLevel * (isSec ? 4 : 3);
 
@@ -748,7 +672,7 @@ export const GeneralReports = () => {
             ? Math.min(100, Math.round((actualGradesCount / totalExpected) * 100))
             : actualGradesCount > 0
               ? 5
-              : 0; // Si hay notas pero no sabemos el total, mostramos al menos un 5% para que se vea algo
+              : 0;
 
         return {
           name: sub.name.substring(0, 12),
@@ -771,13 +695,12 @@ export const GeneralReports = () => {
       filteredStudentCount: students.length
     };
   }, [
-    state.grades,
     state.subjects,
     state.students,
     state.courses,
-    selectedPeriod,
     selectedLevelFilter,
-    auditStats
+    auditStats,
+    dbStats
   ]);
 
   const globalStats = React.useMemo(() => {
@@ -1047,71 +970,83 @@ export const GeneralReports = () => {
                       <h4 className="text-[9px] font-black uppercase text-slate-400 mb-4">
                         Índice de Excelencia Institucional
                       </h4>
-                      <div className="flex-1 relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={globalAnalytics.distribution}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={80}
-                              paddingAngle={5}
-                              dataKey="value"
-                              labelLine={false}
-                              label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                                const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                                return (
-                                  <text
-                                    x={x}
-                                    y={y}
-                                    fill="white"
-                                    textAnchor="middle"
-                                    dominantBaseline="central"
-                                    style={{ fontSize: '10px', fontWeight: 'bold' }}
-                                  >
-                                    {`${(percent * 100).toFixed(0)}%`}
-                                  </text>
-                                );
-                              }}
-                            >
-                              {globalAnalytics.distribution.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              contentStyle={{
-                                borderRadius: '1rem',
-                                border: 'none',
-                                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
-                              }}
-                            />
-                            <Legend
-                              verticalAlign="bottom"
-                              height={36}
-                              formatter={(value, entry: any) => {
-                                const scale = rankingScales.find((s) => s.label === value);
-                                return (
-                                  <span className="text-[10px] text-slate-500 font-medium">
-                                    {value} ({scale?.min}-{scale?.max})
-                                  </span>
-                                );
-                              }}
-                              iconSize={8}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-3xl font-black text-slate-900">
-                            {globalStats.totalStudents}
+                      {!dbStats ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center gap-2">
+                          <BarChart3 className="text-indigo-600 animate-pulse" size={32} />
+                          <span className="text-[9px] font-black uppercase text-slate-400 mt-2">
+                            Estadísticas no calculadas
                           </span>
-                          <span className="text-[8px] font-black text-slate-400 uppercase">
-                            Estudiantes
+                          <span className="text-[8px] text-slate-400 max-w-[150px]">
+                            Calcula las estadísticas desde el inicio de la plataforma.
                           </span>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="flex-1 relative">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={globalAnalytics.distribution}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                                labelLine={false}
+                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                  const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+                                  const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+                                  return (
+                                    <text
+                                      x={x}
+                                      y={y}
+                                      fill="white"
+                                      textAnchor="middle"
+                                      dominantBaseline="central"
+                                      style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                    >
+                                      {`${(percent * 100).toFixed(0)}%`}
+                                    </text>
+                                  );
+                                }}
+                              >
+                                {globalAnalytics.distribution.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{
+                                  borderRadius: '1rem',
+                                  border: 'none',
+                                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+                                }}
+                              />
+                              <Legend
+                                verticalAlign="bottom"
+                                height={36}
+                                formatter={(value, entry: any) => {
+                                  const scale = rankingScales.find((s) => s.label === value);
+                                  return (
+                                    <span className="text-[10px] text-slate-500 font-medium">
+                                      {value} ({scale?.min}-{scale?.max})
+                                    </span>
+                                  );
+                                }}
+                                iconSize={8}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-3xl font-black text-slate-900">
+                              {globalStats.totalStudents}
+                            </span>
+                            <span className="text-[8px] font-black text-slate-400 uppercase">
+                              Estudiantes
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* 2. MATERIAS PENDIENTES */}
@@ -1119,26 +1054,35 @@ export const GeneralReports = () => {
                       <h4 className="text-[9px] font-black uppercase text-slate-400 mb-4">
                         Materias Pendientes por Estudiante
                       </h4>
-                      <div className="flex-1">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={globalAnalytics.riskChart}
-                              cx="50%"
-                              cy="50%"
-                              outerRadius={85}
-                              dataKey="value"
-                              label={({ name, value }) => `${value}`}
-                            >
-                              {globalAnalytics.riskChart.map((entry, index) => (
-                                <Cell key={index} fill={entry.fill} />
-                              ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ borderRadius: '15px', border: 'none' }} />
-                            <Legend wrapperStyle={{ fontSize: '9px', fontWeight: 'bold' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {!dbStats ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center gap-2">
+                          <Target className="text-slate-300" size={32} />
+                          <span className="text-[9px] font-black uppercase text-slate-400">
+                            Estadísticas no calculadas
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex-1">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={globalAnalytics.riskChart}
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={85}
+                                dataKey="value"
+                                label={({ name, value }) => `${value}`}
+                              >
+                                {globalAnalytics.riskChart.map((entry, index) => (
+                                  <Cell key={index} fill={entry.fill} />
+                                ))}
+                              </Pie>
+                              <Tooltip contentStyle={{ borderRadius: '15px', border: 'none' }} />
+                              <Legend wrapperStyle={{ fontSize: '9px', fontWeight: 'bold' }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
                     </div>
 
                     {/* 3. AVANCE DE CARGA */}
@@ -1193,206 +1137,217 @@ export const GeneralReports = () => {
                         </div>
                       </div>
                       <div className="h-[200px]">
-                        {comparisonMode === 'materias' ? (
-                          <div className="h-full w-full overflow-x-auto custom-scrollbar">
-                            <div
-                              style={{
-                                width: Math.max(globalAnalytics.subjectsTrend.length * 60, 300)
-                              }}
-                            >
-                              <ResponsiveContainer width="100%" height={200}>
-                                <BarChart data={globalAnalytics.subjectsTrend}>
-                                  <XAxis
-                                    dataKey="name"
-                                    tick={{ fontSize: 8, fontWeight: 'bold' }}
-                                  />
-                                  <Tooltip contentStyle={{ borderRadius: '15px' }} />
-                                  <Bar
-                                    dataKey="P1"
-                                    fill="#cbd5e1"
-                                    radius={[3, 3, 0, 0]}
-                                    barSize={8}
-                                  >
-                                    <LabelList
-                                      dataKey="P1"
-                                      position="top"
-                                      style={{
-                                        fontSize: '6px',
-                                        fontWeight: 'bold',
-                                        fill: '#94a3b8'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="P2"
-                                    fill="#94a3b8"
-                                    radius={[3, 3, 0, 0]}
-                                    barSize={8}
-                                  >
-                                    <LabelList
-                                      dataKey="P2"
-                                      position="top"
-                                      style={{
-                                        fontSize: '6px',
-                                        fontWeight: 'bold',
-                                        fill: '#94a3b8'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="P3"
-                                    fill="#64748b"
-                                    radius={[3, 3, 0, 0]}
-                                    barSize={8}
-                                  >
-                                    <LabelList
-                                      dataKey="P3"
-                                      position="top"
-                                      style={{
-                                        fontSize: '6px',
-                                        fontWeight: 'bold',
-                                        fill: '#64748b'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="P4"
-                                    fill="#4f46e5"
-                                    radius={[3, 3, 0, 0]}
-                                    barSize={8}
-                                  >
-                                    <LabelList
-                                      dataKey="P4"
-                                      position="top"
-                                      style={{
-                                        fontSize: '6px',
-                                        fontWeight: 'bold',
-                                        fill: '#4f46e5'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
+                        {!dbStats ? (
+                          <div className="h-full w-full flex flex-col items-center justify-center text-center gap-2">
+                            <LineIcon className="text-slate-300" size={32} />
+                            <span className="text-[9px] font-black uppercase text-slate-400">
+                              Estadísticas no calculadas
+                            </span>
                           </div>
                         ) : (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={globalAnalytics.trend}>
-                              <CartesianGrid
-                                strokeDasharray="3 3"
-                                vertical={false}
-                                stroke="#f1f5f9"
-                              />
-                              <XAxis
-                                dataKey="name"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: 10, fontWeight: 'bold' }}
-                              />
-                              <Tooltip contentStyle={{ borderRadius: '20px' }} />
-                              {comparisonMode === 'indice' ? (
-                                <Bar
-                                  dataKey="promedio"
-                                  fill="#ef4444"
-                                  radius={[10, 10, 0, 0]}
-                                  barSize={40}
+                          <>
+                            {comparisonMode === 'materias' ? (
+                              <div className="h-full w-full overflow-x-auto custom-scrollbar">
+                                <div
+                                  style={{
+                                    width: Math.max(globalAnalytics.subjectsTrend.length * 60, 300)
+                                  }}
                                 >
-                                  <LabelList
-                                    dataKey="promedio"
-                                    position="top"
-                                    style={{
-                                      fontSize: '10px',
-                                      fontWeight: 'bold',
-                                      fill: '#ef4444'
-                                    }}
-                                    formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                  <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={globalAnalytics.subjectsTrend}>
+                                      <XAxis
+                                        dataKey="name"
+                                        tick={{ fontSize: 8, fontWeight: 'bold' }}
+                                      />
+                                      <Tooltip contentStyle={{ borderRadius: '15px' }} />
+                                      <Bar
+                                        dataKey="P1"
+                                        fill="#cbd5e1"
+                                        radius={[3, 3, 0, 0]}
+                                        barSize={8}
+                                      >
+                                        <LabelList
+                                          dataKey="P1"
+                                          position="top"
+                                          style={{
+                                            fontSize: '6px',
+                                            fontWeight: 'bold',
+                                            fill: '#94a3b8'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="P2"
+                                        fill="#94a3b8"
+                                        radius={[3, 3, 0, 0]}
+                                        barSize={8}
+                                      >
+                                        <LabelList
+                                          dataKey="P2"
+                                          position="top"
+                                          style={{
+                                            fontSize: '6px',
+                                            fontWeight: 'bold',
+                                            fill: '#94a3b8'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="P3"
+                                        fill="#64748b"
+                                        radius={[3, 3, 0, 0]}
+                                        barSize={8}
+                                      >
+                                        <LabelList
+                                          dataKey="P3"
+                                          position="top"
+                                          style={{
+                                            fontSize: '6px',
+                                            fontWeight: 'bold',
+                                            fill: '#64748b'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="P4"
+                                        fill="#4f46e5"
+                                        radius={[3, 3, 0, 0]}
+                                        barSize={8}
+                                      >
+                                        <LabelList
+                                          dataKey="P4"
+                                          position="top"
+                                          style={{
+                                            fontSize: '6px',
+                                            fontWeight: 'bold',
+                                            fill: '#4f46e5'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={globalAnalytics.trend}>
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={false}
+                                    stroke="#f1f5f9"
                                   />
-                                </Bar>
-                              ) : (
-                                <>
-                                  <Bar
-                                    dataKey="c1"
-                                    fill="#6366f1"
-                                    radius={[5, 5, 0, 0]}
-                                    barSize={20}
-                                  >
-                                    <LabelList
-                                      dataKey="c1"
-                                      position="top"
-                                      style={{
-                                        fontSize: '8px',
-                                        fontWeight: 'bold',
-                                        fill: '#6366f1'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="c2"
-                                    fill="#10b981"
-                                    radius={[5, 5, 0, 0]}
-                                    barSize={20}
-                                  >
-                                    <LabelList
-                                      dataKey="c2"
-                                      position="top"
-                                      style={{
-                                        fontSize: '8px',
-                                        fontWeight: 'bold',
-                                        fill: '#10b981'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="c3"
-                                    fill="#f59e0b"
-                                    radius={[5, 5, 0, 0]}
-                                    barSize={20}
-                                  >
-                                    <LabelList
-                                      dataKey="c3"
-                                      position="top"
-                                      style={{
-                                        fontSize: '8px',
-                                        fontWeight: 'bold',
-                                        fill: '#f59e0b'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Bar
-                                    dataKey="c4"
-                                    fill="#f43f5e"
-                                    radius={[5, 5, 0, 0]}
-                                    barSize={20}
-                                  >
-                                    <LabelList
-                                      dataKey="c4"
-                                      position="top"
-                                      style={{
-                                        fontSize: '8px',
-                                        fontWeight: 'bold',
-                                        fill: '#f43f5e'
-                                      }}
-                                      formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                                    />
-                                  </Bar>
-                                  <Legend
-                                    wrapperStyle={{
-                                      fontSize: '8px',
-                                      textTransform: 'uppercase',
-                                      fontWeight: 'black'
-                                    }}
+                                  <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 10, fontWeight: 'bold' }}
                                   />
-                                </>
-                              )}
-                            </BarChart>
-                          </ResponsiveContainer>
+                                  <Tooltip contentStyle={{ borderRadius: '20px' }} />
+                                  {comparisonMode === 'indice' ? (
+                                    <Bar
+                                      dataKey="promedio"
+                                      fill="#ef4444"
+                                      radius={[10, 10, 0, 0]}
+                                      barSize={40}
+                                    >
+                                      <LabelList
+                                        dataKey="promedio"
+                                        position="top"
+                                        style={{
+                                          fontSize: '10px',
+                                          fontWeight: 'bold',
+                                          fill: '#ef4444'
+                                        }}
+                                        formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                      />
+                                    </Bar>
+                                  ) : (
+                                    <>
+                                      <Bar
+                                        dataKey="c1"
+                                        fill="#6366f1"
+                                        radius={[5, 5, 0, 0]}
+                                        barSize={20}
+                                      >
+                                        <LabelList
+                                          dataKey="c1"
+                                          position="top"
+                                          style={{
+                                            fontSize: '8px',
+                                            fontWeight: 'bold',
+                                            fill: '#6366f1'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="c2"
+                                        fill="#10b981"
+                                        radius={[5, 5, 0, 0]}
+                                        barSize={20}
+                                      >
+                                        <LabelList
+                                          dataKey="c2"
+                                          position="top"
+                                          style={{
+                                            fontSize: '8px',
+                                            fontWeight: 'bold',
+                                            fill: '#10b981'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="c3"
+                                        fill="#f59e0b"
+                                        radius={[5, 5, 0, 0]}
+                                        barSize={20}
+                                      >
+                                        <LabelList
+                                          dataKey="c3"
+                                          position="top"
+                                          style={{
+                                            fontSize: '8px',
+                                            fontWeight: 'bold',
+                                            fill: '#f59e0b'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Bar
+                                        dataKey="c4"
+                                        fill="#f43f5e"
+                                        radius={[5, 5, 0, 0]}
+                                        barSize={20}
+                                      >
+                                        <LabelList
+                                          dataKey="c4"
+                                          position="top"
+                                          style={{
+                                            fontSize: '8px',
+                                            fontWeight: 'bold',
+                                            fill: '#f43f5e'
+                                          }}
+                                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                                        />
+                                      </Bar>
+                                      <Legend
+                                        wrapperStyle={{
+                                          fontSize: '8px',
+                                          textTransform: 'uppercase',
+                                          fontWeight: 'black'
+                                        }}
+                                      />
+                                    </>
+                                  )}
+                                </BarChart>
+                              </ResponsiveContainer>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -2038,6 +1993,14 @@ export const GeneralReports = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {isGradesLoading && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-white text-xs font-black uppercase tracking-widest animate-pulse">
+            Descargando calificaciones del centro...
+          </p>
         </div>
       )}
     </div>

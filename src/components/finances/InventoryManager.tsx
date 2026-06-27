@@ -19,7 +19,7 @@ import { PaymentModal } from './PaymentModal';
 
 export const InventoryManager = () => {
   const { state } = useApp();
-  const { products, saveProduct, deleteProduct, createProductInvoice, loading } = useFinance();
+  const { products, saveProduct, deleteProduct, createProductInvoice, loading } = useFinance({ products: true });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');

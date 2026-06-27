@@ -35,7 +35,12 @@ import { toast } from 'react-hot-toast';
 
 export const FinanceDashboard = () => {
   const { state } = useApp();
-  const { invoices, transactions, expenses, products, createProductInvoice, loading } = useFinance();
+  const { invoices, transactions, expenses, products, createProductInvoice, loading } = useFinance({
+    invoices: true,
+    transactions: true,
+    expenses: true,
+    products: true
+  });
 
   // Estados para Modal de Venta y Carrito
   const [showSaleModal, setShowSaleModal] = useState(false);

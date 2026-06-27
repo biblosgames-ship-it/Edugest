@@ -3,7 +3,16 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppContext';
 import { toast } from 'react-hot-toast';
 
-export const useFinance = () => {
+export const useFinance = (options?: {
+  paymentPlans?: boolean;
+  invoices?: boolean;
+  transactions?: boolean;
+  scholarships?: boolean;
+  expenses?: boolean;
+  suppliers?: boolean;
+  payroll?: boolean;
+  products?: boolean;
+}) => {
   const { profile } = useApp();
   const [loading, setLoading] = useState(false);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
@@ -18,73 +27,137 @@ export const useFinance = () => {
 
   const centerId = profile?.center_id;
 
+  const fetchPlans = options ? !!options.paymentPlans : true;
+  const fetchInvoices = options ? !!options.invoices : true;
+  const fetchTransactions = options ? !!options.transactions : true;
+  const fetchScholarships = options ? !!options.scholarships : true;
+  const fetchExpenses = options ? !!options.expenses : true;
+  const fetchSuppliers = options ? !!options.suppliers : true;
+  const fetchPayroll = options ? !!options.payroll : true;
+  const fetchProducts = options ? !!options.products : true;
+
   const fetchData = useCallback(async () => {
     if (!centerId) return;
     setLoading(true);
     try {
-      const [plansRes, invRes, transRes, schRes, expRes, supRes, payConfRes, payPayRes, prodRes] =
-        await Promise.all([
-          supabase.from('finance_payment_plans').select('*').eq('center_id', centerId),
+      const promises: any[] = [];
+      const keys: string[] = [];
+
+      if (fetchPlans) {
+        promises.push(supabase.from('finance_payment_plans').select('*').eq('center_id', centerId));
+        keys.push('plans');
+      }
+      if (fetchInvoices) {
+        promises.push(
           supabase
             .from('finance_invoices')
             .select('*')
             .eq('center_id', centerId)
             .order('due_date', { ascending: true })
-            .limit(5000),
+            .limit(1000)
+        );
+        keys.push('invoices');
+      }
+      if (fetchTransactions) {
+        promises.push(
           supabase
             .from('finance_transactions')
             .select('*, students(names, first_surname)')
             .eq('center_id', centerId)
             .order('created_at', { ascending: false })
-            .limit(5000),
+            .limit(500)
+        );
+        keys.push('transactions');
+      }
+      if (fetchScholarships) {
+        promises.push(
           supabase
             .from('finance_scholarships')
             .select('*, students(names, first_surname, second_surname)')
-            .eq('center_id', centerId),
+            .eq('center_id', centerId)
+        );
+        keys.push('scholarships');
+      }
+      if (fetchExpenses) {
+        promises.push(
           supabase
             .from('finance_expenses')
             .select('*, finance_suppliers(name)')
             .eq('center_id', centerId)
-            .order('expense_date', { ascending: false }),
-          supabase.from('finance_suppliers').select('*').eq('center_id', centerId),
-          supabase
-            .from('finance_payroll_config')
-            .select('*, staff(name)')
-            .eq('center_id', centerId),
+            .order('expense_date', { ascending: false })
+        );
+        keys.push('expenses');
+      }
+      if (fetchSuppliers) {
+        promises.push(supabase.from('finance_suppliers').select('*').eq('center_id', centerId));
+        keys.push('suppliers');
+      }
+      if (fetchPayroll) {
+        promises.push(
+          supabase.from('finance_payroll_config').select('*, staff(name)').eq('center_id', centerId)
+        );
+        keys.push('payroll_config');
+        promises.push(
           supabase
             .from('finance_payroll_payments')
             .select('*, staff(name)')
             .eq('center_id', centerId)
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: false })
+        );
+        keys.push('payroll_payments');
+      }
+      if (fetchProducts) {
+        promises.push(
           supabase
             .from('finance_products')
             .select('*')
             .eq('center_id', centerId)
             .order('name', { ascending: true })
-        ]);
+        );
+        keys.push('products');
+      }
 
-      // Verificar errores específicos
-      if (invRes.error) console.error('Error loading invoices:', invRes.error);
-      if (transRes.error) console.error('Error loading transactions:', transRes.error);
-      if (schRes.error) console.error('Error loading scholarships:', schRes.error);
-      if (prodRes.error) console.error('Error loading products:', prodRes.error);
+      if (promises.length === 0) {
+        setLoading(false);
+        return;
+      }
 
-      setPaymentPlans(plansRes.data || []);
-      setInvoices(invRes.data || []);
-      setTransactions(transRes.data || []);
-      setScholarships(schRes.data || []);
-      setExpenses(expRes.data || []);
-      setSuppliers(supRes.data || []);
-      setPayrollConfigs(payConfRes.data || []);
-      setPayrollPayments(payPayRes.data || []);
-      setProducts(prodRes.data || []);
+      const results = await Promise.all(promises);
+
+      results.forEach((res, index) => {
+        const key = keys[index];
+        if (res.error) {
+          console.error(`Error loading ${key}:`, res.error);
+          return;
+        }
+
+        if (key === 'plans') setPaymentPlans(res.data || []);
+        else if (key === 'invoices') setInvoices(res.data || []);
+        else if (key === 'transactions') setTransactions(res.data || []);
+        else if (key === 'scholarships') setScholarships(res.data || []);
+        else if (key === 'expenses') setExpenses(res.data || []);
+        else if (key === 'suppliers') setSuppliers(res.data || []);
+        else if (key === 'payroll_config') setPayrollConfigs(res.data || []);
+        else if (key === 'payroll_payments') setPayrollPayments(res.data || []);
+        else if (key === 'products') setProducts(res.data || []);
+      });
     } catch (error) {
       console.error('Error fetching finance data:', error);
       toast.error('Error al cargar datos financieros');
     } finally {
       setLoading(false);
     }
-  }, [centerId]);
+  }, [
+    centerId,
+    fetchPlans,
+    fetchInvoices,
+    fetchTransactions,
+    fetchScholarships,
+    fetchExpenses,
+    fetchSuppliers,
+    fetchPayroll,
+    fetchProducts
+  ]);
 
   useEffect(() => {
     fetchData();

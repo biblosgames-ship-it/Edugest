@@ -16,7 +16,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 
 export const ScholarshipsManager = () => {
-  const { scholarships, refresh, loading } = useFinance();
+  const { scholarships, refresh, loading } = useFinance({ scholarships: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 

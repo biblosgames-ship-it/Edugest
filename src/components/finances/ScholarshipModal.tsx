@@ -11,7 +11,7 @@ interface ScholarshipModalProps {
 
 export const ScholarshipModal: React.FC<ScholarshipModalProps> = ({ onClose, onSuccess }) => {
   const { state } = useApp();
-  const { saveScholarship, loading } = useFinance();
+  const { saveScholarship, loading } = useFinance({});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
 

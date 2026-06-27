@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Users,
   User,
@@ -18,6 +18,8 @@ import {
   LineChart as LineIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
+import { toast } from 'react-hot-toast';
 import { SEO } from './SEO';
 import {
   BarChart,
@@ -50,8 +52,255 @@ const rankingScales = [
 ];
 
 export const Dashboard = React.memo(() => {
-  const { state, center, selectedYear } = useApp();
+  const { state, center, selectedYear, profile, loadAllGrades } = useApp();
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [selectedPeriod, setSelectedPeriod] = useState('P1');
+  const [selectedLevel, setSelectedLevel] = useState('Todos');
+  const [comparisonMode, setComparisonMode] = useState<'indice' | 'competencias' | 'materias'>(
+    'indice'
+  );
+
+  const [dbStats, setDbStats] = useState<any>(null);
+  const [loadingDbStats, setLoadingDbStats] = useState(false);
+  const [updatingStats, setUpdatingStats] = useState(false);
+
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'director' || profile?.role === 'management' || profile?.role === 'management_teacher';
+
+  useEffect(() => {
+    const fetchDbStats = async () => {
+      if (!center?.id || !selectedYear) return;
+      setLoadingDbStats(true);
+      try {
+        const { data, error } = await supabase
+          .from('school_statistics')
+          .select('*')
+          .eq('center_id', center.id)
+          .eq('school_year', selectedYear)
+          .eq('period', selectedPeriod)
+          .maybeSingle();
+
+        if (data && data.stats) {
+          setDbStats(data.stats);
+        } else {
+          setDbStats(null);
+        }
+      } catch (err) {
+        console.error('Error fetching statistics:', err);
+      } finally {
+        setLoadingDbStats(false);
+      }
+    };
+
+    fetchDbStats();
+  }, [center?.id, selectedYear, selectedPeriod]);
+
+  const handleUpdateStats = async () => {
+    if (!center?.id) return;
+    setUpdatingStats(true);
+    const loadingToast = toast.loading('Calculando estadísticas generales...');
+    try {
+      const grades = await loadAllGrades();
+      if (!grades || grades.length === 0) {
+        toast.dismiss(loadingToast);
+        toast.error('No hay calificaciones registradas para procesar.');
+        setUpdatingStats(false);
+        return;
+      }
+
+      const subjects = state.subjects || [];
+      const students = state.students || [];
+      const courses = state.courses || [];
+      const periods = ['P1', 'P2', 'P3', 'P4'];
+
+      const courseLevelMap: Record<string, string> = {};
+      courses.forEach((c) => {
+        courseLevelMap[c.id] = (c.level || '').toLowerCase();
+      });
+
+      for (const p of periods) {
+        const statsObj: Record<string, any> = {};
+
+        for (const level of ['Todos', 'Primaria', 'Secundaria']) {
+          const filteredStudents =
+            level === 'Todos'
+              ? students
+              : students.filter((s) => {
+                  const lvl = courseLevelMap[s.course_id] || '';
+                  return lvl.includes(level === 'Primaria' ? 'prim' : 'sec');
+                });
+
+          const studentIds = new Set(filteredStudents.map((s) => s.id));
+          const filteredGrades = grades.filter(
+            (g) => g.period === p && studentIds.has(g.student_id)
+          );
+
+          const studentAverages = filteredStudents
+            .map((student) => {
+              const studentGrades = filteredGrades.filter(
+                (g) => g.student_id === student.id && g.grade !== null
+              );
+              if (studentGrades.length === 0) return null;
+              return studentGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / studentGrades.length;
+            })
+            .filter((a) => a !== null) as number[];
+
+          const distribution = [
+            { name: 'Deficiente', value: studentAverages.filter((a) => a < 70).length, color: '#ef4444' },
+            { name: 'Regular', value: studentAverages.filter((a) => a >= 70 && a < 80).length, color: '#f59e0b' },
+            { name: 'Bueno', value: studentAverages.filter((a) => a >= 80 && a < 90).length, color: '#3b82f6' },
+            { name: 'Muy Bueno', value: studentAverages.filter((a) => a >= 90 && a < 95).length, color: '#6366f1' },
+            { name: 'Excelente', value: studentAverages.filter((a) => a >= 95).length, color: '#10b981' }
+          ].filter((d) => d.value > 0);
+
+          const compIds = level === 'Primaria' ? ['c1', 'c2', 'c3'] : ['c1', 'c2', 'c3', 'c4'];
+          const compLabels: any = {
+            c1: 'Comunicativa (C1)',
+            c2: 'Pensamiento Crítico (C2)',
+            c3: 'Ética y Ciudadana (C3)',
+            c4: 'Personal y Social (C4)'
+          };
+
+          const competencies = compIds.map((id) => {
+            const compGrades = filteredGrades.filter((g) => g.competency_id === id && g.grade !== null);
+            const avg =
+              compGrades.length > 0
+                ? Math.round(compGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / compGrades.length)
+                : 0;
+            return { subject: compLabels[id] || id.toUpperCase(), A: avg };
+          });
+
+          const subjectAverages = subjects
+            .map((s) => {
+              const sGrades = filteredGrades.filter((g) => g.subject_id === s.id && g.grade !== null);
+              const avg =
+                sGrades.length > 0
+                  ? Math.round(sGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / sGrades.length)
+                  : 0;
+              return { name: s.name.substring(0, 10), nota: avg, fullName: s.name };
+            })
+            .filter((s) => s.nota > 0)
+            .sort((a, b) => b.nota - a.nota)
+            .slice(0, 8);
+
+          const trend = periods.map((tp) => {
+            const pGrades = grades.filter(
+              (g) => g.period === tp && g.grade !== null && studentIds.has(g.student_id)
+            );
+            const pAvg =
+              pGrades.length > 0
+                ? Math.round(pGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / pGrades.length)
+                : 0;
+
+            const compStats: any = { name: tp, promedio: pAvg };
+            ['c1', 'c2', 'c3', 'c4'].forEach((cId) => {
+              const cGrades = pGrades.filter((g) => g.competency_id === cId);
+              compStats[cId] =
+                cGrades.length > 0
+                  ? Math.round(cGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / cGrades.length)
+                  : 0;
+            });
+            return compStats;
+          });
+
+          const subjectsTrend = subjects
+            .map((s) => {
+              const data: any = { name: s.name.substring(0, 8), fullName: s.name };
+              periods.forEach((tp) => {
+                const sg = grades.filter(
+                  (g) =>
+                    g.subject_id === s.id &&
+                    g.period === tp &&
+                    g.grade !== null &&
+                    studentIds.has(g.student_id)
+                );
+                data[tp] =
+                  sg.length > 0
+                    ? Math.round(sg.reduce((acc, g) => acc + (g.grade || 0), 0) / sg.length)
+                    : 0;
+              });
+              return data;
+            })
+            .filter((s) => periods.some((tp) => s[tp] > 0));
+
+          const academicStudents = filteredStudents.filter((s) => {
+            const course = courses.find((c) => c.id === s.course_id || c.id === s.courseId);
+            return !course?.level?.toLowerCase().includes('inicial');
+          });
+
+          const riskDist = { '0 Pendientes': 0, '1 Pendiente': 0, '2 Pendientes': 0, '3+ Pendientes': 0 };
+          academicStudents.forEach((student) => {
+            const studentGrades = filteredGrades.filter(
+              (g) => g.student_id === student.id && g.grade !== null
+            );
+            const subjectGradesMap: Record<string, number[]> = {};
+            studentGrades.forEach((g) => {
+              if (!subjectGradesMap[g.subject_id]) subjectGradesMap[g.subject_id] = [];
+              subjectGradesMap[g.subject_id].push(g.grade || 0);
+            });
+
+            let failedCount = 0;
+            Object.values(subjectGradesMap).forEach((gradesArr) => {
+              const avg = gradesArr.reduce((a, b) => a + b, 0) / gradesArr.length;
+              if (avg < 70) failedCount++;
+            });
+
+            if (failedCount === 0) riskDist['0 Pendientes']++;
+            else if (failedCount === 1) riskDist['1 Pendiente']++;
+            else if (failedCount === 2) riskDist['2 Pendientes']++;
+            else riskDist['3+ Pendientes']++;
+          });
+
+          const riskChart = Object.entries(riskDist)
+            .map(([name, value]) => ({
+              name,
+              value,
+              fill: name.includes('0')
+                ? '#10b981'
+                : name.includes('1')
+                  ? '#facc15'
+                  : name.includes('2')
+                    ? '#f97316'
+                    : '#ef4444'
+            }))
+            .filter((d) => d.value > 0);
+
+          statsObj[level] = { distribution, competencies, subjectAverages, trend, subjectsTrend, riskChart };
+        }
+
+        const { error } = await supabase
+          .from('school_statistics')
+          .upsert({
+            center_id: center.id,
+            school_year: selectedYear,
+            period: p,
+            stats: statsObj,
+            updated_by: profile?.id
+          }, { onConflict: 'center_id,school_year,period' });
+
+        if (error) throw error;
+      }
+
+      toast.dismiss(loadingToast);
+      toast.success('Estadísticas actualizadas con éxito.');
+
+      const { data } = await supabase
+        .from('school_statistics')
+        .select('*')
+        .eq('center_id', center.id)
+        .eq('school_year', selectedYear)
+        .eq('period', selectedPeriod)
+        .maybeSingle();
+      if (data && data.stats) setDbStats(data.stats);
+
+    } catch (err: any) {
+      console.error('Error updating stats:', err);
+      toast.dismiss(loadingToast);
+      toast.error('Error al actualizar: ' + err.message);
+    } finally {
+      setUpdatingStats(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -83,7 +332,7 @@ export const Dashboard = React.memo(() => {
       .replace(/[\u0300-\u036f]/g, '')
       .trim();
 
-  // --- CÁLCULOS REALES DE ESTADÍSTICAS ---
+  // --- CÁLCULOS REALES DE POBLACIÓN (SIN NOTAS) ---
   const stats = useMemo(() => {
     const students = state.students || [];
     const personnel = state.teachers || [];
@@ -125,145 +374,20 @@ export const Dashboard = React.memo(() => {
     };
   }, [state.students, state.teachers, state.courses, state.subjects]);
 
-  const [selectedPeriod, setSelectedPeriod] = useState('P1');
-  const [selectedLevel, setSelectedLevel] = useState('Todos');
-  const [comparisonMode, setComparisonMode] = useState<'indice' | 'competencias' | 'materias'>(
-    'indice'
-  );
-
-  // --- ANALÍTICA AVANZADA ---
+  // --- ANALÍTICA AVANZADA (PRECALCULADA) ---
   const analytics = useMemo(() => {
-    const grades = state.grades || [];
-    const subjects = state.subjects || [];
-    const students = state.students || [];
-    const courses = state.courses || [];
-    const periods = ['P1', 'P2', 'P3', 'P4'];
-
-    // Filtrar alumnos por nivel (Normalizar para aceptar tanto 'Primaria' como 'Primario')
-    const filteredStudents =
-      selectedLevel === 'Todos'
-        ? students
-        : students.filter((s) => {
-            const course = courses.find((c) => c.id === s.course_id || c.id === s.courseId);
-            const levelName = course?.level || '';
-            return levelName.startsWith(selectedLevel.substring(0, 7)); // Coincidir 'Primari' o 'Secundar'
-          });
-
-    const studentIds = new Set(filteredStudents.map((s) => s.id));
-
-    // Filtrar notas por periodo y por alumnos del nivel
-    const filteredGrades = grades.filter(
-      (g) => g.period === selectedPeriod && studentIds.has(g.student_id)
-    );
-
-    // 1. Índice Académico (Distribución)
-    const studentAverages = filteredStudents
-      .map((student) => {
-        const studentGrades = filteredGrades.filter(
-          (g) => g.student_id === student.id && g.grade !== null
-        );
-        if (studentGrades.length === 0) return null;
-        const avg =
-          studentGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / studentGrades.length;
-        return avg;
-      })
-      .filter((a) => a !== null) as number[];
-
-    const distribution = [
-      { name: 'Deficiente', value: studentAverages.filter((a) => a < 70).length, color: '#ef4444' },
-      {
-        name: 'Regular',
-        value: studentAverages.filter((a) => a >= 70 && a < 80).length,
-        color: '#f59e0b'
-      },
-      {
-        name: 'Bueno',
-        value: studentAverages.filter((a) => a >= 80 && a < 90).length,
-        color: '#3b82f6'
-      },
-      {
-        name: 'Muy Bueno',
-        value: studentAverages.filter((a) => a >= 90 && a < 95).length,
-        color: '#6366f1'
-      },
-      { name: 'Excelente', value: studentAverages.filter((a) => a >= 95).length, color: '#10b981' }
-    ].filter((d) => d.value > 0);
-
-    // 2. Desempeño por Competencia (3 para Primaria, 4 para Secundaria)
-    const compIds = selectedLevel === 'Primaria' ? ['c1', 'c2', 'c3'] : ['c1', 'c2', 'c3', 'c4'];
-    const compLabels: any = {
-      c1: 'Comunicativa (C1)',
-      c2: 'Pensamiento Crítico (C2)',
-      c3: 'Ética y Ciudadana (C3)',
-      c4: 'Personal y Social (C4)'
+    const lvlKey = selectedLevel === 'Primario' ? 'Primaria' : selectedLevel === 'Secundario' ? 'Secundaria' : 'Todos';
+    if (dbStats && dbStats[lvlKey]) {
+      return dbStats[lvlKey];
+    }
+    return {
+      distribution: [],
+      competencies: [],
+      subjectAverages: [],
+      trend: [],
+      subjectsTrend: []
     };
-
-    const competencies = compIds.map((id) => {
-      const compGrades = filteredGrades.filter((g) => g.competency_id === id && g.grade !== null);
-      const avg =
-        compGrades.length > 0
-          ? Math.round(compGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / compGrades.length)
-          : 0;
-      return { subject: compLabels[id] || id.toUpperCase(), A: avg };
-    });
-
-    // 3. Promedio por Materia
-    const subjectAverages = subjects
-      .map((s) => {
-        const sGrades = filteredGrades.filter((g) => g.subject_id === s.id && g.grade !== null);
-        const avg =
-          sGrades.length > 0
-            ? Math.round(sGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / sGrades.length)
-            : 0;
-        return { name: s.name.substring(0, 10), nota: avg, fullName: s.name };
-      })
-      .filter((s) => s.nota > 0)
-      .sort((a, b) => b.nota - a.nota)
-      .slice(0, 8);
-
-    // 4. Tendencia Multi-periodo
-    const trend = periods.map((p) => {
-      const pGrades = grades.filter(
-        (g) => g.period === p && g.grade !== null && studentIds.has(g.student_id)
-      );
-      const pAvg =
-        pGrades.length > 0
-          ? Math.round(pGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / pGrades.length)
-          : 0;
-
-      const compStats: any = { name: p, promedio: pAvg };
-      ['c1', 'c2', 'c3', 'c4'].forEach((cId) => {
-        const cGrades = pGrades.filter((g) => g.competency_id === cId);
-        compStats[cId] =
-          cGrades.length > 0
-            ? Math.round(cGrades.reduce((acc, g) => acc + (g.grade || 0), 0) / cGrades.length)
-            : 0;
-      });
-      return compStats;
-    });
-
-    const subjectsTrend = subjects
-      .map((s) => {
-        const data: any = { name: s.name.substring(0, 8), fullName: s.name };
-        periods.forEach((p) => {
-          const sg = grades.filter(
-            (g) =>
-              g.subject_id === s.id &&
-              g.period === p &&
-              g.grade !== null &&
-              studentIds.has(g.student_id)
-          );
-          data[p] =
-            sg.length > 0
-              ? Math.round(sg.reduce((acc, g) => acc + (g.grade || 0), 0) / sg.length)
-              : 0;
-        });
-        return data;
-      })
-      .filter((s) => periods.some((p) => s[p] > 0));
-
-    return { distribution, competencies, subjectAverages, trend, subjectsTrend };
-  }, [state.grades, state.subjects, state.students, state.courses, selectedPeriod, selectedLevel]);
+  }, [dbStats, selectedLevel]);
 
   // --- AGENDA DEL DÍA (REAL DEL CALENDARIO) ---
   const todayEvents = useMemo(() => {
@@ -548,308 +672,333 @@ export const Dashboard = React.memo(() => {
       </div>
 
       {/* 2. DASHBOARD DE ANALÍTICA (4 GRÁFICOS HORIZONTALES) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* GRÁFICO 1: ÍNDICE DE EXCELENCIA */}
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all group overflow-hidden">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <PieIcon size={18} />
-              </div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Índice Académico
-              </h3>
-            </div>
-            <span className="text-[9px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full">
-              EN VIVO
-            </span>
+      {!dbStats ? (
+        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-12 text-center flex flex-col items-center justify-center gap-4 shadow-xl relative overflow-hidden my-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl rounded-full"></div>
+          <div className="p-4 bg-indigo-50 text-indigo-600 rounded-3xl mb-2">
+            <BarChart3 size={32} />
           </div>
-          <div className="h-[200px] w-full relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={analytics.distribution}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  labelLine={false}
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                    const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                    return (
-                      <text
-                        x={x}
-                        y={y}
-                        fill="white"
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        style={{ fontSize: '10px', fontWeight: 'bold' }}
-                      >
-                        {`${(percent * 100).toFixed(0)}%`}
-                      </text>
-                    );
-                  }}
-                >
-                  {analytics.distribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '20px',
-                    border: 'none',
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'
-                  }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry: any) => {
-                    const scale = rankingScales.find((s) => s.label === value);
-                    return (
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {value} ({scale?.min}-{scale?.max})
-                      </span>
-                    );
-                  }}
-                  iconSize={8}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <p className="text-2xl font-black text-slate-900">{stats.totalStudents}</p>
-              <p className="text-[8px] font-black text-slate-400 uppercase">Alumnos</p>
-            </div>
-          </div>
+          <h3 className="text-lg font-black uppercase text-slate-800 tracking-tight leading-tight">
+            Estadísticas no calculadas
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+            Las estadísticas de rendimiento académico para el periodo <strong>{selectedPeriod}</strong> del año <strong>{selectedYear}</strong> no han sido procesadas aún en la base de datos.
+          </p>
+          {isAdmin && (
+            <button
+              onClick={handleUpdateStats}
+              disabled={updatingStats}
+              className="mt-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-2xl shadow-xl shadow-indigo-100 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Activity size={14} className={updatingStats ? 'animate-spin' : ''} />
+              {updatingStats ? 'Calculando estadísticas...' : 'Calcular Estadísticas del Centro'}
+            </button>
+          )}
         </div>
-
-        {/* GRÁFICO 2: DESEMPEÑO POR COMPETENCIA (BARRAS DIGERIBLES) */}
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                <Target size={18} />
-              </div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Por Competencia
-              </h3>
-            </div>
-            <span className="text-[9px] font-black text-slate-400">Promedio %</span>
-          </div>
-          <div className="h-[200px] w-full flex flex-col justify-center gap-6 px-2">
-            {analytics.competencies.map((c, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] font-black text-slate-700 uppercase">
-                    {c.subject}
-                  </span>
-                  <span className="text-[10px] font-black text-emerald-600">{c.A}%</span>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {/* GRÁFICO 1: ÍNDICE DE EXCELENCIA */}
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all group overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <PieIcon size={18} />
                 </div>
-                <div className="w-full h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5">
-                  <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{
-                      width: `${c.A}%`,
-                      backgroundColor: i === 0 ? '#6366f1' : i === 1 ? '#10b981' : '#f59e0b',
-                      boxShadow: '0 0 10px rgba(0,0,0,0.1)'
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Índice Académico
+                </h3>
+              </div>
+              <span className="text-[9px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full">
+                EN VIVO
+              </span>
+            </div>
+            <div className="h-[200px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={analytics.distribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    labelLine={false}
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                      const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+                      const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+                      return (
+                        <text
+                          x={x}
+                          y={y}
+                          fill="white"
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          style={{ fontSize: '10px', fontWeight: 'bold' }}
+                        >
+                          {`${(percent * 100).toFixed(0)}%`}
+                        </text>
+                      );
                     }}
-                  ></div>
-                </div>
+                  >
+                    {analytics.distribution.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '20px',
+                      border: 'none',
+                      boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value, entry: any) => {
+                      const scale = rankingScales.find((s) => s.label === value);
+                      return (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {value} ({scale?.min}-{scale?.max})
+                        </span>
+                      );
+                    }}
+                    iconSize={8}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <p className="text-2xl font-black text-slate-900">{stats.totalStudents}</p>
+                <p className="text-[8px] font-black text-slate-400 uppercase">Alumnos</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* GRÁFICO 3: PROMEDIO POR MATERIA (REDiseño LEGIBLE) */}
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-                <BarChart3 size={18} />
-              </div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Rendimiento Materia
-              </h3>
             </div>
           </div>
-          <div className="h-[200px] w-full overflow-y-auto pr-2 custom-scrollbar space-y-4">
-            {analytics.subjectAverages.length > 0 ? (
-              analytics.subjectAverages.map((s, idx) => (
-                <div key={idx} className="space-y-1.5">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[8px] font-black text-slate-500 uppercase truncate max-w-[80%]">
-                      {s.fullName}
+
+          {/* GRÁFICO 2: DESEMPEÑO POR COMPETENCIA (BARRAS DIGERIBLES) */}
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <Target size={18} />
+                </div>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Por Competencia
+                </h3>
+              </div>
+              <span className="text-[9px] font-black text-slate-400">Promedio %</span>
+            </div>
+            <div className="h-[200px] w-full flex flex-col justify-center gap-6 px-2">
+              {analytics.competencies.map((c: any, i: number) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] font-black text-slate-700 uppercase">
+                      {c.subject}
                     </span>
-                    <span className="text-[9px] font-black text-indigo-600">{s.nota}%</span>
+                    <span className="text-[10px] font-black text-emerald-600">{c.A}%</span>
                   </div>
-                  <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                  <div className="w-full h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5">
                     <div
-                      className={`h-full rounded-full transition-all duration-1000 ${s.nota >= 70 ? 'bg-indigo-500' : 'bg-rose-500'}`}
-                      style={{ width: `${s.nota}%` }}
+                      className="h-full rounded-full transition-all duration-1000"
+                      style={{
+                        width: `${c.A}%`,
+                        backgroundColor: i === 0 ? '#6366f1' : i === 1 ? '#10b981' : '#f59e0b',
+                        boxShadow: '0 0 10px rgba(0,0,0,0.1)'
+                      }}
                     ></div>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-300 uppercase italic">
-                Sin datos este periodo
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* GRÁFICO 4: TENDENCIA Y COMPARATIVA MULTI-PERIODO (POTENCIADO) */}
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
-                <LineIcon size={18} />
-              </div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Análisis Comparativo
-              </h3>
+              ))}
             </div>
           </div>
 
-          {/* SELECTOR DE MODO INTERNO */}
-          <div className="flex gap-1 bg-slate-50 p-1 rounded-xl mb-6">
-            <button
-              onClick={() => setComparisonMode('indice')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'indice' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400'}`}
-            >
-              Índice
-            </button>
-            <button
-              onClick={() => setComparisonMode('competencias')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'competencias' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
-            >
-              Comps
-            </button>
-            <button
-              onClick={() => setComparisonMode('materias')}
-              className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'materias' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
-            >
-              Materias
-            </button>
+          {/* GRÁFICO 3: PROMEDIO POR MATERIA (REDiseño LEGIBLE) */}
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <BarChart3 size={18} />
+                </div>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Rendimiento Materia
+                </h3>
+              </div>
+            </div>
+            <div className="h-[200px] w-full overflow-y-auto pr-2 custom-scrollbar space-y-4">
+              {analytics.subjectAverages.length > 0 ? (
+                analytics.subjectAverages.map((s: any, idx: number) => (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex justify-between items-center px-1">
+                      <span className="text-[8px] font-black text-slate-500 uppercase truncate max-w-[80%]">
+                        {s.fullName}
+                      </span>
+                      <span className="text-[9px] font-black text-indigo-600">{s.nota}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ${s.nota >= 70 ? 'bg-indigo-500' : 'bg-rose-500'}`}
+                        style={{ width: `${s.nota}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-300 uppercase italic">
+                  Sin datos este periodo
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="h-[200px] w-full">
-            {comparisonMode === 'materias' ? (
-              <div className="h-full w-full overflow-x-auto custom-scrollbar">
-                <div style={{ width: Math.max(analytics.subjectsTrend.length * 80, 300) }}>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={analytics.subjectsTrend}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis
-                        dataKey="name"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 8, fontWeight: 'bold', fill: '#94a3b8' }}
-                      />
-                      <Tooltip contentStyle={{ borderRadius: '20px', border: 'none' }} />
-                      <Bar dataKey="P1" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={10}>
-                        <LabelList
-                          dataKey="P1"
-                          position="top"
-                          style={{ fontSize: '6px', fontWeight: 'bold', fill: '#94a3b8' }}
-                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                        />
-                      </Bar>
-                      <Bar dataKey="P2" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={10}>
-                        <LabelList
-                          dataKey="P2"
-                          position="top"
-                          style={{ fontSize: '6px', fontWeight: 'bold', fill: '#94a3b8' }}
-                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                        />
-                      </Bar>
-                      <Bar dataKey="P3" fill="#64748b" radius={[4, 4, 0, 0]} barSize={10}>
-                        <LabelList
-                          dataKey="P3"
-                          position="top"
-                          style={{ fontSize: '6px', fontWeight: 'bold', fill: '#64748b' }}
-                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                        />
-                      </Bar>
-                      <Bar dataKey="P4" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={10}>
-                        <LabelList
-                          dataKey="P4"
-                          position="top"
-                          style={{ fontSize: '6px', fontWeight: 'bold', fill: '#4f46e5' }}
-                          formatter={(v: any) => (v > 0 ? `${v}%` : '')}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+          {/* GRÁFICO 4: TENDENCIA Y COMPARATIVA MULTI-PERIODO (POTENCIADO) */}
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                  <LineIcon size={18} />
                 </div>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Análisis Comparativo
+                </h3>
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.trend}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                  />
-                  <YAxis hide domain={[0, 100]} />
-                  <Tooltip contentStyle={{ borderRadius: '20px', border: 'none' }} />
-                  {comparisonMode === 'indice' ? (
-                    <Bar dataKey="promedio" fill="#ef4444" radius={[10, 10, 0, 0]} barSize={30}>
-                      <LabelList
-                        dataKey="promedio"
-                        position="top"
-                        style={{ fontSize: '8px', fontWeight: 'bold', fill: '#ef4444' }}
-                        formatter={(v: any) => `${v}%`}
-                      />
-                    </Bar>
-                  ) : (
-                    <>
-                      <Bar dataKey="c1" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={15}>
+            </div>
+
+            {/* SELECTOR DE MODO INTERNO */}
+            <div className="flex gap-1 bg-slate-50 p-1 rounded-xl mb-6">
+              <button
+                onClick={() => setComparisonMode('indice')}
+                className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'indice' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                Índice
+              </button>
+              <button
+                onClick={() => setComparisonMode('competencias')}
+                className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'competencias' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                Comps
+              </button>
+              <button
+                onClick={() => setComparisonMode('materias')}
+                className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${comparisonMode === 'materias' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                Materias
+              </button>
+            </div>
+
+            <div className="h-[200px] w-full">
+              {comparisonMode === 'materias' ? (
+                <div className="h-full w-full overflow-x-auto custom-scrollbar">
+                  <div style={{ width: Math.max(analytics.subjectsTrend.length * 80, 300) }}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={analytics.subjectsTrend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 8, fontWeight: 'bold', fill: '#94a3b8' }}
+                        />
+                        <Tooltip contentStyle={{ borderRadius: '20px', border: 'none' }} />
+                        <Bar dataKey="P1" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={10}>
+                          <LabelList
+                            dataKey="P1"
+                            position="top"
+                            style={{ fontSize: '6px', fontWeight: 'bold', fill: '#94a3b8' }}
+                            formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                          />
+                        </Bar>
+                        <Bar dataKey="P2" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={10}>
+                          <LabelList
+                            dataKey="P2"
+                            position="top"
+                            style={{ fontSize: '6px', fontWeight: 'bold', fill: '#94a3b8' }}
+                            formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                          />
+                        </Bar>
+                        <Bar dataKey="P3" fill="#64748b" radius={[4, 4, 0, 0]} barSize={10}>
+                          <LabelList
+                            dataKey="P3"
+                            position="top"
+                            style={{ fontSize: '6px', fontWeight: 'bold', fill: '#64748b' }}
+                            formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                          />
+                        </Bar>
+                        <Bar dataKey="P4" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={10}>
+                          <LabelList
+                            dataKey="P4"
+                            position="top"
+                            style={{ fontSize: '6px', fontWeight: 'bold', fill: '#4f46e5' }}
+                            formatter={(v: any) => (v > 0 ? `${v}%` : '')}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics.trend}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                    />
+                    <YAxis hide domain={[0, 100]} />
+                    <Tooltip contentStyle={{ borderRadius: '20px', border: 'none' }} />
+                    {comparisonMode === 'indice' ? (
+                      <Bar dataKey="promedio" fill="#ef4444" radius={[10, 10, 0, 0]} barSize={30}>
                         <LabelList
-                          dataKey="c1"
+                          dataKey="promedio"
                           position="top"
-                          style={{ fontSize: '7px', fontWeight: 'bold', fill: '#6366f1' }}
+                          style={{ fontSize: '8px', fontWeight: 'bold', fill: '#ef4444' }}
                           formatter={(v: any) => `${v}%`}
                         />
                       </Bar>
-                      <Bar dataKey="c2" fill="#10b981" radius={[4, 4, 0, 0]} barSize={15}>
-                        <LabelList
-                          dataKey="c2"
-                          position="top"
-                          style={{ fontSize: '7px', fontWeight: 'bold', fill: '#10b981' }}
-                          formatter={(v: any) => `${v}%`}
+                    ) : (
+                      <>
+                        <Bar dataKey="c1" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={15}>
+                          <LabelList
+                            dataKey="c1"
+                            position="top"
+                            style={{ fontSize: '7px', fontWeight: 'bold', fill: '#6366f1' }}
+                            formatter={(v: any) => `${v}%`}
+                          />
+                        </Bar>
+                        <Bar dataKey="c2" fill="#10b981" radius={[4, 4, 0, 0]} barSize={15}>
+                          <LabelList
+                            dataKey="c2"
+                            position="top"
+                            style={{ fontSize: '7px', fontWeight: 'bold', fill: '#10b981' }}
+                            formatter={(v: any) => `${v}%`}
+                          />
+                        </Bar>
+                        <Bar dataKey="c3" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={15}>
+                          <LabelList
+                            dataKey="c3"
+                            position="top"
+                            style={{ fontSize: '7px', fontWeight: 'bold', fill: '#f59e0b' }}
+                            formatter={(v: any) => `${v}%`}
+                          />
+                        </Bar>
+                        <Legend
+                          iconType="circle"
+                          wrapperStyle={{
+                            fontSize: '8px',
+                            fontWeight: 'bold',
+                            textTransform: 'uppercase'
+                          }}
                         />
-                      </Bar>
-                      <Bar dataKey="c3" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={15}>
-                        <LabelList
-                          dataKey="c3"
-                          position="top"
-                          style={{ fontSize: '7px', fontWeight: 'bold', fill: '#f59e0b' }}
-                          formatter={(v: any) => `${v}%`}
-                        />
-                      </Bar>
-                      <Legend
-                        iconType="circle"
-                        wrapperStyle={{
-                          fontSize: '8px',
-                          fontWeight: 'bold',
-                          textTransform: 'uppercase'
-                        }}
-                      />
-                    </>
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+                      </>
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 2.1 SELECTOR DE PERIODO Y NIVEL (FILTRO DE ANALÍTICA) */}
       <div className="flex flex-col md:flex-row items-center justify-center gap-6 bg-white/50 backdrop-blur-sm p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
@@ -872,7 +1021,7 @@ export const Dashboard = React.memo(() => {
           ))}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 border-r border-slate-200 pr-6">
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
             Analizar Periodo:
           </span>
@@ -890,6 +1039,21 @@ export const Dashboard = React.memo(() => {
             </button>
           ))}
         </div>
+
+        {isAdmin && (
+          <button
+            onClick={handleUpdateStats}
+            disabled={updatingStats}
+            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 cursor-pointer ${
+              updatingStats
+                ? 'bg-slate-100 text-slate-400 border border-slate-200'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-100'
+            }`}
+          >
+            <Activity size={12} className={updatingStats ? 'animate-spin' : ''} />
+            {updatingStats ? 'Procesando...' : 'Calcular Estadísticas'}
+          </button>
+        )}
       </div>
 
       {/* 3. MONITOREO EN TIEMPO REAL - REDISEÑO ALTO CONTRASTE */}

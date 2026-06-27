@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast';
 
 export const FinanceSettings = () => {
   const { state, profile } = useApp();
-  const { paymentPlans, savePaymentPlan, loading, refresh } = useFinance();
+  const { paymentPlans, savePaymentPlan, loading, refresh } = useFinance({ paymentPlans: true });
   const [editingLevel, setEditingLevel] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     enrollment_fee: 0,

@@ -22,7 +22,7 @@ import { useApp } from '../../context/AppContext';
 
 export const FinanceReports = () => {
   const { state, center } = useApp();
-  const { invoices, loading } = useFinance();
+  const { invoices, loading } = useFinance({ invoices: true });
   const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
 
   const reportData = useMemo(() => {

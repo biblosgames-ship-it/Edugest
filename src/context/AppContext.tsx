@@ -63,6 +63,7 @@ interface AppContextType {
   deleteActivity: (id: string) => Promise<void>;
   addAttendanceRecord: (record: any) => Promise<void>;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
+  loadAllGrades: () => Promise<any[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -157,13 +158,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             roomRes,
             blockRes,
             schedRes,
-            attRes,
             perfRes,
             lvlSchedRes,
             fEventsRes,
             syRes,
             studRes,
-            gradeRes,
             actRes,
             centRes,
             licRes
@@ -193,8 +192,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .select('*')
               .eq('center_id', targetCid)
               .eq('school_year', selectedYear),
-            supabase.from('attendance_records').select('*').eq('center_id', targetCid),
-            supabase.from('performance_alerts').select('*').eq('center_id', targetCid),
+            supabase
+              .from('performance_alerts')
+              .select('*')
+              .eq('center_id', targetCid)
+              .order('date', { ascending: false })
+              .limit(200),
             supabase.from('level_schedules').select('*').eq('center_id', targetCid),
             supabase.from('fixed_events').select('*').eq('center_id', targetCid),
             supabase
@@ -208,11 +211,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .eq('center_id', targetCid)
               .eq('school_year', selectedYear),
             supabase
-              .from('student_grades')
+              .from('activities')
               .select('*')
               .eq('center_id', targetCid)
-              .eq('school_year', selectedYear),
-            supabase.from('activities').select('*').eq('center_id', targetCid),
+              .order('date', { ascending: false })
+              .limit(300),
             supabase.from('centers').select('*').eq('id', targetCid).single(),
             supabase
               .from('saas_licenses')
@@ -369,11 +372,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          const attendanceRecordsUnified = (attRes.data || []).map((att: any) => ({
-            ...att,
-            teacher_id: idMap[att.teacher_id] || att.teacher_id
-          }));
-
           const performanceAlertsUnified = (perfRes.data || []).map((p: any) => ({
             ...p,
             teacher_id: idMap[p.teacher_id] || p.teacher_id
@@ -396,10 +394,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             rooms: roomRes.data || [],
             timeBlocks: blockRes.data || [],
             schedule: scheduleUnified,
-            attendanceRecords: attendanceRecordsUnified,
+            attendanceRecords: [],
             performanceAlerts: performanceAlertsUnified,
             students: studRes.data || [],
-            grades: gradeRes.data || [],
+            grades: [], // Vacío por defecto
             activities: (actRes.data || []).map((a: any) => ({
               ...a,
               startTime: a.start_time,
@@ -736,6 +734,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedYear,
         setSelectedYear,
         refreshData,
+        loadAllGrades: async () => {
+          const targetCid = center?.id || profile?.center_id;
+          if (!targetCid) return [];
+          if (state.grades && state.grades.length > 0) return state.grades;
+
+          try {
+            const { data, error } = await supabase
+              .from('student_grades')
+              .select('*')
+              .eq('center_id', targetCid)
+              .eq('school_year', selectedYear);
+
+            if (error) throw error;
+            if (data) {
+              setState((prev) => ({ ...prev, grades: data }));
+              return data;
+            }
+          } catch (err) {
+            console.error('Error fetching on-demand grades:', err);
+          }
+          return [];
+        },
         updateProfile: async () => {},
         addSchoolYear,
         deleteSchoolYear,

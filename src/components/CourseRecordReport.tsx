@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 import {
   PieChart,
   Pie,
@@ -49,6 +50,31 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
   const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
   const [selectedPeriod, setSelectedPeriod] = useState<string>(initialPeriod || 'P1');
 
+  const [courseGrades, setCourseGrades] = useState<any[]>([]);
+  const [loadingGrades, setLoadingGrades] = useState(false);
+
+  useEffect(() => {
+    const fetchCourseGrades = async () => {
+      if (!selectedCourseId) return;
+      setLoadingGrades(true);
+      try {
+        const { data, error } = await supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId);
+
+        if (error) throw error;
+        setCourseGrades(data || []);
+      } catch (err) {
+        console.error('Error fetching course grades:', err);
+      } finally {
+        setLoadingGrades(false);
+      }
+    };
+
+    fetchCourseGrades();
+  }, [selectedCourseId]);
+
   const courses = state.courses || [];
 
   // Initialize with first course if none selected and no initialCourseId
@@ -63,7 +89,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
 
     const students = state.students?.filter((s: any) => s.course_id === selectedCourseId) || [];
     const subjects = state.subjects || [];
-    const grades = state.grades?.filter((g: any) => g.course_id === selectedCourseId) || [];
+    const grades = courseGrades;
     const course = courses.find((c: any) => c.id === selectedCourseId);
     const isSecondary = (course?.level || '').toLowerCase().includes('secundar');
 
@@ -286,7 +312,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
     state.students,
     state.courses,
     state.subjects,
-    state.grades,
+    courseGrades,
     selectedPeriod,
     selectedCourseId
   ]);
@@ -391,10 +417,18 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
       </div>
 
       {/* DOCUMENTO IMPRIMIBLE */}
-      <div
-        id="report-container"
-        className="max-w-[1200px] w-full mx-auto p-8 print:p-0 print:max-w-none bg-white my-8 print:my-0 rounded-2xl shadow-sm print:shadow-none min-h-screen h-fit pb-16"
-      >
+      {loadingGrades ? (
+        <div className="max-w-[1200px] w-full mx-auto p-12 bg-white my-8 rounded-2xl shadow-sm min-h-[400px] flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 text-xs font-black uppercase tracking-widest animate-pulse">
+            Cargando calificaciones del grado...
+          </p>
+        </div>
+      ) : (
+        <div
+          id="report-container"
+          className="max-w-[1200px] w-full mx-auto p-8 print:p-0 print:max-w-none bg-white my-8 print:my-0 rounded-2xl shadow-sm print:shadow-none min-h-screen h-fit pb-16"
+        >
         {/* ENCABEZADO OFICIAL */}
         <div className="flex flex-col items-center justify-center text-center mb-10 pb-6 border-b-2 border-slate-800">
           {center?.logo_url && (
@@ -717,6 +751,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 
