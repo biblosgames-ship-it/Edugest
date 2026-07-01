@@ -442,7 +442,15 @@ export const PaymentModal = ({
               </div>
             </div>
 
-            <div className="text-center text-[9px] font-bold text-slate-400 uppercase border-t border-dashed border-slate-200 pt-6">
+            {/* Signature / Stamp line */}
+            <div className={`mt-8 mb-6 flex flex-col items-center justify-center text-center ${printFormat === 'ticket' ? 'mt-6 mb-4' : 'mt-10 mb-8'}`}>
+              <div className={`border-t border-slate-400 pt-1.5 ${printFormat === 'ticket' ? 'w-36' : 'w-48'}`}></div>
+              <p className={`${printFormat === 'ticket' ? 'text-[8px]' : 'text-[10px]'} font-black uppercase text-slate-400 tracking-wider`}>
+                Firma Autorizada / Sello
+              </p>
+            </div>
+
+            <div className={`text-center font-bold text-slate-500 uppercase border-t border-dashed border-slate-200 pt-6 ${printFormat === 'ticket' ? 'text-[10px]' : 'text-xs'}`}>
               Fecha de Emisión: {new Date().toLocaleString()}
             </div>
           </div>

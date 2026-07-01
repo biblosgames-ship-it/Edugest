@@ -13,6 +13,7 @@ import {
   GraduationCap,
   RefreshCw,
   Trash2,
+  Printer,
   Package,
   X
 } from 'lucide-react';
@@ -171,17 +172,20 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
             ...t,
             amount_paid: 0,
             ids: [],
+            invoice_ids: [],
             notes_list: []
           };
           result.push(groups[rNum]);
         }
         groups[rNum].amount_paid += Number(t.amount_paid);
         groups[rNum].ids.push(t.id);
+        if (t.invoice_id) groups[rNum].invoice_ids.push(t.invoice_id);
         if (t.notes) groups[rNum].notes_list.push(t.notes);
       } else {
         result.push({
           ...t,
-          ids: [t.id]
+          ids: [t.id],
+          invoice_ids: t.invoice_id ? [t.invoice_id] : []
         });
       }
     });
@@ -195,6 +199,17 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
 
     return result;
   }, [studentTransactions]);
+
+  const handleReprintReceipt = (t: any) => {
+    const invoicesToPrint = studentInvoices.filter((inv) => 
+      t.invoice_ids && t.invoice_ids.includes(inv.id)
+    );
+    if (invoicesToPrint.length > 0) {
+      setSelectedInvoice(invoicesToPrint);
+    } else {
+      toast.error('No se encontraron las facturas asociadas a este recibo.');
+    }
+  };
 
   const handleGenerateInvoices = async () => {
     if (!student || isGenerating) return;
@@ -560,10 +575,17 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                     <p className="text-[10px] font-black text-slate-900 uppercase">
                       Recibo #{t.receipt_number || 'S/N'}
                     </p>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-black text-emerald-600">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-emerald-600 mr-1">
                         RD$ {Number(t.amount_paid).toLocaleString()}
                       </span>
+                      <button
+                        onClick={() => handleReprintReceipt(t)}
+                        className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Reimprimir Recibo"
+                      >
+                        <Printer size={14} />
+                      </button>
                       <button
                         onClick={() => voidPayment(t.id)}
                         className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
