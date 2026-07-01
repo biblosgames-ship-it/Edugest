@@ -42,6 +42,43 @@ export const FinanceDashboard = () => {
     products: true
   });
 
+  const groupedTransactions = useMemo(() => {
+    const groups: { [key: string]: any } = {};
+    const result: any[] = [];
+
+    transactions.forEach((t) => {
+      if (t.receipt_number) {
+        const rNum = t.receipt_number.toString();
+        if (!groups[rNum]) {
+          groups[rNum] = {
+            ...t,
+            amount_paid: 0,
+            ids: [],
+            notes_list: []
+          };
+          result.push(groups[rNum]);
+        }
+        groups[rNum].amount_paid += Number(t.amount_paid);
+        groups[rNum].ids.push(t.id);
+        if (t.notes) groups[rNum].notes_list.push(t.notes);
+      } else {
+        result.push({
+          ...t,
+          ids: [t.id]
+        });
+      }
+    });
+
+    result.forEach((t) => {
+      if (t.notes_list && t.notes_list.length > 0) {
+        const uniqueNotes = Array.from(new Set(t.notes_list)) as string[];
+        t.notes = uniqueNotes.join(' • ');
+      }
+    });
+
+    return result;
+  }, [transactions]);
+
   // Estados para Modal de Venta y Carrito
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleForm, setSaleForm] = useState({
@@ -440,7 +477,7 @@ export const FinanceDashboard = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {transactions.slice(0, 5).map((t) => (
+              {groupedTransactions.slice(0, 5).map((t) => (
                 <tr key={t.id} className="group hover:bg-slate-50 transition-colors">
                   <td className="py-4">
                     <div className="flex items-center gap-3">

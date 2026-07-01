@@ -159,6 +159,43 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   const studentInvoices = invoices.filter((i) => i.student_id === studentId);
   const studentTransactions = transactions.filter((t) => t.student_id === studentId);
 
+  const groupedTransactions = useMemo(() => {
+    const groups: { [key: string]: any } = {};
+    const result: any[] = [];
+
+    studentTransactions.forEach((t) => {
+      if (t.receipt_number) {
+        const rNum = t.receipt_number.toString();
+        if (!groups[rNum]) {
+          groups[rNum] = {
+            ...t,
+            amount_paid: 0,
+            ids: [],
+            notes_list: []
+          };
+          result.push(groups[rNum]);
+        }
+        groups[rNum].amount_paid += Number(t.amount_paid);
+        groups[rNum].ids.push(t.id);
+        if (t.notes) groups[rNum].notes_list.push(t.notes);
+      } else {
+        result.push({
+          ...t,
+          ids: [t.id]
+        });
+      }
+    });
+
+    result.forEach((t) => {
+      if (t.notes_list && t.notes_list.length > 0) {
+        const uniqueNotes = Array.from(new Set(t.notes_list)) as string[];
+        t.notes = uniqueNotes.join(' • ');
+      }
+    });
+
+    return result;
+  }, [studentTransactions]);
+
   const handleGenerateInvoices = async () => {
     if (!student || isGenerating) return;
 
@@ -511,17 +548,17 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
 
           <div className="space-y-6 relative">
             <div className="absolute left-6 top-8 bottom-8 w-px bg-slate-100"></div>
-            {studentTransactions.length === 0 ? (
+            {groupedTransactions.length === 0 ? (
               <p className="text-[10px] font-bold text-slate-400 uppercase italic text-center py-10">
                 No hay pagos registrados
               </p>
             ) : (
-              studentTransactions.map((t) => (
+              groupedTransactions.map((t) => (
                 <div key={t.id} className="relative pl-12">
                   <div className="absolute left-4 top-1 w-4 h-4 bg-white border-4 border-emerald-500 rounded-full z-10"></div>
                   <div className="flex justify-between items-start mb-1">
                     <p className="text-[10px] font-black text-slate-900 uppercase">
-                      Recibo #{t.receipt_number}
+                      Recibo #{t.receipt_number || 'S/N'}
                     </p>
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-black text-emerald-600">

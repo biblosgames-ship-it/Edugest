@@ -351,14 +351,14 @@ export const useFinance = (options?: {
   const voidPayment = async (transactionId: string) => {
     if (
       !window.confirm(
-        '¿Estás seguro de que deseas ANULAR este pago? El recibo desaparecerá y la factura volverá a estar pendiente.'
+        '¿Estás seguro de que deseas ANULAR este pago? El recibo desaparecerá y las facturas volverán a estar pendientes.'
       )
     )
       return;
 
     setLoading(true);
     try {
-      // 1. Obtener datos de la transacción para saber qué factura reabrir
+      // 1. Obtener datos de la transacción original para saber qué factura reabrir
       const { data: trans, error: gErr } = await supabase
         .from('finance_transactions')
         .select('*')
@@ -367,27 +367,44 @@ export const useFinance = (options?: {
 
       if (gErr) throw gErr;
 
-      // 2. Si tiene factura vinculada, volverla a poner pendiente
-      if (trans.invoice_id) {
-        await supabase
-          .from('finance_invoices')
-          .update({ status: 'pending' })
-          .eq('id', trans.invoice_id);
+      // 2. Buscar todas las transacciones que comparten el mismo receipt_number
+      let targetTransactions = [trans];
+      if (trans.receipt_number) {
+        const { data: siblingTrans } = await supabase
+          .from('finance_transactions')
+          .select('*')
+          .eq('receipt_number', trans.receipt_number)
+          .eq('center_id', centerId);
+        if (siblingTrans && siblingTrans.length > 0) {
+          targetTransactions = siblingTrans;
+        }
       }
 
-      // 3. Borrar la transacción
+      // 3. Para cada transacción, volver a poner la factura en 'pending'
+      for (const t of targetTransactions) {
+        if (t.invoice_id) {
+          await supabase
+            .from('finance_invoices')
+            .update({ status: 'pending' })
+            .eq('id', t.invoice_id);
+        }
+      }
+
+      // 4. Borrar todas las transacciones agrupadas
+      const targetIds = targetTransactions.map((t) => t.id);
       const { error: dErr } = await supabase
         .from('finance_transactions')
         .delete()
-        .eq('id', transactionId);
+        .in('id', targetIds);
 
       if (dErr) throw dErr;
 
+      const totalAmount = targetTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
       await logAction(
         'delete',
         'payments',
         transactionId,
-        `Pago anulado (Monto: ${trans.amount_paid})`
+        `Pago anulado (Recibo: ${trans.receipt_number || 'S/N'}, Monto Total: ${totalAmount})`
       );
       toast.success('Pago anulado exitosamente');
       await fetchData();
