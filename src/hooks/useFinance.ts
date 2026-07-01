@@ -529,42 +529,54 @@ export const useFinance = (options?: {
         }
 
         try {
-          const totalCartAmount = invoiceData.items.reduce((acc, i) => acc + i.amount, 0);
-          const totalConcepts = invoiceData.items
-            .map((i) => `${i.quantity}x ${i.concept.replace('Venta: ', '')}`)
-            .join(', ');
-
           const savedEntries = localStorage.getItem('edugens_ledger_entries');
           const ledgerEntries = savedEntries ? JSON.parse(savedEntries) : [];
-          const accountName = 'INGRESOS: INVENTARIO';
+          const newEntries = [...ledgerEntries];
 
-          const newLedgerEntry = {
-            id: `PAY-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            account: accountName,
-            item: studentName,
-            desc: `Cobro de: ${totalConcepts} [MÉTODO: ${invoiceData.payment_method.toUpperCase()}]`,
-            type: 'income',
-            amount: totalCartAmount,
-            method: invoiceData.payment_method
-          };
+          invoiceData.items.forEach((item, index) => {
+            const prod = products.find((p) => p.id === item.product_id);
+            const category = prod?.category || 'other';
+
+            let accountName = 'INGRESOS: INVENTARIO (OTROS)';
+            if (category === 'uniform') accountName = 'INGRESOS: UNIFORMES';
+            else if (category === 'book') accountName = 'INGRESOS: LIBROS';
+            else if (category === 'material') accountName = 'INGRESOS: MATERIALES';
+
+            const itemConcept = item.concept.startsWith('Venta: ')
+              ? item.concept.replace('Venta: ', '')
+              : item.concept;
+
+            const newLedgerEntry = {
+              id: `PAY-${Date.now()}-${index}`,
+              date: new Date().toISOString().split('T')[0],
+              account: accountName,
+              item: studentName,
+              desc: `Venta: ${item.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
+              type: 'income',
+              amount: Number(item.amount),
+              method: invoiceData.payment_method
+            };
+
+            newEntries.unshift(newLedgerEntry);
+
+            // Asegurar que la categoría existe en el catálogo
+            const savedCats = localStorage.getItem('edugens_ledger_categories');
+            const ledgerCats = savedCats ? JSON.parse(savedCats) : [];
+            if (!ledgerCats.some((c: any) => c.name === accountName)) {
+              ledgerCats.push({
+                id: `cat-${Date.now()}-${index}`,
+                name: accountName,
+                type: 'income',
+                items: []
+              });
+              localStorage.setItem('edugens_ledger_categories', JSON.stringify(ledgerCats));
+            }
+          });
 
           localStorage.setItem(
             'edugens_ledger_entries',
-            JSON.stringify([newLedgerEntry, ...ledgerEntries])
+            JSON.stringify(newEntries)
           );
-
-          const savedCats = localStorage.getItem('edugens_ledger_categories');
-          const ledgerCats = savedCats ? JSON.parse(savedCats) : [];
-          if (!ledgerCats.some((c: any) => c.name === accountName)) {
-            ledgerCats.push({
-              id: `cat-${Date.now()}`,
-              name: accountName,
-              type: 'income',
-              items: []
-            });
-            localStorage.setItem('edugens_ledger_categories', JSON.stringify(ledgerCats));
-          }
         } catch (e) {
           console.error('Error syncing with Ledger:', e);
         }

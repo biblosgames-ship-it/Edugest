@@ -26,10 +26,10 @@ export const FinanceModule = () => {
   const tabs = [
     { id: 'dashboard', label: 'Resumen', icon: BarChart3 },
     { id: 'students', label: 'Cuentas Alumnos', icon: Users },
+    { id: 'inventory', label: 'Inventario', icon: Package },
     { id: 'expenses', label: 'Libro Contable', icon: BookOpen },
     { id: 'payroll', label: 'Nómina', icon: Wallet },
     { id: 'scholarships', label: 'Becas', icon: GraduationCap },
-    { id: 'inventory', label: 'Inventario', icon: Package },
     { id: 'reports', label: 'Reportes', icon: PieChart },
     { id: 'settings', label: 'Configuración', icon: Settings }
   ];
