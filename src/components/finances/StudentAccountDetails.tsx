@@ -151,6 +151,19 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       // Error se maneja en el hook
     }
   };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!window.confirm('¿Deseas eliminar esta factura pendiente? Esta acción no se puede deshacer.')) return;
+    try {
+      const { error } = await supabase.from('finance_invoices').delete().eq('id', invoiceId);
+      if (error) throw error;
+      toast.success('Factura eliminada correctamente.');
+      refresh();
+    } catch (e: any) {
+      toast.error('Error al eliminar la factura: ' + e.message);
+    }
+  };
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
@@ -538,12 +551,21 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       </p>
                     </div>
                     {inv.status !== 'paid' && (
-                      <button
-                        onClick={() => setSelectedInvoice([inv])}
-                        className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                      >
-                        Cobrar
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedInvoice([inv])}
+                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                        >
+                          Cobrar
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInvoice(inv.id)}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                          title="Eliminar Factura"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -607,12 +629,21 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       </p>
                     </div>
                     {inv.status !== 'paid' && (
-                      <button
-                        onClick={() => setSelectedInvoice([inv])}
-                        className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                      >
-                        Cobrar
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedInvoice([inv])}
+                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                        >
+                          Cobrar
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInvoice(inv.id)}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                          title="Eliminar Factura"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

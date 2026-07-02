@@ -57,6 +57,17 @@ export const StudentAccounts = () => {
       const currentYear = selectedYear || '2025-2026';
 
       for (const student of studentsWithoutInvoices) {
+        // Verificación de respaldo en la base de datos para evitar duplicación
+        const { data: dbInvoices } = await supabase
+          .from('finance_invoices')
+          .select('id')
+          .eq('student_id', student.id)
+          .limit(1);
+
+        if (dbInvoices && dbInvoices.length > 0) {
+          continue; // Si ya existen facturas en el servidor, ignoramos al estudiante
+        }
+
         // 1. Buscar Plan
         const course = state.courses?.find((c) => c.id === student.course_id);
         const cleanLevel = course?.level?.split(' ')?.[0]?.trim();

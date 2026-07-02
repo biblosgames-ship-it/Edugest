@@ -394,6 +394,13 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [searchTerm, setSearchTerm] = useState('');
   const [reportType, setReportType] = useState('detailed');
   const [methodFilter, setMethodFilter] = useState('all');
+  const [entryDate, setEntryDate] = useState(getLocalDateString);
+
+  useEffect(() => {
+    if (showModal) {
+      setEntryDate(getLocalDateString());
+    }
+  }, [showModal]);
 
   const handleGenerateCustomReport = () => {
     if (reportType === 'condensed') {
@@ -451,7 +458,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     if (cart.length === 0) return toast.error('La canasta está vacía');
 
     const newEntry = {
-      date: getLocalDateString(),
+      date: entryDate,
       account: cart[0].account, // Usamos la cuenta del primer item
       item: cart.map((i) => `${i.quantity}x ${i.name}`).join(', '),
       description: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
@@ -524,9 +531,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
   const handleCashClosing = () => {
     const doc = new jsPDF();
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter((e: any) => e.date === today);
-    if (todayEntries.length === 0) return toast.error('Sin movimientos hoy');
+    const closingDateText = startDate === endDate ? startDate : `${startDate} al ${endDate}`;
+    if (filteredEntries.length === 0) return toast.error('Sin movimientos en el periodo seleccionado');
 
     // HEADER
     doc.setFontSize(18);
@@ -539,15 +545,15 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('CUADRE DE CAJA DIARIO', 14, 45);
+    doc.text('CUADRE DE CAJA CONTABLE', 14, 45);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`FECHA DE CIERRE: ${today}`, 14, 52);
+    doc.text(`FECHA DE CIERRE: ${closingDateText}`, 14, 52);
 
     autoTable(doc, {
       startY: 60,
       head: [['CUENTA', 'CONCEPTO', 'MONTO']],
-      body: todayEntries.map((e) => [e.account, e.item, `RD$ ${e.amount.toLocaleString()}`]),
+      body: filteredEntries.map((e) => [e.account, e.item, `RD$ ${e.amount.toLocaleString()}`]),
       theme: 'grid',
       headStyles: { fillColor: [15, 23, 42] }
     });
@@ -556,7 +562,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'bold');
     doc.line(14, finalY, 196, finalY);
     doc.text(
-      `EFECTIVO EN CAJA: RD$ ${todayEntries.reduce((acc, e) => acc + (e.type === 'income' ? e.amount : -e.amount), 0).toLocaleString()}`,
+      `EFECTIVO EN CAJA: RD$ ${filteredEntries.reduce((acc, e) => acc + (e.type === 'income' ? e.amount : -e.amount), 0).toLocaleString()}`,
       196,
       finalY + 10,
       { align: 'right' }
@@ -1053,6 +1059,18 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     {cart.length} Products
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Fecha de la Transacción
+                </label>
+                <input
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                />
               </div>
 
               <div>
