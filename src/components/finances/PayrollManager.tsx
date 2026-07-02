@@ -148,7 +148,7 @@ export const PayrollManager = () => {
         date: new Date().toISOString().split('T')[0],
         account: 'EGRESOS: NOMINA',
         item: `NÓMINA ${monthName.toUpperCase()}: ${emp.full_name}`,
-        desc: `Bruto: ${bruto} | Bonos: ${additions.toFixed(2)} | Deduc: ${deductions.toFixed(2)} (Neto: ${net.toFixed(2)})`,
+        description: `Bruto: ${bruto} | Bonos: ${additions.toFixed(2)} | Deduc: ${deductions.toFixed(2)} (Neto: ${net.toFixed(2)})`,
         type: 'expense',
         amount: net,
         method: 'transfer'

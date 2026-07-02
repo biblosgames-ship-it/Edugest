@@ -355,7 +355,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       const matchesAccount = accountFilter === 'all' || e.account === accountFilter;
       const matchesMethod = methodFilter === 'all' || (e.method || 'cash') === methodFilter;
       const matchesSearch =
-        e.desc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (e.description || e.desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.item.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesDate && matchesAccount && matchesMethod && matchesSearch;
     });
@@ -400,7 +400,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       date: new Date().toISOString().split('T')[0],
       account: cart[0].account, // Usamos la cuenta del primer item
       item: cart.map((i) => `${i.quantity}x ${i.name}`).join(', '),
-      desc: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
+      description: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
       type,
       amount: cartTotal,
       method: 'cash'
@@ -815,7 +815,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                   <p className="text-[9px] font-bold text-indigo-500 uppercase">{entry.item}</p>
                 </td>
                 <td className="px-8 py-5 text-[10px] font-bold text-slate-500 uppercase">
-                  {entry.desc}
+                  {entry.description || entry.desc}
                 </td>
                 <td className="px-8 py-5 text-right font-black text-emerald-600 text-sm">
                   {entry.type === 'income' ? `RD$ ${entry.amount.toLocaleString()}` : '-'}

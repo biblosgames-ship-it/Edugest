@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.finance_ledger_entries (
   date DATE NOT NULL,
   account TEXT NOT NULL, -- Nombre de la cuenta (categoría)
   item TEXT, -- Nombre del alumno, proveedor, etc.
-  desc TEXT, -- Descripción de la transacción
+  description TEXT, -- Descripción de la transacción
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   amount NUMERIC NOT NULL DEFAULT 0,
   method TEXT NOT NULL, -- Método de pago (cash, transfer, card, check)

@@ -301,7 +301,7 @@ export const useFinance = (options?: {
             date: new Date().toISOString().split('T')[0],
             account: accountName,
             item: studentName,
-            desc: `Cobro de: ${invConcept} (Recibo #${transRow.receipt_number || 'S/N'})`,
+            description: `Cobro de: ${invConcept} (Recibo #${transRow.receipt_number || 'S/N'})`,
             type: 'income',
             amount: Number(paymentData.amount_paid),
             method: paymentData.payment_method
@@ -610,7 +610,7 @@ export const useFinance = (options?: {
                 date: new Date().toISOString().split('T')[0],
                 account: accountName,
                 item: studentName,
-                desc: `Venta: ${inv.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
+                description: `Venta: ${inv.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
                 type: 'income',
                 amount: Number(inv.amount_final),
                 method: invoiceData.payment_method
