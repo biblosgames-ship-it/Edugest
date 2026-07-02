@@ -76,7 +76,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         Nombre: s.name || '',
         Nivel: s.level || 'Secundario',
         Area: s.area || 'General',
-        Horas_Semanales: s.weekly_hours || 4
+        Horas_Semanales: s.hours_per_week || s.weekly_hours || 4
       }));
       if (sheetMaterias.length === 0) {
         sheetMaterias.push({

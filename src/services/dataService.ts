@@ -545,7 +545,7 @@ export const dataService = {
           .from('subjects')
           .update({
             area: s.area || match.area,
-            weekly_hours: s.weekly_hours || match.weekly_hours
+            hours_per_week: s.weekly_hours || match.hours_per_week
           })
           .eq('id', subjectId);
         if (error) throw error;
@@ -557,7 +557,7 @@ export const dataService = {
             name: s.name,
             level: s.level,
             area: s.area || 'General',
-            weekly_hours: s.weekly_hours || 4
+            hours_per_week: s.weekly_hours || 4
           })
           .select()
           .single();
