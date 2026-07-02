@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   TrendingDown,
   TrendingUp,
@@ -42,12 +42,16 @@ export const LedgerManager = () => {
     ledger: true
   });
 
+  const hasSeeded = useRef(false);
+  const hasMigrated = useRef(false);
+
   useEffect(() => {
     localStorage.setItem('edugens_ledger_active_tab', activeTab);
   }, [activeTab]);
 
   useEffect(() => {
-    if (!loading && categories.length === 0) {
+    if (!loading && categories.length === 0 && !hasSeeded.current) {
+      hasSeeded.current = true;
       const defaultCats = [
         { name: 'INGRESOS: COLEGIATURAS', type: 'income', items: [] },
         { name: 'INGRESOS: INSCRIPCIONES', type: 'income', items: [] },
@@ -77,7 +81,8 @@ export const LedgerManager = () => {
   // RUTINA DE MIGRACIÓN: De LocalStorage a Supabase
   useEffect(() => {
     const localEntriesStr = localStorage.getItem('edugens_ledger_entries');
-    if (!loading && localEntriesStr) {
+    if (!loading && localEntriesStr && !hasMigrated.current) {
+      hasMigrated.current = true;
       try {
         const localEntries = JSON.parse(localEntriesStr);
         if (Array.isArray(localEntries) && localEntries.length > 0) {
