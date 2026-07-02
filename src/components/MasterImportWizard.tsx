@@ -16,6 +16,49 @@ import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 
+const formatToISODate = (dateStr: any) => {
+  if (!dateStr) return null;
+  try {
+    const str = String(dateStr).trim();
+    if (!str) return null;
+
+    // Manejar números de Excel (seriales) e.g. "43920"
+    if (/^\d{5}$/.test(str)) {
+      const num = Number(str);
+      const date = new Date((num - 25569) * 86400 * 1000);
+      return date.toISOString().split('T')[0];
+    }
+
+    // Formato DD/MM/AAAA o D/M/AAAA o DD-MM-AAAA o D-M-AAAA
+    const parts = str.split(/[\/\-]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // AAAA/MM/DD
+        const y = parts[0];
+        const m = parts[1].padStart(2, '0');
+        const d = parts[2].padStart(2, '0');
+        const iso = `${y}-${m}-${d}`;
+        if (!isNaN(Date.parse(iso))) return iso;
+      } else {
+        // DD/MM/AAAA
+        const d = parts[0].padStart(2, '0');
+        const m = parts[1].padStart(2, '0');
+        const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+        const iso = `${y}-${m}-${d}`;
+        if (!isNaN(Date.parse(iso))) return iso;
+      }
+    }
+
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed)) {
+      return new Date(parsed).toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('Error formateando fecha:', dateStr);
+  }
+  return null;
+};
+
 interface MasterImportWizardProps {
   onClose: () => void;
 }
@@ -373,7 +416,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               first_surname: findVal(['primerapellido', 'lastname', 'surname', 'apellido']),
               second_surname: findVal(['segundoapellido', 'middlename']),
               sex: findVal(['sexo', 'gender']).toUpperCase().startsWith('M') ? 'M' : 'F',
-              birth_date: findVal(['fecha', 'nacimiento', 'birth']),
+              birth_date: formatToISODate(findVal(['fecha', 'nacimiento', 'birth'])),
               level_course: findVal(['nivel', 'level']) || 'Secundario',
               grade_course: findVal(['grado', 'grade']) || '1ero',
               seccion_course: findVal(['seccion', 'section']) || 'A',
