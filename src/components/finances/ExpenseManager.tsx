@@ -62,7 +62,9 @@ export const LedgerManager = () => {
       const seedDefaults = async () => {
         try {
           for (const cat of defaultCats) {
-            await saveLedgerCategory(cat);
+            if (!categories.some((c: any) => c.name === cat.name && c.type === cat.type)) {
+              await saveLedgerCategory(cat);
+            }
           }
         } catch (e) {
           console.error('Error seeding default ledger categories:', e);

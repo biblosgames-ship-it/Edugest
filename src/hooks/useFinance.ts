@@ -23,7 +23,7 @@ export const useFinance = (options?: {
   ledger?: boolean;
 }) => {
   const { profile } = useApp();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
