@@ -3,6 +3,14 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppContext';
 import { toast } from 'react-hot-toast';
 
+const getLocalDateString = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const useFinance = (options?: {
   paymentPlans?: boolean;
   invoices?: boolean;
@@ -298,7 +306,7 @@ export const useFinance = (options?: {
           await supabase.from('finance_ledger_entries').insert({
             center_id: centerId || profile?.center_id,
             transaction_id: transRow.id,
-            date: new Date().toISOString().split('T')[0],
+            date: getLocalDateString(),
             account: accountName,
             item: studentName,
             description: `Cobro de: ${invConcept} (Recibo #${transRow.receipt_number || 'S/N'})`,
@@ -607,7 +615,7 @@ export const useFinance = (options?: {
               return {
                 center_id: currentCenterId,
                 transaction_id: transRow.id,
-                date: new Date().toISOString().split('T')[0],
+                date: getLocalDateString(),
                 account: accountName,
                 item: studentName,
                 description: `Venta: ${inv.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,

@@ -72,6 +72,45 @@ export const LedgerManager = () => {
     }
   }, [loading, categories.length]);
 
+  // RUTINA DE MIGRACIÓN: De LocalStorage a Supabase
+  useEffect(() => {
+    const localEntriesStr = localStorage.getItem('edugens_ledger_entries');
+    if (!loading && localEntriesStr) {
+      try {
+        const localEntries = JSON.parse(localEntriesStr);
+        if (Array.isArray(localEntries) && localEntries.length > 0) {
+          const migrateEntries = async () => {
+            const toastId = toast.loading('Migrando transacciones locales del día a la base de datos...');
+            try {
+              for (const entry of localEntries) {
+                await saveLedgerEntry({
+                  date: entry.date,
+                  account: entry.account,
+                  item: entry.item,
+                  description: entry.description || entry.desc || '',
+                  type: entry.type,
+                  amount: Number(entry.amount),
+                  method: entry.method || 'cash'
+                });
+              }
+              localStorage.removeItem('edugens_ledger_entries');
+              toast.success('¡Historial local migrado con éxito a la base de datos!', { id: toastId });
+            } catch (err) {
+              console.error('Error migrating ledger entries:', err);
+              toast.error('Error al migrar registros locales.', { id: toastId });
+            }
+          };
+          migrateEntries();
+        } else {
+          localStorage.removeItem('edugens_ledger_entries');
+        }
+      } catch (e) {
+        console.error('Error parsing local ledger entries:', e);
+        localStorage.removeItem('edugens_ledger_entries');
+      }
+    }
+  }, [loading]);
+
   if (loading && categories.length === 0) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -327,6 +366,14 @@ const AccountsConfig = ({ categories, onSaveCategory, onDeleteCategory }: any) =
   );
 };
 
+const getLocalDateString = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) => {
   const { center } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -334,8 +381,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [selectedCat, setSelectedCat] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [amount, setAmount] = useState(0);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(getLocalDateString);
+  const [endDate, setEndDate] = useState(getLocalDateString);
   const [accountFilter, setAccountFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [reportType, setReportType] = useState('detailed');
@@ -397,7 +444,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     if (cart.length === 0) return toast.error('La canasta está vacía');
 
     const newEntry = {
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       account: cart[0].account, // Usamos la cuenta del primer item
       item: cart.map((i) => `${i.quantity}x ${i.name}`).join(', '),
       description: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
