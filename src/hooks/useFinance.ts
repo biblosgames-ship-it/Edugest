@@ -12,6 +12,7 @@ export const useFinance = (options?: {
   suppliers?: boolean;
   payroll?: boolean;
   products?: boolean;
+  ledger?: boolean;
 }) => {
   const { profile } = useApp();
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,8 @@ export const useFinance = (options?: {
   const [payrollConfigs, setPayrollConfigs] = useState<any[]>([]);
   const [payrollPayments, setPayrollPayments] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [ledgerCategories, setLedgerCategories] = useState<any[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
 
   const centerId = profile?.center_id;
 
@@ -35,6 +38,7 @@ export const useFinance = (options?: {
   const fetchSuppliers = options ? !!options.suppliers : true;
   const fetchPayroll = options ? !!options.payroll : true;
   const fetchProducts = options ? !!options.products : true;
+  const fetchLedger = options ? !!options.ledger : true;
 
   const fetchData = useCallback(async () => {
     if (!centerId) return;
@@ -116,6 +120,25 @@ export const useFinance = (options?: {
         );
         keys.push('products');
       }
+      if (fetchLedger) {
+        promises.push(
+          supabase
+            .from('finance_ledger_categories')
+            .select('*')
+            .eq('center_id', centerId)
+            .order('name', { ascending: true })
+        );
+        keys.push('ledger_categories');
+        promises.push(
+          supabase
+            .from('finance_ledger_entries')
+            .select('*')
+            .eq('center_id', centerId)
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
+        );
+        keys.push('ledger_entries');
+      }
 
       if (promises.length === 0) {
         setLoading(false);
@@ -140,6 +163,8 @@ export const useFinance = (options?: {
         else if (key === 'payroll_config') setPayrollConfigs(res.data || []);
         else if (key === 'payroll_payments') setPayrollPayments(res.data || []);
         else if (key === 'products') setProducts(res.data || []);
+        else if (key === 'ledger_categories') setLedgerCategories(res.data || []);
+        else if (key === 'ledger_entries') setLedgerEntries(res.data || []);
       });
     } catch (error) {
       console.error('Error fetching finance data:', error);
@@ -156,7 +181,8 @@ export const useFinance = (options?: {
     fetchExpenses,
     fetchSuppliers,
     fetchPayroll,
-    fetchProducts
+    fetchProducts,
+    fetchLedger
   ]);
 
   useEffect(() => {
@@ -234,14 +260,17 @@ export const useFinance = (options?: {
         .select();
 
       if (tErr) throw tErr;
+      const transRow = trans[0];
 
       // 2. Actualizar factura si aplica
+      let invRow: any = null;
       if (paymentData.invoice_id) {
         const { data: inv } = await supabase
           .from('finance_invoices')
           .select('*')
           .eq('id', paymentData.invoice_id)
           .single();
+        invRow = inv;
         const newStatus = paymentData.amount_paid >= inv.amount_final ? 'paid' : 'partial';
         await supabase
           .from('finance_invoices')
@@ -249,15 +278,48 @@ export const useFinance = (options?: {
           .eq('id', paymentData.invoice_id);
       }
 
+      // === REGISTRO AUTOMÁTICO EN EL LIBRO CONTABLE (DB) ===
+      if (transRow) {
+        try {
+          let studentName = 'Alumno';
+          const { data: std } = await supabase
+            .from('students')
+            .select('names, first_surname')
+            .eq('id', paymentData.student_id)
+            .single();
+          if (std) {
+            studentName = `${std.names} ${std.first_surname || ''}`.trim();
+          }
+
+          const invConcept = invRow?.concept || paymentData.notes || 'Cobro';
+          const isEnrollment = invConcept.toLowerCase().includes('inscrip');
+          const accountName = isEnrollment ? 'INGRESOS: INSCRIPCIONES' : 'INGRESOS: COLEGIATURAS';
+
+          await supabase.from('finance_ledger_entries').insert({
+            center_id: centerId || profile?.center_id,
+            transaction_id: transRow.id,
+            date: new Date().toISOString().split('T')[0],
+            account: accountName,
+            item: studentName,
+            desc: `Cobro de: ${invConcept} (Recibo #${transRow.receipt_number || 'S/N'})`,
+            type: 'income',
+            amount: Number(paymentData.amount_paid),
+            method: paymentData.payment_method
+          });
+        } catch (e) {
+          console.error('Error auto-syncing transaction with ledger:', e);
+        }
+      }
+
       await logAction(
         'create',
         'payments',
-        trans[0].id,
+        transRow.id,
         `Pago registrado de ${paymentData.amount_paid}`
       );
       fetchData();
       toast.success('Pago registrado con éxito');
-      return trans[0];
+      return transRow;
     } catch (error) {
       toast.error('Error al registrar pago');
       throw error;
@@ -508,77 +570,57 @@ export const useFinance = (options?: {
           notes: invoiceData.notes || `Cobro de venta de producto: ${inv.concept}`
         }));
 
-        const { error: tErr } = await supabase
+        const { data: transRows, error: tErr } = await supabase
           .from('finance_transactions')
-          .insert(transactionsToInsert);
+          .insert(transactionsToInsert)
+          .select();
 
         if (tErr) throw tErr;
 
-        let studentName = 'Venta de Productos';
-        try {
-          const { data: std } = await supabase
-            .from('students')
-            .select('names, first_surname')
-            .eq('id', invoiceData.student_id)
-            .single();
-          if (std) {
-            studentName = `${std.names} ${std.first_surname || ''}`.trim();
-          }
-        } catch (err) {
-          console.error('Error fetching student name for ledger:', err);
-        }
-
-        try {
-          const savedEntries = localStorage.getItem('edugens_ledger_entries');
-          const ledgerEntries = savedEntries ? JSON.parse(savedEntries) : [];
-          const newEntries = [...ledgerEntries];
-
-          invoiceData.items.forEach((item, index) => {
-            const prod = products.find((p) => p.id === item.product_id);
-            const category = prod?.category || 'other';
-
-            let accountName = 'INGRESOS: INVENTARIO (OTROS)';
-            if (category === 'uniform') accountName = 'INGRESOS: UNIFORMES';
-            else if (category === 'book') accountName = 'INGRESOS: LIBROS';
-            else if (category === 'material') accountName = 'INGRESOS: MATERIALES';
-
-            const itemConcept = item.concept.startsWith('Venta: ')
-              ? item.concept.replace('Venta: ', '')
-              : item.concept;
-
-            const newLedgerEntry = {
-              id: `PAY-${Date.now()}-${index}`,
-              date: new Date().toISOString().split('T')[0],
-              account: accountName,
-              item: studentName,
-              desc: `Venta: ${item.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
-              type: 'income',
-              amount: Number(item.amount),
-              method: invoiceData.payment_method
-            };
-
-            newEntries.unshift(newLedgerEntry);
-
-            // Asegurar que la categoría existe en el catálogo
-            const savedCats = localStorage.getItem('edugens_ledger_categories');
-            const ledgerCats = savedCats ? JSON.parse(savedCats) : [];
-            if (!ledgerCats.some((c: any) => c.name === accountName)) {
-              ledgerCats.push({
-                id: `cat-${Date.now()}-${index}`,
-                name: accountName,
-                type: 'income',
-                items: []
-              });
-              localStorage.setItem('edugens_ledger_categories', JSON.stringify(ledgerCats));
+        // === REGISTRO AUTOMÁTICO EN EL LIBRO CONTABLE (DB) ===
+        if (transRows && transRows.length > 0) {
+          try {
+            let studentName = 'Venta de Productos';
+            const { data: std } = await supabase
+              .from('students')
+              .select('names, first_surname')
+              .eq('id', invoiceData.student_id)
+              .single();
+            if (std) {
+              studentName = `${std.names} ${std.first_surname || ''}`.trim();
             }
-          });
 
-          localStorage.setItem(
-            'edugens_ledger_entries',
-            JSON.stringify(newEntries)
-          );
-        } catch (e) {
-          console.error('Error syncing with Ledger:', e);
+            const ledgerEntriesToInsert = transRows.map((transRow, index) => {
+              const inv = invs[index];
+              const itemConcept = inv.concept.startsWith('Venta: ')
+                ? inv.concept.replace('Venta: ', '')
+                : inv.concept;
+
+              const prod = products.find((p) => p.id === inv.product_id);
+              const category = prod?.category || 'other';
+
+              let accountName = 'INGRESOS: INVENTARIO (OTROS)';
+              if (category === 'uniform') accountName = 'INGRESOS: UNIFORMES';
+              else if (category === 'book') accountName = 'INGRESOS: LIBROS';
+              else if (category === 'material') accountName = 'INGRESOS: MATERIALES';
+
+              return {
+                center_id: currentCenterId,
+                transaction_id: transRow.id,
+                date: new Date().toISOString().split('T')[0],
+                account: accountName,
+                item: studentName,
+                desc: `Venta: ${inv.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
+                type: 'income',
+                amount: Number(inv.amount_final),
+                method: invoiceData.payment_method
+              };
+            });
+
+            await supabase.from('finance_ledger_entries').insert(ledgerEntriesToInsert);
+          } catch (e) {
+            console.error('Error auto-syncing product sale with ledger:', e);
+          }
         }
       }
 
@@ -596,6 +638,83 @@ export const useFinance = (options?: {
     }
   };
 
+  // MUTADORES DEL LIBRO CONTABLE
+  const saveLedgerCategory = async (category: any) => {
+    const currentCenterId = centerId || profile?.center_id;
+    if (!currentCenterId) {
+      toast.error('Error: No se encontró la identificación del centro');
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('finance_ledger_categories')
+        .upsert({ ...category, center_id: currentCenterId })
+        .select();
+
+      if (error) throw error;
+      await fetchData();
+      return data?.[0];
+    } catch (error: any) {
+      console.error('Error saving ledger category:', error);
+      toast.error(`Error al guardar categoría contable: ${error.message}`);
+      throw error;
+    }
+  };
+
+  const deleteLedgerCategory = async (categoryId: string) => {
+    try {
+      const { error } = await supabase
+        .from('finance_ledger_categories')
+        .delete()
+        .eq('id', categoryId);
+
+      if (error) throw error;
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error deleting ledger category:', error);
+      toast.error('Error al eliminar categoría contable: ' + error.message);
+      throw error;
+    }
+  };
+
+  const saveLedgerEntry = async (entry: any) => {
+    const currentCenterId = centerId || profile?.center_id;
+    if (!currentCenterId) {
+      toast.error('Error: No se encontró la identificación del centro');
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('finance_ledger_entries')
+        .upsert({ ...entry, center_id: currentCenterId })
+        .select();
+
+      if (error) throw error;
+      await fetchData();
+      return data?.[0];
+    } catch (error: any) {
+      console.error('Error saving ledger entry:', error);
+      toast.error(`Error al guardar movimiento contable: ${error.message}`);
+      throw error;
+    }
+  };
+
+  const deleteLedgerEntry = async (entryId: string) => {
+    try {
+      const { error } = await supabase
+        .from('finance_ledger_entries')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error deleting ledger entry:', error);
+      toast.error('Error al eliminar movimiento contable: ' + error.message);
+      throw error;
+    }
+  };
+
   return {
     loading,
     paymentPlans,
@@ -607,6 +726,8 @@ export const useFinance = (options?: {
     payrollConfigs,
     payrollPayments,
     products,
+    ledgerCategories,
+    ledgerEntries,
     savePaymentPlan,
     registerPayment,
     voidPayment,
@@ -614,6 +735,10 @@ export const useFinance = (options?: {
     saveProduct,
     deleteProduct,
     createProductInvoice,
+    saveLedgerCategory,
+    deleteLedgerCategory,
+    saveLedgerEntry,
+    deleteLedgerEntry,
     refresh: fetchData
   };
 };

@@ -22,6 +22,7 @@ import { toast } from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useApp } from '../../context/AppContext';
+import { useFinance } from '../../hooks/useFinance';
 
 export const LedgerManager = () => {
   const [activeTab, setActiveTab] = useState(() => {
@@ -29,14 +30,16 @@ export const LedgerManager = () => {
     return saved || 'daily';
   });
 
-  const [categories, setCategories] = useState<any[]>(() => {
-    const saved = localStorage.getItem('edugens_ledger_categories');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [entries, setEntries] = useState<any[]>(() => {
-    const saved = localStorage.getItem('edugens_ledger_entries');
-    return saved ? JSON.parse(saved) : [];
+  const {
+    ledgerCategories: categories,
+    ledgerEntries: entries,
+    saveLedgerCategory,
+    deleteLedgerCategory,
+    saveLedgerEntry,
+    deleteLedgerEntry,
+    loading
+  } = useFinance({
+    ledger: true
   });
 
   useEffect(() => {
@@ -44,12 +47,38 @@ export const LedgerManager = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    localStorage.setItem('edugens_ledger_categories', JSON.stringify(categories));
-  }, [categories]);
+    if (!loading && categories.length === 0) {
+      const defaultCats = [
+        { name: 'INGRESOS: COLEGIATURAS', type: 'income', items: [] },
+        { name: 'INGRESOS: INSCRIPCIONES', type: 'income', items: [] },
+        { name: 'INGRESOS: UNIFORMES', type: 'income', items: [] },
+        { name: 'INGRESOS: LIBROS', type: 'income', items: [] },
+        { name: 'INGRESOS: MATERIALES', type: 'income', items: [] },
+        { name: 'EGRESOS: SERVICIOS', type: 'expense', items: [] },
+        { name: 'EGRESOS: NOMINA', type: 'expense', items: [] },
+        { name: 'EGRESOS: INVENTARIO', type: 'expense', items: [] },
+        { name: 'EGRESOS: OTROS', type: 'expense', items: [] }
+      ];
+      const seedDefaults = async () => {
+        try {
+          for (const cat of defaultCats) {
+            await saveLedgerCategory(cat);
+          }
+        } catch (e) {
+          console.error('Error seeding default ledger categories:', e);
+        }
+      };
+      seedDefaults();
+    }
+  }, [loading, categories.length]);
 
-  useEffect(() => {
-    localStorage.setItem('edugens_ledger_entries', JSON.stringify(entries));
-  }, [entries]);
+  if (loading && categories.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -92,38 +121,46 @@ export const LedgerManager = () => {
       </div>
 
       {activeTab === 'daily' && (
-        <DailyLedger entries={entries} setEntries={setEntries} categories={categories} />
+        <DailyLedger
+          entries={entries}
+          onSaveEntry={saveLedgerEntry}
+          onDeleteEntry={deleteLedgerEntry}
+          categories={categories}
+        />
       )}
       {activeTab === 'config' && (
-        <AccountsConfig categories={categories} setCategories={setCategories} />
+        <AccountsConfig
+          categories={categories}
+          onSaveCategory={saveLedgerCategory}
+          onDeleteCategory={deleteLedgerCategory}
+        />
       )}
     </div>
   );
 };
 
-const AccountsConfig = ({ categories, setCategories }: any) => {
+const AccountsConfig = ({ categories, onSaveCategory, onDeleteCategory }: any) => {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatType, setNewCatType] = useState('income');
   const [newItems, setNewItems] = useState<{ name: string; price: number }[]>([]);
 
-  const handleSaveCategory = () => {
+  const handleSaveCategory = async () => {
     if (!newCatName) return toast.error('Escribe un nombre para la cuenta');
     const newCat = {
-      id: editingCategory?.id || Date.now().toString(),
+      ...(editingCategory?.id ? { id: editingCategory.id } : {}),
       name: newCatName,
       type: newCatType,
       items: newItems
     };
-    if (editingCategory) {
-      setCategories(categories.map((c: any) => (c.id === editingCategory.id ? newCat : c)));
-      toast.success('Cuenta actualizada');
-    } else {
-      setCategories([...categories, newCat]);
-      toast.success('Cuenta creada');
+    try {
+      await onSaveCategory(newCat);
+      toast.success(editingCategory ? 'Cuenta actualizada' : 'Cuenta creada');
+      resetModal();
+    } catch (e) {
+      console.error('Error saving category:', e);
     }
-    resetModal();
   };
 
   const resetModal = () => {
@@ -142,10 +179,14 @@ const AccountsConfig = ({ categories, setCategories }: any) => {
     setNewItems(updated);
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string) => {
     if (window.confirm('¿Eliminar esta cuenta?')) {
-      setCategories(categories.filter((c: any) => c.id !== id));
-      toast.success('Cuenta eliminada');
+      try {
+        await onDeleteCategory(id);
+        toast.success('Cuenta eliminada');
+      } catch (e) {
+        console.error('Error deleting category:', e);
+      }
     }
   };
 
@@ -286,14 +327,13 @@ const AccountsConfig = ({ categories, setCategories }: any) => {
   );
 };
 
-const DailyLedger = ({ entries, setEntries, categories }: any) => {
+const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) => {
   const { center } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [type, setType] = useState('income');
   const [selectedCat, setSelectedCat] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [amount, setAmount] = useState(0);
-  const [desc, setDesc] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [accountFilter, setAccountFilter] = useState('all');
@@ -324,6 +364,7 @@ const DailyLedger = ({ entries, setEntries, categories }: any) => {
   const [quantity, setQuantity] = useState(1);
   const [discount, setDiscount] = useState(0);
   const [cart, setCart] = useState<any[]>([]);
+  const [desc, setDesc] = useState('');
 
   const cartTotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + item.total, 0);
@@ -352,24 +393,28 @@ const DailyLedger = ({ entries, setEntries, categories }: any) => {
     setCart(cart.filter((i) => i.id !== id));
   };
 
-  const handleSaveEntry = () => {
+  const handleSaveEntry = async () => {
     if (cart.length === 0) return toast.error('La canasta está vacía');
 
     const newEntry = {
-      id: Date.now().toString(),
       date: new Date().toISOString().split('T')[0],
       account: cart[0].account, // Usamos la cuenta del primer item
       item: cart.map((i) => `${i.quantity}x ${i.name}`).join(', '),
       desc: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
       type,
-      amount: cartTotal
+      amount: cartTotal,
+      method: 'cash'
     };
 
-    setEntries([newEntry, ...entries]);
-    toast.success('Transacción registrada con éxito');
-    setShowModal(false);
-    setCart([]);
-    setDesc('');
+    try {
+      await onSaveEntry(newEntry);
+      toast.success('Transacción registrada con éxito');
+      setShowModal(false);
+      setCart([]);
+      setDesc('');
+    } catch (e) {
+      console.error('Error saving ledger entry:', e);
+    }
   };
 
   const handlePrintReceipt = (entry: any) => {
@@ -787,7 +832,16 @@ const DailyLedger = ({ entries, setEntries, categories }: any) => {
                       <Printer size={16} />
                     </button>
                     <button
-                      onClick={() => setEntries(entries.filter((e: any) => e.id !== entry.id))}
+                      onClick={async () => {
+                        if (window.confirm('¿Anular este movimiento contable?')) {
+                          try {
+                            await onDeleteEntry(entry.id);
+                            toast.success('Movimiento anulado');
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }
+                      }}
                       className="p-2 text-slate-300 hover:text-rose-500"
                     >
                       <Trash2 size={16} />

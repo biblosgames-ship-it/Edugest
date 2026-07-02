@@ -20,6 +20,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 
 export const PayrollManager = () => {
   const { state, center } = useApp();
@@ -138,27 +139,33 @@ export const PayrollManager = () => {
     const readyToPay = masterPayroll.filter((m) => m.baseSalary > 0);
     if (readyToPay.length === 0) return toast.error('Configura los sueldos en la Nómina Maestra');
 
-    const currentEntries = JSON.parse(localStorage.getItem('edugens_ledger_entries') || '[]');
     const monthName = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(new Date());
 
-    const newEntries = readyToPay.map((emp) => {
+    const ledgerEntriesToInsert = readyToPay.map((emp) => {
       const { bruto, additions, deductions, net } = calculateNet(emp);
       return {
-        id: `PAY-${Date.now()}-${emp.id}`,
+        center_id: center?.id,
         date: new Date().toISOString().split('T')[0],
-        account: 'Nómina',
+        account: 'EGRESOS: NOMINA',
         item: `NÓMINA ${monthName.toUpperCase()}: ${emp.full_name}`,
         desc: `Bruto: ${bruto} | Bonos: ${additions.toFixed(2)} | Deduc: ${deductions.toFixed(2)} (Neto: ${net.toFixed(2)})`,
         type: 'expense',
-        amount: net
+        amount: net,
+        method: 'transfer'
       };
     });
 
-    localStorage.setItem(
-      'edugens_ledger_entries',
-      JSON.stringify([...newEntries, ...currentEntries])
-    );
-    toast.success(`Nómina de ${monthName} procesada con éxito`);
+    const processPayrollDb = async () => {
+      try {
+        const { error } = await supabase.from('finance_ledger_entries').insert(ledgerEntriesToInsert);
+        if (error) throw error;
+        toast.success(`Nómina de ${monthName} procesada y guardada en el Libro Contable`);
+      } catch (e: any) {
+        console.error('Error saving payroll to ledger database table:', e);
+        toast.error('Error al registrar nómina en el libro contable: ' + e.message);
+      }
+    };
+    processPayrollDb();
   };
 
   const exportToPDF = () => {

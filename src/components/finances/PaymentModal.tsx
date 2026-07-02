@@ -196,52 +196,7 @@ export const PaymentModal = ({
         }
       }
 
-      // === SINCRONIZACIÓN CON LIBRO CONTABLE MAESTRO ===
-      try {
-        const savedEntries = localStorage.getItem('edugens_ledger_entries');
-        const ledgerEntries = savedEntries ? JSON.parse(savedEntries) : [];
-        const newEntries = [...ledgerEntries];
 
-        invoicesList.forEach((inv, index) => {
-          const invConcept = inv.concept || '';
-          const isEnrollment = invConcept.toLowerCase().includes('inscrip');
-          const accountName = isEnrollment ? 'INGRESOS: INSCRIPCIONES' : 'INGRESOS: COLEGIATURAS';
-          
-          const newLedgerEntry = {
-            id: `PAY-${Date.now()}-${index}`,
-            date: new Date().toISOString().split('T')[0],
-            account: accountName,
-            item: `${student.names} ${student.first_surname}`,
-            desc: `Cobro de: ${invConcept} - ${courseName} (Recibo #${results[0]?.receipt_number || 'S/N'}) [MÉTODO: ${formData.payment_method.toUpperCase()}]`,
-            type: 'income',
-            amount: Number(inv.amount_final),
-            method: formData.payment_method
-          };
-
-          newEntries.unshift(newLedgerEntry);
-
-          // Asegurar que la categoría existe en el catálogo
-          const savedCats = localStorage.getItem('edugens_ledger_categories');
-          const ledgerCats = savedCats ? JSON.parse(savedCats) : [];
-          if (!ledgerCats.some((c: any) => c.name === accountName)) {
-            ledgerCats.push({
-              id: `cat-${Date.now()}-${index}`,
-              name: accountName,
-              type: 'income',
-              items: []
-            });
-            localStorage.setItem('edugens_ledger_categories', JSON.stringify(ledgerCats));
-          }
-        });
-
-        localStorage.setItem(
-          'edugens_ledger_entries',
-          JSON.stringify(newEntries)
-        );
-      } catch (e) {
-        console.error('Error syncing with Ledger:', e);
-      }
-      // ===============================================
 
       setReceiptData({
         student,
