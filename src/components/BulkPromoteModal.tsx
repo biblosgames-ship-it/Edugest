@@ -29,6 +29,7 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
   const [targetYear, setTargetYear] = useState('');
   const [targetCourseId, setTargetCourseId] = useState('');
   const [targetCourses, setTargetCourses] = useState<any[]>([]);
+  const [studentTargets, setStudentTargets] = useState<Record<string, string>>({});
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -159,6 +160,17 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
     fetchTargetCourses();
   }, [targetYear, sourceCourse]);
 
+  // Actualizar todos los destinos individuales cuando cambia el destino global
+  useEffect(() => {
+    if (students.length > 0 && targetCourseId) {
+      const updatedTargets: Record<string, string> = {};
+      students.forEach((s) => {
+        updatedTargets[s.id] = targetCourseId;
+      });
+      setStudentTargets(updatedTargets);
+    }
+  }, [students, targetCourseId]);
+
   const getNextGradeName = (grade: string) => {
     const g = (grade || '').toLowerCase().trim();
     if (g.includes('preprimario') || g.includes('pre-primario')) return '1ero';
@@ -226,13 +238,21 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
       const currentStudent: any = studentMap.get(sId);
       const studentName = `${currentStudent?.first_surname} ${currentStudent?.names}`.toUpperCase();
 
+      const finalTargetCourseId = studentTargets[sId] || targetCourseId;
+      if (!finalTargetCourseId) {
+        details.push(`⚠️ ${studentName} - Omitido (sin curso de destino)`);
+        continue;
+      }
+
       setCurrentPromotingName(studentName);
       setProgressIndex(i + 1);
 
       try {
-        await dataService.promoteStudent(sId, targetYear, targetCourseId);
+        await dataService.promoteStudent(sId, targetYear, finalTargetCourseId);
         successCount++;
-        details.push(`✅ ${studentName} - Reinscrito con éxito`);
+        const targetCourseName = targetCourses.find((c) => c.id === finalTargetCourseId);
+        const courseStr = targetCourseName ? `${targetCourseName.grade} "${targetCourseName.section}"` : 'Curso';
+        details.push(`✅ ${studentName} - Reinscrito con éxito en ${courseStr}`);
       } catch (err: any) {
         console.error(err);
         failedCount++;
@@ -377,25 +397,57 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
               ) : (
                 students.map((s, idx) => {
                   const isSelected = selectedStudentIds.includes(s.id);
+                  const currentStudentTarget = studentTargets[s.id] || targetCourseId;
                   return (
                     <div
                       key={s.id}
-                      onClick={() => handleToggleSelect(s.id)}
-                      className={`flex items-center gap-3 py-2.5 px-4 cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'bg-indigo-50/20' : ''}`}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 px-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors ${isSelected ? 'bg-indigo-50/10' : ''}`}
                     >
-                      <button type="button" className="text-indigo-600 shrink-0">
-                        {isSelected ? (
-                          <CheckSquare size={16} />
-                        ) : (
-                          <Square size={16} className="text-slate-300" />
-                        )}
-                      </button>
-                      <span className="text-[10px] font-black text-slate-500 w-6 text-center border-r border-slate-100">
-                        {idx + 1}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-800 uppercase">
-                        {s.first_surname} {s.second_surname || ''}, {s.names}
-                      </span>
+                      <div
+                        className="flex items-center gap-3 flex-1 cursor-pointer"
+                        onClick={() => handleToggleSelect(s.id)}
+                      >
+                        <button type="button" className="text-indigo-600 shrink-0">
+                          {isSelected ? (
+                            <CheckSquare size={16} />
+                          ) : (
+                            <Square size={16} className="text-slate-300" />
+                          )}
+                        </button>
+                        <span className="text-[10px] font-black text-slate-500 w-6 text-center border-r border-slate-100">
+                          {idx + 1}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-800 uppercase">
+                          {s.first_surname} {s.second_surname || ''}, {s.names}
+                        </span>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Destino:</span>
+                        <select
+                          value={currentStudentTarget}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStudentTargets((prev) => ({ ...prev, [s.id]: val }));
+                            if (val === '') {
+                              setSelectedStudentIds((prev) => prev.filter((id) => id !== s.id));
+                            } else {
+                              if (!selectedStudentIds.includes(s.id)) {
+                                setSelectedStudentIds((prev) => [...prev, s.id]);
+                              }
+                            }
+                          }}
+                          disabled={!isSelected}
+                          className={`px-3 py-1.5 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 outline-none focus:border-indigo-500 bg-white transition-all cursor-pointer ${!isSelected ? 'opacity-40 cursor-not-allowed bg-slate-100' : ''}`}
+                        >
+                          <option value="">-- No promover / Repetir --</option>
+                          {targetCourses.map((tc: any) => (
+                            <option key={tc.id} value={tc.id}>
+                              {tc.grade} "{tc.section}" ({tc.level})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   );
                 })
