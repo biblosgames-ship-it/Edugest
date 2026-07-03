@@ -168,6 +168,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Nivel_Curso: course?.level || '',
           Grado_Curso: course?.grade || '',
           Seccion_Curso: course?.section || '',
+          Tanda_Curso: course?.tanda || 'Matutina',
           Tutor_Nombre: parent?.name || '',
           Tutor_Parentesco: parent?.relation || '',
           Tutor_Telefono: parent?.phone || '',
@@ -186,6 +187,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Nivel_Curso: 'Secundario',
           Grado_Curso: '1ero',
           Seccion_Curso: 'A',
+          Tanda_Curso: 'Matutina',
           Tutor_Nombre: 'Ana Santos',
           Tutor_Parentesco: 'Madre',
           Tutor_Telefono: '809-555-0202',
@@ -206,6 +208,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Nivel_Curso: course?.level || '',
           Grado_Curso: course?.grade || '',
           Seccion_Curso: course?.section || '',
+          Tanda_Curso: course?.tanda || 'Matutina',
           Horas_Semanales: a.hours_per_week || 4
         };
       });
@@ -216,6 +219,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Nivel_Curso: 'Secundario',
           Grado_Curso: '1ero',
           Seccion_Curso: 'A',
+          Tanda_Curso: 'Matutina',
           Horas_Semanales: 6
         });
       }
@@ -420,6 +424,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               level_course: findVal(['nivel', 'level']) || 'Secundario',
               grade_course: findVal(['grado', 'grade']) || '1ero',
               seccion_course: findVal(['seccion', 'section']) || 'A',
+              tanda_course: findVal(['tanda', 'shift', 'jornada']) || 'Matutina',
               tutor_name: findVal(['tutor', 'padre', 'encargado']),
               tutor_parentesco: findVal(['parentesco', 'relation']),
               tutor_telefono: findVal(['telefono', 'phone']),
@@ -444,6 +449,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               nivel: findVal(['nivel', 'level']) || 'Secundario',
               grade: findVal(['grado', 'grade']) || '1ero',
               section: findVal(['seccion', 'section']) || 'A',
+              tanda: findVal(['tanda', 'shift', 'jornada']) || 'Matutina',
               hours_per_week: Number(findVal(['horas', 'weekly'])) || 4
             };
           })

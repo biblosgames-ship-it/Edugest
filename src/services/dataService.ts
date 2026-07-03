@@ -487,12 +487,12 @@ export const dataService = {
       .eq('center_id', centerId)
       .eq('school_year', schoolYear);
 
-    const courseMap = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
+    const courseMap = new Map<string, string>(); // 'nivel_grado_seccion_tanda' -> UUID
 
     for (const c of data.courses) {
-      const key = `${c.level}_${c.grade}_${c.section}`.toLowerCase().trim();
+      const key = `${c.level}_${c.grade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
       const match = (existingCourses || []).find(
-        (ec: any) => `${ec.level}_${ec.grade}_${ec.section}`.toLowerCase().trim() === key
+        (ec: any) => `${ec.level}_${ec.grade}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
       );
 
       let courseId = '';
@@ -633,7 +633,7 @@ export const dataService = {
       .eq('center_id', centerId);
 
     for (const s of data.students) {
-      const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}`
+      const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}_${s.tanda_course || 'Matutina'}`
         .toLowerCase()
         .trim();
       const courseId = courseMap.get(courseKey) || null;
@@ -723,7 +723,7 @@ export const dataService = {
       if (!a.docente || !a.materia) continue;
       const docKey = a.docente.toLowerCase().trim();
       const subKey = `${a.materia}_${a.nivel || ''}`.toLowerCase().trim();
-      const courseKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}`.toLowerCase().trim();
+      const courseKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}_${a.tanda || 'Matutina'}`.toLowerCase().trim();
 
       const teacherId = staffMap.get(docKey);
       const subjectId = subjectMap.get(subKey);

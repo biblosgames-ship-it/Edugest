@@ -321,7 +321,7 @@ export const StudentManagement = () => {
             <option value="">TODOS LOS CURSOS</option>
             {(state.courses || []).map((c: any) => (
               <option key={c.id} value={c.id}>
-                {c.level} {c.grade} {c.section}
+                {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
               </option>
             ))}
           </select>
@@ -417,7 +417,15 @@ export const StudentManagement = () => {
                   </td>
                   <td className="py-1 px-4">
                     <div className="text-[10px] font-black text-text-main uppercase leading-none">
-                      {s.first_surname} {s.second_surname}, {s.names}
+                      {s.first_surname} {s.second_surname || ''}, {s.names}
+                      {!selectedCourseId && (
+                        <span className="block text-[8px] text-slate-400 font-bold mt-1">
+                          {(() => {
+                            const c = (state.courses || []).find((course: any) => course.id === s.course_id);
+                            return c ? `${c.level} ${c.grade} "${c.section}" - ${c.tanda || 'Matutina'}` : 'Sin curso';
+                          })()}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="py-1 px-4 text-center text-[9px] font-black text-slate-400">
