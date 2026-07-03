@@ -274,7 +274,9 @@ export const StudentAccounts = () => {
 
       const hasOverdue = studentInvoices.some(
         (i) =>
-          i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date())
+          !String(i.concept).toLowerCase().includes('inscrib') &&
+          !String(i.concept).toLowerCase().includes('inscrip') &&
+          (i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date()))
       );
 
       let status = 'Al día';

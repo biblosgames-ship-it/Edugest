@@ -233,7 +233,10 @@ export const FinanceDashboard = () => {
     const netProfit = totalIncome - totalExpenses;
 
     const overdueInvoices = invoices.filter(
-      (i) => i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date())
+      (i) =>
+        !String(i.concept).toLowerCase().includes('inscrib') &&
+        !String(i.concept).toLowerCase().includes('inscrip') &&
+        (i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date()))
     );
     const totalOverdue = overdueInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
 

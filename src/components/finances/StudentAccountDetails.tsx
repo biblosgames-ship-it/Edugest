@@ -529,7 +529,10 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                         {inv.description
                           ? `Correspondiente a ${inv.description}`
                           : `Vence: ${new Date(inv.due_date).toLocaleDateString()}`}
-                        {inv.status === 'pending' && new Date(inv.due_date) < new Date() && (
+                        {inv.status === 'pending' &&
+                          !String(inv.concept).toLowerCase().includes('inscrib') &&
+                          !String(inv.concept).toLowerCase().includes('inscrip') &&
+                          new Date(inv.due_date) < new Date() && (
                           <span className="text-rose-500 flex items-center gap-1">
                             <AlertCircle size={10} /> MORA
                           </span>

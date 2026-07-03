@@ -55,8 +55,10 @@ export const FinanceReports = () => {
           const sBalance = sDebt - sPaid;
           const hasMora = studentInvoices.some(
             (i) =>
-              i.status === 'overdue' ||
-              (i.status === 'pending' && new Date(i.due_date) < new Date())
+              !String(i.concept).toLowerCase().includes('inscrib') &&
+              !String(i.concept).toLowerCase().includes('inscrip') &&
+              (i.status === 'overdue' ||
+                (i.status === 'pending' && new Date(i.due_date) < new Date()))
           );
 
           courseDebt += sDebt;
@@ -106,7 +108,9 @@ export const FinanceReports = () => {
           .reduce((acc, i) => acc + Number(i.amount_final), 0);
         const hasMora = studentInvoices.some(
           (i) =>
-            i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date())
+            !String(i.concept).toLowerCase().includes('inscrib') &&
+            !String(i.concept).toLowerCase().includes('inscrip') &&
+            (i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date()))
         );
         return { ...student, balance: sDebt - sPaid, hasMora };
       })
