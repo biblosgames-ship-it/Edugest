@@ -493,9 +493,19 @@ export const dataService = {
     for (const c of data.courses) {
       const key = `${c.level}_${c.grade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
       const fallbackKey = `${c.level}_${c.grade}_${c.section}`.toLowerCase().trim();
-      const match = (existingCourses || []).find(
+      let match = (existingCourses || []).find(
         (ec: any) => `${ec.level}_${ec.grade}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
       );
+
+      // Fallback: Si no hay coincidencia exacta con tanda, verificar si existe exactamente un curso en la BD con ese nivel, grado y sección
+      if (!match) {
+        const baseMatches = (existingCourses || []).filter(
+          (ec: any) => `${ec.level}_${ec.grade}_${ec.section}`.toLowerCase().trim() === fallbackKey
+        );
+        if (baseMatches.length === 1) {
+          match = baseMatches[0];
+        }
+      }
 
       let courseId = '';
       if (match) {
