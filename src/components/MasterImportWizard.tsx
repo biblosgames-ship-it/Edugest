@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { sortCourses } from '../utils/courseSorter';
 import {
   FileSpreadsheet,
   Upload,
@@ -105,7 +106,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
       ];
 
       // Pestaña 2: Cursos
-      const sheetCursos = (state.courses || []).map((c: any) => ({
+      const sheetCursos = sortCourses(state.courses || []).map((c: any) => ({
         Nivel: c.level || 'Secundario',
         Grado: c.grade || '',
         Seccion: c.section || '',

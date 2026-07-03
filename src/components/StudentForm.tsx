@@ -26,6 +26,7 @@ import { dataService } from '../services/dataService';
 import { generateStudentPDF } from '../utils/pdfGenerator';
 import { format, differenceInYears } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
+import { sortCourses } from '../utils/courseSorter';
 
 interface StudentFormProps {
   gradeId?: string;
@@ -662,7 +663,7 @@ export const StudentForm = ({
                         className={`${inputClass} border-brand-blue/30 font-black text-brand-blue bg-surface`}
                       >
                         <option value="">-- Seleccione el Grado --</option>
-                        {state.courses.map((c: any) => (
+                        {sortCourses(state.courses || []).map((c: any) => (
                           <option key={c.id} value={c.id}>
                             {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                           </option>

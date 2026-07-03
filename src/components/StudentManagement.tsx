@@ -4,6 +4,7 @@ import { useApp, useSupabase } from '../context/AppContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStudents } from '../hooks/useStudents';
 import { supabase } from '../lib/supabase';
+import { sortCourses } from '../utils/courseSorter';
 import {
   GraduationCap,
   Trash2,
@@ -367,7 +368,7 @@ export const StudentManagement = () => {
             className="w-48 px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-[10px] font-black uppercase outline-none focus:border-indigo-500 focus:bg-surface transition-all shadow-inner cursor-pointer"
           >
             <option value="">TODOS LOS CURSOS</option>
-            {(state.courses || []).map((c: any) => (
+            {sortCourses(state.courses || []).map((c: any) => (
               <option key={c.id} value={c.id}>
                 {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
               </option>
