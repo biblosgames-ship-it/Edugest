@@ -379,6 +379,9 @@ export const StudentManagement = () => {
                 #
               </th>
               <th className="py-2 px-4 text-[9px] font-black uppercase">Apellidos y Nombres</th>
+              {!selectedCourseId && (
+                <th className="py-2 px-4 text-[9px] font-black uppercase w-48">Curso / Sección / Tanda</th>
+              )}
               <th className="py-2 px-4 text-[9px] font-black uppercase text-center w-8">S</th>
               <th className="py-2 px-4 text-right text-[9px] font-black uppercase w-32">
                 Acciones
@@ -389,7 +392,7 @@ export const StudentManagement = () => {
             {showLoading ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={selectedCourseId ? 4 : 5}
                   className="py-10 text-center animate-pulse font-black text-slate-300 uppercase text-[9px]"
                 >
                   Cargando...
@@ -398,7 +401,7 @@ export const StudentManagement = () => {
             ) : filteredStudents.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={selectedCourseId ? 4 : 5}
                   className="py-10 text-center font-black text-slate-400 uppercase text-[10px]"
                 >
                   Sin resultados
@@ -418,16 +421,16 @@ export const StudentManagement = () => {
                   <td className="py-1 px-4">
                     <div className="text-[10px] font-black text-text-main uppercase leading-none">
                       {s.first_surname} {s.second_surname || ''}, {s.names}
-                      {!selectedCourseId && (
-                        <span className="block text-[8px] text-slate-400 font-bold mt-1">
-                          {(() => {
-                            const c = (state.courses || []).find((course: any) => course.id === s.course_id);
-                            return c ? `${c.level} ${c.grade} "${c.section}" - ${c.tanda || 'Matutina'}` : 'Sin curso';
-                          })()}
-                        </span>
-                      )}
                     </div>
                   </td>
+                  {!selectedCourseId && (
+                    <td className="py-1 px-4 text-[10px] font-black text-slate-500 uppercase">
+                      {(() => {
+                        const c = (state.courses || []).find((course: any) => course.id === s.course_id);
+                        return c ? `${c.grade} "${c.section}" - ${c.tanda || 'Matutina'}` : 'Sin curso';
+                      })()}
+                    </td>
+                  )}
                   <td className="py-1 px-4 text-center text-[9px] font-black text-slate-400">
                     {s.sex || '-'}
                   </td>
