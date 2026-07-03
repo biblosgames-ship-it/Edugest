@@ -140,7 +140,7 @@ export const dataService = {
     if (error) throw error;
 
     // Guardar extras
-    if (extra.family?.length > 0) {
+    if (extra?.family?.length > 0) {
       const { error: fErr } = await supabase.from('parents').insert(
         extra.family.map((f: any) => ({
           name: f.name,
@@ -156,15 +156,15 @@ export const dataService = {
 
     // Attempt to save extra data if tables exist
     try {
-      if (extra.medical)
+      if (extra?.medical)
         await supabase.from('student_medical').upsert({ ...extra.medical, student_id: student.id });
     } catch (e) {}
     try {
-      if (extra.history)
+      if (extra?.history)
         await supabase.from('student_history').upsert({ ...extra.history, student_id: student.id });
     } catch (e) {}
     try {
-      if (extra.documents)
+      if (extra?.documents)
         await supabase
           .from('student_documents')
           .upsert({ ...extra.documents, student_id: student.id });
@@ -181,7 +181,7 @@ export const dataService = {
     if (error) throw error;
 
     // Actualizar extras
-    if (extra.family?.length > 0) {
+    if (extra?.family?.length > 0) {
       await supabase.from('parents').delete().eq('student_id', id);
       const { error: fErr } = await supabase.from('parents').insert(
         extra.family.map((f: any) => ({
@@ -197,15 +197,15 @@ export const dataService = {
     }
 
     try {
-      if (extra.medical)
+      if (extra?.medical)
         await supabase.from('student_medical').upsert({ ...extra.medical, student_id: id });
     } catch (e) {}
     try {
-      if (extra.history)
+      if (extra?.history)
         await supabase.from('student_history').upsert({ ...extra.history, student_id: id });
     } catch (e) {}
     try {
-      if (extra.documents)
+      if (extra?.documents)
         await supabase.from('student_documents').upsert({ ...extra.documents, student_id: id });
     } catch (e) {}
   },
