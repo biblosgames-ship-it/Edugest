@@ -1,5 +1,30 @@
-/** VERSION 55.0 - RECONSTRUCCIÓN TOTAL DE SERVICIOS **/
 import { supabase } from '../lib/supabase';
+
+const normalizeGrade = (grade: string) => {
+  if (!grade) return '';
+  let g = String(grade).toLowerCase()
+    .replace(/pre-primario/g, 'preprimario')
+    .replace(/pre-kinder/g, 'prekinder')
+    .replace(/pre-kínder/g, 'prekinder')
+    .replace(/kínder/g, 'kinder')
+    .replace(/\s+/g, ' ')
+    .trim();
+    
+  g = g.replace(/\s+primaria/g, '')
+       .replace(/\s+primario/g, '')
+       .replace(/\s+secundaria/g, '')
+       .replace(/\s+secundario/g, '')
+       .replace(/\s+inicial/g, '');
+
+  if (g.startsWith('1ro') || g.startsWith('1ero')) return '1ero';
+  if (g.startsWith('2do') || g.startsWith('2ndo')) return '2do';
+  if (g.startsWith('3ro') || g.startsWith('3ero')) return '3ero';
+  if (g.startsWith('4to')) return '4to';
+  if (g.startsWith('5to')) return '5to';
+  if (g.startsWith('6to')) return '6to';
+
+  return g;
+};
 
 export const dataService = {
   // CENTROS
@@ -491,16 +516,17 @@ export const dataService = {
     const courseMapFallback = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
 
     for (const c of data.courses) {
-      const key = `${c.level}_${c.grade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
-      const fallbackKey = `${c.level}_${c.grade}_${c.section}`.toLowerCase().trim();
+      const normGrade = normalizeGrade(c.grade);
+      const key = `${c.level}_${normGrade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
+      const fallbackKey = `${c.level}_${normGrade}_${c.section}`.toLowerCase().trim();
       let match = (existingCourses || []).find(
-        (ec: any) => `${ec.level}_${ec.grade}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
+        (ec: any) => `${ec.level}_${normalizeGrade(ec.grade)}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
       );
 
       // Fallback: Si no hay coincidencia exacta con tanda, verificar si existe exactamente un curso en la BD con ese nivel, grado y sección
       if (!match) {
         const baseMatches = (existingCourses || []).filter(
-          (ec: any) => `${ec.level}_${ec.grade}_${ec.section}`.toLowerCase().trim() === fallbackKey
+          (ec: any) => `${ec.level}_${normalizeGrade(ec.grade)}_${ec.section}`.toLowerCase().trim() === fallbackKey
         );
         if (baseMatches.length === 1) {
           match = baseMatches[0];
@@ -646,10 +672,11 @@ export const dataService = {
       .eq('center_id', centerId);
 
     for (const s of data.students) {
-      const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}_${s.tanda_course || 'Matutina'}`
+      const normGrade = normalizeGrade(s.grade_course);
+      const courseKey = `${s.level_course || ''}_${normGrade}_${s.seccion_course || ''}_${s.tanda_course || 'Matutina'}`
         .toLowerCase()
         .trim();
-      const fallbackKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}`
+      const fallbackKey = `${s.level_course || ''}_${normGrade}_${s.seccion_course || ''}`
         .toLowerCase()
         .trim();
       const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
@@ -739,8 +766,9 @@ export const dataService = {
       if (!a.docente || !a.materia) continue;
       const docKey = a.docente.toLowerCase().trim();
       const subKey = `${a.materia}_${a.nivel || ''}`.toLowerCase().trim();
-      const courseKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}_${a.tanda || 'Matutina'}`.toLowerCase().trim();
-      const fallbackKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}`.toLowerCase().trim();
+      const normGrade = normalizeGrade(a.grade);
+      const courseKey = `${a.nivel || ''}_${normGrade}_${a.section || ''}_${a.tanda || 'Matutina'}`.toLowerCase().trim();
+      const fallbackKey = `${a.nivel || ''}_${normGrade}_${a.section || ''}`.toLowerCase().trim();
 
       const teacherId = staffMap.get(docKey);
       const subjectId = subjectMap.get(subKey);
