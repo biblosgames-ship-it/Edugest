@@ -22,7 +22,7 @@ export const useFinance = (options?: {
   products?: boolean;
   ledger?: boolean;
 }) => {
-  const { profile } = useApp();
+  const { profile, selectedYear } = useApp();
   const [loading, setLoading] = useState(true);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -60,13 +60,17 @@ export const useFinance = (options?: {
         keys.push('plans');
       }
       if (fetchInvoices) {
+        let query = supabase
+          .from('finance_invoices')
+          .select('*')
+          .eq('center_id', centerId);
+        
+        if (selectedYear) {
+          query = query.eq('period', selectedYear);
+        }
+
         promises.push(
-          supabase
-            .from('finance_invoices')
-            .select('*')
-            .eq('center_id', centerId)
-            .order('due_date', { ascending: true })
-            .limit(1000)
+          query.order('due_date', { ascending: true }).limit(1000)
         );
         keys.push('invoices');
       }
@@ -182,6 +186,7 @@ export const useFinance = (options?: {
     }
   }, [
     centerId,
+    selectedYear,
     fetchPlans,
     fetchInvoices,
     fetchTransactions,

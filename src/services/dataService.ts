@@ -904,12 +904,29 @@ export const dataService = {
     if (sErr) throw sErr;
 
     // 2. Verificar si ya existe inscripción para este estudiante en el año destino
-    const { data: existingEnrollment } = await supabase
-      .from('students')
-      .select('id')
-      .eq('student_code', sourceStudent.student_code)
-      .eq('school_year', targetYear)
-      .maybeSingle();
+    let existingEnrollment: any = null;
+
+    if (sourceStudent.student_code && sourceStudent.student_code.trim() !== '') {
+      const { data } = await supabase
+        .from('students')
+        .select('id')
+        .eq('student_code', sourceStudent.student_code)
+        .eq('school_year', targetYear)
+        .maybeSingle();
+      existingEnrollment = data;
+    }
+
+    if (!existingEnrollment) {
+      // Fallback: buscar por nombres, primer apellido y año destino
+      const { data } = await supabase
+        .from('students')
+        .select('id')
+        .eq('names', sourceStudent.names)
+        .eq('first_surname', sourceStudent.first_surname)
+        .eq('school_year', targetYear)
+        .maybeSingle();
+      existingEnrollment = data;
+    }
 
     if (existingEnrollment) {
       // Si ya está registrado en el nuevo ciclo, solo actualizamos el curso destino
