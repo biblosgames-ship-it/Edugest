@@ -161,6 +161,9 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
 
   const getNextGradeName = (grade: string) => {
     const g = (grade || '').toLowerCase().trim();
+    if (g.includes('preprimario') || g.includes('pre-primario')) return '1ero';
+    if (g.includes('kinder') || g.includes('kínder')) return 'Preprimario';
+    if (g.includes('prekínder') || g.includes('pre-kinder') || g.includes('pre-kínder') || g.includes('prekinder')) return 'Kínder';
     if (g.includes('1')) return '2do';
     if (g.includes('2')) return '3ero';
     if (g.includes('3')) return '4to';
@@ -176,7 +179,7 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
     if (l === 'primario' && g.includes('6')) {
       return 'Secundario';
     }
-    if (l === 'inicial') {
+    if (l === 'inicial' && (g.includes('preprimario') || g.includes('pre-primario'))) {
       return 'Primario';
     }
     return level;
