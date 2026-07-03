@@ -1,7 +1,6 @@
 /** VERSION 54.0 - FIX IMPRESIÓN (CID ANCLADO) **/
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp, useSupabase } from '../context/AppContext';
-import { useQueryClient } from '@tanstack/react-query';
 import { useStudents } from '../hooks/useStudents';
 import { supabase } from '../lib/supabase';
 import { sortCourses } from '../utils/courseSorter';
@@ -32,7 +31,6 @@ export const StudentManagement = () => {
   const { state, selectedYear, refreshData } = useApp();
   const { profile } = useSupabase();
   const { students: allStudents, isLoading: loading, deleteStudent } = useStudents();
-  const queryClient = useQueryClient();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -288,52 +286,6 @@ export const StudentManagement = () => {
     }
   };
 
-  const handleDeleteAllStudents = async () => {
-    if (!profile?.center_id) return;
-    
-    const scopeText = selectedCourseId 
-      ? "este curso" 
-      : `todo el año escolar ${selectedYear}`;
-      
-    const confirm1 = window.confirm(
-      `¿Deseas eliminar permanentemente a TODOS los estudiantes de ${scopeText}? Esta acción es irreversible.`
-    );
-    if (!confirm1) return;
-    
-    const confirm2 = window.prompt(
-      `Para confirmar la eliminación masiva de alumnos de ${scopeText}, escribe la palabra "ELIMINAR" en mayúsculas:`
-    );
-    if (confirm2 !== 'ELIMINAR') {
-      alert('Confirmación incorrecta. Operación cancelada.');
-      return;
-    }
-
-    setLocalLoading(true);
-    try {
-      let query = supabase.from('students').delete().eq('center_id', profile.center_id);
-      
-      if (selectedCourseId) {
-        query = query.eq('course_id', selectedCourseId);
-      } else {
-        query = query.eq('school_year', selectedYear);
-      }
-
-      const { error } = await query;
-      if (error) throw error;
-
-      queryClient.invalidateQueries({ queryKey: ['students', profile.center_id, selectedYear] });
-      queryClient.invalidateQueries({ queryKey: ['center-stats', profile.center_id] });
-
-      alert('Todos los estudiantes del grupo seleccionado han sido eliminados de la base de datos.');
-      await refreshData(profile.center_id, true);
-    } catch (err: any) {
-      console.error(err);
-      alert('Error al intentar eliminar los estudiantes: ' + (err.message || err));
-    } finally {
-      setLocalLoading(false);
-    }
-  };
-
   return (
     <div className="space-y-4 pb-10 animate-fade-in text-left text-text-main">
       <div className="flex flex-wrap items-center justify-between gap-4 bg-surface p-4 rounded-3xl border border-border-main shadow-lg">
@@ -408,14 +360,7 @@ export const StudentManagement = () => {
               <Printer size={16} /> Imprimir Listado
             </button>
           )}
-          {filteredStudents.length > 0 && (
-            <button
-              onClick={handleDeleteAllStudents}
-              className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-700 transition-all shadow-xl"
-            >
-              <Trash2 size={16} /> Limpiar Alumnos
-            </button>
-          )}
+
           <button
             onClick={() => {
               setEditingStudent(null);
