@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FileSpreadsheet,
   Upload,
@@ -66,6 +67,7 @@ interface MasterImportWizardProps {
 export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
   const { state, center, selectedYear, refreshData } = useApp();
   const { profile } = useSupabase();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState<'upload' | 'preview' | 'importing' | 'success'>(
     'upload'
@@ -502,6 +504,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
 
       setProgressMsg('Sincronizando Estado de la Aplicación...');
       setProgressValue(85);
+      queryClient.invalidateQueries({ queryKey: ['students', centerId, selectedYear] });
+      queryClient.invalidateQueries({ queryKey: ['center-stats', centerId] });
       await refreshData(centerId, true);
 
       setProgressValue(100);

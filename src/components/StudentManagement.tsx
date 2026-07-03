@@ -1,6 +1,7 @@
 /** VERSION 54.0 - FIX IMPRESIÓN (CID ANCLADO) **/
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp, useSupabase } from '../context/AppContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStudents } from '../hooks/useStudents';
 import { supabase } from '../lib/supabase';
 import {
@@ -30,6 +31,7 @@ export const StudentManagement = () => {
   const { state, selectedYear, refreshData } = useApp();
   const { profile } = useSupabase();
   const { students: allStudents, isLoading: loading, deleteStudent } = useStudents();
+  const queryClient = useQueryClient();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -317,6 +319,9 @@ export const StudentManagement = () => {
 
       const { error } = await query;
       if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['students', profile.center_id, selectedYear] });
+      queryClient.invalidateQueries({ queryKey: ['center-stats', profile.center_id] });
 
       alert('Todos los estudiantes del grupo seleccionado han sido eliminados de la base de datos.');
       await refreshData(profile.center_id, true);
