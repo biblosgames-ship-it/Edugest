@@ -488,9 +488,11 @@ export const dataService = {
       .eq('school_year', schoolYear);
 
     const courseMap = new Map<string, string>(); // 'nivel_grado_seccion_tanda' -> UUID
+    const courseMapFallback = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
 
     for (const c of data.courses) {
       const key = `${c.level}_${c.grade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
+      const fallbackKey = `${c.level}_${c.grade}_${c.section}`.toLowerCase().trim();
       const match = (existingCourses || []).find(
         (ec: any) => `${ec.level}_${ec.grade}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
       );
@@ -522,6 +524,7 @@ export const dataService = {
         courseId = newCourse.id;
       }
       courseMap.set(key, courseId);
+      courseMapFallback.set(fallbackKey, courseId);
     }
 
     // 3. Materias
@@ -636,7 +639,10 @@ export const dataService = {
       const courseKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}_${s.tanda_course || 'Matutina'}`
         .toLowerCase()
         .trim();
-      const courseId = courseMap.get(courseKey) || null;
+      const fallbackKey = `${s.level_course || ''}_${s.grade_course || ''}_${s.seccion_course || ''}`
+        .toLowerCase()
+        .trim();
+      const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
 
       const studentNameKey = `${s.first_surname || ''} ${s.second_surname || ''} ${s.names || ''}`
         .toLowerCase()
@@ -724,10 +730,11 @@ export const dataService = {
       const docKey = a.docente.toLowerCase().trim();
       const subKey = `${a.materia}_${a.nivel || ''}`.toLowerCase().trim();
       const courseKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}_${a.tanda || 'Matutina'}`.toLowerCase().trim();
+      const fallbackKey = `${a.nivel || ''}_${a.grade || ''}_${a.section || ''}`.toLowerCase().trim();
 
       const teacherId = staffMap.get(docKey);
       const subjectId = subjectMap.get(subKey);
-      const courseId = courseMap.get(courseKey);
+      const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey);
 
       // Si alguno no se encuentra, se omite de forma flexible de acuerdo con la decisión de diseño
       if (!teacherId || !subjectId || !courseId) {
