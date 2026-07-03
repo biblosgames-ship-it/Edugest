@@ -664,7 +664,7 @@ export const StudentForm = ({
                         <option value="">-- Seleccione el Grado --</option>
                         {state.courses.map((c: any) => (
                           <option key={c.id} value={c.id}>
-                            {c.grade} - Sec. {c.section} ({c.tanda || 'Sin Tanda'})
+                            {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                           </option>
                         ))}
                       </select>
