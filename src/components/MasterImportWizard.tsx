@@ -109,7 +109,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         Nivel: c.level || 'Secundario',
         Grado: c.grade || '',
         Seccion: c.section || '',
-        Tanda: c.shift || 'Matutina'
+        Tanda: c.tanda || c.shift || 'Matutina'
       }));
       // Si está vacío, agregar un ejemplo
       if (sheetCursos.length === 0) {
