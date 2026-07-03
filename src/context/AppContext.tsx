@@ -98,7 +98,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [center, setCenter] = useState<any | null>(null);
   const [license, setLicense] = useState<any | null>(null);
   const [isSubscriptionExpired, setIsSubscriptionExpired] = useState<boolean>(false);
-  const [selectedYear, setSelectedYear] = useState('2025-2026');
+  const [selectedYear, setSelectedYear] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('edugest_selected_year') || '2025-2026';
+    }
+    return '2025-2026';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('edugest_selected_year', selectedYear);
+    }
+  }, [selectedYear]);
+
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   const stateRef = useRef(state);
