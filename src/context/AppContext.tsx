@@ -462,36 +462,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load initial session on mount
   useEffect(() => {
-    const init = async () => {
-      try {
-        const {
-          data: { session }
-        } = await supabase.auth.getSession();
-        const currUser = session?.user ?? null;
-        setUser(currUser);
-      } catch (err) {
-        console.error('Error getting initial session:', err);
-      } finally {
-        setIsAuthReady(true);
-      }
-    };
-    init();
+    const hasAuthHash = window.location.hash && (
+      window.location.hash.includes('access_token=') || 
+      window.location.hash.includes('id_token=') || 
+      window.location.hash.includes('error=')
+    );
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       const sessionUser = session?.user ?? null;
-      if (_event === 'SIGNED_IN') {
-        setUser(sessionUser);
+      setUser(sessionUser);
+
+      if (event === 'SIGNED_IN') {
         if (window.location.hash) {
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
         }
-      } else if (_event === 'SIGNED_OUT') {
+        setIsAuthReady(true);
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setCenter(null);
+        setIsAuthReady(true);
+      } else {
+        // For INITIAL_SESSION or other events, if no auth hash is in progress, mark auth as ready
+        if (!hasAuthHash) {
+          setIsAuthReady(true);
+        }
       }
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
