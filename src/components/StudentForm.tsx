@@ -576,13 +576,67 @@ export const StudentForm = ({
                 <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
                   Información Básica
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowSiblingSearch(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100"
-                >
-                  <LinkIcon size={14} /> Vincular con Hermano
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSiblingSearch(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100"
+                  >
+                    <LinkIcon size={14} /> Vincular con Hermano
+                  </button>
+                  {currentStudentId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`¿Deseas iniciar el registro de un nuevo hermano/a compartiendo la dirección y datos familiares de ${student.names}?`)) {
+                          setStudent((prev) => ({
+                            ...prev,
+                            names: '',
+                            secondSurname: '',
+                            sex: 'M',
+                            birthDate: '',
+                            placeOfBirth: '',
+                            birthCertificateFolio: '',
+                            idCard: '',
+                            sigerdCode: '',
+                            student_code: ''
+                          }));
+                          setCurrentStudentId('');
+                          setMedical({
+                            insurance_ars: '',
+                            medical_conditions: '',
+                            allergies: '',
+                            permanent_medication: '',
+                            blood_type: '',
+                            special_observations: ''
+                          });
+                          setHistory({
+                            previous_school: '',
+                            repeating_grade: false,
+                            performance_observations: '',
+                            pedagogical_diagnosis: '',
+                            special_needs: ''
+                          });
+                          setDocuments({
+                            has_birth_certificate: false,
+                            has_previous_grades: false,
+                            has_grades_record: false,
+                            has_parents_id_copy: false,
+                            has_medical_insurance_copy: false,
+                            has_photo_2x2: false,
+                            has_vaccine_card: false,
+                            has_medical_certification: false
+                          });
+                          toast.success('Modo Registro de Hermano activado. Introduce los datos del nuevo alumno.');
+                          setActiveTab('general');
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100 cursor-pointer"
+                    >
+                      <Plus size={14} /> Registrar Hermano
+                    </button>
+                  )}
+                </div>
               </div>
 
               {siblings.length > 0 && (
