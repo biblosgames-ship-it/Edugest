@@ -126,6 +126,7 @@ export const StudentForm = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSiblingSearch, setShowSiblingSearch] = useState(false);
+  const [siblingLinkType, setSiblingLinkType] = useState<'full' | 'link_only'>('full');
 
   const [currentStudentId, setCurrentStudentId] = useState(studentId || initialData?.id || '');
   const [siblings, setSiblings] = useState<any[]>([]);
@@ -467,25 +468,6 @@ export const StudentForm = ({
     try {
       const full = await dataService.getFullStudent(sibling.id);
 
-      // Importar Familia
-      const familyList = full.family || [];
-      const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
-      const dbPadre = familyList.find((f: any) => getRole(f) === 'padre');
-      const dbMadre = familyList.find((f: any) => getRole(f) === 'madre');
-      const dbTutor = familyList.find((f: any) => getRole(f) === 'tutor');
-
-      setFamily({
-        padre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbPadre },
-        madre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbMadre },
-        tutor: {
-          name: dbTutor?.name || '',
-          relation: dbTutor?.relation || '',
-          id_card: dbTutor?.id_card || '',
-          phone: dbTutor?.phone || '',
-          address: dbTutor?.address || ''
-        }
-      });
-
       let finalFamilyId = full.family_id || sibling.family_id || student.familyId;
       if (!finalFamilyId) {
         finalFamilyId = crypto.randomUUID();
@@ -505,6 +487,32 @@ export const StudentForm = ({
           .update({ family_id: finalFamilyId })
           .eq('id', currentId);
       }
+
+      if (siblingLinkType === 'link_only') {
+        setStudent((prev) => ({ ...prev, familyId: finalFamilyId }));
+        setShowSiblingSearch(false);
+        alert(`✅ Vínculo familiar establecido con éxito.\n\nSe ha enlazado a ${full.names} como hermano(a), pero NO se han modificado los datos de padres ni la dirección de ${student.names}.`);
+        return;
+      }
+
+      // Importar Familia
+      const familyList = full.family || [];
+      const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
+      const dbPadre = familyList.find((f: any) => getRole(f) === 'padre');
+      const dbMadre = familyList.find((f: any) => getRole(f) === 'madre');
+      const dbTutor = familyList.find((f: any) => getRole(f) === 'tutor');
+
+      setFamily({
+        padre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbPadre },
+        madre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbMadre },
+        tutor: {
+          name: dbTutor?.name || '',
+          relation: dbTutor?.relation || '',
+          id_card: dbTutor?.id_card || '',
+          phone: dbTutor?.phone || '',
+          address: dbTutor?.address || ''
+        }
+      });
 
       // Importar datos comunes
       setStudent((prev) => ({
@@ -576,13 +584,21 @@ export const StudentForm = ({
                 <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
                   Información Básica
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowSiblingSearch(true)}
+                    onClick={() => { setSiblingLinkType('full'); setShowSiblingSearch(true); }}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100"
                   >
                     <LinkIcon size={14} /> Vincular con Hermano
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSiblingLinkType('link_only'); setShowSiblingSearch(true); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all border border-amber-100"
+                    title="Vincula al hermano pero mantiene los padres y la dirección actual intactos"
+                  >
+                    <LinkIcon size={14} /> Vincular (Padres Separados)
                   </button>
                   {currentStudentId && (
                     <button
