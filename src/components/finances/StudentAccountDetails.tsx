@@ -15,7 +15,8 @@ import {
   Trash2,
   Printer,
   Package,
-  X
+  X,
+  Edit2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
@@ -35,6 +36,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     transactions,
     paymentPlans,
     voidPayment,
+    updateTransaction,
     refresh,
     loading,
     products,
@@ -691,6 +693,25 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                         title="Reimprimir Recibo"
                       >
                         <Printer size={14} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const newMethod = window.prompt(
+                            'Ingrese el nuevo método de pago (Transferencia, Efectivo, Cheque, Tarjeta):',
+                            t.payment_method
+                          );
+                          if (newMethod && newMethod.trim() !== '' && newMethod !== t.payment_method) {
+                            if (window.confirm(`¿Seguro que desea cambiar el método de pago a ${newMethod}? No se cambiará el número de recibo.`)) {
+                              updateTransaction(t.id, { payment_method: newMethod.trim() })
+                                .then(() => alert('Método de pago actualizado correctamente'))
+                                .catch(() => alert('Error al actualizar método de pago'));
+                            }
+                          }
+                        }}
+                        className="p-1.5 text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
+                        title="Editar Método de Pago"
+                      >
+                        <Edit2 size={14} />
                       </button>
                       <button
                         onClick={() => voidPayment(t.id)}

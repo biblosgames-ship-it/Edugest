@@ -728,6 +728,22 @@ export const useFinance = (options?: {
     }
   };
 
+  const updateTransaction = async (transactionId: string, updates: any) => {
+    try {
+      const { error } = await supabase
+        .from('finance_transactions')
+        .update(updates)
+        .eq('id', transactionId);
+      
+      if (error) throw error;
+      
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
+
   return {
     loading,
     paymentPlans,
@@ -744,6 +760,7 @@ export const useFinance = (options?: {
     savePaymentPlan,
     registerPayment,
     voidPayment,
+    updateTransaction,
     saveScholarship,
     saveProduct,
     deleteProduct,
