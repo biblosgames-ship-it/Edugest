@@ -27,6 +27,9 @@ import { generateStudentPDF } from '../utils/pdfGenerator';
 import { format, differenceInYears } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
 import { sortCourses } from '../utils/courseSorter';
+import { supabase } from '../lib/supabase';
+import { toast } from 'react-hot-toast';
+
 
 interface StudentFormProps {
   gradeId?: string;
@@ -123,6 +126,39 @@ export const StudentForm = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSiblingSearch, setShowSiblingSearch] = useState(false);
+
+  const [currentStudentId, setCurrentStudentId] = useState(studentId || initialData?.id || '');
+  const [siblings, setSiblings] = useState<any[]>([]);
+
+  // Sincronizar el id si los props cambian
+  useEffect(() => {
+    setCurrentStudentId(studentId || initialData?.id || '');
+  }, [studentId, initialData?.id]);
+
+  // Cargar hermanos vinculados por family_id
+  useEffect(() => {
+    const fetchSiblings = async () => {
+      if (!student.familyId) {
+        setSiblings([]);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, names, first_surname, second_surname, school_year, course_id')
+          .eq('family_id', student.familyId);
+        
+        if (error) throw error;
+        
+        const filtered = (data || []).filter((s: any) => s.id !== currentStudentId);
+        setSiblings(filtered);
+      } catch (err) {
+        console.error('Error fetching siblings:', err);
+      }
+    };
+    
+    fetchSiblings();
+  }, [student.familyId, currentStudentId]);
 
   // Sugerencias para campos inteligentes
   const [suggestions, setSuggestions] = useState({
@@ -252,7 +288,7 @@ export const StudentForm = ({
 
     loadData();
     loadSuggestions();
-  }, [studentId, initialData?.id, siblingSource?.id, state.students]);
+  }, [currentStudentId, siblingSource?.id, state.students]);
 
   useEffect(() => {
     if (selectedCourse) {
@@ -333,7 +369,7 @@ export const StudentForm = ({
         history,
         documents
       };
-      const sid = studentId || initialData?.id;
+      const sid = currentStudentId;
       if (sid) {
         await dataService.updateStudent(sid, studentData, extraData, customSchoolYear);
         alert('¡Expediente actualizado exitosamente!');
@@ -510,6 +546,34 @@ export const StudentForm = ({
                   <LinkIcon size={14} /> Vincular con Hermano
                 </button>
               </div>
+
+              {siblings.length > 0 && (
+                <div className="p-4 bg-indigo-50/50 border border-indigo-100/80 rounded-2xl space-y-2">
+                  <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-1.5 font-bold">
+                    <Users size={12} /> Hermanos Vinculados ({siblings.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {siblings.map((sib) => {
+                      const course = (state.courses || []).find((c: any) => c.id === sib.course_id);
+                      const courseLabel = course ? `${course.grade} "${course.section}"` : 'Sin curso';
+                      return (
+                        <button
+                          key={sib.id}
+                          type="button"
+                          onClick={() => {
+                            setCurrentStudentId(sib.id);
+                            toast.success(`Cargando expediente de ${sib.names}`);
+                          }}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-100/50 transition-all shadow-sm cursor-pointer"
+                        >
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                          {sib.names} ({courseLabel} - {sib.school_year})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {siblingSource && (
                 <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
@@ -711,7 +775,7 @@ export const StudentForm = ({
                         className={`${inputClass} ${canEditSchoolYear ? 'border-amber-400 bg-amber-50/10 focus:ring-amber-500' : 'bg-brand-bg font-bold opacity-75 cursor-not-allowed'}`}
                         readOnly={!canEditSchoolYear}
                       />
-                      {initialData?.id && !canEditSchoolYear && (
+                      {currentStudentId && !canEditSchoolYear && (
                         <button
                           type="button"
                           onClick={() => {
@@ -720,7 +784,7 @@ export const StudentForm = ({
                                 '⚠️ ADVERTENCIA: Modificar el año escolar de un alumno ya registrado puede desvincular sus notas históricas de los boletines del año pasado.\n\n¿Realmente necesitas cambiar este año por un error de registro inicial? (Para promover un alumno al nuevo año utiliza el botón Promover)'
                               )
                             ) {
-                              setCanEditSchoolYear(true);
+                               setCanEditSchoolYear(true);
                             }
                           }}
                           className="px-3 py-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all"
@@ -729,7 +793,7 @@ export const StudentForm = ({
                         </button>
                       )}
                     </div>
-                    {initialData?.id && (
+                    {currentStudentId && (
                       <p className="mt-2 text-[10px] text-amber-600 font-bold leading-normal flex items-start gap-1">
                         <span>💡</span>
                         <span>
@@ -1316,7 +1380,7 @@ export const StudentForm = ({
           </button>
 
           <div className="flex items-center gap-4">
-            {!studentId && !initialData?.id && (
+            {!currentStudentId && (
               <button
                 type="submit"
                 name="save-and-sibling"
@@ -1335,7 +1399,7 @@ export const StudentForm = ({
               <Save size={24} />{' '}
               {isSaving
                 ? 'Guardando...'
-                : studentId || initialData?.id
+                : currentStudentId
                   ? 'Actualizar'
                   : 'Guardar Alumno'}
             </button>
