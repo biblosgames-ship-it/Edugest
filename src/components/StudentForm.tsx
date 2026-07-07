@@ -522,7 +522,7 @@ export const StudentForm = ({
       }));
 
       setShowSiblingSearch(false);
-      alert(`Datos vinculados con el hermano: ${full.names} ${full.first_surname}`);
+      alert(`✅ Vínculo familiar establecido con éxito.\n\nSe han importado la dirección y los datos familiares de ${full.names} ${full.first_surname}.\n\n⚠️ RECUERDA: Sigues editando el expediente de ${student.names}. No modifiques su nombre o apellidos a menos que realmente desees cambiar los datos de este alumno.`);
     } catch (e) {
       console.error(e);
       alert('Error al importar datos del hermano');
