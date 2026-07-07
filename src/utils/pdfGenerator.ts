@@ -72,14 +72,14 @@ export const generateStudentPDF = (
     body: [
       [
         'Nombres y Apellidos:',
-        `${student.names || ''} ${student.firstSurname || ''} ${student.secondSurname || ''}`.toUpperCase()
+        `${student.names || student.first_name || ''} ${student.firstSurname || student.first_surname || ''} ${student.secondSurname || student.second_surname || ''}`.trim().toUpperCase()
       ],
-      ['Fecha de Nacimiento:', student.birthDate || '---'],
+      ['Fecha de Nacimiento:', student.birthDate || student.birth_date || '---'],
       ['Sexo / Nacionalidad:', `${student.sex || '---'} / ${student.nationality || 'Dominicana'}`],
-      ['Cédula:', student.idCard || '---'],
+      ['Cédula:', student.idCard || student.id_card || '---'],
       [
         'Dirección:',
-        `${student.addressStreet || ''} ${student.addressNumber || ''}, ${student.addressSector || ''}`
+        `${student.addressStreet || student.address_street || ''} ${student.addressNumber || student.address_number || ''}, ${student.addressSector || student.address_sector || ''}`.trim()
       ]
     ],
     theme: 'grid',
