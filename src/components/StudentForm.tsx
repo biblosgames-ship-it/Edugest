@@ -486,6 +486,17 @@ export const StudentForm = ({
         }
       });
 
+      let finalFamilyId = full.family_id || sibling.family_id || student.familyId;
+      if (!finalFamilyId) {
+        finalFamilyId = crypto.randomUUID();
+      }
+
+      // Asegurar que el hermano importado tenga este family_id en la base de datos de inmediato
+      await supabase
+        .from('students')
+        .update({ family_id: finalFamilyId })
+        .eq('id', sibling.id);
+
       // Importar datos comunes
       setStudent((prev) => ({
         ...prev,
@@ -498,7 +509,7 @@ export const StudentForm = ({
         homePhone: full.home_phone || prev.homePhone,
         livesWith: full.lives_with || prev.livesWith,
         parentsCivilStatus: full.parents_civil_status || prev.parentsCivilStatus,
-        familyId: full.family_id || sibling.family_id || ''
+        familyId: finalFamilyId
       }));
 
       setShowSiblingSearch(false);
