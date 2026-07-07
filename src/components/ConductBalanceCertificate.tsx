@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
+import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 
 interface ConductBalanceCertificateProps {
@@ -61,8 +62,15 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
     directorName: '',
     directorTitle: 'Directora General',
     adminName: '',
-    adminTitle: 'Encargada de Administración y Caja'
+    adminTitle: 'Encargada de Administración y Caja',
+
+    // Cotización
+    enrollmentFee: '',
+    monthlyFee: '',
+    monthsCount: '10'
   });
+
+  const [certificateType, setCertificateType] = useState<'conduct-balance' | 'quote'>('conduct-balance');
 
   useEffect(() => {
     const loadData = async () => {
@@ -126,6 +134,24 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
           ? `${course.grade} de ${course.level?.toLowerCase().includes('prim') ? 'Primaria' : course.level?.toLowerCase().includes('sec') ? 'Secundaria' : course.level}`
           : '';
 
+        let defaultEnrollment = '';
+        let defaultMonthly = '';
+        let defaultMonths = '10';
+
+        if (student.course_id) {
+          const { data: planData } = await supabase
+            .from('finance_payment_plans')
+            .select('*')
+            .eq('course_id', student.course_id)
+            .maybeSingle();
+
+          if (planData) {
+            defaultEnrollment = String(planData.enrollment_fee || '');
+            defaultMonthly = String(planData.monthly_fee || '');
+            defaultMonths = String(planData.months_count || '10');
+          }
+        }
+
         setFormData((prev) => ({
           ...prev,
           ...baseData,
@@ -133,7 +159,10 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
             `${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`.trim(),
           rne: student.sigerd_code || student.student_code || student.rne || '',
           courseName: courseDisplay,
-          tutorName: parentsName
+          tutorName: parentsName,
+          enrollmentFee: defaultEnrollment,
+          monthlyFee: defaultMonthly,
+          monthsCount: defaultMonths
         }));
       } catch (error) {
         console.error('Error loading certificate data:', error);
@@ -199,60 +228,117 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
       // 3. Título del Documento
       doc.setFont('times', 'bold');
       doc.setFontSize(14);
-      doc.text('CERTIFICACIÓN DE CONDUCTA Y SALDO', centerX, 80, { align: 'center' });
 
-      // 4. Párrafo Introductorio
-      doc.setFont('times', 'normal');
-      doc.setFontSize(12);
+      if (certificateType === 'conduct-balance') {
+        doc.text('CERTIFICACIÓN DE CONDUCTA Y SALDO', centerX, 80, { align: 'center' });
 
-      const introText = `Quien suscribe, ${formData.directorName}, en calidad de ${formData.directorTitle} del ${centerDisplay.name}, certifica que el estudiante:`;
-      const splitIntro = doc.splitTextToSize(introText, 175);
-      doc.text(splitIntro, 20, 95);
+        // 4. Párrafo Introductorio
+        doc.setFont('times', 'normal');
+        doc.setFontSize(12);
 
-      // 5. Datos del Estudiante (Párrafo fluido)
-      doc.setFont('times', 'normal');
-      const studentDataText = `${formData.studentName}, Código del Sigerd No.: ${formData.rne} del Grado ${formData.courseName}, Año Escolar: ${formData.schoolYear}. Hijo(a) de los señores: ${formData.tutorName}.`;
-      const splitStudentData = doc.splitTextToSize(studentDataText, 175);
-      doc.text(splitStudentData, 20, 105);
+        const introText = `Quien suscribe, ${formData.directorName}, en calidad de ${formData.directorTitle} del ${centerDisplay.name}, certifica que el estudiante:`;
+        const splitIntro = doc.splitTextToSize(introText, 175);
+        doc.text(splitIntro, 20, 95);
 
-      // Calculamos la siguiente posición Y dinámicamente
-      const studentLines = splitStudentData.length;
-      let currentY = 105 + studentLines * 7 + 5;
+        // 5. Datos del Estudiante (Párrafo fluido)
+        const studentDataText = `${formData.studentName}, Código del Sigerd No.: ${formData.rne} del Grado ${formData.courseName}, Año Escolar: ${formData.schoolYear}. Hijo(a) de los señores: ${formData.tutorName}.`;
+        const splitStudentData = doc.splitTextToSize(studentDataText, 175);
+        doc.text(splitStudentData, 20, 105);
 
-      // 6. Conducta
-      doc.setFont('times', 'bold');
-      doc.text('CONDUCTA:', 20, currentY);
+        // Calculamos la siguiente posición Y dinámicamente
+        const studentLines = splitStudentData.length;
+        let currentY = 105 + studentLines * 7 + 5;
 
-      doc.setFont('times', 'normal');
-      doc.text(`Calificación: ${formData.conduct}`, 25, currentY + 8);
+        // 6. Conducta
+        doc.setFont('times', 'bold');
+        doc.text('CONDUCTA:', 20, currentY);
 
-      doc.setFont('times', 'bold');
-      doc.text('Observaciones:', 25, currentY + 15);
-      doc.setFont('times', 'normal');
-      const splitObs = doc.splitTextToSize(formData.observations, 165);
-      doc.text(splitObs, 25, currentY + 22);
+        doc.setFont('times', 'normal');
+        doc.text(`Calificación: ${formData.conduct}`, 25, currentY + 8);
 
-      // Calcular nueva Y basada en las observaciones
-      const obsLines = splitObs.length;
-      const nextY = currentY + 22 + obsLines * 7 + 5;
+        doc.setFont('times', 'bold');
+        doc.text('Observaciones:', 25, currentY + 15);
+        doc.setFont('times', 'normal');
+        const splitObs = doc.splitTextToSize(formData.observations, 165);
+        doc.text(splitObs, 25, currentY + 22);
 
-      // 7. Estado de Saldo
-      doc.setFont('times', 'bold');
-      doc.text('ESTADO DE SALDO:', 20, nextY);
+        // Calcular nueva Y basada en las observaciones
+        const obsLines = splitObs.length;
+        const nextY = currentY + 22 + obsLines * 7 + 5;
 
-      doc.setFont('times', 'normal');
-      if (formData.balanceStatus === 'al-dia') {
-        doc.text('Se encuentra al día con sus compromisos económicos.', 25, nextY + 8);
+        // 7. Estado de Saldo
+        doc.setFont('times', 'bold');
+        doc.text('ESTADO DE SALDO:', 20, nextY);
+
+        doc.setFont('times', 'normal');
+        if (formData.balanceStatus === 'al-dia') {
+          doc.text('Se encuentra al día con sus compromisos económicos.', 25, nextY + 8);
+        } else {
+          doc.text(`Presenta un balance pendiente de: RD$ ${formData.balanceAmount}`, 25, nextY + 8);
+          doc.text(`Concepto: ${formData.balanceConcept}`, 25, nextY + 15);
+        }
+
+        // 8. Párrafo Final
+        const issueY = nextY + (formData.balanceStatus === 'al-dia' ? 25 : 30);
+        const issueText = `La presente certificación se expide a solicitud de la parte interesada, en la ciudad de ${formData.issuePlace}, a los ${formData.issueDay} días del mes de ${formData.issueMonth} del año ${formData.issueYear}.`;
+        const splitIssue = doc.splitTextToSize(issueText, 175);
+        doc.text(splitIssue, 20, issueY);
       } else {
-        doc.text(`Presenta un balance pendiente de: RD$ ${formData.balanceAmount}`, 25, nextY + 8);
-        doc.text(`Concepto: ${formData.balanceConcept}`, 25, nextY + 15);
-      }
+        doc.text('COTIZACIÓN DE AÑO ESCOLAR', centerX, 80, { align: 'center' });
 
-      // 8. Párrafo Final
-      const issueY = nextY + (formData.balanceStatus === 'al-dia' ? 25 : 30);
-      const issueText = `La presente certificación se expide a solicitud de la parte interesada, en la ciudad de ${formData.issuePlace}, a los ${formData.issueDay} días del mes de ${formData.issueMonth} del año ${formData.issueYear}.`;
-      const splitIssue = doc.splitTextToSize(issueText, 175);
-      doc.text(splitIssue, 20, issueY);
+        // 4. Párrafo Introductorio
+        doc.setFont('times', 'normal');
+        doc.setFontSize(12);
+
+        const introText = `Quien suscribe, ${formData.directorName}, en calidad de ${formData.directorTitle} del ${centerDisplay.name}, hace constar la cotización correspondiente al Año Escolar ${formData.schoolYear} para el estudiante:`;
+        const splitIntro = doc.splitTextToSize(introText, 175);
+        doc.text(splitIntro, 20, 95);
+
+        // 5. Datos del Estudiante
+        const studentDataText = `${formData.studentName}, del Grado ${formData.courseName}. Hijo(a) de los señores: ${formData.tutorName}.`;
+        const splitStudentData = doc.splitTextToSize(studentDataText, 175);
+        doc.text(splitStudentData, 20, 105);
+
+        const studentLines = splitStudentData.length;
+        let currentY = 105 + studentLines * 7 + 5;
+
+        // 6. Detalle de Costos
+        doc.setFont('times', 'bold');
+        doc.text('DETALLE DE COSTOS DEL AÑO ESCOLAR:', 20, currentY);
+
+        doc.setFont('times', 'normal');
+        let itemY = currentY + 10;
+        
+        doc.setFont('times', 'bold');
+        doc.text('Concepto', 25, itemY);
+        doc.text('Monto', 150, itemY, { align: 'right' });
+        doc.setLineWidth(0.2);
+        doc.line(20, itemY + 2, 195.9, itemY + 2);
+        
+        itemY += 10;
+        doc.setFont('times', 'normal');
+        doc.text('Inscripción / Matrícula (Pago Único)', 25, itemY);
+        doc.text(`RD$ ${Number(formData.enrollmentFee || 0).toLocaleString()}`, 150, itemY, { align: 'right' });
+
+        itemY += 8;
+        const totalMonthly = Number(formData.monthlyFee || 0) * Number(formData.monthsCount || 0);
+        doc.text(`Mensualidades colegiatura (${formData.monthsCount} cuotas de RD$ ${Number(formData.monthlyFee || 0).toLocaleString()})`, 25, itemY);
+        doc.text(`RD$ ${totalMonthly.toLocaleString()}`, 150, itemY, { align: 'right' });
+
+        itemY += 4;
+        doc.line(20, itemY, 195.9, itemY);
+
+        itemY += 8;
+        doc.setFont('times', 'bold');
+        doc.text('VALOR TOTAL DEL AÑO ESCOLAR:', 25, itemY);
+        const grandTotal = Number(formData.enrollmentFee || 0) + totalMonthly;
+        doc.text(`RD$ ${grandTotal.toLocaleString()}`, 150, itemY, { align: 'right' });
+
+        const issueY = itemY + 25;
+        const issueText = `La presente cotización se expide a solicitud de la parte interesada, en la ciudad de ${formData.issuePlace}, a los ${formData.issueDay} días del mes de ${formData.issueMonth} del año ${formData.issueYear}.`;
+        const splitIssue = doc.splitTextToSize(issueText, 175);
+        doc.text(splitIssue, 20, issueY);
+      }
 
       // 9. Firmas
       const sigY = 240;
@@ -274,7 +360,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
       doc.text(formData.adminTitle, 155, sigY + 10, { align: 'center' });
 
       doc.save(
-        `Certificacion_Conducta_Saldo_${formData.studentName ? formData.studentName.replace(/\s+/g, '_') : 'Estudiante'}.pdf`
+        `Certificacion_${certificateType === 'conduct-balance' ? 'Conducta_Saldo' : 'Cotizacion_Escolar'}_${formData.studentName ? formData.studentName.replace(/\s+/g, '_') : 'Estudiante'}.pdf`
       );
     } catch (error: any) {
       console.error('Error generando PDF:', error);
@@ -343,10 +429,10 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-black uppercase tracking-tight">
-              Configurar Certificación
+              Certificaciones / Cotizaciones
             </h3>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-              Conducta y Saldo
+              {certificateType === 'conduct-balance' ? 'Conducta y Saldo' : 'Cotización de Año Escolar'}
             </p>
           </div>
         </div>
@@ -372,6 +458,23 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         {/* Editor Form (No imprimible) */}
         <div className="w-1/2 p-8 overflow-y-auto bg-slate-50 border-r border-slate-100 no-print custom-scrollbar">
           <div className="space-y-6 max-w-lg mx-auto">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-4">
+              <button
+                type="button"
+                onClick={() => setCertificateType('conduct-balance')}
+                className={`flex-1 py-2 text-center font-black text-[10px] uppercase tracking-wider rounded-xl transition-all ${certificateType === 'conduct-balance' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Conducta y Saldo
+              </button>
+              <button
+                type="button"
+                onClick={() => setCertificateType('quote')}
+                className={`flex-1 py-2 text-center font-black text-[10px] uppercase tracking-wider rounded-xl transition-all ${certificateType === 'quote' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Cotización de Año
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 text-indigo-600 mb-2">
               <Edit3 size={18} />
               <span className="text-[10px] font-black uppercase tracking-widest">
@@ -380,6 +483,8 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-5">
+              {certificateType === 'conduct-balance' ? (
+                <>
               {/* Conducta Section */}
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
                 <div className="flex items-center gap-2 mb-2">
@@ -503,6 +608,58 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
                   </div>
                 )}
               </div>
+              </>
+            ) : (
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                    <ScrollText size={14} />
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Costos de Cotización
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">
+                      Costo de Inscripción (RD$)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.enrollmentFee}
+                      onChange={(e) => setFormData({ ...formData, enrollmentFee: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">
+                        Cuota Mensual (RD$)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.monthlyFee}
+                        onChange={(e) => setFormData({ ...formData, monthlyFee: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">
+                        Cant. de Cuotas
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.monthsCount}
+                        onChange={(e) => setFormData({ ...formData, monthsCount: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
               {/* Autoridades Section */}
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
@@ -589,88 +746,139 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
             </div>
 
             <h2 className="text-2xl font-bold text-center uppercase tracking-widest mb-10">
-              Certificación
+              {certificateType === 'conduct-balance' ? 'Certificación' : 'Cotización de Año Escolar'}
             </h2>
 
             <p className="text-justify text-[15px] leading-loose mb-8">
               Quien suscribe, <strong>{formData.directorName}</strong>, en calidad de{' '}
-              {formData.directorTitle} del {centerDisplay.name}, certifica que el estudiante:
+              {formData.directorTitle} del {centerDisplay.name}, {certificateType === 'conduct-balance' ? 'certifica que el estudiante:' : 'hace constar la cotización correspondiente al Año Escolar ' + formData.schoolYear + ' para el estudiante:'}
             </p>
 
-            {/* Datos del Estudiante (Párrafo fluido) */}
+            {/* Datos del Estudiante */}
             <div className="mb-8 mt-2">
               <p className="text-justify text-[15px] leading-loose">
-                <strong>{formData.studentName}</strong>, Código del Sigerd No.:{' '}
-                <strong>{formData.rne}</strong> del Grado <strong>{formData.courseName}</strong>,
-                Año Escolar: <strong>{formData.schoolYear}</strong>. Hijo(a) de los señores:{' '}
-                <strong>{formData.tutorName}</strong>.
+                {certificateType === 'conduct-balance' ? (
+                  <>
+                    <strong>{formData.studentName}</strong>, Código del Sigerd No.:{' '}
+                    <strong>{formData.rne}</strong> del Grado <strong>{formData.courseName}</strong>,
+                    Año Escolar: <strong>{formData.schoolYear}</strong>. Hijo(a) de los señores:{' '}
+                    <strong>{formData.tutorName}</strong>.
+                  </>
+                ) : (
+                  <>
+                    <strong>{formData.studentName}</strong>, del Grado <strong>{formData.courseName}</strong>. Hijo(a) de los señores:{' '}
+                    <strong>{formData.tutorName}</strong>.
+                  </>
+                )}
               </p>
             </div>
 
-            <div className="mb-8 border-t border-[#d1d5db] pt-8">
-              <h3 className="font-bold uppercase tracking-widest mb-4 border-b border-[#d1d5db] pb-1">
-                Conducta
-              </h3>
-              <p className="text-[15px] mb-4">
-                Durante su permanencia en esta institución, el estudiante ha mantenido una conducta:
-              </p>
+            {certificateType === 'conduct-balance' ? (
+              <>
+                <div className="mb-8 border-t border-[#d1d5db] pt-8">
+                  <h3 className="font-bold uppercase tracking-widest mb-4 border-b border-[#d1d5db] pb-1">
+                    Conducta
+                  </h3>
+                  <p className="text-[15px] mb-4">
+                    Durante su permanencia en esta institución, el estudiante ha mantenido una conducta:
+                  </p>
 
-              <div className="space-y-2 ml-4 mb-6">
-                {['Excelente', 'Muy Buena', 'Buena', 'Regular'].map((c) => (
-                  <div key={c} className="flex items-center gap-3">
-                    {formData.conduct === c ? <CheckSquare size={16} /> : <Square size={16} />}
-                    <span className="text-[15px]">{c}</span>
+                  <div className="space-y-2 ml-4 mb-6">
+                    {['Excelente', 'Muy Buena', 'Buena', 'Regular'].map((c) => (
+                      <div key={c} className="flex items-center gap-3">
+                        {formData.conduct === c ? <CheckSquare size={16} /> : <Square size={16} />}
+                        <span className="text-[15px]">{c}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <p className="text-[15px] mb-1 font-bold">Observaciones sobre la conducta:</p>
-              <p className="text-[15px] leading-relaxed text-justify">{formData.observations}</p>
-            </div>
-
-            <div className="mb-10 border-t border-[#d1d5db] pt-8">
-              <h3 className="font-bold uppercase tracking-widest mb-4 border-b border-[#d1d5db] pb-1">
-                Estado de Saldo
-              </h3>
-              <p className="text-[15px] mb-4">
-                Luego de revisar los registros administrativos y financieros del centro, hacemos
-                constar que el estudiante:
-              </p>
-
-              <div className="space-y-4 ml-4 mb-6">
-                <div className="flex items-center gap-3">
-                  {formData.balanceStatus === 'al-dia' ? (
-                    <CheckSquare size={16} />
-                  ) : (
-                    <Square size={16} />
-                  )}
-                  <span className="text-[15px]">
-                    Se encuentra al día con sus compromisos económicos.
-                  </span>
+                  <p className="text-[15px] mb-1 font-bold">Observaciones sobre la conducta:</p>
+                  <p className="text-[15px] leading-relaxed text-justify">{formData.observations}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  {formData.balanceStatus === 'pendiente' ? (
-                    <CheckSquare size={16} />
-                  ) : (
-                    <Square size={16} />
-                  )}
-                  <span className="text-[15px]">
-                    Presenta un balance pendiente de:{' '}
-                    <strong>
-                      {formData.balanceStatus === 'pendiente' && formData.balanceAmount
-                        ? `RD$ ${formData.balanceAmount}`
-                        : '_______________________'}
-                    </strong>
-                  </span>
+
+                <div className="mb-10 border-t border-[#d1d5db] pt-8">
+                  <h3 className="font-bold uppercase tracking-widest mb-4 border-b border-[#d1d5db] pb-1">
+                    Estado de Saldo
+                  </h3>
+                  <p className="text-[15px] mb-4">
+                    Luego de revisar los registros administrativos y financieros del centro, hacemos
+                    constar que el estudiante:
+                  </p>
+
+                  <div className="space-y-4 ml-4 mb-6">
+                    <div className="flex items-center gap-3">
+                      {formData.balanceStatus === 'al-dia' ? (
+                        <CheckSquare size={16} />
+                      ) : (
+                        <Square size={16} />
+                      )}
+                      <span className="text-[15px]">
+                        Se encuentra al día con sus compromisos económicos.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {formData.balanceStatus === 'pendiente' ? (
+                        <CheckSquare size={16} />
+                      ) : (
+                        <Square size={16} />
+                      )}
+                      <span className="text-[15px]">
+                        Presenta un balance pendiente de:{' '}
+                        <strong>
+                          {formData.balanceStatus === 'pendiente' && formData.balanceAmount
+                            ? `RD$ ${formData.balanceAmount}`
+                            : '_______________________'}
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[15px] mb-1 font-bold">Concepto(s):</p>
+                  <p className="text-[15px]">{formData.balanceConcept}</p>
+                </div>
+              </>
+            ) : (
+              <div className="mb-10 border-t border-[#d1d5db] pt-8 space-y-6">
+                <h3 className="font-bold uppercase tracking-widest mb-4 border-b border-[#d1d5db] pb-1">
+                  Detalle de Costos del Año Escolar
+                </h3>
+                <div className="w-full border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-[14px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        <th className="px-6 py-4">Concepto</th>
+                        <th className="px-6 py-4 text-right">Monto (RD$)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      <tr>
+                        <td className="px-6 py-4">Inscripción / Matrícula (Pago Único)</td>
+                        <td className="px-6 py-4 text-right font-bold">
+                          RD$ {Number(formData.enrollmentFee || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="px-6 py-4">
+                          Mensualidades colegiatura ({formData.monthsCount} cuotas de RD$ {Number(formData.monthlyFee || 0).toLocaleString()})
+                        </td>
+                        <td className="px-6 py-4 text-right font-bold">
+                          RD$ {(Number(formData.monthlyFee || 0) * Number(formData.monthsCount || 0)).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-50/50 font-black text-slate-900 border-t-2 border-slate-200">
+                        <td className="px-6 py-4 uppercase">VALOR TOTAL DEL AÑO ESCOLAR</td>
+                        <td className="px-6 py-4 text-right text-indigo-600 text-base">
+                          RD$ {(Number(formData.enrollmentFee || 0) + (Number(formData.monthlyFee || 0) * Number(formData.monthsCount || 0))).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              <p className="text-[15px] mb-1 font-bold">Concepto(s):</p>
-              <p className="text-[15px]">{formData.balanceConcept}</p>
-            </div>
+            )}
 
             <p className="text-justify text-[15px] leading-loose mb-16">
-              La presente certificación se expide a solicitud de la parte interesada, en la ciudad
+              La presente {certificateType === 'conduct-balance' ? 'certificación' : 'cotización'} se expide a solicitud de la parte interesada, en la ciudad
               de {formData.issuePlace}, a los {formData.issueDay} días del mes de{' '}
               {formData.issueMonth} del año {formData.issueYear}.
             </p>

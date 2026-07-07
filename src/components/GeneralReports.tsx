@@ -231,9 +231,9 @@ export const GeneralReports = () => {
         id: 'primary-certificate'
       },
       {
-        title: 'Certificación de Conducta y Saldo',
+        title: 'Certificaciones y Cotizaciones',
         description:
-          'Generar certificación de conducta y estado de saldo financiero para un estudiante.',
+          'Generar certificaciones de conducta y saldo, o cotización de costos de inscripción y cuotas del año escolar.',
         icon: ScrollIcon,
         color: 'bg-teal-600',
         id: 'conduct-balance-certificate'
@@ -1823,7 +1823,7 @@ export const GeneralReports = () => {
             {!selectedConductStudentId ? (
               <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl my-auto animate-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xl font-black text-slate-900 uppercase">Conducta y Saldo</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase">Certificaciones y Cotizaciones</h3>
                   <button
                     onClick={() => setShowConductBalanceCertificate(false)}
                     className="p-2 hover:bg-slate-100 rounded-full text-slate-400"
