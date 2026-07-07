@@ -78,20 +78,21 @@ export const StudentManagement = () => {
       }
       const fullData = await dataService.getFullStudent(s.id);
       const centerData = await dataService.getCenter(centerId);
+      const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
       const familyInfo = {
-        padre: (fullData.family || []).find((f: any) => f.role?.toLowerCase() === 'padre') || {
+        padre: (fullData.family || []).find((f: any) => getRole(f) === 'padre') || {
           name: '',
           id_card: '',
           phone: '',
           occupation: ''
         },
-        madre: (fullData.family || []).find((f: any) => f.role?.toLowerCase() === 'madre') || {
+        madre: (fullData.family || []).find((f: any) => getRole(f) === 'madre') || {
           name: '',
           id_card: '',
           phone: '',
           occupation: ''
         },
-        tutor: (fullData.family || []).find((f: any) => f.role?.toLowerCase() === 'tutor') || {
+        tutor: (fullData.family || []).find((f: any) => getRole(f) === 'tutor') || {
           name: '',
           relation: '',
           id_card: '',
