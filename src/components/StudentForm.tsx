@@ -491,11 +491,20 @@ export const StudentForm = ({
         finalFamilyId = crypto.randomUUID();
       }
 
-      // Asegurar que el hermano importado tenga este family_id en la base de datos de inmediato
+      // 1. Asegurar que el hermano importado tenga este family_id en la base de datos de inmediato
       await supabase
         .from('students')
         .update({ family_id: finalFamilyId })
         .eq('id', sibling.id);
+
+      // 2. Si el alumno actual ya existe, guardarlo en la base de datos de inmediato
+      const currentId = studentId || initialData?.id;
+      if (currentId) {
+        await supabase
+          .from('students')
+          .update({ family_id: finalFamilyId })
+          .eq('id', currentId);
+      }
 
       // Importar datos comunes
       setStudent((prev) => ({
@@ -590,8 +599,10 @@ export const StudentForm = ({
                           key={sib.id}
                           type="button"
                           onClick={() => {
-                            setCurrentStudentId(sib.id);
-                            toast.success(`Cargando expediente de ${sib.names}`);
+                            if (window.confirm(`¿Estás seguro de que deseas abrir el expediente de ${sib.names}? Guarda los cambios del alumno actual primero para no perderlos.`)) {
+                              setCurrentStudentId(sib.id);
+                              toast.success(`Cargando expediente de ${sib.names}`);
+                            }
                           }}
                           className="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-100/50 transition-all shadow-sm cursor-pointer"
                         >
