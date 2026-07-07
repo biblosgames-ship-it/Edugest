@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import {
@@ -23,6 +24,7 @@ interface BulkPromoteModalProps {
 
 export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPromoteModalProps) => {
   const { state, selectedYear } = useApp();
+  const queryClient = useQueryClient();
 
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -258,6 +260,12 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
         failedCount++;
         details.push(`❌ ${studentName} - Falló: ${err?.message || 'Error desconocido'}`);
       }
+    }
+
+    const centerId = students[0]?.center_id;
+    if (centerId) {
+      queryClient.invalidateQueries({ queryKey: ['students', centerId, targetYear] });
+      queryClient.invalidateQueries({ queryKey: ['center-stats', centerId] });
     }
 
     setResultsReport({

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import { Sparkles, ArrowRight, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
@@ -13,6 +14,7 @@ interface PromoteStudentModalProps {
 
 export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStudentModalProps) => {
   const { state, selectedYear } = useApp();
+  const queryClient = useQueryClient();
 
   const [targetYear, setTargetYear] = useState('');
   const [targetCourseId, setTargetCourseId] = useState('');
@@ -143,6 +145,8 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
     setError(null);
     try {
       await dataService.promoteStudent(student.id, targetYear, targetCourseId);
+      queryClient.invalidateQueries({ queryKey: ['students', student.center_id, targetYear] });
+      queryClient.invalidateQueries({ queryKey: ['center-stats', student.center_id] });
       setSuccess(true);
       toast.success('Alumno reinscrito exitosamente');
       if (onSuccess) onSuccess();
