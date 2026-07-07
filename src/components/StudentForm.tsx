@@ -296,6 +296,24 @@ export const StudentForm = ({
     }
   }, [selectedCourse]);
 
+  useEffect(() => {
+    if (activeTab === 'family') {
+      setFamily((prev) => {
+        const updates: any = {};
+        if (!prev.padre.name && student.firstSurname) {
+          updates.padre = { ...prev.padre, name: student.firstSurname };
+        }
+        if (!prev.madre.name && student.secondSurname) {
+          updates.madre = { ...prev.madre, name: student.secondSurname };
+        }
+        if (Object.keys(updates).length > 0) {
+          return { ...prev, ...updates };
+        }
+        return prev;
+      });
+    }
+  }, [activeTab, student.firstSurname, student.secondSurname]);
+
   const [age, setAge] = useState<number | null>(null);
   useEffect(() => {
     if (student.birthDate) {
@@ -932,7 +950,28 @@ export const StudentForm = ({
                 </span>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
-                    <label className={labelClass}>Nombre Completo</label>
+                    <div className="flex items-center justify-between">
+                      <label className={labelClass}>Nombre Completo</label>
+                      {student.firstSurname && !family.padre.name.includes(student.firstSurname) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFamily({
+                              ...family,
+                              padre: {
+                                ...family.padre,
+                                name: family.padre.name
+                                  ? `${family.padre.name} ${student.firstSurname}`.trim()
+                                  : student.firstSurname
+                              }
+                            })
+                          }
+                          className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-all cursor-pointer"
+                        >
+                          + Apellido ({student.firstSurname})
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={family.padre.name}
@@ -990,7 +1029,28 @@ export const StudentForm = ({
                 </span>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
-                    <label className={labelClass}>Nombre Completo</label>
+                    <div className="flex items-center justify-between">
+                      <label className={labelClass}>Nombre Completo</label>
+                      {student.secondSurname && !family.madre.name.includes(student.secondSurname) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFamily({
+                              ...family,
+                              madre: {
+                                ...family.madre,
+                                name: family.madre.name
+                                  ? `${family.madre.name} ${student.secondSurname}`.trim()
+                                  : student.secondSurname
+                              }
+                            })
+                          }
+                          className="text-[9px] font-black uppercase text-pink-600 bg-pink-50 px-2 py-0.5 rounded hover:bg-pink-100 transition-all cursor-pointer"
+                        >
+                          + Apellido ({student.secondSurname})
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={family.madre.name}

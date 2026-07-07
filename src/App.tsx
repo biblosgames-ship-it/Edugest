@@ -244,7 +244,7 @@ function AppContent() {
     { id: 'schedule', label: 'Generador de Horarios', icon: CalendarDays },
     { id: 'agenda', label: 'Calendario Escolar', icon: Calendar },
     { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
-    { id: 'communications', label: 'Escusas y Comunicados', icon: MessageSquare },
+    { id: 'communications', label: 'Excusas y Comunicados', icon: MessageSquare },
     { id: 'facility', label: 'Gestión de Plantel', icon: Wrench },
     { id: 'control', label: 'Modo Control', icon: Monitor },
     { id: 'general-reports', label: 'Reportes', icon: FileBarChart },
