@@ -284,11 +284,21 @@ export const useFinance = (options?: {
           .eq('id', paymentData.invoice_id)
           .single();
         invRow = inv;
-        const newStatus = paymentData.amount_paid >= inv.amount_final ? 'paid' : 'partial';
-        await supabase
-          .from('finance_invoices')
-          .update({ status: newStatus })
-          .eq('id', paymentData.invoice_id);
+        if (inv) {
+          // Obtener la suma de todos los pagos registrados para esta factura
+          const { data: allTxs } = await supabase
+            .from('finance_transactions')
+            .select('amount_paid')
+            .eq('invoice_id', paymentData.invoice_id);
+            
+          const totalPaid = (allTxs || []).reduce((sum, tx) => sum + Number(tx.amount_paid), 0);
+          const newStatus = totalPaid >= Number(inv.amount_final) ? 'paid' : 'partial';
+          
+          await supabase
+            .from('finance_invoices')
+            .update({ status: newStatus })
+            .eq('id', paymentData.invoice_id);
+        }
       }
 
       // === REGISTRO AUTOMÁTICO EN EL LIBRO CONTABLE (DB) ===
@@ -455,18 +465,38 @@ export const useFinance = (options?: {
         }
       }
 
-      // 3. Para cada transacción, volver a poner la factura en 'pending'
+      // 3. Para cada transacción, recalcular el estado de la factura basándose en los pagos restantes
+      const targetIds = targetTransactions.map((t) => t.id);
       for (const t of targetTransactions) {
         if (t.invoice_id) {
+          const { data: remainingTxs } = await supabase
+            .from('finance_transactions')
+            .select('amount_paid')
+            .eq('invoice_id', t.invoice_id)
+            .not('id', 'in', `(${targetIds.join(',')})`);
+            
+          const totalPaid = (remainingTxs || []).reduce((sum, tx) => sum + Number(tx.amount_paid), 0);
+          
+          let newStatus = 'pending';
+          if (totalPaid > 0) {
+            const { data: inv } = await supabase
+              .from('finance_invoices')
+              .select('amount_final')
+              .eq('id', t.invoice_id)
+              .single();
+            if (inv) {
+              newStatus = totalPaid >= Number(inv.amount_final) ? 'paid' : 'partial';
+            }
+          }
+          
           await supabase
             .from('finance_invoices')
-            .update({ status: 'pending' })
+            .update({ status: newStatus })
             .eq('id', t.invoice_id);
         }
       }
 
       // 4. Borrar todas las transacciones agrupadas
-      const targetIds = targetTransactions.map((t) => t.id);
       const { error: dErr } = await supabase
         .from('finance_transactions')
         .delete()
@@ -736,6 +766,18 @@ export const useFinance = (options?: {
         .eq('id', transactionId);
       
       if (error) throw error;
+
+      // Actualizar movimientos del libro contable si cambia el método o el monto del pago
+      if (updates.payment_method || updates.amount_paid !== undefined) {
+        const ledgerUpdates: any = {};
+        if (updates.payment_method) ledgerUpdates.method = updates.payment_method;
+        if (updates.amount_paid !== undefined) ledgerUpdates.amount = Number(updates.amount_paid);
+        
+        await supabase
+          .from('finance_ledger_entries')
+          .update(ledgerUpdates)
+          .eq('transaction_id', transactionId);
+      }
       
       await fetchData();
     } catch (e) {

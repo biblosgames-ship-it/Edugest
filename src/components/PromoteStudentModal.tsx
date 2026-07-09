@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase';
-import { Sparkles, ArrowRight, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
+import { Sparkles, ArrowRight, CheckCircle2, AlertCircle, Loader2, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface PromoteStudentModalProps {
@@ -23,6 +23,54 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+
+  // Verificar si ya existe inscripción para este alumno en el año destino
+  useEffect(() => {
+    const checkExisting = async () => {
+      if (!targetYear || !student.names) {
+        setAlreadyRegistered(false);
+        return;
+      }
+      try {
+        let query = supabase
+          .from('students')
+          .select('id')
+          .eq('school_year', targetYear)
+          .eq('center_id', student.center_id);
+
+        if (student.student_code && student.student_code.trim() !== '') {
+          const { data } = await query
+            .eq('student_code', student.student_code)
+            .maybeSingle();
+          if (data) {
+            setAlreadyRegistered(true);
+            return;
+          }
+        }
+
+        // Fallback: buscar por nombres y primer apellido
+        const { data } = await supabase
+          .from('students')
+          .select('id')
+          .eq('school_year', targetYear)
+          .eq('center_id', student.center_id)
+          .eq('names', student.names)
+          .eq('first_surname', student.first_surname);
+
+        if (data && data.length > 0) {
+          setAlreadyRegistered(true);
+        } else {
+          setAlreadyRegistered(false);
+        }
+      } catch (err) {
+        console.error('Error checking existing enrollment:', err);
+        setAlreadyRegistered(false);
+      }
+    };
+
+    checkExisting();
+  }, [targetYear, student]);
 
   // Obtener cursos actuales del estudiante
   const currentCourse = useMemo(() => {
@@ -187,6 +235,13 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
         <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
           <AlertCircle size={18} className="shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {alreadyRegistered && !success && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
+          <AlertTriangle size={18} className="shrink-0 text-amber-600" />
+          <span>Este alumno ya está registrado en el ciclo {targetYear}. Si continúas, se actualizará su curso de destino en lugar de crear un duplicado.</span>
         </div>
       )}
 

@@ -172,7 +172,7 @@ export const StudentForm = ({
   // EFECTO PARA CARGAR DATOS COMPLETOS
   useEffect(() => {
     const loadData = async () => {
-      const id = studentId || initialData?.id || siblingSource?.id;
+      const id = currentStudentId || siblingSource?.id;
       if (!id) return;
 
       setIsLoadingFull(true);
@@ -331,6 +331,33 @@ export const StudentForm = ({
     }
     setIsSaving(true);
 
+    // Validar si ya existe un alumno con el mismo nombre y apellido en el ciclo seleccionado
+    if (!currentStudentId && student.names && student.firstSurname) {
+      try {
+        const { data: existing, error: checkErr } = await supabase
+          .from('students')
+          .select('id')
+          .eq('center_id', profile.center_id)
+          .eq('school_year', selectedYear)
+          .eq('names', student.names.trim())
+          .eq('first_surname', student.firstSurname.trim());
+
+        if (checkErr) throw checkErr;
+
+        if (existing && existing.length > 0) {
+          const confirmSave = window.confirm(
+            `⚠️ Ya existe un alumno registrado con el nombre "${student.names} ${student.firstSurname}" en el ciclo ${selectedYear}.\n\n¿Estás seguro de que deseas registrar este duplicado?`
+          );
+          if (!confirmSave) {
+            setIsSaving(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking duplicate student:', err);
+      }
+    }
+
     const normalize = (val: string) => {
       if (!val) return '';
       // Eliminar espacios extras y poner en formato Titulo (Opcional, pero ayuda)
@@ -480,7 +507,7 @@ export const StudentForm = ({
         .eq('id', sibling.id);
 
       // 2. Si el alumno actual ya existe, guardarlo en la base de datos de inmediato
-      const currentId = studentId || initialData?.id;
+      const currentId = currentStudentId;
       if (currentId) {
         await supabase
           .from('students')

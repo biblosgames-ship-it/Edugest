@@ -176,6 +176,13 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id);
   const studentTransactions = transactions.filter((t) => t.student_id === studentId);
 
+  const getInvoiceBalance = (inv: any) => {
+    const paid = studentTransactions
+      .filter((t) => t.invoice_id === inv.id)
+      .reduce((sum, t) => sum + Number(t.amount_paid), 0);
+    return Math.max(0, Number(inv.amount_final) - paid);
+  };
+
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: any } = {};
     const result: any[] = [];
@@ -494,7 +501,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       ? 'bg-emerald-50/30 border-emerald-100'
                       : isSelected
                         ? 'bg-indigo-50 border-indigo-600 shadow-lg'
-                        : 'bg-white border-slate-100 hover:border-slate-200'
+                        : inv.status === 'partial'
+                          ? 'bg-amber-50/20 border-amber-200 hover:border-amber-300'
+                          : 'bg-white border-slate-100 hover:border-slate-200'
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -520,7 +529,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${
                         inv.status === 'paid'
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-100 text-slate-400'
+                          : inv.status === 'partial'
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-slate-100 text-slate-400'
                       }`}
                     >
                       {inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
@@ -545,14 +556,23 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                   <div className="flex items-center gap-6">
                     <div className="text-right">
                       <p className="text-sm font-black text-slate-900">
-                        RD$ {Number(inv.amount_final).toLocaleString()}
+                        RD$ {getInvoiceBalance(inv).toLocaleString()}
                       </p>
+                      {inv.status === 'partial' && (
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">
+                          de RD$ {Number(inv.amount_final).toLocaleString()}
+                        </p>
+                      )}
                       <p
                         className={`text-[8px] font-black uppercase tracking-widest ${
-                          inv.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'
+                          inv.status === 'paid'
+                            ? 'text-emerald-600'
+                            : inv.status === 'partial'
+                              ? 'text-amber-500'
+                              : 'text-amber-600'
                         }`}
                       >
-                        {inv.status === 'paid' ? 'Pagado' : 'Pendiente'}
+                        {inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
                       </p>
                     </div>
                     {inv.status !== 'paid' && (
@@ -600,7 +620,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                   className={`p-5 rounded-3xl border transition-all flex items-center justify-between group ${
                     inv.status === 'paid'
                       ? 'bg-emerald-50/30 border-emerald-100'
-                      : 'bg-white border-slate-100 hover:border-slate-200'
+                      : inv.status === 'partial'
+                        ? 'bg-amber-50/20 border-amber-200 hover:border-amber-300'
+                        : 'bg-white border-slate-100 hover:border-slate-200'
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -608,7 +630,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${
                         inv.status === 'paid'
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-100 text-slate-400'
+                          : inv.status === 'partial'
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-slate-100 text-slate-400'
                       }`}
                     >
                       {inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
@@ -623,14 +647,23 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                   <div className="flex items-center gap-6">
                     <div className="text-right">
                       <p className="text-sm font-black text-slate-900">
-                        RD$ {Number(inv.amount_final).toLocaleString()}
+                        RD$ {getInvoiceBalance(inv).toLocaleString()}
                       </p>
+                      {inv.status === 'partial' && (
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">
+                          de RD$ {Number(inv.amount_final).toLocaleString()}
+                        </p>
+                      )}
                       <p
                         className={`text-[8px] font-black uppercase tracking-widest ${
-                          inv.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'
+                          inv.status === 'paid'
+                            ? 'text-emerald-600'
+                            : inv.status === 'partial'
+                              ? 'text-amber-500'
+                              : 'text-amber-600'
                         }`}
                       >
-                        {inv.status === 'paid' ? 'Pagado' : 'Pendiente'}
+                        {inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
                       </p>
                     </div>
                     {inv.status !== 'paid' && (

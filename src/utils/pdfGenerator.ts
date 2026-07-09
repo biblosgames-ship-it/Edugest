@@ -74,13 +74,17 @@ export const generateStudentPDF = (
         'Nombres y Apellidos:',
         `${student.names || student.first_name || ''} ${student.firstSurname || student.first_surname || ''} ${student.secondSurname || student.second_surname || ''}`.trim().toUpperCase()
       ],
-      ['Fecha de Nacimiento:', student.birthDate || student.birth_date || '---'],
-      ['Sexo / Nacionalidad:', `${student.sex || '---'} / ${student.nationality || 'Dominicana'}`],
+      ['Código Alumno / SIGERD:', `${student.student_code || '---'}  /  ${student.sigerdCode || student.sigerd_code || '---'}`],
+      ['Fecha y Lugar de Nac.:', `${student.birthDate || student.birth_date || '---'}  |  ${student.placeOfBirth || student.place_of_birth || '---'}`],
+      ['Sexo / Nacionalidad / Folio:', `${student.sex || '---'}  /  ${student.nationality || 'Dominicana'}  /  Folio: ${student.birthCertificateFolio || student.birth_certificate_folio || '---'}`],
       ['Cédula:', student.idCard || student.id_card || '---'],
       [
         'Dirección:',
-        `${student.addressStreet || student.address_street || ''} ${student.addressNumber || student.address_number || ''}, ${student.addressSector || student.address_sector || ''}`.trim()
-      ]
+        `${student.addressStreet || student.address_street || ''} ${student.addressNumber || student.address_number || ''}, ${student.addressSector || student.address_sector || ''}, ${student.municipality || student.municipality || ''}, ${student.province || student.province || ''}`.trim().toUpperCase()
+      ],
+      ['Teléfonos / Correo:', `Personal: ${student.personalPhone || student.personal_phone || '---'}  |  Casa: ${student.homePhone || student.home_phone || '---'}  |  ${student.email || '---'}`],
+      ['Vive con / Autorizado:', `Vive con: ${student.livesWith || student.lives_with || '---'}  |  Autorizado: ${student.authorizedPerson || student.authorized_person || '---'}`],
+      ['Restricciones Legales:', student.legalRestrictions || student.legal_restrictions || 'Ninguna']
     ],
     theme: 'grid',
     styles: commonStyles,

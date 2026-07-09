@@ -8,7 +8,9 @@ import {
   FileText,
   Save,
   Receipt,
-  GraduationCap
+  GraduationCap,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { useFinance } from '../../hooks/useFinance';
 import { toast } from 'react-hot-toast';
@@ -50,7 +52,31 @@ export const PaymentModal = ({
     : initialCourseName || student.courses?.name || 'Grado';
 
   const courseName = fullCourseName;
-  const totalAmount = invoicesList.reduce((acc, inv) => acc + Number(inv.amount_final), 0);
+  const [studentTransactions, setStudentTransactions] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchTxs = async () => {
+      try {
+        const { data } = await supabase
+          .from('finance_transactions')
+          .select('*')
+          .eq('student_id', student.id);
+        if (data) setStudentTransactions(data);
+      } catch (err) {
+        console.error('Error fetching transactions for balance:', err);
+      }
+    };
+    fetchTxs();
+  }, [student.id]);
+
+  const getInvoiceBalance = (inv: any) => {
+    const paid = studentTransactions
+      .filter((t) => t.invoice_id === inv.id)
+      .reduce((sum, t) => sum + Number(t.amount_paid), 0);
+    return Math.max(0, Number(inv.amount_final) - paid);
+  };
+
+  const totalAmount = invoicesList.reduce((acc, inv) => acc + getInvoiceBalance(inv), 0);
   const totalConcepts = invoicesList.map((inv) => inv.concept).join(' + ');
 
   const [formData, setFormData] = useState({
@@ -59,6 +85,28 @@ export const PaymentModal = ({
     reference_number: '',
     notes: ''
   });
+
+  const [paymentMethods, setPaymentMethods] = useState<Array<{
+    method: string;
+    amount: number;
+    reference_number: string;
+  }>>([
+    { method: 'cash', amount: totalAmount, reference_number: '' }
+  ]);
+
+  // Sincronizar métodos de pago cuando totalAmount cambia (después de cargar transacciones)
+  React.useEffect(() => {
+    const computedTotal = invoicesList.reduce((acc, inv) => {
+      const paid = studentTransactions
+        .filter((t) => t.invoice_id === inv.id)
+        .reduce((sum, t) => sum + Number(t.amount_paid), 0);
+      return acc + Math.max(0, Number(inv.amount_final) - paid);
+    }, 0);
+    setFormData((prev) => ({ ...prev, amount_paid: computedTotal }));
+    setPaymentMethods([
+      { method: 'cash', amount: computedTotal, reference_number: '' }
+    ]);
+  }, [studentTransactions]);
 
   const [isSuccess, setIsSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -166,29 +214,109 @@ export const PaymentModal = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.amount_paid <= 0) return toast.error('El monto debe ser mayor a 0');
+    
+    // Preparar lista de métodos de pago válidos (monto mayor a 0)
+    const payments = paymentMethods
+      .map((pm) => ({ ...pm, amount: Number(pm.amount) }))
+      .filter((pm) => pm.amount > 0);
+
+    if (payments.length === 0) {
+      return toast.error('Debe ingresar al menos un método de pago con monto mayor a 0');
+    }
+
+    const totalPaid = payments.reduce((sum, pm) => sum + pm.amount, 0);
 
     try {
+      // 1. Obtener facturas con sus saldos pendientes correspondientes
+      const invoicesWithBalance = invoicesList.map((inv) => {
+        const paid = studentTransactions
+          .filter((t) => t.invoice_id === inv.id)
+          .reduce((sum, t) => sum + Number(t.amount_paid), 0);
+        const balance = Math.max(0, Number(inv.amount_final) - paid);
+        return {
+          ...inv,
+          balance: balance
+        };
+      }).filter((inv) => inv.balance > 0);
+
+      // 2. Distribuir los pagos secuencialmente entre las facturas (FIFO)
+      const transactionsToInsert: any[] = [];
+      let paymentIndex = 0;
+      let invoiceIndex = 0;
+
+      const activeInvoices = invoicesWithBalance.map(inv => ({ ...inv }));
+      const activePayments = payments.map(p => ({ ...p }));
+
+      while (invoiceIndex < activeInvoices.length && paymentIndex < activePayments.length) {
+        const currentInvoice = activeInvoices[invoiceIndex];
+        const currentPayment = activePayments[paymentIndex];
+
+        if (currentInvoice.balance <= 0) {
+          invoiceIndex++;
+          continue;
+        }
+        if (currentPayment.amount <= 0) {
+          paymentIndex++;
+          continue;
+        }
+
+        const amountToApply = Math.min(currentInvoice.balance, currentPayment.amount);
+
+        transactionsToInsert.push({
+          student_id: student.id,
+          invoice_id: currentInvoice.id,
+          amount_paid: amountToApply,
+          payment_method: currentPayment.method,
+          reference_number: currentPayment.reference_number || '',
+          notes: formData.notes || `Cobro de: ${currentInvoice.concept}`
+        });
+
+        currentInvoice.balance -= amountToApply;
+        currentPayment.amount -= amountToApply;
+      }
+
+      // 3. Manejar cualquier excedente/pago anticipado
+      while (paymentIndex < activePayments.length) {
+        const currentPayment = activePayments[paymentIndex];
+        if (currentPayment.amount > 0) {
+          transactionsToInsert.push({
+            student_id: student.id,
+            invoice_id: null,
+            amount_paid: currentPayment.amount,
+            payment_method: currentPayment.method,
+            reference_number: currentPayment.reference_number || '',
+            notes: (formData.notes || 'Pago anticipado/excedente') + ' (Sin factura vinculada)'
+          });
+          currentPayment.amount = 0;
+        }
+        paymentIndex++;
+      }
+
+      // Si no hay transacciones para insertar pero hay dinero (ej. venta inmediata sin factura)
+      if (transactionsToInsert.length === 0 && totalPaid > 0) {
+        payments.forEach(p => {
+          transactionsToInsert.push({
+            student_id: student.id,
+            invoice_id: null,
+            amount_paid: p.amount,
+            payment_method: p.method,
+            reference_number: p.reference_number || '',
+            notes: formData.notes || 'Abono general / pago sin factura'
+          });
+        });
+      }
+
+      // 4. Guardar cada transacción en Supabase en secuencia
       const results = [];
       let firstReceiptNumber: any = undefined;
 
-      for (const inv of invoicesList) {
-        const paymentPayload: any = {
-          student_id: student.id,
-          invoice_id: inv.id,
-          amount_paid: Number(inv.amount_final),
-          payment_method: formData.payment_method,
-          reference_number: formData.reference_number,
-          notes:
-            formData.notes + (invoicesList.length > 1 ? ` (Pago múltiple: ${totalConcepts})` : '')
-        };
-
-        // Reuse the receipt number of the first transaction for subsequent payments
+      for (const transPayload of transactionsToInsert) {
+        const payload = { ...transPayload };
         if (firstReceiptNumber !== undefined) {
-          paymentPayload.receipt_number = firstReceiptNumber;
+          payload.receipt_number = firstReceiptNumber;
         }
 
-        const res = await registerPayment(paymentPayload);
+        const res = await registerPayment(payload);
         results.push(res);
 
         if (res && res.receipt_number && firstReceiptNumber === undefined) {
@@ -196,16 +324,25 @@ export const PaymentModal = ({
         }
       }
 
-
+      // 5. Configurar datos del recibo para imprimir
+      const methodLabels: { [key: string]: string } = {
+        cash: 'Efectivo',
+        transfer: 'Transferencia',
+        card: 'Tarjeta',
+        check: 'Cheque'
+      };
+      
+      const methodsString = Array.from(new Set(payments.map((p) => methodLabels[p.method] || p.method))).join(' + ');
+      const refsString = Array.from(new Set(payments.map((p) => p.reference_number).filter(Boolean))).join(', ');
 
       setReceiptData({
         student,
         courseName,
         concepts: totalConcepts,
-        amount: formData.amount_paid,
-        method: formData.payment_method,
+        amount: totalPaid,
+        method: methodsString || 'Efectivo',
         date: new Date().toLocaleDateString(),
-        ref: formData.reference_number,
+        ref: refsString,
         receiptNumbers: results.filter((r) => r && r.receipt_number).map((r) => r.receipt_number)
       });
       setIsSuccess(true);
@@ -506,50 +643,110 @@ export const PaymentModal = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                  <DollarSign size={12} className="text-emerald-500" /> Monto Recibido
+            <div className="space-y-4">
+              <div className="flex justify-between items-center px-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <CreditCard size={12} className="text-indigo-500" /> Distribución de Métodos de Pago
                 </label>
-                <input
-                  type="number"
-                  required
-                  value={formData.amount_paid}
-                  onChange={(e) =>
-                    setFormData({ ...formData, amount_paid: Number(e.target.value) })
-                  }
-                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xl font-black focus:ring-2 focus:ring-indigo-600 transition-all"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                  <CreditCard size={12} className="text-indigo-500" /> Método de Pago
-                </label>
-                <select
-                  value={formData.payment_method}
-                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all appearance-none uppercase tracking-widest"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentSum = paymentMethods.reduce((sum, pm) => sum + pm.amount, 0);
+                    const remaining = Math.max(0, totalAmount - currentSum);
+                    setPaymentMethods([
+                      ...paymentMethods,
+                      { method: 'transfer', amount: remaining, reference_number: '' }
+                    ]);
+                  }}
+                  className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer border-none"
                 >
-                  <option value="cash">Efectivo</option>
-                  <option value="transfer">Transferencia</option>
-                  <option value="card">Tarjeta</option>
-                  <option value="check">Cheque</option>
-                </select>
+                  <Plus size={10} /> Agregar otro método
+                </button>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                <Hash size={12} className="text-slate-400" /> Referencia (Opcional)
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: # Transacción o Cheque"
-                value={formData.reference_number}
-                onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
-                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-black focus:ring-2 focus:ring-indigo-600 transition-all"
-              />
+              <div className="space-y-3">
+                {paymentMethods.map((pm, idx) => (
+                  <div key={idx} className="flex flex-col md:flex-row gap-3 items-end bg-slate-50 p-4 rounded-2xl relative group/pm">
+                    {paymentMethods.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newMethods = paymentMethods.filter((_, i) => i !== idx);
+                          setPaymentMethods(newMethods);
+                          const newSum = newMethods.reduce((sum, p) => sum + p.amount, 0);
+                          setFormData((prev) => ({ ...prev, amount_paid: newSum }));
+                        }}
+                        className="absolute -top-2 -right-2 bg-rose-500 text-white p-1 rounded-full shadow-lg hover:bg-rose-600 transition-all cursor-pointer border-none"
+                        title="Eliminar método"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Método</span>
+                      <select
+                        value={pm.method}
+                        onChange={(e) => {
+                          const newMethods = [...paymentMethods];
+                          newMethods[idx].method = e.target.value;
+                          setPaymentMethods(newMethods);
+                        }}
+                        className="w-full bg-white border-none rounded-xl py-2.5 px-3 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all appearance-none uppercase tracking-widest"
+                      >
+                        <option value="cash">Efectivo</option>
+                        <option value="transfer">Transferencia</option>
+                        <option value="card">Tarjeta</option>
+                        <option value="check">Cheque</option>
+                      </select>
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Monto (RD$)</span>
+                      <input
+                        type="number"
+                        required
+                        min="0.01"
+                        step="any"
+                        value={pm.amount}
+                        onChange={(e) => {
+                          const newMethods = [...paymentMethods];
+                          newMethods[idx].amount = Number(e.target.value);
+                          setPaymentMethods(newMethods);
+                          const newSum = newMethods.reduce((sum, p) => sum + p.amount, 0);
+                          setFormData((prev) => ({ ...prev, amount_paid: newSum }));
+                        }}
+                        className="w-full bg-white border-none rounded-xl py-2.5 px-3 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all"
+                      />
+                    </div>
+
+                    {pm.method !== 'cash' && (
+                      <div className="flex-1 space-y-1">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Referencia</span>
+                        <input
+                          type="text"
+                          placeholder="Ref / Nº"
+                          value={pm.reference_number}
+                          onChange={(e) => {
+                            const newMethods = [...paymentMethods];
+                            newMethods[idx].reference_number = e.target.value;
+                            setPaymentMethods(newMethods);
+                          }}
+                          className="w-full bg-white border-none rounded-xl py-2.5 px-3 text-[10px] font-black focus:ring-2 focus:ring-indigo-600 transition-all"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Total Display */}
+              <div className="bg-slate-900 text-white p-4 rounded-2xl flex justify-between items-center px-6 mt-2">
+                <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <DollarSign size={14} className="text-emerald-400" /> Monto Total a Recibir
+                </span>
+                <span className="text-lg font-black text-emerald-400">RD$ {formData.amount_paid.toLocaleString()}</span>
+              </div>
             </div>
 
             <div className="space-y-2">
