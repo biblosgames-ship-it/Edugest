@@ -112,6 +112,7 @@ export const PaymentModal = ({
   const [receiptData, setReceiptData] = useState<any>(null);
   const [tutorName, setTutorName] = useState<string>('No registrado');
   const [printFormat, setPrintFormat] = useState<'letter' | 'ticket'>('letter');
+  const isSubmittingPayment = React.useRef(false);
 
   // CARGAR DATOS DEL TUTOR
   React.useEffect(() => {
@@ -154,6 +155,7 @@ export const PaymentModal = ({
 
   // DETECTAR FACTURAS YA PAGADAS PARA IR DIRECTO AL RECIBO
   React.useEffect(() => {
+    if (isSubmittingPayment.current) return;
     const loadReceiptForPaidInvoices = async () => {
       const allPaid = invoicesList.length > 0 && invoicesList.every((inv) => inv.status === 'paid');
       if (!allPaid) return;
@@ -214,6 +216,7 @@ export const PaymentModal = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    isSubmittingPayment.current = true;
     
     // Preparar lista de métodos de pago válidos (monto mayor a 0)
     const payments = paymentMethods
@@ -349,6 +352,7 @@ export const PaymentModal = ({
       // No cerramos inmediatamente para permitir imprimir
     } catch (error) {
       console.error('Payment error:', error);
+      isSubmittingPayment.current = false;
     }
   };
 
@@ -525,8 +529,8 @@ export const PaymentModal = ({
                     Método de Pago
                   </p>
                   <p className="text-xs font-bold uppercase text-slate-900">
-                    {formData.payment_method}{' '}
-                    {formData.reference_number && `(Ref: ${formData.reference_number})`}
+                    {receiptData?.method || formData.payment_method}{' '}
+                    {(receiptData?.ref || formData.reference_number) && `(Ref: ${receiptData?.ref || formData.reference_number})`}
                   </p>
                 </div>
                 <div className="text-right">
@@ -534,7 +538,7 @@ export const PaymentModal = ({
                     Total Pagado
                   </p>
                   <p className={printFormat === 'ticket' ? 'text-xl font-black text-slate-900' : 'text-3xl font-black text-slate-900'}>
-                    RD$ {formData.amount_paid.toLocaleString()}
+                    RD$ {(receiptData?.amount || formData.amount_paid).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -653,10 +657,13 @@ export const PaymentModal = ({
                   onClick={() => {
                     const currentSum = paymentMethods.reduce((sum, pm) => sum + pm.amount, 0);
                     const remaining = Math.max(0, totalAmount - currentSum);
-                    setPaymentMethods([
+                    const newMethods = [
                       ...paymentMethods,
                       { method: 'transfer', amount: remaining, reference_number: '' }
-                    ]);
+                    ];
+                    setPaymentMethods(newMethods);
+                    const newSum = newMethods.reduce((sum, p) => sum + p.amount, 0);
+                    setFormData((prev) => ({ ...prev, amount_paid: newSum }));
                   }}
                   className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer border-none"
                 >

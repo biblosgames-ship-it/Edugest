@@ -183,6 +183,24 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     return Math.max(0, Number(inv.amount_final) - paid);
   };
 
+  const formatPaymentMethod = (method: string) => {
+    if (!method) return '---';
+    const methodLabels: Record<string, string> = {
+      cash: 'Efectivo',
+      transfer: 'Transferencia',
+      card: 'Tarjeta',
+      check: 'Cheque'
+    };
+    if (method.includes('+') || method.includes(',')) {
+      const parts = method.split(/[+,]/).map((p) => p.trim().toLowerCase());
+      return parts
+        .map((p) => methodLabels[p] || p.charAt(0).toUpperCase() + p.slice(1))
+        .join(' + ');
+    }
+    const lower = method.trim().toLowerCase();
+    return methodLabels[lower] || method;
+  };
+
   const groupedTransactions = useMemo(() => {
     const groups: { [key: string]: any } = {};
     const result: any[] = [];
@@ -196,7 +214,8 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
             amount_paid: 0,
             ids: [],
             invoice_ids: [],
-            notes_list: []
+            notes_list: [],
+            methods_list: []
           };
           result.push(groups[rNum]);
         }
@@ -204,11 +223,13 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
         groups[rNum].ids.push(t.id);
         if (t.invoice_id) groups[rNum].invoice_ids.push(t.invoice_id);
         if (t.notes) groups[rNum].notes_list.push(t.notes);
+        if (t.payment_method) groups[rNum].methods_list.push(t.payment_method);
       } else {
         result.push({
           ...t,
           ids: [t.id],
-          invoice_ids: t.invoice_id ? [t.invoice_id] : []
+          invoice_ids: t.invoice_id ? [t.invoice_id] : [],
+          methods_list: t.payment_method ? [t.payment_method] : []
         });
       }
     });
@@ -217,6 +238,10 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       if (t.notes_list && t.notes_list.length > 0) {
         const uniqueNotes = Array.from(new Set(t.notes_list)) as string[];
         t.notes = uniqueNotes.join(' • ');
+      }
+      if (t.methods_list && t.methods_list.length > 0) {
+        const uniqueMethods = Array.from(new Set(t.methods_list)) as string[];
+        t.payment_method = uniqueMethods.join(' + ');
       }
     });
 
@@ -756,7 +781,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                     </div>
                   </div>
                   <p className="text-[9px] font-bold text-slate-400 uppercase">
-                    {new Date(t.created_at).toLocaleDateString()} • {t.payment_method}
+                    {new Date(t.created_at).toLocaleDateString()} • {formatPaymentMethod(t.payment_method)}
                   </p>
                   <p className="text-[9px] font-bold text-indigo-400 mt-1">
                     {t.notes || 'Pago de cuota'}
