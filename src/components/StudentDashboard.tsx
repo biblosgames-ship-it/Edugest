@@ -53,6 +53,8 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
   const [allCourses, setAllCourses] = useState<any[]>([]);
   const [course, setCourse] = useState<any>(null);
+  const [familyStudents, setFamilyStudents] = useState<any[]>([]);
+  const hasCheckedSiblings = React.useRef(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +102,84 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     };
     fetchCourses();
   }, [profile?.center_id, selectedYear]);
+
+  // Autovinculación de cursos de hermanos para padres
+  useEffect(() => {
+    const autoLinkSiblings = async () => {
+      if (profile?.role !== 'parent' || !profile.full_name || !profile.center_id || !allCourses.length) {
+        return;
+      }
+      if (hasCheckedSiblings.current) return;
+
+      try {
+        // 1. Extraer nombre del alumno
+        let studentNamePart = profile.full_name.toLowerCase();
+        if (studentNamePart.includes('padre/madre') || studentNamePart.includes('tutor') || studentNamePart.includes('encargado')) {
+          studentNamePart = studentNamePart
+            .replace('(padre/madre)', '')
+            .replace('(tutor)', '')
+            .replace('(encargado)', '')
+            .trim();
+        }
+
+        // 2. Buscar al alumno en el ciclo activo
+        const { data: students, error: sErr } = await supabase
+          .from('students')
+          .select('id, names, first_surname, second_surname, family_id, course_id')
+          .eq('center_id', profile.center_id)
+          .eq('school_year', selectedYear || '2025-2026');
+
+        if (sErr || !students) return;
+
+        // Encontrar el alumno que coincida con el nombre en el perfil del padre
+        const match = students.find((s) => {
+          const fullName = `${s.names} ${s.first_surname} ${s.second_surname}`.toLowerCase().trim();
+          return fullName.includes(studentNamePart) || studentNamePart.includes(s.names.toLowerCase());
+        });
+
+        if (!match) return;
+        
+        hasCheckedSiblings.current = true;
+
+        if (!match.family_id) return;
+
+        // 3. Obtener todos los hermanos que comparten el family_id
+        const siblings = students.filter((s) => s.family_id === match.family_id);
+        setFamilyStudents(siblings);
+
+        const siblingCourseIds = siblings
+          .map((s) => s.course_id)
+          .filter(Boolean) as string[];
+
+        // 4. Filtrar los cursos que aún no están vinculados en el perfil del padre
+        const currentLinked = profile.parent_course_ids || parentCourseIds || [];
+        const missingCourseIds = siblingCourseIds.filter(
+          (cId) => !currentLinked.includes(cId)
+        );
+
+        if (missingCourseIds.length > 0) {
+          const updatedIds = Array.from(new Set([...currentLinked, ...missingCourseIds]));
+          
+          console.log('[StudentDashboard] Autovinculando cursos de hermanos:', missingCourseIds);
+          
+          const { error: updErr } = await supabase
+            .from('profiles')
+            .update({ parent_course_ids: updatedIds })
+            .eq('id', profile.id);
+
+          if (!updErr) {
+            localStorage.setItem('parent_course_ids', JSON.stringify(updatedIds));
+            setParentCourseIds(updatedIds);
+            profile.parent_course_ids = updatedIds;
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-linking sibling courses:', err);
+      }
+    };
+
+    autoLinkSiblings();
+  }, [profile, allCourses, selectedYear]);
 
   // Sincronizar reactivamente si cambia en el perfil
   useEffect(() => {
@@ -535,7 +615,12 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
                 }`}
               >
                 <span>
-                  Hijo: {c.grade} {c.section}
+                  {(() => {
+                    const studentForCourse = familyStudents.find((s) => s.course_id === c.id);
+                    return studentForCourse
+                      ? `${studentForCourse.names.split(' ')[0]}: ${c.grade} "${c.section}"`
+                      : `Hijo: ${c.grade} "${c.section}"`;
+                  })()}
                 </span>
                 <span
                   className="text-[8px] bg-slate-150 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-md p-1 transition-all cursor-pointer"

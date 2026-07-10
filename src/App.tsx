@@ -50,7 +50,8 @@ import {
   Loader2,
   DollarSign,
   Wrench,
-  Menu
+  Menu,
+  Lock
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
 
@@ -128,6 +129,16 @@ function AppContent() {
   const [dataView, setDataView] = useState('course');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
+  const [isFinancesUnlocked, setIsFinancesUnlocked] = useState(false);
+  const [pinError, setPinError] = useState('');
+
+  // Volver a bloquear finanzas si se cambia de vista
+  useEffect(() => {
+    if (activeView !== 'finances') {
+      setIsFinancesUnlocked(false);
+      setPinError('');
+    }
+  }, [activeView]);
 
   const studentCount = stats?.studentCount || 0;
   const totalUserCount = stats?.totalUserCount || 0;
@@ -394,7 +405,60 @@ function AppContent() {
               profile?.role === 'finance' ||
               profile?.role === 'superAdmin' ||
               isSuperAdmin ? (
-                <FinanceModule />
+                profile?.finance_pin && !isFinancesUnlocked ? (
+                  <div className="max-w-md mx-auto my-12 bg-white rounded-[3rem] border border-slate-100 shadow-2xl p-10 text-center space-y-8 animate-in zoom-in-95 duration-200">
+                    <div className="mx-auto w-20 h-20 bg-rose-50 text-rose-600 rounded-[2rem] flex items-center justify-center shadow-inner animate-pulse">
+                      <Lock size={40} />
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800">
+                        Módulo Protegido
+                      </h2>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider leading-relaxed">
+                        Introduce el PIN de seguridad de finanzas para acceder a los saldos, cobros e inventario.
+                      </p>
+                    </div>
+                    
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const inputVal = (e.currentTarget.elements.namedItem('financePinInput') as HTMLInputElement).value;
+                        if (inputVal === profile.finance_pin) {
+                          setIsFinancesUnlocked(true);
+                          setPinError('');
+                          toast.success('🔓 Acceso concedido a Finanzas');
+                        } else {
+                          setPinError('PIN incorrecto. Inténtalo de nuevo.');
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      <input
+                        name="financePinInput"
+                        type="password"
+                        maxLength={6}
+                        required
+                        autoFocus
+                        placeholder="••••"
+                        className="w-full text-center tracking-[1em] text-2xl font-bold p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 text-slate-800 placeholder:text-slate-250"
+                        onChange={() => setPinError('')}
+                      />
+                      {pinError && (
+                        <p className="text-xs font-black text-rose-600 uppercase tracking-wide bg-rose-50 p-3 rounded-xl animate-bounce">
+                          ⚠️ {pinError}
+                        </p>
+                      )}
+                      <button
+                        type="submit"
+                        className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-rose-100 cursor-pointer active:scale-95 border-none"
+                      >
+                        Desbloquear Módulo
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <FinanceModule />
+                )
               ) : (
                 <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400">
                   <ShieldCheck size={64} className="mb-4 opacity-20" />

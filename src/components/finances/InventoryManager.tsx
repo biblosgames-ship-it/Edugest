@@ -218,16 +218,11 @@ export const InventoryManager = () => {
         quantity: item.quantity
       }));
 
+      // Creamos las facturas siempre como PENDIENTES. Si selecciona cobro inmediato,
+      // el PaymentModal se encargará de realizar el cobro (soportando cobro mixto).
       const invs = await createProductInvoice({
         student_id: saleForm.student_id,
-        items,
-        ...(saleForm.immediate_pay
-          ? {
-              payment_method: saleForm.payment_method,
-              reference_number: saleForm.reference_number,
-              notes: saleForm.notes || 'Cobro de venta de inventario'
-            }
-          : {})
+        items
       });
       setShowSaleModal(false);
       setCart([]);
@@ -238,6 +233,8 @@ export const InventoryManager = () => {
           setReceiptStudent(studentObj);
           setReceiptInvoices(invs);
         }
+      } else {
+        toast.success('Factura de venta generada con éxito');
       }
     } catch (err) {
       // Error se maneja en el hook
@@ -800,55 +797,15 @@ export const InventoryManager = () => {
                 </label>
               </div>
 
-              {/* Desglose de Pago Inmediato */}
+              {/* Mensaje de Cobro Dividido */}
               {saleForm.immediate_pay && (
-                <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400">
-                        Método de Pago
-                      </label>
-                      <select
-                        value={saleForm.payment_method}
-                        onChange={(e) =>
-                          setSaleForm({ ...saleForm, payment_method: e.target.value })
-                        }
-                        className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600 uppercase tracking-widest"
-                      >
-                        <option value="cash">Efectivo</option>
-                        <option value="transfer">Transferencia</option>
-                        <option value="card">Tarjeta</option>
-                        <option value="check">Cheque</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400">
-                        Referencia (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ej: # Transacción"
-                        value={saleForm.reference_number}
-                        onChange={(e) =>
-                          setSaleForm({ ...saleForm, reference_number: e.target.value })
-                        }
-                        className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">
-                      Notas / Comentarios
-                    </label>
-                    <textarea
-                      placeholder="Comentarios sobre la transacción..."
-                      value={saleForm.notes}
-                      onChange={(e) => setSaleForm({ ...saleForm, notes: e.target.value })}
-                      rows={2}
-                      className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-xs font-bold focus:ring-2 focus:ring-indigo-600 resize-none"
-                    />
-                  </div>
+                <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl animate-in slide-in-from-top-2 duration-200">
+                  <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                    💡 Cobro Unificado
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-bold leading-normal uppercase">
+                    Al confirmar la venta, se abrirá la pasarela de cobros donde podrás registrar múltiples métodos de pago (Efectivo, Transferencia, Tarjeta o Cobro Dividido), registrar referencias y generar el recibo oficial.
+                  </p>
                 </div>
               )}
 

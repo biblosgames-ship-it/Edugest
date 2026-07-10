@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Save, Settings2, CreditCard, Info, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Save, Settings2, CreditCard, Info, CheckCircle2, AlertCircle, ShieldAlert } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
 import { supabase } from '../../lib/supabase';
@@ -9,6 +9,55 @@ export const FinanceSettings = () => {
   const { state, profile } = useApp();
   const { paymentPlans, savePaymentPlan, loading, refresh } = useFinance({ paymentPlans: true });
   const [editingLevel, setEditingLevel] = useState<string | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [hasExistingPin, setHasExistingPin] = useState(!!profile?.finance_pin);
+
+  const handleSavePin = async () => {
+    if (!pinInput || pinInput.length < 4) {
+      return toast.error('El PIN debe tener al menos 4 dígitos numéricos.');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ finance_pin: pinInput })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+
+      if (profile) profile.finance_pin = pinInput;
+      setHasExistingPin(true);
+      setPinInput('');
+      toast.success('🔒 PIN de seguridad actualizado con éxito.');
+    } catch (err: any) {
+      console.error('Error saving PIN:', err);
+      toast.error('Error al guardar el PIN: ' + err.message);
+    }
+  };
+
+  const handleClearPin = async () => {
+    if (!window.confirm('¿Estás seguro de que deseas desactivar el PIN de seguridad de finanzas? Cualquier administrador podrá entrar directo.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ finance_pin: null })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+
+      if (profile) profile.finance_pin = null;
+      setHasExistingPin(false);
+      setPinInput('');
+      toast.success('🔓 PIN de seguridad desactivado.');
+    } catch (err: any) {
+      console.error('Error clearing PIN:', err);
+      toast.error('Error al desactivar el PIN.');
+    }
+  };
+
   const [formData, setFormData] = useState({
     enrollment_fee: 0,
     monthly_fee: 0,
@@ -177,6 +226,57 @@ export const FinanceSettings = () => {
               de Secundaria) adoptarán automáticamente estos costos. Esto asegura una facturación
               uniforme y rápida.
             </p>
+          </div>
+        </div>
+
+        {/* PIN DE SEGURIDAD */}
+        <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+              <ShieldAlert size={24} />
+            </div>
+            <div>
+              <h3 className="text-base font-black uppercase tracking-tight text-slate-800">
+                PIN de Seguridad para Finanzas
+              </h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                Bloquea el acceso al módulo de finanzas para evitar miradas indiscretas.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-end gap-4 bg-slate-50 p-6 rounded-[2rem]">
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                Código PIN (Solo números)
+              </label>
+              <input
+                type="password"
+                maxLength={6}
+                placeholder={hasExistingPin ? "•••••• (PIN Activo)" : "Establece un PIN numérico"}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-6 py-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none text-slate-800 placeholder:text-slate-350"
+              />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleSavePin}
+                className="flex-1 sm:flex-none px-6 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-rose-100"
+              >
+                Guardar
+              </button>
+              {hasExistingPin && (
+                <button
+                  type="button"
+                  onClick={handleClearPin}
+                  className="flex-1 sm:flex-none px-6 py-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer"
+                >
+                  Desactivar
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
