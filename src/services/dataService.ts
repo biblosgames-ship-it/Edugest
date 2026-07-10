@@ -78,16 +78,22 @@ export const dataService = {
     return data;
   },
 
-  async searchStudents(centerId: string, query: string) {
+  async searchStudents(centerId: string, query: string, schoolYear?: string) {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
-    const { data, error } = await supabase
+    let dbQuery = supabase
       .from('students')
       .select(
-        'id, names, first_surname, second_surname, first_name, last_name, course_id, family_id, address_sector, address_street, address_number'
+        'id, names, first_surname, second_surname, first_name, last_name, course_id, family_id, address_sector, address_street, address_number, school_year'
       )
-      .eq('center_id', centerId)
+      .eq('center_id', centerId);
+
+    if (schoolYear) {
+      dbQuery = dbQuery.eq('school_year', schoolYear);
+    }
+
+    const { data, error } = await dbQuery
       .or(
         `names.ilike.%${cleanQuery}%,first_surname.ilike.%${cleanQuery}%,second_surname.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%`
       )

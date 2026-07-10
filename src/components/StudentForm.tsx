@@ -485,9 +485,9 @@ export const StudentForm = ({
       setSearchResults([]);
       return;
     }
-    const results = await dataService.searchStudents(profile.center_id, q);
+    const results = await dataService.searchStudents(profile.center_id, q, selectedYear);
     // Excluir al propio estudiante si estamos editando
-    setSearchResults(results.filter((r: any) => r.id !== studentId));
+    setSearchResults(results.filter((r: any) => r.id !== currentStudentId));
   };
 
   const importSibling = async (sibling: any) => {
@@ -561,6 +561,43 @@ export const StudentForm = ({
     } catch (e) {
       console.error(e);
       alert('Error al importar datos del hermano');
+    } finally {
+      setIsLoadingFull(false);
+    }
+  };
+
+  const handleUnlinkSibling = async (sibling: any) => {
+    if (!window.confirm(`¿Estás seguro de que deseas desvincular a ${sibling.names} como hermano?`)) {
+      return;
+    }
+    
+    setIsLoadingFull(true);
+    try {
+      // 1. Quitar el family_id del hermano en la base de datos
+      const { error } = await supabase
+        .from('students')
+        .update({ family_id: null })
+        .eq('id', sibling.id);
+
+      if (error) throw error;
+
+      // 2. Si no quedan más hermanos en el listado, podemos quitar también el familyId del estudiante actual
+      const remainingSiblings = siblings.filter((s) => s.id !== sibling.id);
+      if (remainingSiblings.length === 0) {
+        setStudent((prev) => ({ ...prev, familyId: '' }));
+        if (currentStudentId) {
+          await supabase
+            .from('students')
+            .update({ family_id: null })
+            .eq('id', currentStudentId);
+        }
+      }
+
+      setSiblings(remainingSiblings);
+      toast.success('Hermano desvinculado con éxito');
+    } catch (err) {
+      console.error('Error unlinking sibling:', err);
+      toast.error('Error al desvincular hermano');
     } finally {
       setIsLoadingFull(false);
     }
@@ -684,7 +721,7 @@ export const StudentForm = ({
 
               {siblings.length > 0 && (
                 <div className="p-4 bg-indigo-50/50 border border-indigo-100/80 rounded-2xl space-y-2">
-                  <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-1.5 font-bold">
+                   <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-1.5 font-bold">
                     <Users size={12} /> Hermanos Vinculados ({siblings.length})
                   </p>
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -692,20 +729,33 @@ export const StudentForm = ({
                       const course = (state.courses || []).find((c: any) => c.id === sib.course_id);
                       const courseLabel = course ? `${course.grade} "${course.section}"` : 'Sin curso';
                       return (
-                        <button
+                        <div
                           key={sib.id}
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm(`¿Estás seguro de que deseas abrir el expediente de ${sib.names}? Guarda los cambios del alumno actual primero para no perderlos.`)) {
-                              setCurrentStudentId(sib.id);
-                              toast.success(`Cargando expediente de ${sib.names}`);
-                            }
-                          }}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-100/50 transition-all shadow-sm cursor-pointer"
+                          className="flex items-center gap-1 bg-white border border-indigo-100 text-indigo-700 rounded-xl pl-3 pr-1.5 py-1 hover:bg-indigo-50/50 transition-all shadow-sm group"
                         >
-                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                          {sib.names} ({courseLabel} - {sib.school_year})
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`¿Estás seguro de que deseas abrir el expediente de ${sib.names}? Guarda los cambios del alumno actual primero para no perderlos.`)) {
+                                setCurrentStudentId(sib.id);
+                                toast.success(`Cargando expediente de ${sib.names}`);
+                              }
+                            }}
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-tight cursor-pointer border-none bg-transparent outline-none p-0 text-indigo-700 hover:text-indigo-900"
+                          >
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                            {sib.names} ({courseLabel} - {sib.school_year})
+                          </button>
+                          <div className="w-px h-3.5 bg-indigo-100 mx-1"></div>
+                          <button
+                            type="button"
+                            onClick={() => handleUnlinkSibling(sib)}
+                            className="text-slate-400 hover:text-rose-600 rounded-lg p-0.5 transition-all cursor-pointer border-none bg-transparent"
+                            title="Desvincular hermano"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1647,8 +1697,8 @@ export const StudentForm = ({
                           {res.first_surname} {res.second_surname}, {res.names}
                         </p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">
-                          {state.courses.find((c: any) => c.id === res.course_id)?.grade ||
-                            'Sin Grado'}
+                          {state.courses.find((c: any) => c.id === res.course_id)?.grade || 'Sin Grado'}
+                          {res.school_year && ` — Ciclo: ${res.school_year}`}
                         </p>
                       </div>
                       <ChevronRight
