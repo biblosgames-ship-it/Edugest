@@ -767,11 +767,14 @@ export const useFinance = (options?: {
       
       if (error) throw error;
 
-      // Actualizar movimientos del libro contable si cambia el método o el monto del pago
-      if (updates.payment_method || updates.amount_paid !== undefined) {
+      // Actualizar movimientos del libro contable si cambia el método, el monto o la fecha
+      if (updates.payment_method || updates.amount_paid !== undefined || updates.created_at) {
         const ledgerUpdates: any = {};
         if (updates.payment_method) ledgerUpdates.method = updates.payment_method;
         if (updates.amount_paid !== undefined) ledgerUpdates.amount = Number(updates.amount_paid);
+        if (updates.created_at) {
+          ledgerUpdates.date = new Date(updates.created_at).toISOString().split('T')[0];
+        }
         
         await supabase
           .from('finance_ledger_entries')

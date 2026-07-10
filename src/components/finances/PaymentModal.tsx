@@ -10,7 +10,8 @@ import {
   Receipt,
   GraduationCap,
   Trash2,
-  Plus
+  Plus,
+  Calendar
 } from 'lucide-react';
 import { useFinance } from '../../hooks/useFinance';
 import { toast } from 'react-hot-toast';
@@ -83,7 +84,8 @@ export const PaymentModal = ({
     amount_paid: totalAmount,
     payment_method: 'cash',
     reference_number: '',
-    notes: ''
+    notes: '',
+    payment_date: new Date().toISOString().split('T')[0]
   });
 
   const [paymentMethods, setPaymentMethods] = useState<Array<{
@@ -314,7 +316,10 @@ export const PaymentModal = ({
       let firstReceiptNumber: any = undefined;
 
       for (const transPayload of transactionsToInsert) {
-        const payload = { ...transPayload };
+        const payload = { 
+          ...transPayload,
+          created_at: `${formData.payment_date}T12:00:00Z`
+        };
         if (firstReceiptNumber !== undefined) {
           payload.receipt_number = firstReceiptNumber;
         }
@@ -756,16 +761,30 @@ export const PaymentModal = ({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
-                <FileText size={12} className="text-slate-400" /> Notas adicionales
-              </label>
-              <textarea
-                rows={2}
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-bold focus:ring-2 focus:ring-indigo-600 transition-all resize-none"
-              ></textarea>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                  <Calendar size={12} className="text-slate-400" /> Fecha del Cobro
+                </label>
+                <input
+                  type="date"
+                  value={formData.payment_date}
+                  onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-bold focus:ring-2 focus:ring-indigo-600 transition-all text-slate-800 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                  <FileText size={12} className="text-slate-400" /> Notas adicionales
+                </label>
+                <textarea
+                  rows={1}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-xs font-bold focus:ring-2 focus:ring-indigo-600 transition-all resize-none outline-none"
+                ></textarea>
+              </div>
             </div>
 
             <button

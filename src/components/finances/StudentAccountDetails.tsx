@@ -56,6 +56,12 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     reference_number: '',
     notes: ''
   });
+  const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    payment_method: 'cash',
+    reference_number: '',
+    created_at: ''
+  });
 
   const [cart, setCart] = useState<
     Array<{
@@ -754,20 +760,15 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                       </button>
                       <button
                         onClick={() => {
-                          const newMethod = window.prompt(
-                            'Ingrese el nuevo método de pago (Transferencia, Efectivo, Cheque, Tarjeta):',
-                            t.payment_method
-                          );
-                          if (newMethod && newMethod.trim() !== '' && newMethod !== t.payment_method) {
-                            if (window.confirm(`¿Seguro que desea cambiar el método de pago a ${newMethod}? No se cambiará el número de recibo.`)) {
-                              updateTransaction(t.id, { payment_method: newMethod.trim() })
-                                .then(() => alert('Método de pago actualizado correctamente'))
-                                .catch(() => alert('Error al actualizar método de pago'));
-                            }
-                          }
+                          setEditingTransaction(t);
+                          setEditFormData({
+                            payment_method: t.payment_method || 'cash',
+                            reference_number: t.reference_number || '',
+                            created_at: new Date(t.created_at).toISOString().split('T')[0]
+                          });
                         }}
-                        className="p-1.5 text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
-                        title="Editar Método de Pago"
+                        className="p-1.5 text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
+                        title="Editar Transacción"
                       >
                         <Edit2 size={14} />
                       </button>
@@ -792,6 +793,104 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
           </div>
         </div>
       </div>
+
+      {/* MODAL DE EDITAR TRANSACCIÓN */}
+      {editingTransaction && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200 space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Editar Transacción
+              </h3>
+              <button
+                onClick={() => setEditingTransaction(null)}
+                className="p-2 hover:bg-slate-50 rounded-full text-slate-400 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const loadingToast = toast.loading('Guardando cambios...');
+                try {
+                  await updateTransaction(editingTransaction.id, {
+                    payment_method: editFormData.payment_method,
+                    reference_number: editFormData.reference_number,
+                    created_at: `${editFormData.created_at}T12:00:00Z`
+                  });
+                  toast.success('Transacción actualizada con éxito', { id: loadingToast });
+                  setEditingTransaction(null);
+                  refresh();
+                } catch (err: any) {
+                  console.error('Error updating transaction:', err);
+                  toast.error('Error al actualizar: ' + err.message, { id: loadingToast });
+                }
+              }}
+              className="space-y-4 text-left"
+            >
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 block px-1">
+                  Método de Pago
+                </label>
+                <select
+                  value={editFormData.payment_method}
+                  onChange={(e) => setEditFormData({ ...editFormData, payment_method: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-600 outline-none uppercase tracking-widest"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="check">Cheque</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 block px-1">
+                  Referencia / Nº de Transacción (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: # Transacción"
+                  value={editFormData.reference_number}
+                  onChange={(e) => setEditFormData({ ...editFormData, reference_number: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-600 outline-none text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 block px-1">
+                  Fecha del Pago
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={editFormData.created_at}
+                  onChange={(e) => setEditFormData({ ...editFormData, created_at: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-600 outline-none text-slate-800"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingTransaction(null)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE COBRO */}
       {selectedInvoice && (

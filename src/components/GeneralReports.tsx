@@ -43,6 +43,7 @@ import { MeetingsReport } from './MeetingsReport';
 import { PedagogicalReport } from './PedagogicalReport';
 import FamilyReport from './FamilyReport';
 import DemographicReport from './DemographicReport';
+import { GlobalAdminDashboardReport } from './GlobalAdminDashboardReport';
 import MasterDirectoryReport from './MasterDirectoryReport';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
@@ -165,6 +166,13 @@ export const GeneralReports = () => {
       }
     ],
     admin: [
+      {
+        title: 'Dashboard Global Administrativo',
+        description: 'Análisis dinámico de matrícula, personal, finanzas (ingresos/gastos), agenda e incidencias en un rango de fechas.',
+        icon: LineIcon,
+        color: 'bg-indigo-600',
+        id: 'global-admin-report'
+      },
       {
         title: 'Reporte Consolidado de Personal',
         description: 'Listado de todo el equipo (Docentes, Administrativos, Apoyo).',
@@ -517,6 +525,7 @@ export const GeneralReports = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedConductStudentId, setSelectedConductStudentId] = useState<string | null>(null);
   const [showMasterDirectory, setShowMasterDirectory] = useState(false);
+  const [showGlobalAdminReport, setShowGlobalAdminReport] = useState(false);
 
   // Load raw grades on-demand for detailed reports
   const needsGrades = showInstitutionalRecord || showCourseRecord || showMassDigitizing || showPerformanceComparison || showHonorRoll || showTeacherPerformance;
@@ -1599,6 +1608,8 @@ export const GeneralReports = () => {
                           setShowHonorRoll(true);
                         } else if (report.id === 'teacher-performance') {
                           setShowTeacherPerformance(true);
+                        } else if (report.id === 'global-admin-report') {
+                          setShowGlobalAdminReport(true);
                         } else if (report.id === 'staff-consolidated') {
                           setShowStaffConsolidated(true);
                         } else if (report.id === 'workload-report') {
@@ -1671,6 +1682,10 @@ export const GeneralReports = () => {
 
         {showStaffConsolidated && (
           <StaffConsolidatedReport onClose={() => setShowStaffConsolidated(false)} />
+        )}
+
+        {showGlobalAdminReport && (
+          <GlobalAdminDashboardReport onClose={() => setShowGlobalAdminReport(false)} />
         )}
 
         {showWorkloadReport && <WorkloadReport onClose={() => setShowWorkloadReport(false)} />}
