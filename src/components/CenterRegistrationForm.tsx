@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { School, MapPin, Building2, ChevronRight, KeyRound } from 'lucide-react';
 import { dataService } from '../services/dataService';
+import { toast } from 'react-hot-toast';
 
 export const CenterRegistrationForm = () => {
   const [name, setName] = useState('');
@@ -10,26 +11,26 @@ export const CenterRegistrationForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    const submitter = (e.nativeEvent as any).submitter;
-    submitter?.setAttribute('disabled', 'true');
     e.preventDefault();
     if (!name || !licenseKey) return;
 
     setIsSubmitting(true);
+    const loadingToast = toast.loading('Construyendo entorno y desplegando base de datos... Por favor espera.');
     console.log('Iniciando registro con:', { name, licenseKey, district, regional });
+    
     try {
-      alert('Iniciando despliegue de base de datos... Por favor no cierre esta ventana.');
       const result = await dataService.registerSchoolSaas(name, licenseKey, district, regional);
       console.log('Registro exitoso, ID de centro:', result);
-      alert('¡Entorno construido con éxito! Reiniciando plataforma...');
+      toast.success('¡Entorno construido con éxito! Reiniciando...', { id: loadingToast });
 
-      // Force hard reload so Supabase context triggers re-fetch of the new profile & center
-      window.location.reload();
+      // Esperar 1.5s antes de recargar para que se lea el toast
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (error: any) {
       console.error('Error al registrar escuela:', error);
-      alert('Error detallado: ' + (error.message || 'Error desconocido'));
+      toast.error('Error detallado: ' + (error.message || 'Error desconocido'), { id: loadingToast });
       setIsSubmitting(false);
-      submitter?.removeAttribute('disabled');
     }
   };
 
