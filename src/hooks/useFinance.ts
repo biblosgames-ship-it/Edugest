@@ -321,7 +321,7 @@ export const useFinance = (options?: {
           await supabase.from('finance_ledger_entries').insert({
             center_id: centerId || profile?.center_id,
             transaction_id: transRow.id,
-            date: getLocalDateString(),
+            date: transRow.created_at ? transRow.created_at.split('T')[0] : getLocalDateString(),
             account: accountName,
             item: studentName,
             description: `Cobro de: ${invConcept} (Recibo #${transRow.receipt_number || 'S/N'})`,
@@ -650,7 +650,7 @@ export const useFinance = (options?: {
               return {
                 center_id: currentCenterId,
                 transaction_id: transRow.id,
-                date: getLocalDateString(),
+                date: transRow.created_at ? transRow.created_at.split('T')[0] : getLocalDateString(),
                 account: accountName,
                 item: studentName,
                 description: `Venta: ${inv.quantity}x ${itemConcept} [MÉTODO: ${invoiceData.payment_method!.toUpperCase()}]`,
