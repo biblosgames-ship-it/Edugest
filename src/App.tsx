@@ -27,6 +27,7 @@ import { SaaSAdminPanel } from './components/SaaSAdminPanel';
 import { FinanceModule } from './components/finances/FinanceModule';
 import { Login } from './components/Login';
 import { InvitationForm } from './components/InvitationForm';
+import { CenterRegistrationForm } from './components/CenterRegistrationForm';
 import { FacilityDashboard } from './components/facility/FacilityDashboard';
 import { AppProvider, useApp, useSupabase } from './context/AppContext';
 import {
@@ -131,7 +132,7 @@ function AppContent() {
   const { data: stats } = useStats();
   const [isFinancesUnlocked, setIsFinancesUnlocked] = useState(false);
   const [pinError, setPinError] = useState('');
-
+  const [activationMode, setActivationMode] = useState<'invitation' | 'registration'>('invitation');
   // Volver a bloquear finanzas si se cambia de vista
   useEffect(() => {
     if (activeView !== 'finances') {
@@ -231,17 +232,43 @@ function AppContent() {
         ></div>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none"></div>
 
-        <div className="max-w-md w-full relative z-10 glass-premium p-12 rounded-[3.5rem] border border-white/10 backdrop-blur-3xl text-center space-y-8">
-          <div className="space-y-4">
-            <h1 className="text-3xl font-black text-white uppercase tracking-tight">
-              Activa tu Cuenta
-            </h1>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Ingresa el código de invitación proporcionado por tu administrador escolar para
-              vincular tu perfil digital y habilitar tu acceso a la plataforma.
-            </p>
+        <div className="max-w-md w-full relative z-10 glass-premium p-12 rounded-[3.5rem] border border-white/10 backdrop-blur-3xl text-center space-y-8 animate-in zoom-in-95 duration-200">
+          {/* Selector de modo */}
+          <div className="flex gap-2 p-1.5 bg-white/5 rounded-2xl border border-white/10">
+            <button
+              onClick={() => setActivationMode('invitation')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border-none cursor-pointer ${
+                activationMode === 'invitation' ? 'bg-white text-slate-950 shadow-lg' : 'text-slate-400 hover:text-white bg-transparent'
+              }`}
+            >
+              Unirme a un Centro
+            </button>
+            <button
+              onClick={() => setActivationMode('registration')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border-none cursor-pointer ${
+                activationMode === 'registration' ? 'bg-white text-slate-950 shadow-lg' : 'text-slate-400 hover:text-white bg-transparent'
+              }`}
+            >
+              Registrar Centro nuevo
+            </button>
           </div>
-          <InvitationForm />
+
+          {activationMode === 'invitation' ? (
+            <>
+              <div className="space-y-4">
+                <h1 className="text-3xl font-black text-white uppercase tracking-tight">
+                  Activa tu Cuenta
+                </h1>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Ingresa el código de invitación proporcionado por tu administrador escolar para
+                  vincular tu perfil digital y habilitar tu acceso a la plataforma.
+                </p>
+              </div>
+              <InvitationForm />
+            </>
+          ) : (
+            <CenterRegistrationForm />
+          )}
         </div>
       </div>
     );
