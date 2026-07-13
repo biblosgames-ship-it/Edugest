@@ -60,18 +60,45 @@ export const useFinance = (options?: {
         keys.push('plans');
       }
       if (fetchInvoices) {
-        let query = supabase
-          .from('finance_invoices')
-          .select('*')
-          .eq('center_id', centerId);
-        
-        if (selectedYear) {
-          query = query.eq('period', selectedYear);
-        }
+        const fetchAllInvoices = async () => {
+          let allInvoices: any[] = [];
+          let from = 0;
+          const limit = 1000;
+          let hasMore = true;
 
-        promises.push(
-          query.order('due_date', { ascending: true }).limit(100000)
-        );
+          while (hasMore) {
+            let query = supabase
+              .from('finance_invoices')
+              .select('*')
+              .eq('center_id', centerId);
+
+            if (selectedYear) {
+              query = query.eq('period', selectedYear);
+            }
+
+            const { data, error } = await query
+              .order('due_date', { ascending: true })
+              .range(from, from + limit - 1);
+
+            if (error) {
+              return { data: null, error };
+            }
+
+            if (data && data.length > 0) {
+              allInvoices = [...allInvoices, ...data];
+              if (data.length < limit) {
+                hasMore = false;
+              } else {
+                from += limit;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+          return { data: allInvoices, error: null };
+        };
+
+        promises.push(fetchAllInvoices());
         keys.push('invoices');
       }
       if (fetchTransactions) {
