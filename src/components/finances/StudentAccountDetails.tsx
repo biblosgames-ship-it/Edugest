@@ -280,8 +280,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     if (!student || isGenerating) return;
 
     // BUSCAR PLAN: Primero por Grado exacto, luego por Nivel como respaldo
-    const cleanLevel = student.courses?.level?.trim();
     const courseId = student.course_id || student.courseId;
+    const course = state.courses?.find((c) => c.id === courseId);
+    const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
 
     let plan = paymentPlans.find((p) => p.course_id === courseId);
 
@@ -297,6 +298,10 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       toast.error('No hay precios configurados para este grado o nivel.');
       return;
     }
+
+    console.log('[DEBUG-FINANCE] Alumno:', student.names, student.first_surname);
+    console.log('[DEBUG-FINANCE] Plan resuelto:', plan);
+    console.log('[DEBUG-FINANCE] Facturas cargadas para el periodo activo:', studentInvoices);
 
     setIsGenerating(true);
     const loadingToast = toast.loading('Generando/completando facturas...');
@@ -526,9 +531,16 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
               <div className="p-2.5 bg-slate-900 text-white rounded-2xl">
                 <DollarSign size={18} />
               </div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">
-                Plan de Pagos y Cuotas
-              </h3>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">
+                  Plan de Pagos y Cuotas
+                </h3>
+                {plan && (
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+                    Plan activo: {plan.months_count} mensualidades de RD$ {Number(plan.monthly_fee).toLocaleString()} + Inscripción de RD$ {Number(plan.enrollment_fee).toLocaleString()}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-4">
               {selectedInvoices.length > 0 && (
