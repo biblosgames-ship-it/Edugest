@@ -467,6 +467,22 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
         </div>
       </div>
 
+      {/* DEBUG BOX */}
+      <div className="bg-red-50 border border-red-200 p-6 rounded-3xl text-xs font-mono text-red-800 space-y-2">
+        <div className="font-bold text-red-900">🔍 DIAGNÓSTICO FINANCIERO (TEMPORAL):</div>
+        <div>• Alumno ID: {student.id}</div>
+        <div>• Curso ID: {student.course_id} | Grado: {course?.grade || 'NULL'} | Nivel: {course?.level || 'NULL'}</div>
+        <div>• Plan de Pago: {plan ? `Meses configurados: ${plan.months_count} | Mensualidad: RD$ ${plan.monthly_fee} | Inscripción: RD$ ${plan.enrollment_fee}` : '❌ NO ENCONTRADO'}</div>
+        <div>• Facturas cargadas en pantalla (Total: {studentInvoices.length}):</div>
+        <div className="bg-white/60 p-3 rounded-xl border border-red-100 max-h-32 overflow-y-auto">
+          {studentInvoices.map((i, idx) => (
+            <div key={i.id || idx}>
+              - [{i.period}] {i.concept} | Monto Final: RD$ {i.amount_final} | Estado: {i.status} | Fecha Venc: {i.due_date}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* PERFIL RESUMEN */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-8">
         <div className="w-24 h-24 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center text-3xl font-black shadow-xl shadow-indigo-100">
