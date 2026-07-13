@@ -386,6 +386,7 @@ export const StudentManagement = () => {
                 <th className="py-2 px-4 text-[9px] font-black uppercase w-48">Curso / Sección / Tanda</th>
               )}
               <th className="py-2 px-4 text-[9px] font-black uppercase text-center w-8">S</th>
+              <th className="py-2 px-4 text-[9px] font-black uppercase text-center w-36">Vínculo Familiar</th>
               <th className="py-2 px-4 text-right text-[9px] font-black uppercase w-32">
                 Acciones
               </th>
@@ -395,7 +396,7 @@ export const StudentManagement = () => {
             {showLoading ? (
               <tr>
                 <td
-                  colSpan={selectedCourseId ? 4 : 5}
+                  colSpan={selectedCourseId ? 5 : 6}
                   className="py-10 text-center animate-pulse font-black text-slate-300 uppercase text-[9px]"
                 >
                   Cargando...
@@ -404,7 +405,7 @@ export const StudentManagement = () => {
             ) : filteredStudents.length === 0 ? (
               <tr>
                 <td
-                  colSpan={selectedCourseId ? 4 : 5}
+                  colSpan={selectedCourseId ? 5 : 6}
                   className="py-10 text-center font-black text-slate-400 uppercase text-[10px]"
                 >
                   Sin resultados
@@ -436,6 +437,27 @@ export const StudentManagement = () => {
                   )}
                   <td className="py-1 px-4 text-center text-[9px] font-black text-slate-400">
                     {s.sex || '-'}
+                  </td>
+                  <td className="py-1 px-4 text-center">
+                    {(() => {
+                      if (!s.family_id) {
+                        return <span className="text-[9px] font-black uppercase text-slate-300">Sin Vincular</span>;
+                      }
+                      const siblingsList = (state.students || []).filter((x) => x.family_id === s.family_id && x.id !== s.id);
+                      if (siblingsList.length === 0) {
+                        return <span className="text-[9px] font-black uppercase text-slate-400">Hijo Único</span>;
+                      }
+                      return (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border border-indigo-100 flex items-center gap-1">
+                            {siblingsList.length + 1} Hermanos
+                          </span>
+                          <span className="text-[8px] text-indigo-700 font-bold max-w-[120px] truncate" title={siblingsList.map(x => `${x.names} ${x.first_surname || ''}`).join(', ')}>
+                            ({siblingsList.map(x => x.names.split(' ')[0]).join(', ')})
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-1 px-4 text-right">
                     <div className="flex justify-end gap-1">

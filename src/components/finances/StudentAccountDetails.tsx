@@ -304,6 +304,9 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       const newInvoices = [];
       const currentCenterId = profile?.center_id || student.center_id;
       const currentYear = selectedYear || '2025-2026';
+      const periodYearMatch = currentYear.match(/^(\d{4})/);
+      const baseYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
+      const errorList = [];
 
       // Buscar si el alumno tiene beca
       const studentScholarship = scholarships.find((s) => s.student_id === studentId);
@@ -367,7 +370,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
-        const currentYearNum = new Date().getFullYear() + (startMonthIdx + i >= 12 ? 1 : 0);
+        const currentYearNum = baseYear + (startMonthIdx + i >= 12 ? 1 : 0);
 
         const dueDate = new Date(currentYearNum, currentMonthIdx, paymentEndDay);
 
@@ -408,10 +411,18 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
         const { error } = await supabase.from('finance_invoices').insert(inv);
         if (error) {
           console.error(`Error en cuota ${inv.concept}:`, error);
+          errorList.push(`${inv.concept}: ${error.message}`);
         }
       }
 
-      toast.success('¡Proceso de facturación completado!', { id: loadingToast });
+      if (errorList.length > 0) {
+        toast.error(`Facturación completada con algunos errores:\n${errorList.join('\n')}`, {
+          id: loadingToast,
+          duration: 8000
+        });
+      } else {
+        toast.success('¡Proceso de facturación completado!', { id: loadingToast });
+      }
       refresh();
     } catch (error: any) {
       console.error('Error:', error);
@@ -464,22 +475,6 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
           <button className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100">
             <GraduationCap size={16} /> Asignar Beca
           </button>
-        </div>
-      </div>
-
-      {/* DEBUG BOX */}
-      <div className="bg-red-50 border border-red-200 p-6 rounded-3xl text-xs font-mono text-red-800 space-y-2">
-        <div className="font-bold text-red-900">🔍 DIAGNÓSTICO FINANCIERO (TEMPORAL):</div>
-        <div>• Alumno ID: {student.id}</div>
-        <div>• Curso ID: {student.course_id} | Grado: {course?.grade || 'NULL'} | Nivel: {course?.level || 'NULL'}</div>
-        <div>• Plan de Pago: {plan ? `Meses configurados: ${plan.months_count} | Mensualidad: RD$ ${plan.monthly_fee} | Inscripción: RD$ ${plan.enrollment_fee}` : '❌ NO ENCONTRADO'}</div>
-        <div>• Facturas cargadas en pantalla (Total: {studentInvoices.length}):</div>
-        <div className="bg-white/60 p-3 rounded-xl border border-red-100 max-h-32 overflow-y-auto">
-          {studentInvoices.map((i, idx) => (
-            <div key={i.id || idx}>
-              - [{i.period}] {i.concept} | Monto Final: RD$ {i.amount_final} | Estado: {i.status} | Fecha Venc: {i.due_date}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -546,17 +541,13 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                   <CheckCircle2 size={14} /> Pagar {selectedInvoices.length} Seleccionadas
                 </button>
               )}
-              {plan && (studentInvoices.length === 0 || studentInvoices.length < Number(plan.months_count) + 1) && (
+              {studentInvoices.length === 0 && (
                 <button
                   onClick={handleGenerateInvoices}
                   disabled={isGenerating}
                   className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg"
                 >
-                  {isGenerating
-                    ? 'Generando...'
-                    : studentInvoices.length === 0
-                      ? 'Generar Facturas Ahora'
-                      : 'Completar Cuotas Faltantes'}
+                  {isGenerating ? 'Generando...' : 'Generar Facturas Ahora'}
                 </button>
               )}
             </div>

@@ -70,6 +70,9 @@ export const StudentAccounts = () => {
     try {
       let createdCount = 0;
       const currentYear = selectedYear || '2025-2026';
+      const periodYearMatch = currentYear.match(/^(\d{4})/);
+      const baseYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
+      const errorList: string[] = [];
 
       for (const student of studentsToProcess) {
         // 1. Buscar Plan
@@ -158,7 +161,7 @@ export const StudentAccounts = () => {
           if (exists) continue; // Saltar si ya existe esta mensualidad
 
           const mIdx = (startMonthIdx + i) % 12;
-          const yOffset = new Date().getFullYear() + (startMonthIdx + i >= 12 ? 1 : 0);
+          const yOffset = baseYear + (startMonthIdx + i >= 12 ? 1 : 0);
           const dueDate = new Date(yOffset, mIdx, paymentEndDay);
 
           // Calcular Mensualidad con beca si corresponde
@@ -198,13 +201,25 @@ export const StudentAccounts = () => {
         // 3. Guardar en DB
         if (newInvoices.length > 0) {
           const { error } = await supabase.from('finance_invoices').insert(newInvoices);
-          if (!error) createdCount++;
+          if (!error) {
+            createdCount++;
+          } else {
+            console.error(`Error procesando alumno ${student.names}:`, error);
+            errorList.push(`${student.names} ${student.first_surname || ''}: ${error.message}`);
+          }
         }
       }
 
-      toast.success(`¡Éxito! Se generó/completó la facturación anual para ${createdCount} alumnos.`, {
-        id: loadingToast
-      });
+      if (errorList.length > 0) {
+        toast.error(`Facturación masiva completada con algunos errores:\n${errorList.slice(0, 3).join('\n')}`, {
+          id: loadingToast,
+          duration: 8000
+        });
+      } else {
+        toast.success(`¡Éxito! Se generó/completó la facturación anual para ${createdCount} alumnos.`, {
+          id: loadingToast
+        });
+      }
       refresh();
     } catch (error: any) {
       toast.error('Error en proceso masivo: ' + error.message, { id: loadingToast });
