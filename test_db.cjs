@@ -13,8 +13,8 @@ for (const line of lines) {
 const supabase = createClient(url, key);
 
 async function test() {
-  const { data, error } = await supabase.from('courses').select('*');
-  console.log('Courses:', data, error);
+  const { data, error } = await supabase.from('profiles').select('*');
+  console.log('Profiles:', data, error);
 }
 
 test();
