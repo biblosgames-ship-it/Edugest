@@ -438,6 +438,60 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
     }
   };
 
+  const handleCleanupDuplicates = async () => {
+    setIsGenerating(true);
+    const loadingToast = toast.loading('Eliminando facturas duplicadas...');
+
+    try {
+      // 1. Agrupar facturas por concepto
+      const conceptGroups: { [key: string]: any[] } = {};
+      studentInvoices.forEach((inv) => {
+        if (!conceptGroups[inv.concept]) {
+          conceptGroups[inv.concept] = [];
+        }
+        conceptGroups[inv.concept].push(inv);
+      });
+
+      const idsToDelete: string[] = [];
+      
+      Object.keys(conceptGroups).forEach((concept) => {
+        const group = conceptGroups[concept];
+        if (group.length > 1) {
+          const sorted = [...group].sort((a, b) => {
+            const score = (status: string) => (status === 'paid' ? 3 : status === 'partial' ? 2 : 1);
+            return score(b.status) - score(a.status);
+          });
+          
+          for (let i = 1; i < sorted.length; i++) {
+            idsToDelete.push(sorted[i].id);
+          }
+        }
+      });
+
+      if (idsToDelete.length === 0) {
+        toast.success('No se encontraron facturas duplicadas.', { id: loadingToast });
+        setIsGenerating(false);
+        return;
+      }
+
+      // Borrar de Supabase
+      const { error } = await supabase
+        .from('finance_invoices')
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      toast.success(`Se eliminaron ${idsToDelete.length} facturas duplicadas con éxito.`, { id: loadingToast });
+      refresh();
+    } catch (err: any) {
+      console.error('Error cleaning duplicates:', err);
+      toast.error('Error al limpiar duplicados: ' + err.message, { id: loadingToast });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // 1. GENERADOR AUTOMÁTICO ELIMINADO PARA EVITAR BUCLES
   // Ahora el usuario debe dar al botón "Generar Facturas Ahora"
 
@@ -468,6 +522,12 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
             className="bg-white text-slate-600 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
           >
             <RefreshCw size={14} /> Actualizar
+          </button>
+          <button
+            onClick={handleCleanupDuplicates}
+            className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-xs font-bold border border-rose-200 hover:bg-rose-100 transition-colors flex items-center gap-2"
+          >
+            <Trash2 size={14} /> Limpiar Duplicados
           </button>
           <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 shadow-sm">
             <FileText size={16} /> Estado de Cuenta PDF

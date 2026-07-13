@@ -10,7 +10,8 @@ import {
   CreditCard,
   FileSpreadsheet,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
@@ -297,6 +298,63 @@ export const StudentAccounts = () => {
     }
   };
 
+  const handleBulkCleanupDuplicates = async () => {
+    if (!window.confirm('¿Deseas escanear y eliminar todas las facturas duplicadas de la escuela en este ciclo? (Se conservarán las facturas pagadas si hay duplicados).')) return;
+    setIsBatchProcessing(true);
+    const loadingToast = toast.loading('Escaneando facturas duplicadas...');
+
+    try {
+      const currentYear = selectedYear || '2025-2026';
+      // Agrupar facturas por student_id y concepto
+      const studentConceptGroups: { [key: string]: any[] } = {};
+      invoices.forEach((inv) => {
+        if (inv.product_id || inv.period !== currentYear) return;
+        const key = `${inv.student_id}_${inv.concept}`;
+        if (!studentConceptGroups[key]) {
+          studentConceptGroups[key] = [];
+        }
+        studentConceptGroups[key].push(inv);
+      });
+
+      const idsToDelete: string[] = [];
+
+      Object.keys(studentConceptGroups).forEach((key) => {
+        const group = studentConceptGroups[key];
+        if (group.length > 1) {
+          const sorted = [...group].sort((a, b) => {
+            const score = (status: string) => (status === 'paid' ? 3 : status === 'partial' ? 2 : 1);
+            return score(b.status) - score(a.status);
+          });
+          for (let i = 1; i < sorted.length; i++) {
+            idsToDelete.push(sorted[i].id);
+          }
+        }
+      });
+
+      if (idsToDelete.length === 0) {
+        toast.success('No se encontraron facturas duplicadas en la escuela.', { id: loadingToast });
+        setIsBatchProcessing(false);
+        return;
+      }
+
+      // Borrar de Supabase
+      const { error } = await supabase
+        .from('finance_invoices')
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      toast.success(`¡Éxito! Se eliminaron ${idsToDelete.length} facturas duplicadas de la escuela.`, { id: loadingToast });
+      refresh();
+    } catch (err: any) {
+      console.error('Error bulk cleanup:', err);
+      toast.error('Error al limpiar duplicados: ' + err.message, { id: loadingToast });
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
   const students = state.students || [];
 
   const studentBalances = useMemo(() => {
@@ -405,6 +463,14 @@ export const StudentAccounts = () => {
             title="Actualizar Datos"
           >
             <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={handleBulkCleanupDuplicates}
+            disabled={isBatchProcessing}
+            className="p-5 bg-rose-50 border border-rose-100 text-rose-600 rounded-[1.8rem] hover:bg-rose-100 transition-all shadow-sm"
+            title="Eliminar facturas duplicadas de la escuela"
+          >
+            <Trash2 size={24} />
           </button>
           <button
             onClick={handleSyncPrices}
