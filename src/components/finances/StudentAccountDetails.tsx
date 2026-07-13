@@ -177,9 +177,10 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const hasAttempted = useRef(false);
 
+  const currentYear = selectedYear || '2025-2026';
   const student = state.students.find((s) => s.id === studentId);
-  const studentInvoices = invoices.filter((i) => i.student_id === studentId && !i.product_id);
-  const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id);
+  const studentInvoices = invoices.filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear);
+  const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id && i.period === currentYear);
   const studentTransactions = transactions.filter((t) => t.student_id === studentId);
 
   const course = student ? state.courses?.find((c) => c.id === student.course_id) : null;

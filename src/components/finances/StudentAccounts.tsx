@@ -45,7 +45,8 @@ export const StudentAccounts = () => {
       }
       if (!plan) return false;
 
-      const studentInvoices = invoices.filter((i) => i.student_id === s.id && !i.product_id);
+      const currentYear = selectedYear || '2025-2026';
+      const studentInvoices = invoices.filter((i) => i.student_id === s.id && !i.product_id && i.period === currentYear);
       const targetCount = Number(plan.months_count) + 1; // 1 inscripción + cuotas
       return studentInvoices.length < targetCount;
     });
@@ -299,8 +300,9 @@ export const StudentAccounts = () => {
   const students = state.students || [];
 
   const studentBalances = useMemo(() => {
+    const currentYear = selectedYear || '2025-2026';
     return students.map((student) => {
-      const studentInvoices = invoices.filter((i) => i.student_id === student.id);
+      const studentInvoices = invoices.filter((i) => i.student_id === student.id && i.period === currentYear);
       const totalDebt = studentInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
       const paidInvoices = studentInvoices.filter((i) => i.status === 'paid');
       const totalPaid = paidInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);

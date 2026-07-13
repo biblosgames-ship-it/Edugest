@@ -70,7 +70,7 @@ export const useFinance = (options?: {
         }
 
         promises.push(
-          query.order('due_date', { ascending: true }).limit(10000)
+          query.order('due_date', { ascending: true }).limit(100000)
         );
         keys.push('invoices');
       }
