@@ -24,6 +24,15 @@ import autoTable from 'jspdf-autotable';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
 
+const translateMethod = (method: string) => {
+  const m = String(method || '').toLowerCase().trim();
+  if (m === 'cash') return 'EFECTIVO';
+  if (m === 'transfer') return 'TRANSFERENCIA';
+  if (m === 'card') return 'TARJETA';
+  if (m === 'check') return 'CHEQUE';
+  return m.toUpperCase() || 'EFECTIVO';
+};
+
 const groupLedgerEntries = (entriesList: any[]) => {
   const groupedMap = new Map<string, any>();
 
@@ -36,17 +45,16 @@ const groupLedgerEntries = (entriesList: any[]) => {
       
       if (e.account === 'INGRESOS: COLEGIATURAS') {
         existing.count = (existing.count || 1) + 1;
-        existing.description = `Mensualidades (${existing.count} cuotas) [MÉTODO: ${(e.method || 'cash').toUpperCase()}]`;
+        existing.description = `Mensualidades (${existing.count} cuotas)`;
       } else {
         existing.description = `${existing.description} + ${e.description || ''}`;
       }
     } else {
       const copy = { ...e, amount: Number(e.amount), count: 1 };
-      const methodLabel = (e.method || 'cash').toUpperCase();
       if (e.account === 'INGRESOS: COLEGIATURAS') {
-        copy.description = `Mensualidad (1 cuota) [MÉTODO: ${methodLabel}]`;
+        copy.description = `Mensualidad (1 cuota)`;
       } else {
-        copy.description = `${e.description || ''} [MÉTODO: ${methodLabel}]`;
+        copy.description = e.description || '';
       }
       groupedMap.set(key, copy);
     }
@@ -770,6 +778,38 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     window.open(blob, '_blank');
   };
 
+  const handleExportCSV = () => {
+    const groupedEntries = groupLedgerEntries(filteredEntries);
+    if (groupedEntries.length === 0) return toast.error('No hay movimientos para exportar');
+
+    const headers = ['FECHA', 'CUENTA', 'ALUMNO_CLIENTE', 'DESCRIPCION', 'METODO_PAGO', 'TIPO', 'MONTO'];
+    const rows = groupedEntries.map((e) => [
+      e.date,
+      e.account,
+      e.item,
+      e.description,
+      translateMethod(e.method),
+      e.type === 'income' ? 'INGRESO' : 'EGRESO',
+      e.amount
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((val) => `"${String(val || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const closingDateText = startDate === endDate ? startDate : `${startDate}_al_${endDate}`;
+    link.setAttribute('download', `Cuadre_Caja_${closingDateText}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Archivo de Excel (CSV) descargado con éxito.');
+  };
+
   return (
     <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm animate-fade-in relative">
       <div className="flex flex-col gap-6 mb-10">
@@ -885,12 +925,20 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
             </div>
           </div>
 
-          <button
-            onClick={handleGenerateCustomReport}
-            className="flex items-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95"
-          >
-            <Download size={18} /> Generar Reporte
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleGenerateCustomReport}
+              className="flex items-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95"
+            >
+              <Download size={18} /> Generar Reporte
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-3 bg-emerald-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-900 transition-all transform active:scale-95"
+            >
+              <FileText size={18} /> Exportar a Excel
+            </button>
+          </div>
         </div>
       </div>
 
