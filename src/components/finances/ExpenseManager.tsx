@@ -24,6 +24,37 @@ import autoTable from 'jspdf-autotable';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
 
+const groupLedgerEntries = (entriesList: any[]) => {
+  const groupedMap = new Map<string, any>();
+
+  entriesList.forEach((e) => {
+    const key = `${e.account}_${e.item}_${e.date}_${e.method || 'cash'}`;
+
+    if (groupedMap.has(key)) {
+      const existing = groupedMap.get(key);
+      existing.amount = Number(existing.amount) + Number(e.amount);
+      
+      if (e.account === 'INGRESOS: COLEGIATURAS') {
+        existing.count = (existing.count || 1) + 1;
+        existing.description = `Mensualidades (${existing.count} cuotas) [MÉTODO: ${(e.method || 'cash').toUpperCase()}]`;
+      } else {
+        existing.description = `${existing.description} + ${e.description || ''}`;
+      }
+    } else {
+      const copy = { ...e, amount: Number(e.amount), count: 1 };
+      const methodLabel = (e.method || 'cash').toUpperCase();
+      if (e.account === 'INGRESOS: COLEGIATURAS') {
+        copy.description = `Mensualidad (1 cuota) [MÉTODO: ${methodLabel}]`;
+      } else {
+        copy.description = `${e.description || ''} [MÉTODO: ${methodLabel}]`;
+      }
+      groupedMap.set(key, copy);
+    }
+  });
+
+  return Array.from(groupedMap.values());
+};
+
 export const LedgerManager = () => {
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem('edugens_ledger_active_tab');
@@ -550,10 +581,17 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     doc.text(`FECHA DE CIERRE: ${closingDateText}`, 14, 52);
 
+    const groupedEntries = groupLedgerEntries(filteredEntries);
+
     autoTable(doc, {
       startY: 60,
-      head: [['CUENTA', 'CONCEPTO', 'MONTO']],
-      body: filteredEntries.map((e) => [e.account, e.item, `RD$ ${e.amount.toLocaleString()}`]),
+      head: [['CUENTA', 'ALUMNO / CLIENTE', 'DESCRIPCIÓN / MÉTODO', 'MONTO']],
+      body: groupedEntries.map((e) => [
+        e.account,
+        e.item,
+        e.description,
+        `RD$ ${e.amount.toLocaleString()}`
+      ]),
       theme: 'grid',
       headStyles: { fillColor: [15, 23, 42] }
     });
@@ -687,8 +725,10 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     doc.text(`Periodo: ${startDate} al ${endDate}`, 14, 46);
 
+    const groupedEntries = groupLedgerEntries(filteredEntries);
+
     const grouped: any = {};
-    filteredEntries.forEach((e) => {
+    groupedEntries.forEach((e) => {
       if (!grouped[e.account]) grouped[e.account] = [];
       grouped[e.account].push(e);
     });
@@ -709,7 +749,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
         body: accountEntries.map((e: any) => [
           e.date,
           e.item,
-          e.type === 'income' ? 'ING' : 'EGR',
+          e.description,
           `RD$ ${e.amount.toLocaleString()}`
         ]),
         foot: [['', '', 'TOTAL CUENTA:', `RD$ ${accountTotal.toLocaleString()}`]],
