@@ -31,43 +31,47 @@ export const StudentAccounts = () => {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   const handleBatchBilling = async () => {
-    const studentsWithoutInvoices = students.filter(
-      (s) => !invoices.some((i) => i.student_id === s.id)
-    );
+    // Buscar alumnos con facturación incompleta
+    const studentsToProcess = students.filter((s) => {
+      const course = state.courses?.find((c) => c.id === s.course_id);
+      const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
 
-    if (studentsWithoutInvoices.length === 0) {
-      toast.success('Todos los alumnos ya tienen sus facturas generadas.');
+      let plan = paymentPlans.find((p) => p.course_id === s.course_id);
+      if (!plan && cleanLevel) {
+        plan = paymentPlans.find((p) => {
+          const c = state.courses?.find((x) => x.id === p.course_id);
+          return c?.level?.trim() === cleanLevel;
+        });
+      }
+      if (!plan) return false;
+
+      const studentInvoices = invoices.filter((i) => i.student_id === s.id && !i.product_id);
+      const targetCount = Number(plan.months_count) + 1; // 1 inscripción + cuotas
+      return studentInvoices.length < targetCount;
+    });
+
+    if (studentsToProcess.length === 0) {
+      toast.success('Todos los alumnos ya tienen sus facturas generadas y al día.');
       return;
     }
 
     if (
       !window.confirm(
-        `¿Deseas generar AUTOMÁTICAMENTE la facturación de todo el año para ${studentsWithoutInvoices.length} alumnos? Se usarán los precios configurados para cada grado.`
+        `¿Deseas generar/completar AUTOMÁTICAMENTE la facturación anual para ${studentsToProcess.length} alumnos con cuotas pendientes o incompletas?`
       )
     )
       return;
 
     setIsBatchProcessing(true);
     const loadingToast = toast.loading(
-      `Procesando facturación para ${studentsWithoutInvoices.length} alumnos...`
+      `Procesando facturación para ${studentsToProcess.length} alumnos...`
     );
 
     try {
       let createdCount = 0;
       const currentYear = selectedYear || '2025-2026';
 
-      for (const student of studentsWithoutInvoices) {
-        // Verificación de respaldo en la base de datos para evitar duplicación
-        const { data: dbInvoices } = await supabase
-          .from('finance_invoices')
-          .select('id')
-          .eq('student_id', student.id)
-          .limit(1);
-
-        if (dbInvoices && dbInvoices.length > 0) {
-          continue; // Si ya existen facturas en el servidor, ignoramos al estudiante
-        }
-
+      for (const student of studentsToProcess) {
         // 1. Buscar Plan
         const course = state.courses?.find((c) => c.id === student.course_id);
         const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
@@ -80,7 +84,11 @@ export const StudentAccounts = () => {
           });
         }
 
-        if (!plan) continue; // Saltar si no hay precio configurado
+        if (!plan) continue;
+
+        const studentExistingInvoices = invoices.filter(
+          (i) => i.student_id === student.id && !i.product_id
+        );
 
         // 2. Generar Pack de Facturas
         const newInvoices = [];
@@ -107,19 +115,24 @@ export const StudentAccounts = () => {
           enrollmentFinal = Math.max(0, enrollmentOriginal - enrollmentDiscount);
         }
 
-        // Inscripción
-        newInvoices.push({
-          center_id: currentCenterId,
-          student_id: student.id,
-          course_id: student.course_id,
-          period: currentYear,
-          concept: 'Inscripción',
-          amount_original: enrollmentOriginal,
-          amount_final: enrollmentFinal,
-          discount_applied: enrollmentDiscount,
-          due_date: new Date().toISOString().split('T')[0],
-          status: 'pending'
-        });
+        // Inscripción (solo si no existe ya)
+        const hasEnrollment = studentExistingInvoices.some(
+          (inv) => inv.concept.toLowerCase().includes('inscrip') || inv.concept.toLowerCase().includes('inscrib')
+        );
+        if (!hasEnrollment) {
+          newInvoices.push({
+            center_id: currentCenterId,
+            student_id: student.id,
+            course_id: student.course_id,
+            period: currentYear,
+            concept: 'Inscripción',
+            amount_original: enrollmentOriginal,
+            amount_final: enrollmentFinal,
+            discount_applied: enrollmentDiscount,
+            due_date: new Date().toISOString().split('T')[0],
+            status: 'pending'
+          });
+        }
 
         // Mensualidades
         const monthNames = [
@@ -140,6 +153,10 @@ export const StudentAccounts = () => {
         const paymentEndDay = plan.payment_end_day || 10;
 
         for (let i = 0; i < Number(plan.months_count); i++) {
+          const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
+          const exists = studentExistingInvoices.some((inv) => inv.concept === conceptName);
+          if (exists) continue; // Saltar si ya existe esta mensualidad
+
           const mIdx = (startMonthIdx + i) % 12;
           const yOffset = new Date().getFullYear() + (startMonthIdx + i >= 12 ? 1 : 0);
           const dueDate = new Date(yOffset, mIdx, paymentEndDay);
@@ -167,7 +184,7 @@ export const StudentAccounts = () => {
             student_id: student.id,
             course_id: student.course_id,
             period: currentYear,
-            concept: `Cuota ${(i + 1).toString().padStart(2, '0')}`,
+            concept: conceptName,
             month_number: i + 1,
             description: monthNames[mIdx],
             amount_original: monthlyOriginal,
@@ -179,11 +196,13 @@ export const StudentAccounts = () => {
         }
 
         // 3. Guardar en DB
-        const { error } = await supabase.from('finance_invoices').insert(newInvoices);
-        if (!error) createdCount++;
+        if (newInvoices.length > 0) {
+          const { error } = await supabase.from('finance_invoices').insert(newInvoices);
+          if (!error) createdCount++;
+        }
       }
 
-      toast.success(`¡Éxito! Se generó la facturación anual para ${createdCount} alumnos.`, {
+      toast.success(`¡Éxito! Se generó/completó la facturación anual para ${createdCount} alumnos.`, {
         id: loadingToast
       });
       refresh();
