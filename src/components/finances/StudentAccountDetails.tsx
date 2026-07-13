@@ -483,6 +483,20 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       if (error) throw error;
 
       toast.success(`Se eliminaron ${idsToDelete.length} facturas duplicadas con éxito.`, { id: loadingToast });
+      
+      // Corregir también las entradas contables mal categorizadas de Tela retroactivamente
+      try {
+        const studentName = `${student?.names} ${student?.first_surname || ''}`.trim();
+        await supabase
+          .from('finance_ledger_entries')
+          .update({ account: 'INGRESOS: UNIFORMES' })
+          .eq('account', 'INGRESOS: INVENTARIO (OTROS)')
+          .eq('item', studentName)
+          .ilike('description', '%Tela%');
+      } catch (e) {
+        console.error('Error correcting ledger entries:', e);
+      }
+
       refresh();
     } catch (err: any) {
       console.error('Error cleaning duplicates:', err);

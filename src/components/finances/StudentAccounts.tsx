@@ -290,6 +290,17 @@ export const StudentAccounts = () => {
         `¡Sincronización terminada! Se actualizaron ${updatedCount} facturas con los nuevos precios.`,
         { id: loadingToast }
       );
+      // Corregir también las entradas contables mal categorizadas de Tela retroactivamente
+      try {
+        await supabase
+          .from('finance_ledger_entries')
+          .update({ account: 'INGRESOS: UNIFORMES' })
+          .eq('account', 'INGRESOS: INVENTARIO (OTROS)')
+          .ilike('description', '%Tela%');
+      } catch (e) {
+        console.error('Error correcting ledger entries:', e);
+      }
+
       refresh();
     } catch (error: any) {
       toast.error('Error en sincronización: ' + error.message, { id: loadingToast });
@@ -346,6 +357,18 @@ export const StudentAccounts = () => {
       if (error) throw error;
 
       toast.success(`¡Éxito! Se eliminaron ${idsToDelete.length} facturas duplicadas de la escuela.`, { id: loadingToast });
+      
+      // Corregir también las entradas contables mal categorizadas de Tela retroactivamente
+      try {
+        await supabase
+          .from('finance_ledger_entries')
+          .update({ account: 'INGRESOS: UNIFORMES' })
+          .eq('account', 'INGRESOS: INVENTARIO (OTROS)')
+          .ilike('description', '%Tela%');
+      } catch (e) {
+        console.error('Error correcting ledger entries:', e);
+      }
+
       refresh();
     } catch (err: any) {
       console.error('Error bulk cleanup:', err);

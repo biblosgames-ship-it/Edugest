@@ -343,7 +343,24 @@ export const useFinance = (options?: {
 
           const invConcept = invRow?.concept || paymentData.notes || 'Cobro';
           const isEnrollment = invConcept.toLowerCase().includes('inscrip');
-          const accountName = isEnrollment ? 'INGRESOS: INSCRIPCIONES' : 'INGRESOS: COLEGIATURAS';
+          let accountName = isEnrollment ? 'INGRESOS: INSCRIPCIONES' : 'INGRESOS: COLEGIATURAS';
+
+          if (invRow?.product_id || invConcept.toLowerCase().startsWith('venta: ') || invConcept.toLowerCase().includes('tela')) {
+            let category = 'other';
+            if (invRow?.product_id) {
+              const prod = products.find((p) => p.id === invRow.product_id);
+              category = prod?.category || 'other';
+            }
+
+            accountName = 'INGRESOS: INVENTARIO (OTROS)';
+            if (category === 'uniform' || invConcept.toLowerCase().includes('tela')) {
+              accountName = 'INGRESOS: UNIFORMES';
+            } else if (category === 'book') {
+              accountName = 'INGRESOS: LIBROS';
+            } else if (category === 'material') {
+              accountName = 'INGRESOS: MATERIALES';
+            }
+          }
 
           await supabase.from('finance_ledger_entries').insert({
             center_id: centerId || profile?.center_id,
@@ -670,9 +687,13 @@ export const useFinance = (options?: {
               const category = prod?.category || 'other';
 
               let accountName = 'INGRESOS: INVENTARIO (OTROS)';
-              if (category === 'uniform') accountName = 'INGRESOS: UNIFORMES';
-              else if (category === 'book') accountName = 'INGRESOS: LIBROS';
-              else if (category === 'material') accountName = 'INGRESOS: MATERIALES';
+              if (category === 'uniform' || itemConcept.toLowerCase().includes('tela')) {
+                accountName = 'INGRESOS: UNIFORMES';
+              } else if (category === 'book') {
+                accountName = 'INGRESOS: LIBROS';
+              } else if (category === 'material') {
+                accountName = 'INGRESOS: MATERIALES';
+              }
 
               return {
                 center_id: currentCenterId,
