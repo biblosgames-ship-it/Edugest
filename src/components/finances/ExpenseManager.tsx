@@ -451,6 +451,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [reportType, setReportType] = useState('detailed');
   const [methodFilter, setMethodFilter] = useState('all');
   const [entryDate, setEntryDate] = useState(getLocalDateString);
+  const [entryMethod, setEntryMethod] = useState('cash');
 
   useEffect(() => {
     if (showModal) {
@@ -520,7 +521,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       description: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
       type,
       amount: cartTotal,
-      method: 'cash'
+      method: entryMethod
     };
 
     try {
@@ -529,6 +530,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       setShowModal(false);
       setCart([]);
       setDesc('');
+      setEntryMethod('cash');
     } catch (e) {
       console.error('Error saving ledger entry:', e);
     }
@@ -1062,6 +1064,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 onClick={() => {
                   setShowModal(false);
                   setCart([]);
+                  setDesc('');
+                  setEntryMethod('cash');
                 }}
                 className="p-2 hover:bg-slate-50 rounded-full text-slate-400"
               >
@@ -1212,6 +1216,22 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Método de Pago
+                </label>
+                <select
+                  value={entryMethod}
+                  onChange={(e) => setEntryMethod(e.target.value)}
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="check">Cheque</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
                   Nota / Comentario
                 </label>
                 <textarea
@@ -1228,6 +1248,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 onClick={() => {
                   setShowModal(false);
                   setCart([]);
+                  setDesc('');
+                  setEntryMethod('cash');
                 }}
                 className="flex-1 py-4 bg-slate-100 rounded-2xl text-xs font-black uppercase"
               >
