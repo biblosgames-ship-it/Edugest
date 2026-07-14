@@ -680,8 +680,35 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       currentY += 6;
     });
 
+    const totalIncome = filteredEntries
+      .filter((e) => e.type === 'income')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalExpense = filteredEntries
+      .filter((e) => e.type === 'expense')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const netBalance = totalIncome - totalExpense;
+
+    currentY += 2;
+    doc.line(10, currentY, 90, currentY);
+    currentY += 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('TOTAL INGRESOS:', 10, currentY);
+    doc.text(`RD$ ${totalIncome.toLocaleString()}`, 90, currentY, { align: 'right' });
+    currentY += 5;
+
+    doc.text('TOTAL EGRESOS:', 10, currentY);
+    doc.text(`RD$ ${totalExpense.toLocaleString()}`, 90, currentY, { align: 'right' });
+    currentY += 5;
+
+    doc.setFillColor(240, 240, 240);
+    doc.rect(10, currentY - 4, 80, 6, 'F');
+    doc.text('BALANCE DEL DÍA:', 12, currentY);
+    doc.text(`RD$ ${netBalance.toLocaleString()}`, 88, currentY, { align: 'right' });
+    currentY += 8;
+
     // DESGLOSE POR MÉTODO DE PAGO
-    currentY += 4;
     doc.line(10, currentY, 90, currentY);
     currentY += 6;
     doc.setFontSize(7);
