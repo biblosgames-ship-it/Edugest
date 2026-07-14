@@ -34,7 +34,7 @@ export const PaymentModal = ({
   onSuccess
 }: Props) => {
   const { state, profile, center } = useApp();
-  const { registerPayment, loading } = useFinance({});
+  const { registerPayment, loading } = useFinance({ products: true });
 
   // Normalizar: Siempre trabajar con un array de facturas
   const invoicesList = Array.isArray(invoice) ? invoice : [invoice];
