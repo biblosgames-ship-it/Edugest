@@ -421,7 +421,24 @@ const getLocalDateString = () => {
 };
 
 const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) => {
-  const { center } = useApp();
+  const { center, state } = useApp();
+
+  const getStudentGrade = (studentFullName: string) => {
+    const cleanName = (name: string) => (name || '').toLowerCase().trim();
+    const targetName = cleanName(studentFullName);
+
+    const std = state.students?.find((s) => {
+      const fullName = cleanName(`${s.names} ${s.first_surname || ''}`);
+      const fullNameWithSecond = cleanName(`${s.names} ${s.first_surname || ''} ${s.second_surname || ''}`);
+      return fullName === targetName || fullNameWithSecond === targetName;
+    });
+
+    if (std && std.course_id) {
+      const course = state.courses?.find((c) => c.id === std.course_id);
+      return course ? course.name : '---';
+    }
+    return '---';
+  };
   const [showModal, setShowModal] = useState(false);
   const [type, setType] = useState('income');
   const [selectedCat, setSelectedCat] = useState<any>(null);
@@ -593,11 +610,13 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     autoTable(doc, {
       startY: 60,
-      head: [['CUENTA', 'ALUMNO / CLIENTE', 'DESCRIPCIÓN / MÉTODO', 'MONTO']],
+      head: [['CUENTA', 'ALUMNO / CLIENTE', 'GRADO', 'DESCRIPCIÓN', 'MÉTODO DE PAGO', 'MONTO']],
       body: groupedEntries.map((e) => [
         e.account,
         e.item,
+        getStudentGrade(e.item),
         e.description,
+        translateMethod(e.method),
         `RD$ ${e.amount.toLocaleString()}`
       ]),
       theme: 'grid',
@@ -752,15 +771,17 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       autoTable(doc, {
         startY: currentY,
         head: [
-          [{ content: `CUENTA: ${accountName}`, colSpan: 4, styles: { fillColor: [79, 70, 229] } }]
+          [{ content: `CUENTA: ${accountName}`, colSpan: 6, styles: { fillColor: [79, 70, 229] } }]
         ],
         body: accountEntries.map((e: any) => [
           e.date,
           e.item,
+          getStudentGrade(e.item),
           e.description,
+          translateMethod(e.method),
           `RD$ ${e.amount.toLocaleString()}`
         ]),
-        foot: [['', '', 'TOTAL CUENTA:', `RD$ ${accountTotal.toLocaleString()}`]],
+        foot: [['', '', '', '', 'TOTAL CUENTA:', `RD$ ${accountTotal.toLocaleString()}`]],
         footStyles: { fillColor: [241, 245, 249], textColor: [0, 0, 0], fontStyle: 'bold' }
       });
       currentY = (doc as any).lastAutoTable.finalY + 10;
@@ -782,11 +803,12 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     const groupedEntries = groupLedgerEntries(filteredEntries);
     if (groupedEntries.length === 0) return toast.error('No hay movimientos para exportar');
 
-    const headers = ['FECHA', 'CUENTA', 'ALUMNO_CLIENTE', 'DESCRIPCION', 'METODO_PAGO', 'TIPO', 'MONTO'];
+    const headers = ['FECHA', 'CUENTA', 'ALUMNO_CLIENTE', 'GRADO', 'DESCRIPCION', 'METODO_PAGO', 'TIPO', 'MONTO'];
     const rows = groupedEntries.map((e) => [
       e.date,
       e.account,
       e.item,
+      getStudentGrade(e.item),
       e.description,
       translateMethod(e.method),
       e.type === 'income' ? 'INGRESO' : 'EGRESO',
