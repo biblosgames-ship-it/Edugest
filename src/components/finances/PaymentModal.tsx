@@ -768,7 +768,7 @@ export const PaymentModal = ({
                       <input
                         type="number"
                         required
-                        min="0.01"
+                        min="0"
                         step="any"
                         value={pm.amount}
                         onChange={(e) => {

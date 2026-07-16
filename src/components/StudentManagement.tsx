@@ -279,7 +279,18 @@ export const StudentManagement = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Desea eliminar este alumno permanentemente?')) return;
+    const studentObj = allStudents?.find((s: any) => s.id === id);
+    const studentName = studentObj ? `${studentObj.names} ${studentObj.first_surname || ''}`.trim().toUpperCase() : 'ESTE ALUMNO';
+
+    if (!window.confirm(`⚠️ ¿Desea eliminar a ${studentName} permanentemente? Se borrarán todos sus datos académicos y financieros vinculados.`)) return;
+    
+    const confirmationText = window.prompt(`⚠️ ¡ATENCIÓN! Esta acción es totalmente irreversible.\n\nPara confirmar la eliminación definitiva de ${studentName}, escriba la palabra "ELIMINAR" en el campo de abajo:`);
+    
+    if (confirmationText !== 'ELIMINAR') {
+      alert('Confirmación incorrecta. La eliminación ha sido cancelada.');
+      return;
+    }
+
     try {
       await deleteStudent(id);
     } catch (e) {
