@@ -173,6 +173,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   };
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const hasAttempted = useRef(false);
@@ -277,7 +278,8 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
   };
 
   const handleGenerateInvoices = async () => {
-    if (!student || isGenerating) return;
+    if (!student || isGenerating || isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
 
     // BUSCAR PLAN: Primero por Grado exacto, luego por Nivel como respaldo
     const courseId = student.course_id || student.courseId;
@@ -434,6 +436,7 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
       console.error('Error:', error);
       toast.error('Error: ' + error.message, { id: loadingToast });
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };

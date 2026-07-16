@@ -452,6 +452,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [methodFilter, setMethodFilter] = useState('all');
   const [entryDate, setEntryDate] = useState(getLocalDateString);
   const [entryMethod, setEntryMethod] = useState('cash');
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
 
   useEffect(() => {
     if (showModal) {
@@ -513,7 +514,9 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
   const handleSaveEntry = async () => {
     if (cart.length === 0) return toast.error('La canasta está vacía');
+    if (isSavingEntry) return;
 
+    setIsSavingEntry(true);
     const newEntry = {
       date: entryDate,
       account: cart[0].account, // Usamos la cuenta del primer item
@@ -533,6 +536,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       setEntryMethod('cash');
     } catch (e) {
       console.error('Error saving ledger entry:', e);
+    } finally {
+      setIsSavingEntry(false);
     }
   };
 
@@ -1257,10 +1262,10 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               </button>
               <button
                 onClick={handleSaveEntry}
-                disabled={cart.length === 0}
-                className={`flex-1 py-4 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${cart.length > 0 ? (type === 'income' ? 'bg-emerald-600' : 'bg-rose-600') : 'bg-slate-200 cursor-not-allowed'}`}
+                disabled={cart.length === 0 || isSavingEntry}
+                className={`flex-1 py-4 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${cart.length > 0 && !isSavingEntry ? (type === 'income' ? 'bg-emerald-600' : 'bg-rose-600') : 'bg-slate-200 cursor-not-allowed'}`}
               >
-                REGISTRAR COBRO
+                {isSavingEntry ? 'REGISTRANDO...' : 'REGISTRAR COBRO'}
               </button>
             </div>
           </div>

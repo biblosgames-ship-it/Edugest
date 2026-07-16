@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -30,8 +30,11 @@ export const StudentAccounts = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const isBatchProcessingRef = useRef(false);
 
   const handleBatchBilling = async () => {
+    if (isBatchProcessing || isBatchProcessingRef.current) return;
+    isBatchProcessingRef.current = true;
     // Buscar alumnos con facturación incompleta
     const studentsToProcess = students.filter((s) => {
       const course = state.courses?.find((c) => c.id === s.course_id);
@@ -226,6 +229,7 @@ export const StudentAccounts = () => {
     } catch (error: any) {
       toast.error('Error en proceso masivo: ' + error.message, { id: loadingToast });
     } finally {
+      isBatchProcessingRef.current = false;
       setIsBatchProcessing(false);
     }
   };
