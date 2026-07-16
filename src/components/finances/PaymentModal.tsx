@@ -218,97 +218,147 @@ export const PaymentModal = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingPayment.current) return;
     isSubmittingPayment.current = true;
-    
-    // Preparar lista de métodos de pago válidos (monto mayor a 0)
-    const payments = paymentMethods
+
+    // Calcular el saldo pendiente real de las facturas que se van a cobrar
+    const totalPendingBalance = invoicesList.reduce((sum, inv) => {
+      const paid = studentTransactions
+        .filter((t) => t.invoice_id === inv.id)
+        .reduce((s, t) => s + Number(t.amount_paid), 0);
+      return sum + Math.max(0, Number(inv.amount_final) - paid);
+    }, 0);
+
+    // Preparar lista de métodos de pago
+    let payments = paymentMethods
       .map((pm) => ({ ...pm, amount: Number(pm.amount) }))
       .filter((pm) => pm.amount > 0);
 
     if (payments.length === 0) {
-      return toast.error('Debe ingresar al menos un método de pago con monto mayor a 0');
+      if (totalPendingBalance === 0) {
+        // Es becado o saldo cero, creamos un pago virtual de 0 para generar la transacción y el recibo
+        payments = [{ method: paymentMethods[0]?.method || 'cash', amount: 0, reference_number: '' }];
+      } else {
+        isSubmittingPayment.current = false;
+        return toast.error('Debe ingresar al menos un método de pago con monto mayor a 0');
+      }
     }
 
     const totalPaid = payments.reduce((sum, pm) => sum + pm.amount, 0);
 
     try {
-      // 1. Obtener facturas con sus saldos pendientes correspondientes
-      const invoicesWithBalance = invoicesList.map((inv) => {
-        const paid = studentTransactions
-          .filter((t) => t.invoice_id === inv.id)
-          .reduce((sum, t) => sum + Number(t.amount_paid), 0);
-        const balance = Math.max(0, Number(inv.amount_final) - paid);
-        return {
-          ...inv,
-          balance: balance
-        };
-      }).filter((inv) => inv.balance > 0);
+      // Verificación de seguridad en tiempo real: comprobar si alguna factura ya fue pagada por otra transacción paralela
+      const invoiceIds = invoicesList.map((inv) => inv.id);
+      const { data: latestInvoices, error: checkError } = await supabase
+        .from('finance_invoices')
+        .select('id, status, concept')
+        .in('id', invoiceIds);
 
-      // 2. Distribuir los pagos secuencialmente entre las facturas (FIFO)
-      const transactionsToInsert: any[] = [];
-      let paymentIndex = 0;
-      let invoiceIndex = 0;
+      if (checkError) throw checkError;
 
-      const activeInvoices = invoicesWithBalance.map(inv => ({ ...inv }));
-      const activePayments = payments.map(p => ({ ...p }));
-
-      while (invoiceIndex < activeInvoices.length && paymentIndex < activePayments.length) {
-        const currentInvoice = activeInvoices[invoiceIndex];
-        const currentPayment = activePayments[paymentIndex];
-
-        if (currentInvoice.balance <= 0) {
-          invoiceIndex++;
-          continue;
+      // Si el saldo pendiente total es mayor que 0, pero algunas facturas ya aparecen como pagadas en la base de datos:
+      if (totalPendingBalance > 0 && latestInvoices) {
+        const alreadyPaid = latestInvoices.filter((inv) => inv.status === 'paid');
+        if (alreadyPaid.length > 0) {
+          const concepts = alreadyPaid.map(inv => inv.concept).join(', ');
+          toast.error(`Error: Las siguientes facturas ya fueron pagadas en otra transacción: ${concepts}`);
+          isSubmittingPayment.current = false;
+          return;
         }
-        if (currentPayment.amount <= 0) {
-          paymentIndex++;
-          continue;
-        }
-
-        const amountToApply = Math.min(currentInvoice.balance, currentPayment.amount);
-
-        transactionsToInsert.push({
-          student_id: student.id,
-          invoice_id: currentInvoice.id,
-          amount_paid: amountToApply,
-          payment_method: currentPayment.method,
-          reference_number: currentPayment.reference_number || '',
-          notes: formData.notes || `Cobro de: ${currentInvoice.concept}`
-        });
-
-        currentInvoice.balance -= amountToApply;
-        currentPayment.amount -= amountToApply;
       }
 
-      // 3. Manejar cualquier excedente/pago anticipado
-      while (paymentIndex < activePayments.length) {
-        const currentPayment = activePayments[paymentIndex];
-        if (currentPayment.amount > 0) {
+      const transactionsToInsert: any[] = [];
+
+      if (totalPendingBalance === 0) {
+        // Si el saldo pendiente es 0 (becado), creamos una transacción de 0 para cada factura
+        invoicesList.forEach((inv) => {
           transactionsToInsert.push({
             student_id: student.id,
-            invoice_id: null,
-            amount_paid: currentPayment.amount,
+            invoice_id: inv.id,
+            amount_paid: 0,
+            payment_method: payments[0].method,
+            reference_number: payments[0].reference_number || '',
+            notes: formData.notes || `Cobro de: ${inv.concept} (Beca)`
+          });
+        });
+      } else {
+        // 1. Obtener facturas con sus saldos pendientes correspondientes
+        const invoicesWithBalance = invoicesList.map((inv) => {
+          const paid = studentTransactions
+            .filter((t) => t.invoice_id === inv.id)
+            .reduce((sum, t) => sum + Number(t.amount_paid), 0);
+          const balance = Math.max(0, Number(inv.amount_final) - paid);
+          return {
+            ...inv,
+            balance: balance
+          };
+        }).filter((inv) => inv.balance > 0);
+
+        // 2. Distribuir los pagos secuencialmente entre las facturas (FIFO)
+        let paymentIndex = 0;
+        let invoiceIndex = 0;
+
+        const activeInvoices = invoicesWithBalance.map(inv => ({ ...inv }));
+        const activePayments = payments.map(p => ({ ...p }));
+
+        while (invoiceIndex < activeInvoices.length && paymentIndex < activePayments.length) {
+          const currentInvoice = activeInvoices[invoiceIndex];
+          const currentPayment = activePayments[paymentIndex];
+
+          if (currentInvoice.balance <= 0) {
+            invoiceIndex++;
+            continue;
+          }
+          if (currentPayment.amount <= 0) {
+            paymentIndex++;
+            continue;
+          }
+
+          const amountToApply = Math.min(currentInvoice.balance, currentPayment.amount);
+
+          transactionsToInsert.push({
+            student_id: student.id,
+            invoice_id: currentInvoice.id,
+            amount_paid: amountToApply,
             payment_method: currentPayment.method,
             reference_number: currentPayment.reference_number || '',
-            notes: (formData.notes || 'Pago anticipado/excedente') + ' (Sin factura vinculada)'
+            notes: formData.notes || `Cobro de: ${currentInvoice.concept}`
           });
-          currentPayment.amount = 0;
-        }
-        paymentIndex++;
-      }
 
-      // Si no hay transacciones para insertar pero hay dinero (ej. venta inmediata sin factura)
-      if (transactionsToInsert.length === 0 && totalPaid > 0) {
-        payments.forEach(p => {
-          transactionsToInsert.push({
-            student_id: student.id,
-            invoice_id: null,
-            amount_paid: p.amount,
-            payment_method: p.method,
-            reference_number: p.reference_number || '',
-            notes: formData.notes || 'Abono general / pago sin factura'
+          currentInvoice.balance -= amountToApply;
+          currentPayment.amount -= amountToApply;
+        }
+
+        // 3. Manejar cualquier excedente/pago anticipado
+        while (paymentIndex < activePayments.length) {
+          const currentPayment = activePayments[paymentIndex];
+          if (currentPayment.amount > 0) {
+            transactionsToInsert.push({
+              student_id: student.id,
+              invoice_id: null,
+              amount_paid: currentPayment.amount,
+              payment_method: currentPayment.method,
+              reference_number: currentPayment.reference_number || '',
+              notes: (formData.notes || 'Pago anticipado/excedente') + ' (Sin factura vinculada)'
+            });
+            currentPayment.amount = 0;
+          }
+          paymentIndex++;
+        }
+
+        // Si no hay transacciones para insertar pero hay dinero (ej. venta inmediata sin factura)
+        if (transactionsToInsert.length === 0 && totalPaid > 0) {
+          payments.forEach(p => {
+            transactionsToInsert.push({
+              student_id: student.id,
+              invoice_id: null,
+              amount_paid: p.amount,
+              payment_method: p.method,
+              reference_number: p.reference_number || '',
+              notes: formData.notes || 'Abono general / pago sin factura'
+            });
           });
-        });
+        }
       }
 
       // 4. Guardar cada transacción en Supabase en secuencia

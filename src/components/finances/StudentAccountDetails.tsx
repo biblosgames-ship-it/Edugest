@@ -610,9 +610,16 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
                   Plan de Pagos y Cuotas
                 </h3>
                 {plan && (
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
-                    Plan activo: {plan.months_count} mensualidades de RD$ {Number(plan.monthly_fee).toLocaleString()} + Inscripción de RD$ {Number(plan.enrollment_fee).toLocaleString()}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-3 mt-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Plan activo: {plan.months_count} mensualidades de RD$ {Number(plan.monthly_fee).toLocaleString()} + Inscripción de RD$ {Number(plan.enrollment_fee).toLocaleString()}
+                    </p>
+                    {studentInvoices.length > 0 && studentInvoices.every((inv) => inv.status === 'paid') && (
+                      <span className="bg-emerald-100 text-emerald-800 text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest animate-pulse">
+                        ✓ AÑO ESCOLAR PAGADO POR COMPLETO
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
