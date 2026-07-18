@@ -19,7 +19,7 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
 
-export const StudentAccounts = () => {
+export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) => void }) => {
   const { state, profile, selectedYear } = useApp();
   const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance({
     invoices: true,
@@ -462,6 +462,7 @@ export const StudentAccounts = () => {
       <StudentAccountDetails
         studentId={selectedStudentId}
         onBack={() => setSelectedStudentId(null)}
+        onTabChange={onTabChange}
       />
     );
   }

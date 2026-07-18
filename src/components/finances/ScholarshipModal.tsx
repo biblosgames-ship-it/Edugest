@@ -7,13 +7,18 @@ import { toast } from 'react-hot-toast';
 interface ScholarshipModalProps {
   onClose: () => void;
   onSuccess: () => void;
+  preselectedStudent?: any;
 }
 
-export const ScholarshipModal: React.FC<ScholarshipModalProps> = ({ onClose, onSuccess }) => {
+export const ScholarshipModal: React.FC<ScholarshipModalProps> = ({
+  onClose,
+  onSuccess,
+  preselectedStudent
+}) => {
   const { state } = useApp();
   const { saveScholarship, loading } = useFinance({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedStudent, setSelectedStudent] = useState<any>(preselectedStudent || null);
 
   const [formData, setFormData] = useState({
     type: 'percentage' as 'percentage' | 'fixed',

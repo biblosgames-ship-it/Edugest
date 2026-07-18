@@ -27,9 +27,10 @@ import { PaymentModal } from './PaymentModal';
 interface Props {
   studentId: string;
   onBack: () => void;
+  onTabChange?: (tab: string) => void;
 }
 
-export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
+export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props) => {
   const { state, profile, selectedYear } = useApp();
   const {
     invoices,
@@ -555,7 +556,27 @@ export const StudentAccountDetails = ({ studentId, onBack }: Props) => {
           >
             <Package size={16} /> Facturar Producto
           </button>
-          <button className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100">
+          <button
+            onClick={() => {
+              if (student) {
+                localStorage.setItem(
+                  'edugens_assign_scholarship_student',
+                  JSON.stringify({
+                    id: student.id,
+                    names: student.names,
+                    first_surname: student.first_surname,
+                    second_surname: student.second_surname
+                  })
+                );
+                if (onTabChange) {
+                  onTabChange('scholarships');
+                } else {
+                  toast.error('No se pudo redirigir. Ve al módulo de Becas directamente.');
+                }
+              }
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100"
+          >
             <GraduationCap size={16} /> Asignar Beca
           </button>
         </div>

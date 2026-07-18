@@ -70,6 +70,7 @@ export const StudentForm = ({
     placeOfBirth: initialData?.place_of_birth || '',
     nationality: initialData?.nationality || 'Dominicana',
     birthCertificateFolio: initialData?.birth_certificate_folio || '',
+    birthCertificateNumber: initialData?.birth_certificate_number || '',
     idCard: initialData?.id_card || '',
     sigerdCode: initialData?.sigerd_code || '',
     student_code: initialData?.student_code || '',
@@ -227,6 +228,7 @@ export const StudentForm = ({
             placeOfBirth: full.place_of_birth || prev.placeOfBirth,
             nationality: full.nationality || prev.nationality,
             birthCertificateFolio: full.birth_certificate_folio || prev.birthCertificateFolio,
+            birthCertificateNumber: full.birth_certificate_number || prev.birthCertificateNumber,
             idCard: full.id_card || prev.idCard,
             sigerdCode: full.sigerd_code || prev.sigerdCode,
             student_code: full.student_code || prev.student_code,
@@ -381,6 +383,7 @@ export const StudentForm = ({
         place_of_birth: student.placeOfBirth,
         nationality: normalize(student.nationality),
         birth_certificate_folio: student.birthCertificateFolio,
+        birth_certificate_number: student.birthCertificateNumber,
         id_card: student.idCard,
         sigerd_code: student.sigerdCode,
         shift: student.shift || selectedCourse?.tanda,
@@ -420,11 +423,19 @@ export const StudentForm = ({
         await dataService.updateStudent(sid, studentData, extraData, customSchoolYear);
         alert('¡Expediente actualizado exitosamente!');
       } else {
+        // Si el usuario hace click en guardar y añadir hermano, nos aseguramos de que haya un family_id
+        let finalFamilyId = student.familyId;
+        const isSavingSibling = (e.nativeEvent as any).submitter?.name === 'save-and-sibling';
+        if (isSavingSibling && !finalFamilyId) {
+          finalFamilyId = crypto.randomUUID();
+          studentData.family_id = finalFamilyId;
+        }
+
         const savedStudent = await dataService.addStudent(studentData, extraData, customSchoolYear);
         alert('¡Alumno registrado exitosamente!');
 
         // Si el usuario quiere registrar un hermano inmediatamente
-        if ((e.nativeEvent as any).submitter?.name === 'save-and-sibling') {
+        if (isSavingSibling) {
           // Limpiar solo datos personales, mantener familia y dirección
           setStudent((prev) => ({
             ...prev,
@@ -434,8 +445,10 @@ export const StudentForm = ({
             birthDate: '',
             idCard: '',
             sigerdCode: '',
+            birthCertificateFolio: '',
+            birthCertificateNumber: '',
             student_code: '', // Se generará nuevo
-            familyId: savedStudent.family_id // Vincular con el que acabamos de guardar
+            familyId: savedStudent.family_id || finalFamilyId // Vincular con el que acabamos de guardar
           }));
           setActiveTab('general');
           return; // No cerrar ni llamar a onSave aún
@@ -667,8 +680,17 @@ export const StudentForm = ({
                   {currentStudentId && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         if (window.confirm(`¿Deseas iniciar el registro de un nuevo hermano/a compartiendo la dirección y datos familiares de ${student.names}?`)) {
+                          let finalFamilyId = student.familyId;
+                          if (!finalFamilyId) {
+                            finalFamilyId = crypto.randomUUID();
+                            // Actualizar el alumno actual en la base de datos de inmediato
+                            await supabase
+                              .from('students')
+                              .update({ family_id: finalFamilyId })
+                              .eq('id', currentStudentId);
+                          }
                           setStudent((prev) => ({
                             ...prev,
                             names: '',
@@ -677,9 +699,11 @@ export const StudentForm = ({
                             birthDate: '',
                             placeOfBirth: '',
                             birthCertificateFolio: '',
+                            birthCertificateNumber: '',
                             idCard: '',
                             sigerdCode: '',
-                            student_code: ''
+                            student_code: '',
+                            familyId: finalFamilyId
                           }));
                           setCurrentStudentId('');
                           setMedical({
@@ -896,6 +920,29 @@ export const StudentForm = ({
                     value={student.sigerdCode}
                     onChange={(e) => setStudent({ ...student, sigerdCode: e.target.value })}
                     className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelClass}>Folio del Acta de Nacimiento</label>
+                  <input
+                    type="text"
+                    value={student.birthCertificateFolio}
+                    onChange={(e) => setStudent({ ...student, birthCertificateFolio: e.target.value })}
+                    className={inputClass}
+                    placeholder="Ej: 0045"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Número del Acta de Nacimiento</label>
+                  <input
+                    type="text"
+                    value={student.birthCertificateNumber}
+                    onChange={(e) => setStudent({ ...student, birthCertificateNumber: e.target.value })}
+                    className={inputClass}
+                    placeholder="Ej: 0012-B"
                   />
                 </div>
               </div>

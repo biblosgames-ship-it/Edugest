@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   GraduationCap,
   Plus,
@@ -19,6 +19,21 @@ export const ScholarshipsManager = () => {
   const { scholarships, refresh, loading } = useFinance({ scholarships: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [preselectedStudent, setPreselectedStudent] = useState<any | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('edugens_assign_scholarship_student');
+    if (stored) {
+      try {
+        const studentInfo = JSON.parse(stored);
+        setPreselectedStudent(studentInfo);
+        setIsModalOpen(true);
+      } catch (e) {
+        console.error('Error parsing preselected student:', e);
+      }
+      localStorage.removeItem('edugens_assign_scholarship_student');
+    }
+  }, []);
 
   const stats = useMemo(() => {
     const totalCount = scholarships.length;
@@ -211,11 +226,16 @@ export const ScholarshipsManager = () => {
 
       {isModalOpen && (
         <ScholarshipModal
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setPreselectedStudent(null);
+          }}
           onSuccess={() => {
             setIsModalOpen(false);
+            setPreselectedStudent(null);
             refresh();
           }}
+          preselectedStudent={preselectedStudent}
         />
       )}
     </div>

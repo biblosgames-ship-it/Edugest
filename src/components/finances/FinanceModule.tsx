@@ -57,7 +57,7 @@ export const FinanceModule = () => {
       {/* RENDERIZADO DE SUB-MÓDULOS */}
       <div className="animate-fade-in">
         {activeTab === 'dashboard' && <FinanceDashboard />}
-        {activeTab === 'students' && <StudentAccounts />}
+        {activeTab === 'students' && <StudentAccounts onTabChange={setActiveTab} />}
         {activeTab === 'expenses' && <LedgerManager />}
         {activeTab === 'payroll' && <PayrollManager />}
         {activeTab === 'scholarships' && <ScholarshipsManager />}
