@@ -158,6 +158,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const performFetch = async () => {
         setState((prev) => ({ ...prev, loading: true }));
         try {
+          let currentFetchYear = selectedYear;
+          let resolvedSyResData: any[] | null = null;
+
+          // Resolve active school year beforehand if empty to avoid querying empty values
+          if (!currentFetchYear) {
+            const { data } = await supabase
+              .from('school_years')
+              .select('*')
+              .eq('center_id', targetCid)
+              .order('name', { ascending: false });
+
+            resolvedSyResData = data || [];
+            const activeYear = resolvedSyResData?.find((y: any) => y.status === 'activo' || y.is_active);
+            const fallbackYear = activeYear?.name || resolvedSyResData?.[0]?.name || '2026-2027';
+            currentFetchYear = fallbackYear;
+
+            // Immediately set the state for selectedYear
+            setSelectedYear(fallbackYear);
+          }
+
           const [
             cRes,
             sRes,
@@ -185,7 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .from('courses')
               .select('*')
               .eq('center_id', targetCid)
-              .eq('school_year', selectedYear),
+              .eq('school_year', currentFetchYear),
             supabase.from('subjects').select('*').eq('center_id', targetCid),
             supabase.from('profiles').select('*').eq('center_id', targetCid),
             supabase.from('assignments').select('*').eq('center_id', targetCid),
@@ -205,7 +225,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .from('schedule_entries')
               .select('*')
               .eq('center_id', targetCid)
-              .eq('school_year', selectedYear),
+              .eq('school_year', currentFetchYear),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -214,16 +234,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .limit(200),
             supabase.from('level_schedules').select('*').eq('center_id', targetCid),
             supabase.from('fixed_events').select('*').eq('center_id', targetCid),
-            supabase
-              .from('school_years')
-              .select('*')
-              .eq('center_id', targetCid)
-              .order('name', { ascending: false }),
+            resolvedSyResData
+              ? Promise.resolve({ data: resolvedSyResData, error: null })
+              : supabase
+                  .from('school_years')
+                  .select('*')
+                  .eq('center_id', targetCid)
+                  .order('name', { ascending: false }),
             supabase
               .from('students')
               .select('*')
               .eq('center_id', targetCid)
-              .eq('school_year', selectedYear),
+              .eq('school_year', currentFetchYear),
             supabase
               .from('activities')
               .select('*')
@@ -420,16 +442,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             loading: false
           }));
 
-          lastFetchedYearRef.current = selectedYear;
+          lastFetchedYearRef.current = currentFetchYear;
 
           // Seleccionar automáticamente el año activo si existe
-          const activeYear = syRes.data?.find((y: any) => y.status === 'activo' || y.is_active);
-          if (activeYear && (!selectedYear || !syRes.data.some((y: any) => y.name === selectedYear))) {
-            setSelectedYear(activeYear.name);
-          } else if (!selectedYear && syRes.data && syRes.data.length > 0) {
-            setSelectedYear(syRes.data[0].name);
-          } else if (!selectedYear) {
-            setSelectedYear('2026-2027');
+          if (!selectedYear) {
+            // Ya se resolvió e inicializó currentFetchYear al principio del fetch
+          } else {
+            const activeYear = syRes.data?.find((y: any) => y.status === 'activo' || y.is_active);
+            if (activeYear && (!selectedYear || !syRes.data.some((y: any) => y.name === selectedYear))) {
+              setSelectedYear(activeYear.name);
+            }
           }
         } catch (error: any) {
           console.error('Error fetching dashboard data:', error);
