@@ -102,6 +102,15 @@ export const SaaSAdminPanel: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [selectedLicenseForBilling, setSelectedLicenseForBilling] = useState<SaaSProductKey | null>(null);
+  const [billingType, setBillingType] = useState<'reminder' | 'invoice'>('reminder');
+  const [billingSubject, setBillingSubject] = useState('');
+  const [billingBody, setBillingBody] = useState('');
+  const [bankInfo, setBankInfo] = useState(
+    'Banco BHD\nCuenta Corriente: #1234567890\nTitular: EduGest SRL\nRNC: 1-32-45678-9'
+  );
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -130,6 +139,122 @@ export const SaaSAdminPanel: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedLicenseForBilling) return;
+
+    const license = selectedLicenseForBilling;
+    const planDetails = plans.find((p) => p.id === license.plan_id);
+    const monthlyPrice = planDetails?.price_monthly || license.price || 0;
+    const yearlyPrice = planDetails?.price_yearly || (license.price ? license.price * 10 : 0);
+    const planName = license.plan_name || 'Básico';
+
+    if (billingType === 'reminder') {
+      const subject = `Recordatorio de Pago Suscripción EduGest - ${license.center_name || 'Mi Centro'}`;
+      const endDateStr = license.subscription_end_date
+        ? new Date(license.subscription_end_date).toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        : 'S/N';
+
+      const body = `Estimado Equipo de ${license.center_name || 'Centro Educativo'}:
+
+Le saludamos cordialmente desde el equipo administrativo de EduGest.
+
+Este correo electrónico es un recordatorio amigable del pago correspondiente a la suscripción del software de gestión escolar EduGest.
+
+Detalle de su suscripción:
+• Centro Educativo: ${license.center_name || 'No especificado'}
+• Plan Asignado: ${planName}
+• Costo del Plan: $${monthlyPrice.toLocaleString()} DOP mensual / $${yearlyPrice.toLocaleString()} DOP anual
+• Fecha de Vencimiento: ${endDateStr}
+
+Para mantener el servicio activo y sin interrupciones para el personal, docentes y padres, por favor realice su pago correspondiente por transferencia bancaria utilizando los datos detallados a continuación:
+
+Datos de Cuenta para Transferencia:
+${bankInfo}
+
+Una vez realizado el depósito o transferencia, por favor responda a este correo adjuntando el comprobante de pago con el número de referencia para proceder con la extensión inmediata de su vigencia.
+
+Agradecemos su puntualidad y confianza en nuestra plataforma.
+
+Atentamente,
+El equipo de EduGest
+soporte@edugest.net`;
+
+      setBillingSubject(subject);
+      setBillingBody(body);
+    } else {
+      const licensePayments = payments.filter((p) => p.license_id === license.id);
+      const lastPayment = licensePayments.length > 0 ? licensePayments[0] : null;
+
+      const subject = `Factura y Confirmación de Pago - Suscripción EduGest - ${license.center_name || 'Mi Centro'}`;
+      const amountPaid = lastPayment ? lastPayment.amount : monthlyPrice;
+      const payMethodStr = lastPayment ? lastPayment.method : 'Transferencia';
+      const payRefStr = lastPayment?.reference_note || 'N/A';
+      const payDateStr = lastPayment?.payment_date
+        ? new Date(lastPayment.payment_date).toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        : new Date().toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+      const nextExpirationStr = license.subscription_end_date
+        ? new Date(license.subscription_end_date).toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        : 'N/A';
+
+      const body = `Estimado Equipo de ${license.center_name || 'Centro Educativo'}:
+
+Le saludamos cordialmente.
+
+Por medio de la presente, confirmamos que hemos recibido y registrado con éxito su pago de suscripción de la plataforma EduGest. A continuación, le detallamos su recibo/factura de pago correspondiente:
+
+DETALLE DE LA FACTURA
+===================================
+• Centro Educativo: ${license.center_name || 'No especificado'}
+• Plan Asignado: ${planName}
+• Monto Recibido: $${amountPaid.toLocaleString()} DOP
+• Fecha de Pago: ${payDateStr}
+• Método de Pago: ${payMethodStr}
+• Referencia: ${payRefStr}
+• Nueva Fecha de Vencimiento: ${nextExpirationStr}
+===================================
+
+Este correo sirve como constancia y recibo formal de pago por el periodo de servicio correspondiente. Su acceso al sistema ha sido extendido y se encuentra completamente activo.
+
+Le agradecemos su confianza en nuestros servicios de gestión educativa. Si tiene alguna duda o requiere asistencia, no dude en contactarnos.
+
+Atentamente,
+El equipo de EduGest
+soporte@edugest.net`;
+
+      setBillingSubject(subject);
+      setBillingBody(body);
+    }
+  }, [selectedLicenseForBilling, billingType, bankInfo, payments, plans]);
+
+  const handleSendBillingEmail = () => {
+    if (!selectedLicenseForBilling?.linked_email) {
+      alert('Este centro no tiene un correo electrónico vinculado.');
+      return;
+    }
+    const to = selectedLicenseForBilling.linked_email;
+    const subject = encodeURIComponent(billingSubject);
+    const body = encodeURIComponent(billingBody);
+    window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    setIsBillingModalOpen(false);
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -651,6 +776,19 @@ export const SaaSAdminPanel: React.FC = () => {
                             <td className="py-4 px-4 text-right">
                               {centerId && (
                                 <div className="flex justify-end gap-1.5">
+                                  {license.linked_email && (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedLicenseForBilling(license);
+                                        setBillingType('reminder');
+                                        setIsBillingModalOpen(true);
+                                      }}
+                                      className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Emitir Recordatorio o Factura por Correo"
+                                    >
+                                      <Mail size={18} />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() =>
                                       handleSwitchCenter(
@@ -1524,6 +1662,129 @@ export const SaaSAdminPanel: React.FC = () => {
                   )}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: FACTURACIÓN Y RECORDATORIOS */}
+        {isBillingModalOpen && selectedLicenseForBilling && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-8 space-y-6 animate-scale-up">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Facturación y Recordatorios SaaS
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Centro: <span className="font-bold text-indigo-600">{selectedLicenseForBilling.center_name || 'Desconocido'}</span> ({selectedLicenseForBilling.linked_email})
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsBillingModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  {/* TIPO DE CORREO */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Tipo de Correo
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBillingType('reminder')}
+                        className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          billingType === 'reminder'
+                            ? 'bg-blue-50 text-blue-600 border-blue-200'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        Recordatorio de Pago
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingType('invoice')}
+                        className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          billingType === 'invoice'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        Factura de Pago
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CUENTAS DE TRANSFERENCIA */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Cuentas Bancarias de Transferencia
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={bankInfo}
+                      onChange={(e) => setBankInfo(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-brand-blue"
+                      placeholder="Indique las cuentas bancarias..."
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* ASUNTO PREVIO */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Asunto del Correo
+                    </label>
+                    <input
+                      type="text"
+                      value={billingSubject}
+                      onChange={(e) => setBillingSubject(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  {/* CUERPO PREVIO */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Cuerpo del Correo (Editable)
+                    </label>
+                    <textarea
+                      rows={10}
+                      value={billingBody}
+                      onChange={(e) => setBillingBody(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-[10px] font-mono leading-relaxed focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setIsBillingModalOpen(false)}
+                  className="flex-1 py-3 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-colors text-sm cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendBillingEmail}
+                  className={`flex-1 py-3 text-white rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer ${
+                    billingType === 'reminder'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  <Mail size={16} />
+                  Abrir Cliente de Correo
+                </button>
+              </div>
             </div>
           </div>
         )}
