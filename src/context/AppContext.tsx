@@ -98,18 +98,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [center, setCenter] = useState<any | null>(null);
   const [license, setLicense] = useState<any | null>(null);
   const [isSubscriptionExpired, setIsSubscriptionExpired] = useState<boolean>(false);
-  const [selectedYear, setSelectedYear] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('edugest_selected_year') || '2025-2026';
-    }
-    return '2025-2026';
-  });
+  const [selectedYear, setSelectedYear] = useState('');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('edugest_selected_year', selectedYear);
+    if (profile?.center_id) {
+      const stored = localStorage.getItem(`edugest_selected_year_${profile.center_id}`);
+      setSelectedYear(stored || '');
     }
-  }, [selectedYear]);
+  }, [profile?.center_id]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && profile?.center_id && selectedYear) {
+      localStorage.setItem(`edugest_selected_year_${profile.center_id}`, selectedYear);
+    }
+  }, [selectedYear, profile?.center_id]);
 
   const [isAuthReady, setIsAuthReady] = useState(false);
 
@@ -422,7 +424,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Seleccionar automáticamente el año activo si existe
           const activeYear = syRes.data?.find((y: any) => y.status === 'activo' || y.is_active);
-          if (activeYear && !selectedYear) setSelectedYear(activeYear.name);
+          if (activeYear && (!selectedYear || !syRes.data.some((y: any) => y.name === selectedYear))) {
+            setSelectedYear(activeYear.name);
+          } else if (!selectedYear && syRes.data && syRes.data.length > 0) {
+            setSelectedYear(syRes.data[0].name);
+          } else if (!selectedYear) {
+            setSelectedYear('2026-2027');
+          }
         } catch (error: any) {
           console.error('Error fetching dashboard data:', error);
           setState((prev) => ({ ...prev, loading: false }));
