@@ -350,7 +350,7 @@ export const Dashboard = React.memo(() => {
             {center?.name || 'Gestión Institucional'}
           </h1>
           <p className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.4em] opacity-70">
-            BALUARTE DE LA EDUCACIÓN EN PRINCIPIOS MORALES Y ESPIRITUALES
+            {center?.slogan?.toUpperCase() || 'BALUARTE DE LA EDUCACIÓN EN PRINCIPIOS MORALES Y ESPIRITUALES'}
           </p>
         </div>
       </div>
