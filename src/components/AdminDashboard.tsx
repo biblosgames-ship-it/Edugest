@@ -17,7 +17,7 @@ import { FileSpreadsheet, Upload, Copy } from 'lucide-react';
 
 export const AdminDashboard = () => {
   const [users, setUsers] = useState<any[]>([]);
-  const { state, setAppState } = useApp();
+  const { state, setAppState, center } = useApp();
   const { user, profile } = useSupabase();
   const [tab, setTab] = useState<'users' | 'performance' | 'compliance' | 'data' | 'settings'>(
     'users'
@@ -26,16 +26,17 @@ export const AdminDashboard = () => {
   const [showWizard, setShowWizard] = useState(false);
   const [showCloneWizard, setShowCloneWizard] = useState(false);
   const isSuperAdmin = !!profile?.is_superadmin;
+  const [filterCurrentCenter, setFilterCurrentCenter] = useState(true);
 
   useEffect(() => {
     if (profile) {
       fetchUsers();
     }
-  }, [profile, isSuperAdmin]);
+  }, [profile, isSuperAdmin, filterCurrentCenter]);
 
   const fetchUsers = async () => {
     let query = supabase.from('profiles').select('*');
-    if (!isSuperAdmin && profile?.center_id) {
+    if ((!isSuperAdmin || filterCurrentCenter) && profile?.center_id) {
       query = query.eq('center_id', profile.center_id);
     }
     const { data, error } = await query.order('created_at', { ascending: false });
@@ -270,9 +271,22 @@ export const AdminDashboard = () => {
 
           {subTab === 'directory' && (
             <div className="bg-surface p-8 rounded-[2.5rem] border border-border-main shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
-              <h2 className="text-xl font-black mb-6 text-text-main">
-                Directorio General de Usuarios
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+                <h2 className="text-xl font-black text-text-main">
+                  Directorio General de Usuarios
+                </h2>
+                {isSuperAdmin && (
+                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={filterCurrentCenter}
+                      onChange={(e) => setFilterCurrentCenter(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    <span>Ver solo usuarios del centro actual ({center?.name || 'Cargando...'})</span>
+                  </label>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
