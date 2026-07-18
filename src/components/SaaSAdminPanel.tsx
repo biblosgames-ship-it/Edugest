@@ -21,7 +21,8 @@ import {
   Database,
   Edit2,
   Plus,
-  Copy
+  Copy,
+  Printer
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -106,9 +107,17 @@ export const SaaSAdminPanel: React.FC = () => {
 
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
   const [selectedLicenseForBilling, setSelectedLicenseForBilling] = useState<SaaSProductKey | null>(null);
+  const [selectedPaymentForBilling, setSelectedPaymentForBilling] = useState<SaaSPayment | null>(null);
+  const [billingTab, setBillingTab] = useState<'invoice' | 'email'>('invoice');
   const [billingType, setBillingType] = useState<'reminder' | 'invoice'>('reminder');
   const [billingSubject, setBillingSubject] = useState('');
   const [billingBody, setBillingBody] = useState('');
+
+  useEffect(() => {
+    if (isBillingModalOpen) {
+      setBillingTab(billingType === 'reminder' ? 'email' : 'invoice');
+    }
+  }, [isBillingModalOpen, billingType]);
   const [bankInfo, setBankInfo] = useState(
     'Banco BHD\nCuenta Corriente: #1234567890\nTitular: EduGest SRL\nRNC: 1-32-45678-9'
   );
@@ -334,6 +343,7 @@ soporte@edugest.net`;
       if (window.confirm('Pago registrado y suscripción extendida exitosamente.\n\n¿Desea abrir el generador de correo para enviar la factura/confirmación de pago?')) {
         if (license) {
           setSelectedLicenseForBilling(license);
+          setSelectedPaymentForBilling(null);
           setBillingType('invoice');
           setIsBillingModalOpen(true);
         }
@@ -530,6 +540,148 @@ soporte@edugest.net`;
   };
 
   const activeLicenses = licenses.filter((l) => l.is_used);
+  const modalLicense = selectedLicenseForBilling;
+  const modalPlanDetails = modalLicense ? plans.find((p) => p.id === modalLicense.plan_id) : null;
+  const modalMonthlyPrice = modalPlanDetails?.price_monthly || modalLicense?.price || 0;
+  const modalPlanName = modalLicense?.plan_name || 'Básico';
+
+  const modalLicensePayments = modalLicense ? payments.filter((p) => p.license_id === modalLicense.id) : [];
+  const modalLastPayment = selectedPaymentForBilling || (modalLicensePayments.length > 0 ? modalLicensePayments[0] : null);
+  const modalAmountPaid = modalLastPayment ? modalLastPayment.amount : modalMonthlyPrice;
+  const modalPayMethodStr = modalLastPayment ? modalLastPayment.method : 'Transferencia';
+  const modalPayRefStr = modalLastPayment?.reference_note || 'N/A';
+  const modalPayDateStr = modalLastPayment?.payment_date
+    ? new Date(modalLastPayment.payment_date).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    : new Date().toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+  const modalNextExpirationStr = modalLicense?.subscription_end_date
+    ? new Date(modalLicense.subscription_end_date).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    : 'N/A';
+
+  const modalPaymentIdShort = modalLastPayment?.id ? modalLastPayment.id.slice(0, 8).toUpperCase() : 'N/A';
+
+  const handlePrintInvoice = () => {
+    if (!modalLicense) return;
+    const printContent = document.getElementById('saas-invoice-print-area');
+    const windowUrl = window.location.href;
+    const uniqueName = new Date().getTime();
+    const printWindow = window.open(windowUrl, uniqueName.toString(), 'left=0,top=0,width=800,height=900,toolbar=0,scrollbars=0,status=0');
+    
+    if (printWindow && printContent) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Factura de Suscripción EduGest - ${modalLicense.center_name || 'Centro'}</title>
+            <style>
+              body { font-family: sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+              .invoice-box { max-width: 800px; margin: auto; border: 1px solid #e2e8f0; padding: 35px; border-radius: 24px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 30px; }
+              .logo { font-size: 28px; font-weight: 900; color: #4f46e5; letter-spacing: -0.05em; }
+              .invoice-title { font-size: 20px; font-weight: 900; text-align: right; text-transform: uppercase; color: #0f172a; }
+              .details { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+              .details-block h3 { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 5px 0; letter-spacing: 0.05em; }
+              .details-block p { margin: 0; font-size: 13px; color: #334155; }
+              .details-block p.bold { font-weight: 700; color: #0f172a; }
+              .table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+              .table th { border-bottom: 2px solid #cbd5e1; text-align: left; padding: 12px; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 800; }
+              .table td { border-bottom: 1px solid #f1f5f9; padding: 16px 12px; font-size: 13px; }
+              .totals { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 30px; }
+              .totals-row { display: flex; justify-content: space-between; width: 260px; border-bottom: 1px solid #f1f5f9; padding: 8px 0; font-size: 13px; color: #475569; }
+              .totals-row.final { border-bottom: none; font-size: 16px; font-weight: 900; color: #4f46e5; padding-top: 12px; }
+              .footer { text-align: center; font-size: 11px; color: #94a3b8; border-t: 1px dashed #e2e8f0; padding-top: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+            </style>
+          </head>
+          <body>
+            <div class="invoice-box">
+              <div class="header">
+                <div>
+                  <div class="logo">EDUGEST</div>
+                  <p style="margin: 3px 0 0 0; font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Soluciones de Gestión Educativa</p>
+                  <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b;">RNC: 1-32-45678-9<br>Santo Domingo, Rep. Dominicana<br>soporte@edugest.net</p>
+                </div>
+                <div class="invoice-title">
+                  Factura de Suscripción
+                  <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 700; color: #64748b;">No. FAC-2026-${modalPaymentIdShort}</p>
+                  <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: 700; color: #64748b;">Fecha: ${modalPayDateStr}</p>
+                </div>
+              </div>
+              <div class="details">
+                <div class="details-block">
+                  <h3>Facturado a:</h3>
+                  <p class="bold">${modalLicense.center_name || 'Centro Educativo'}</p>
+                  <p>${modalLicense.linked_email}</p>
+                </div>
+                <div class="details-block" style="text-align: right;">
+                  <h3>Detalle de Pago:</h3>
+                  <p>Método: <strong>${modalPayMethodStr}</strong></p>
+                  <p>Referencia: <strong>${modalPayRefStr}</strong></p>
+                </div>
+              </div>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Descripción</th>
+                    <th style="text-align: right;">Periodo / Vigencia</th>
+                    <th style="text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>Licencia SaaS EduGest - Plan ${modalPlanName}</strong>
+                      <p style="margin: 3px 0 0 0; font-size: 11px; color: #94a3b8;">Acceso completo a la plataforma de administración escolar</p>
+                    </td>
+                    <td style="text-align: right;">
+                      Extensión de Servicio
+                      <p style="margin: 3px 0 0 0; font-size: 11px; color: #4f46e5; font-weight: 700;">Vence: ${modalNextExpirationStr}</p>
+                    </td>
+                    <td style="text-align: right; font-weight: 700;">$${modalAmountPaid.toLocaleString()} DOP</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="totals">
+                <div class="totals-row">
+                  <span>Subtotal:</span>
+                  <strong>$${modalAmountPaid.toLocaleString()} DOP</strong>
+                </div>
+                <div class="totals-row">
+                  <span>ITBIS (0%):</span>
+                  <strong>$0.00 DOP</strong>
+                </div>
+                <div class="totals-row final">
+                  <span>Total Pagado:</span>
+                  <strong>$${modalAmountPaid.toLocaleString()} DOP</strong>
+                </div>
+              </div>
+              <div class="footer">
+                ¡Gracias por confiar en EduGest!
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   const pendingLicenses = licenses.filter((l) => !l.is_used);
 
   const filteredActiveLicenses = activeLicenses.filter((l) => {
@@ -790,6 +942,7 @@ soporte@edugest.net`;
                                     <button
                                       onClick={() => {
                                         setSelectedLicenseForBilling(license);
+                                        setSelectedPaymentForBilling(null);
                                         setBillingType('reminder');
                                         setIsBillingModalOpen(true);
                                       }}
@@ -1209,6 +1362,7 @@ soporte@edugest.net`;
                             const license = activeLicenses.find((l) => l.id === payLicenseId);
                             if (license) {
                               setSelectedLicenseForBilling(license);
+                              setSelectedPaymentForBilling(null);
                               setBillingType('reminder');
                               setIsBillingModalOpen(true);
                             }
@@ -1357,6 +1511,7 @@ soporte@edugest.net`;
                                     <button
                                       onClick={() => {
                                         setSelectedLicenseForBilling(license);
+                                        setSelectedPaymentForBilling(payment);
                                         setBillingType('invoice');
                                         setIsBillingModalOpen(true);
                                       }}
