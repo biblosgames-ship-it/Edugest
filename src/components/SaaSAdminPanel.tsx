@@ -20,8 +20,10 @@ import {
   Upload,
   Database,
   Edit2,
-  Plus
+  Plus,
+  Copy
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import {
   generateLicenses,
   getLicenses,
@@ -322,12 +324,20 @@ soporte@edugest.net`;
     if (!payLicenseId) return alert('Seleccione un centro.');
     setIsPaying(true);
     try {
+      const license = activeLicenses.find((l) => l.id === payLicenseId);
       await registerPayment(payLicenseId, payAmount, payMethod, payRef, payMonths);
-      alert('Pago registrado y suscripción extendida exitosamente.');
       setPayAmount(100);
       setPayRef('');
       setPayMonths(1);
       await fetchData();
+
+      if (window.confirm('Pago registrado y suscripción extendida exitosamente.\n\n¿Desea abrir el generador de correo para enviar la factura/confirmación de pago?')) {
+        if (license) {
+          setSelectedLicenseForBilling(license);
+          setBillingType('invoice');
+          setIsBillingModalOpen(true);
+        }
+      }
     } catch (err: any) {
       alert('Error: ' + err.message);
     } finally {
@@ -1188,9 +1198,28 @@ soporte@edugest.net`;
                 </h3>
                 <form onSubmit={handlePayment} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Escuela / Centro
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Escuela / Centro
+                      </label>
+                      {payLicenseId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const license = activeLicenses.find((l) => l.id === payLicenseId);
+                            if (license) {
+                              setSelectedLicenseForBilling(license);
+                              setBillingType('reminder');
+                              setIsBillingModalOpen(true);
+                            }
+                          }}
+                          className="text-blue-500 hover:text-blue-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          title="Enviar Recordatorio de Pago"
+                        >
+                          <Mail size={12} /> Enviar Recordatorio
+                        </button>
+                      )}
+                    </div>
                     <select
                       required
                       value={payLicenseId}
@@ -1324,6 +1353,19 @@ soporte@edugest.net`;
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="flex justify-end gap-1">
+                                  {license && (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedLicenseForBilling(license);
+                                        setBillingType('invoice');
+                                        setIsBillingModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Enviar Factura/Confirmación de Pago"
+                                    >
+                                      <Mail size={14} />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => startEditPayment(payment)}
                                     className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
@@ -1771,6 +1813,17 @@ soporte@edugest.net`;
                   className="flex-1 py-3 border border-slate-200 text-slate-500 rounded-xl font-bold hover:bg-slate-50 transition-colors text-sm cursor-pointer"
                 >
                   Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(billingBody);
+                    toast.success('Contenido copiado al portapapeles');
+                  }}
+                  className="flex-1 py-3 border border-indigo-200 text-indigo-600 bg-indigo-50/50 rounded-xl font-bold hover:bg-indigo-50 transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Copy size={16} />
+                  Copiar Texto
                 </button>
                 <button
                   type="button"

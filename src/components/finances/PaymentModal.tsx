@@ -187,12 +187,13 @@ export const PaymentModal = ({
             ref: refs,
             receiptNumbers: receiptNums.length > 0 ? receiptNums : [1]
           });
-          setFormData({
+          setFormData(prev => ({
+            ...prev,
             amount_paid: totalPaid,
             payment_method: txs[0].payment_method || 'cash',
             reference_number: txs[0].reference_number || '',
             notes: txs[0].notes || ''
-          });
+          }));
           setIsSuccess(true);
         } else {
           // Fallback en caso de latencia de guardado
