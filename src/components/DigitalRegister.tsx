@@ -590,9 +590,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     const pageWidth = doc.internal.pageSize.width;
 
     const centerData = center || {
-      name: 'CENTRO EDUCATIVO CRISTIANO GENESIS',
-      address: 'Calle Respaldo Duarte #11, Los Alcarrizos',
-      phone: '809-560-1234',
+      name: 'CENTRO EDUCATIVO',
+      address: '---',
+      phone: '---',
       logo_url: null
     };
 

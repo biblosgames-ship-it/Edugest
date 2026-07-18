@@ -16,10 +16,10 @@ export const generateStudentPDF = (
   const margin = 20;
 
   // DATOS DE RESPALDO SI FALLA LA DB
-  const center = centerData || {
-    name: 'CENTRO EDUCATIVO CRISTIANO GENESIS',
-    address: 'Calle Respaldo Duarte #11, Los Alcarrizos',
-    phone: '809-560-1234',
+  const center = (centerData && centerData.name) ? centerData : {
+    name: 'CENTRO EDUCATIVO',
+    address: '---',
+    phone: '---',
     logo_url: null
   };
 

@@ -39,7 +39,7 @@ import { Users, X, ScrollText as ScrollIcon } from 'lucide-react';
 import PrimaryCertificate from './PrimaryCertificate';
 
 export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
-  const { state, selectedYear } = useApp();
+  const { state, selectedYear, center: contextCenter } = useApp();
   const { profile } = useSupabase();
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -617,10 +617,10 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'legal' });
       const pageWidth = doc.internal.pageSize.width;
 
-      const center = centerData || {
-        name: 'CENTRO EDUCATIVO CRISTIANO GENESIS',
-        address: 'Calle Respaldo Duarte #11, Los Alcarrizos',
-        phone: '809-560-1234'
+      const center = centerData || contextCenter || {
+        name: 'CENTRO EDUCATIVO',
+        address: '---',
+        phone: '---'
       };
 
       // Header del Centro
@@ -908,10 +908,10 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const isPrimaria = (selectedCourse?.level || '').toLowerCase().includes('primaria');
       const passingGrade = isPrimaria ? 65 : 70;
 
-      const center = centerData || {
-        name: 'CENTRO EDUCATIVO CRISTIANO GENESIS',
-        address: 'Calle Respaldo Duarte #11, Los Alcarrizos',
-        phone: '809-560-1234'
+      const center = centerData || contextCenter || {
+        name: 'CENTRO EDUCATIVO',
+        address: '---',
+        phone: '---'
       };
 
       subjects.forEach((sub, subIdx) => {
@@ -2594,10 +2594,10 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
     const pageWidth = doc.internal.pageSize.width;
 
-    const center = boletinData.centerData || {
-      name: 'CENTRO EDUCATIVO CRISTIANO GENESIS',
-      address: 'Calle Respaldo Duarte #11, Los Alcarrizos',
-      phone: '809-560-1234',
+    const center = boletinData.centerData || contextCenter || {
+      name: 'CENTRO EDUCATIVO',
+      address: '---',
+      phone: '---',
       logo_url: null
     };
 
