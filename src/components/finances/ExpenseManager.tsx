@@ -16,7 +16,9 @@ import {
   Edit2,
   Printer,
   FileText,
-  Zap
+  Zap,
+  Banknote,
+  Landmark
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
@@ -447,11 +449,13 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [startDate, setStartDate] = useState(getLocalDateString);
   const [endDate, setEndDate] = useState(getLocalDateString);
   const [accountFilter, setAccountFilter] = useState('all');
+  const [cashAccountFilter, setCashAccountFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [reportType, setReportType] = useState('detailed');
   const [methodFilter, setMethodFilter] = useState('all');
   const [entryDate, setEntryDate] = useState(getLocalDateString);
   const [entryMethod, setEntryMethod] = useState('cash');
+  const [entryCashAccount, setEntryCashAccount] = useState('caja_chica');
   const [isSavingEntry, setIsSavingEntry] = useState(false);
 
   useEffect(() => {
@@ -473,12 +477,38 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       const matchesDate = e.date >= startDate && e.date <= endDate;
       const matchesAccount = accountFilter === 'all' || e.account === accountFilter;
       const matchesMethod = methodFilter === 'all' || (e.method || 'cash') === methodFilter;
+      const matchesCashAccount = cashAccountFilter === 'all' || (e.cash_account || 'caja_chica') === cashAccountFilter;
       const matchesSearch =
         (e.description || e.desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.item.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesDate && matchesAccount && matchesMethod && matchesSearch;
+      return matchesDate && matchesAccount && matchesMethod && matchesCashAccount && matchesSearch;
     });
-  }, [entries, startDate, endDate, accountFilter, methodFilter, searchTerm]);
+  }, [entries, startDate, endDate, accountFilter, methodFilter, cashAccountFilter, searchTerm]);
+
+  // Computed balances per cash register (all-time for filtered date range)
+  const balances = useMemo(() => {
+    const todayStr = getLocalDateString();
+    const todayEntries = entries.filter((e: any) => e.date === todayStr);
+
+    const cajaChicaEntries = entries.filter((e: any) =>
+      e.date >= startDate && e.date <= endDate && (e.cash_account || 'caja_chica') === 'caja_chica'
+    );
+    const bancoEntries = entries.filter((e: any) =>
+      e.date >= startDate && e.date <= endDate && (e.cash_account || 'caja_chica') === 'banco'
+    );
+
+    const sumNet = (list: any[]) =>
+      list.reduce((acc, e) => acc + (e.type === 'income' ? Number(e.amount) : -Number(e.amount)), 0);
+    const sumIn = (list: any[]) =>
+      list.filter((e) => e.type === 'income').reduce((acc, e) => acc + Number(e.amount), 0);
+    const sumOut = (list: any[]) =>
+      list.filter((e) => e.type === 'expense').reduce((acc, e) => acc + Number(e.amount), 0);
+
+    return {
+      cajaChica: { in: sumIn(cajaChicaEntries), out: sumOut(cajaChicaEntries), net: sumNet(cajaChicaEntries) },
+      banco: { in: sumIn(bancoEntries), out: sumOut(bancoEntries), net: sumNet(bancoEntries) }
+    };
+  }, [entries, startDate, endDate]);
 
   const [quantity, setQuantity] = useState(1);
   const [discount, setDiscount] = useState(0);
@@ -524,7 +554,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       description: cart.some((i) => i.discount > 0) ? `${desc} (Incluye descuentos)` : desc,
       type,
       amount: cartTotal,
-      method: entryMethod
+      method: entryMethod,
+      cash_account: entryCashAccount
     };
 
     try {
@@ -534,6 +565,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       setCart([]);
       setDesc('');
       setEntryMethod('cash');
+      setEntryCashAccount('caja_chica');
     } catch (e) {
       console.error('Error saving ledger entry:', e);
     } finally {
@@ -868,6 +900,88 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
   return (
     <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm animate-fade-in relative">
+
+      {/* ── PANEL DE DOS CAJAS ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* CAJA CHICA */}
+        <div className="rounded-[2rem] border-2 border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-6 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
+              <Banknote size={20} />
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Caja Chica</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase">Efectivo Físico</p>
+            </div>
+            <button
+              onClick={() => setCashAccountFilter(cashAccountFilter === 'caja_chica' ? 'all' : 'caja_chica')}
+              className={`ml-auto text-[9px] font-black uppercase px-3 py-1.5 rounded-xl transition-all ${
+                cashAccountFilter === 'caja_chica'
+                  ? 'bg-emerald-500 text-white shadow-md'
+                  : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+              }`}
+            >
+              {cashAccountFilter === 'caja_chica' ? 'Filtrando' : 'Filtrar'}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-1">
+            <div className="bg-white rounded-xl p-3 border border-emerald-100">
+              <p className="text-[8px] font-black uppercase text-slate-400">Entradas</p>
+              <p className="text-xs font-black text-emerald-600">+{balances.cajaChica.in.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-rose-100">
+              <p className="text-[8px] font-black uppercase text-slate-400">Salidas</p>
+              <p className="text-xs font-black text-rose-600">-{balances.cajaChica.out.toLocaleString()}</p>
+            </div>
+            <div className={`rounded-xl p-3 border-2 ${
+              balances.cajaChica.net >= 0 ? 'bg-emerald-500 border-emerald-500' : 'bg-rose-500 border-rose-500'
+            }`}>
+              <p className="text-[8px] font-black uppercase text-white/70">Saldo</p>
+              <p className="text-xs font-black text-white">{balances.cajaChica.net.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* CUENTA BANCO */}
+        <div className="rounded-[2rem] border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-6 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Landmark size={20} />
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600">Cuenta Banco</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase">Reserva / Transferencias</p>
+            </div>
+            <button
+              onClick={() => setCashAccountFilter(cashAccountFilter === 'banco' ? 'all' : 'banco')}
+              className={`ml-auto text-[9px] font-black uppercase px-3 py-1.5 rounded-xl transition-all ${
+                cashAccountFilter === 'banco'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
+              }`}
+            >
+              {cashAccountFilter === 'banco' ? 'Filtrando' : 'Filtrar'}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-1">
+            <div className="bg-white rounded-xl p-3 border border-emerald-100">
+              <p className="text-[8px] font-black uppercase text-slate-400">Entradas</p>
+              <p className="text-xs font-black text-emerald-600">+{balances.banco.in.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-rose-100">
+              <p className="text-[8px] font-black uppercase text-slate-400">Salidas</p>
+              <p className="text-xs font-black text-rose-600">-{balances.banco.out.toLocaleString()}</p>
+            </div>
+            <div className={`rounded-xl p-3 border-2 ${
+              balances.banco.net >= 0 ? 'bg-indigo-600 border-indigo-600' : 'bg-rose-500 border-rose-500'
+            }`}>
+              <p className="text-[8px] font-black uppercase text-white/70">Saldo</p>
+              <p className="text-xs font-black text-white">{balances.banco.net.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-6 mb-10">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="flex gap-2">
@@ -929,10 +1043,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
             </div>
           </div>
         </div>
+      </div>
 
-        {/* GENERADOR DE REPORTES CONFIGURABLE */}
-        <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100/50 flex flex-wrap items-center justify-between gap-6">
-          <div className="flex flex-wrap items-center gap-6">
+      {/* GENERADOR DE REPORTES CONFIGURABLE */}
+      <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100/50 flex flex-wrap items-center justify-between gap-6 mb-10">
+        <div className="flex flex-wrap items-center gap-6">
             <div className="space-y-2">
               <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
                 Tipo de Reporte
@@ -979,22 +1094,35 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 ))}
               </select>
             </div>
-          </div>
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
+                Tipo de Caja
+              </label>
+              <select
+                value={cashAccountFilter}
+                onChange={(e) => setCashAccountFilter(e.target.value)}
+                className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-44"
+              >
+                <option value="all">Ambas Cajas</option>
+                <option value="caja_chica">💵 Caja Chica</option>
+                <option value="banco">🏦 Cuenta Banco</option>
+              </select>
+            </div>
+        </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleGenerateCustomReport}
-              className="flex items-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95"
-            >
-              <Download size={18} /> Generar Reporte
-            </button>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-3 bg-emerald-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-900 transition-all transform active:scale-95"
-            >
-              <FileText size={18} /> Exportar a Excel
-            </button>
-          </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleGenerateCustomReport}
+            className="flex items-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95"
+          >
+            <Download size={18} /> Generar Reporte
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-3 bg-emerald-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-900 transition-all transform active:scale-95"
+          >
+            <FileText size={18} /> Exportar a Excel
+          </button>
         </div>
       </div>
 
@@ -1005,6 +1133,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               <th className="px-8 py-5">Fecha</th>
               <th className="px-8 py-5">Cuenta / Concepto</th>
               <th className="px-8 py-5">Descripción</th>
+              <th className="px-8 py-5">Caja</th>
               <th className="px-8 py-5 text-right">Entrada (+)</th>
               <th className="px-8 py-5 text-right">Salida (-)</th>
               <th className="px-8 py-5 text-right">Acción</th>
@@ -1020,6 +1149,17 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 </td>
                 <td className="px-8 py-5 text-[10px] font-bold text-slate-500 uppercase">
                   {entry.description || entry.desc}
+                </td>
+                <td className="px-8 py-5">
+                  {(entry.cash_account || 'caja_chica') === 'banco' ? (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100">
+                      <Landmark size={10} /> Banco
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg border border-emerald-100">
+                      <Banknote size={10} /> Caja
+                    </span>
+                  )}
                 </td>
                 <td className="px-8 py-5 text-right font-black text-emerald-600 text-sm">
                   {entry.type === 'income' ? `RD$ ${entry.amount.toLocaleString()}` : '-'}
@@ -1219,20 +1359,58 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 />
               </div>
 
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
-                  Método de Pago
-                </label>
-                <select
-                  value={entryMethod}
-                  onChange={(e) => setEntryMethod(e.target.value)}
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
-                >
-                  <option value="cash">Efectivo</option>
-                  <option value="transfer">Transferencia</option>
-                  <option value="card">Tarjeta</option>
-                  <option value="check">Cheque</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                    Método de Pago
+                  </label>
+                  <select
+                    value={entryMethod}
+                    onChange={(e) => {
+                      const m = e.target.value;
+                      setEntryMethod(m);
+                      // Auto-assign: cash → caja_chica, rest → banco
+                      setEntryCashAccount(m === 'cash' ? 'caja_chica' : 'banco');
+                    }}
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="transfer">Transferencia</option>
+                    <option value="card">Tarjeta</option>
+                    <option value="check">Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block flex items-center gap-1">
+                    Tipo de Caja
+                  </label>
+                  <div className="flex gap-2 h-[58px]">
+                    <button
+                      type="button"
+                      onClick={() => setEntryCashAccount('caja_chica')}
+                      className={`flex-1 rounded-2xl text-[9px] font-black uppercase tracking-wide transition-all flex flex-col items-center justify-center gap-0.5 border-2 ${
+                        entryCashAccount === 'caja_chica'
+                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
+                          : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-emerald-200'
+                      }`}
+                    >
+                      <Banknote size={14} />
+                      Caja Chica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEntryCashAccount('banco')}
+                      className={`flex-1 rounded-2xl text-[9px] font-black uppercase tracking-wide transition-all flex flex-col items-center justify-center gap-0.5 border-2 ${
+                        entryCashAccount === 'banco'
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100'
+                          : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-indigo-200'
+                      }`}
+                    >
+                      <Landmark size={14} />
+                      Banco
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div>

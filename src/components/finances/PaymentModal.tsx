@@ -222,34 +222,46 @@ export const PaymentModal = ({
     if (isSubmittingPayment.current) return;
     isSubmittingPayment.current = true;
 
-    // Calcular el saldo pendiente real de las facturas que se van a cobrar
-    const totalPendingBalance = invoicesList.reduce((sum, inv) => {
-      const paid = studentTransactions
-        .filter((t) => t.invoice_id === inv.id)
-        .reduce((s, t) => s + Number(t.amount_paid), 0);
-      return sum + Math.max(0, Number(inv.amount_final) - paid);
-    }, 0);
-
     // Preparar lista de métodos de pago
     let payments = paymentMethods
       .map((pm) => ({ ...pm, amount: Number(pm.amount) }))
       .filter((pm) => pm.amount > 0);
 
-    if (payments.length === 0) {
-      if (totalPendingBalance === 0) {
-        // Es becado o saldo cero, creamos un pago virtual de 0 para generar la transacción y el recibo
-        payments = [{ method: paymentMethods[0]?.method || 'cash', amount: 0, reference_number: '' }];
-      } else {
-        isSubmittingPayment.current = false;
-        return toast.error('Debe ingresar al menos un método de pago con monto mayor a 0');
-      }
-    }
-
     const totalPaid = payments.reduce((sum, pm) => sum + pm.amount, 0);
 
     try {
-      // Verificación de seguridad en tiempo real: comprobar si alguna factura ya fue pagada por otra transacción paralela
       const invoiceIds = invoicesList.map((inv) => inv.id);
+
+      // === FIX RACE CONDITION ===
+      // Fetch fresco de transacciones en tiempo real, antes de calcular cualquier balance.
+      // El useEffect que carga studentTransactions es async y puede no haber terminado cuando
+      // el usuario presiona "Cobrar", lo que producía saldos incorrectos (cuota extra/duplicada).
+      const { data: freshTxs } = await supabase
+        .from('finance_transactions')
+        .select('invoice_id, amount_paid')
+        .in('invoice_id', invoiceIds);
+      const freshTransactions = freshTxs || [];
+      // === FIN FIX ===
+
+      // Calcular el saldo pendiente real usando datos frescos de la DB
+      const totalPendingBalance = invoicesList.reduce((sum, inv) => {
+        const paid = freshTransactions
+          .filter((t) => t.invoice_id === inv.id)
+          .reduce((s, t) => s + Number(t.amount_paid), 0);
+        return sum + Math.max(0, Number(inv.amount_final) - paid);
+      }, 0);
+
+      if (payments.length === 0) {
+        if (totalPendingBalance === 0) {
+          // Es becado o saldo cero, creamos un pago virtual de 0 para generar la transacción y el recibo
+          payments = [{ method: paymentMethods[0]?.method || 'cash', amount: 0, reference_number: '' }];
+        } else {
+          isSubmittingPayment.current = false;
+          return toast.error('Debe ingresar al menos un método de pago con monto mayor a 0');
+        }
+      }
+
+      // Verificación de seguridad en tiempo real: comprobar si alguna factura ya fue pagada por otra transacción paralela
       const { data: latestInvoices, error: checkError } = await supabase
         .from('finance_invoices')
         .select('id, status, concept')
@@ -283,9 +295,9 @@ export const PaymentModal = ({
           });
         });
       } else {
-        // 1. Obtener facturas con sus saldos pendientes correspondientes
+        // 1. Obtener facturas con sus saldos pendientes usando datos frescos de DB
         const invoicesWithBalance = invoicesList.map((inv) => {
-          const paid = studentTransactions
+          const paid = freshTransactions
             .filter((t) => t.invoice_id === inv.id)
             .reduce((sum, t) => sum + Number(t.amount_paid), 0);
           const balance = Math.max(0, Number(inv.amount_final) - paid);
