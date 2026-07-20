@@ -389,16 +389,27 @@ const AccountsConfig = ({ categories, onSaveCategory, onDeleteCategory }: any) =
                 </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Monto a transferir (RD$)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={transferAmount || ''}
-                  onChange={(e) => setTransferAmount(Number(e.target.value))}
-                  placeholder="0.00"
-                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-2xl font-black focus:ring-2 focus:ring-indigo-600"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Monto a transferir (RD$)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={transferAmount || ''}
+                    onChange={(e) => setTransferAmount(Number(e.target.value))}
+                    placeholder="0.00"
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-2xl font-black focus:ring-2 focus:ring-indigo-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Fecha de Transferencia</label>
+                  <input
+                    type="date"
+                    value={transferDate}
+                    onChange={(e) => setTransferDate(e.target.value)}
+                    className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-black focus:ring-2 focus:ring-indigo-600 h-full"
+                  />
+                </div>
               </div>
 
               <div>
@@ -560,6 +571,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [transferDesc, setTransferDesc] = useState('');
   const [transferFrom, setTransferFrom] = useState('caja_chica');
   const [transferTo, setTransferTo] = useState('banco');
+  const [transferDate, setTransferDate] = useState(getLocalDateString);
 
   useEffect(() => {
     if (showModal) {
@@ -683,7 +695,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     setIsSavingEntry(true);
     try {
-      const date = getLocalDateString();
+      const date = transferDate;
       const descStr = transferDesc ? ` (${transferDesc})` : '';
 
       // Egreso
