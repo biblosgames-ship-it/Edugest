@@ -314,12 +314,11 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       // FETCH FRESCO PARA EVITAR DUPLICADOS POR RACE CONDITIONS
       const { data: existingInvoices } = await supabase
         .from('finance_invoices')
-        .select('concept')
+        .select('concept, product_id')
         .eq('student_id', studentId)
-        .eq('period', currentYear)
-        .is('product_id', null);
+        .eq('period', currentYear);
       
-      const freshStudentInvoices = existingInvoices || [];
+      const freshStudentInvoices = (existingInvoices || []).filter(inv => !inv.product_id);
 
       const newInvoices = [];
       const periodYearMatch = currentYear.match(/^(\d{4})/);
@@ -347,7 +346,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       // Inscripción (solo si no existe)
       const hasEnrollment = freshStudentInvoices.some(
-        (inv) => inv.concept.toLowerCase().includes('inscrip') || inv.concept.toLowerCase().includes('inscrib')
+        (inv) => (inv.concept || '').toLowerCase().includes('inscrip') || (inv.concept || '').toLowerCase().includes('inscrib')
       );
       if (!hasEnrollment) {
         newInvoices.push({
@@ -375,7 +374,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       for (let i = 0; i < monthsCount; i++) {
         const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
-        const exists = freshStudentInvoices.some((inv) => inv.concept === conceptName);
+        const exists = freshStudentInvoices.some((inv) => (inv.concept || '').trim() === conceptName);
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
