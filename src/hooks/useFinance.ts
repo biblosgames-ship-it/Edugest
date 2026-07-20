@@ -372,7 +372,7 @@ export const useFinance = (options?: {
             type: 'income',
             amount: Number(paymentData.amount_paid),
             method: paymentData.payment_method,
-            cash_account: paymentData.payment_method === 'cash' ? 'caja_chica' : 'banco'
+            cash_account: 'caja_chica'
           });
         } catch (e) {
           console.error('Error auto-syncing transaction with ledger:', e);
@@ -706,7 +706,7 @@ export const useFinance = (options?: {
                 type: 'income',
                 amount: Number(inv.amount_final),
                 method: invoiceData.payment_method,
-                cash_account: invoiceData.payment_method === 'cash' ? 'caja_chica' : 'banco'
+                cash_account: 'caja_chica'
               };
             });
 

@@ -281,6 +281,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
   const handleGenerateInvoices = async () => {
     if (!student || isGenerating || isGeneratingRef.current) return;
     isGeneratingRef.current = true;
+    setIsGenerating(true);
 
     // BUSCAR PLAN: Primero por Grado exacto, luego por Nivel como respaldo
     const courseId = student.course_id || student.courseId;
@@ -292,30 +293,37 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     if (!plan && cleanLevel) {
       // Si no hay plan por Grado, buscar cualquier plan que pertenezca al mismo Nivel
       plan = paymentPlans.find((p) => {
-        const course = state.courses?.find((c) => c.id === p.course_id);
-        return course?.level?.trim() === cleanLevel;
+        const c = state.courses?.find((x) => x.id === p.course_id);
+        return c?.level?.trim() === cleanLevel;
       });
     }
 
     if (!plan) {
       toast.error('No hay precios configurados para este grado o nivel.');
+      isGeneratingRef.current = false;
+      setIsGenerating(false);
       return;
     }
 
-    console.log('[DEBUG-FINANCE] Alumno:', student.names, student.first_surname);
-    console.log('[DEBUG-FINANCE] Plan resuelto:', plan);
-    console.log('[DEBUG-FINANCE] Facturas cargadas para el periodo activo:', studentInvoices);
-
-    setIsGenerating(true);
     const loadingToast = toast.loading('Generando/completando facturas...');
 
     try {
-      const newInvoices = [];
       const currentCenterId = profile?.center_id || student.center_id;
       const currentYear = selectedYear || '2025-2026';
+      
+      // FETCH FRESCO PARA EVITAR DUPLICADOS POR RACE CONDITIONS
+      const { data: existingInvoices } = await supabase
+        .from('finance_invoices')
+        .select('concept')
+        .eq('student_id', studentId)
+        .eq('period', currentYear)
+        .is('product_id', null);
+      
+      const freshStudentInvoices = existingInvoices || [];
+
+      const newInvoices = [];
       const periodYearMatch = currentYear.match(/^(\d{4})/);
       const baseYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
-      const errorList = [];
 
       // Buscar si el alumno tiene beca
       const studentScholarship = scholarships.find((s) => s.student_id === studentId);
@@ -338,7 +346,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       }
 
       // Inscripción (solo si no existe)
-      const hasEnrollment = studentInvoices.some(
+      const hasEnrollment = freshStudentInvoices.some(
         (inv) => inv.concept.toLowerCase().includes('inscrip') || inv.concept.toLowerCase().includes('inscrib')
       );
       if (!hasEnrollment) {
@@ -357,30 +365,21 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       }
 
       const monthNames = [
-        'Enero',
-        'Febrero',
-        'Marzo',
-        'Abril',
-        'Mayo',
-        'Junio',
-        'Julio',
-        'Agosto',
-        'Septiembre',
-        'Octubre',
-        'Noviembre',
-        'Diciembre'
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
       ];
       const startMonthIdx = (plan.start_month || 9) - 1; // 1-12 a 0-11
       const paymentEndDay = plan.payment_end_day || 10;
+      
+      const monthsCount = Number(plan.months_count) || 10;
 
-      for (let i = 0; i < Number(plan.months_count); i++) {
+      for (let i = 0; i < monthsCount; i++) {
         const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
-        const exists = studentInvoices.some((inv) => inv.concept === conceptName);
+        const exists = freshStudentInvoices.some((inv) => inv.concept === conceptName);
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
         const currentYearNum = baseYear + (startMonthIdx + i >= 12 ? 1 : 0);
-
         const dueDate = new Date(currentYearNum, currentMonthIdx, paymentEndDay);
 
         // Calcular Mensualidad con beca si corresponde
@@ -416,26 +415,19 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
         });
       }
 
-      for (const inv of newInvoices) {
-        const { error } = await supabase.from('finance_invoices').insert(inv);
-        if (error) {
-          console.error(`Error en cuota ${inv.concept}:`, error);
-          errorList.push(`${inv.concept}: ${error.message}`);
-        }
+      if (newInvoices.length > 0) {
+        // Insert en batch atómico
+        const { error } = await supabase.from('finance_invoices').insert(newInvoices);
+        if (error) throw error;
+        toast.success(`¡Generadas ${newInvoices.length} facturas con éxito!`, { id: loadingToast });
+        refresh();
+      } else {
+        toast.success('Todas las cuotas de este periodo ya estaban generadas.', { id: loadingToast });
       }
 
-      if (errorList.length > 0) {
-        toast.error(`Facturación completada con algunos errores:\n${errorList.join('\n')}`, {
-          id: loadingToast,
-          duration: 8000
-        });
-      } else {
-        toast.success('¡Proceso de facturación completado!', { id: loadingToast });
-      }
-      refresh();
     } catch (error: any) {
       console.error('Error:', error);
-      toast.error('Error: ' + error.message, { id: loadingToast });
+      toast.error('Error al generar cuotas: ' + error.message, { id: loadingToast });
     } finally {
       isGeneratingRef.current = false;
       setIsGenerating(false);

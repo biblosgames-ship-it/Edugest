@@ -337,6 +337,103 @@ const AccountsConfig = ({ categories, onSaveCategory, onDeleteCategory }: any) =
         ))}
       </div>
 
+      {/* MODAL DE TRANSFERENCIA ENTRE CAJAS */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black uppercase tracking-tighter">
+                Transferir Fondos
+              </h3>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="p-2 hover:bg-slate-50 rounded-full text-slate-400"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Origen</label>
+                  <select
+                    value={transferFrom}
+                    onChange={(e) => {
+                      setTransferFrom(e.target.value);
+                      if (e.target.value === transferTo) {
+                        setTransferTo(e.target.value === 'caja_chica' ? 'banco' : 'caja_chica');
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                  >
+                    <option value="caja_chica">Caja Chica</option>
+                    <option value="banco">Banco</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Destino</label>
+                  <select
+                    value={transferTo}
+                    onChange={(e) => {
+                      setTransferTo(e.target.value);
+                      if (e.target.value === transferFrom) {
+                        setTransferFrom(e.target.value === 'caja_chica' ? 'banco' : 'caja_chica');
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                  >
+                    <option value="banco">Banco</option>
+                    <option value="caja_chica">Caja Chica</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Monto a transferir (RD$)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={transferAmount || ''}
+                  onChange={(e) => setTransferAmount(Number(e.target.value))}
+                  placeholder="0.00"
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-2xl font-black focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Nota / Descripción (Opcional)</label>
+                <input
+                  type="text"
+                  value={transferDesc}
+                  onChange={(e) => setTransferDesc(e.target.value)}
+                  placeholder="Ej. Cierre del día, depósito en cuenta..."
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4 mt-8 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="flex-1 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveTransfer}
+                  disabled={isSavingEntry || transferAmount <= 0}
+                  className="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl disabled:opacity-50"
+                >
+                  {isSavingEntry ? 'Procesando...' : 'Realizar Transferencia'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE INGRESO / EGRESO */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl">
@@ -458,6 +555,12 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [entryCashAccount, setEntryCashAccount] = useState('caja_chica');
   const [isSavingEntry, setIsSavingEntry] = useState(false);
 
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferAmount, setTransferAmount] = useState(0);
+  const [transferDesc, setTransferDesc] = useState('');
+  const [transferFrom, setTransferFrom] = useState('caja_chica');
+  const [transferTo, setTransferTo] = useState('banco');
+
   useEffect(() => {
     if (showModal) {
       setEntryDate(getLocalDateString());
@@ -568,6 +671,52 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       setEntryCashAccount('caja_chica');
     } catch (e) {
       console.error('Error saving ledger entry:', e);
+    } finally {
+      setIsSavingEntry(false);
+    }
+  };
+
+  const handleSaveTransfer = async () => {
+    if (transferAmount <= 0) return toast.error('Monto inválido');
+    if (transferFrom === transferTo) return toast.error('Las cajas deben ser diferentes');
+    if (isSavingEntry) return;
+
+    setIsSavingEntry(true);
+    try {
+      const date = getLocalDateString();
+      const descStr = transferDesc ? ` (${transferDesc})` : '';
+
+      // Egreso
+      await onSaveEntry({
+        date,
+        account: 'TRANSFERENCIA ENTRE CAJAS',
+        item: 'Transferencia Saliente',
+        description: `Envío a ${transferTo === 'banco' ? 'Banco' : 'Caja Chica'}${descStr}`,
+        type: 'expense',
+        amount: transferAmount,
+        method: 'transfer',
+        cash_account: transferFrom
+      });
+
+      // Ingreso
+      await onSaveEntry({
+        date,
+        account: 'TRANSFERENCIA ENTRE CAJAS',
+        item: 'Transferencia Entrante',
+        description: `Recibo de ${transferFrom === 'caja_chica' ? 'Caja Chica' : 'Banco'}${descStr}`,
+        type: 'income',
+        amount: transferAmount,
+        method: 'transfer',
+        cash_account: transferTo
+      });
+
+      toast.success('Transferencia registrada exitosamente');
+      setShowTransferModal(false);
+      setTransferAmount(0);
+      setTransferDesc('');
+    } catch (e) {
+      console.error('Error in transfer:', e);
+      toast.error('Error al registrar transferencia');
     } finally {
       setIsSavingEntry(false);
     }
@@ -999,9 +1148,17 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 setType('expense');
                 setShowModal(true);
               }}
-              className="flex items-center gap-3 bg-rose-500 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-rose-100"
+              className="flex items-center gap-3 bg-rose-500 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-rose-600 transition-all"
             >
               <TrendingDown size={18} /> Egreso
+            </button>
+            <button
+              onClick={() => {
+                setShowTransferModal(true);
+              }}
+              className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all"
+            >
+              <Landmark size={18} /> Transferir
             </button>
             <button
               onClick={handleCashClosing}
@@ -1369,8 +1526,6 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     onChange={(e) => {
                       const m = e.target.value;
                       setEntryMethod(m);
-                      // Auto-assign: cash → caja_chica, rest → banco
-                      setEntryCashAccount(m === 'cash' ? 'caja_chica' : 'banco');
                     }}
                     className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-600"
                   >
