@@ -321,38 +321,65 @@ export const FinanceDashboard = () => {
     yearTransactions.forEach(t => updateMinMax(t.created_at));
     allExpenses.forEach(e => updateMinMax(e.created_at || e.date));
 
-    // Si no hay datos, mostrar últimos 6 meses por defecto
+    // Si no hay datos, mostrar últimos 30 días por defecto
     if (!hasData) {
       minDate = new Date();
-      minDate.setMonth(minDate.getMonth() - 5);
+      minDate.setDate(minDate.getDate() - 30);
       maxDate = new Date();
     } else {
-      // Asegurar que el gráfico cubra hasta el mes actual si maxDate es anterior
+      // Asegurar que el gráfico cubra hasta la fecha actual si maxDate es anterior
       const now = new Date();
       if (maxDate < now) maxDate = now;
     }
 
-    // Normalizar a primer día del mes para la iteración
-    minDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    maxDate = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-
-    const current = new Date(minDate);
-    while (current <= maxDate) {
-      const m = String(current.getMonth() + 1).padStart(2, '0');
-      const y = current.getFullYear();
-      const monthPrefix = `${y}-${m}`;
-
-      const tInc = transactions.filter((t) => (t.created_at || '').startsWith(monthPrefix)).reduce((acc, t) => acc + Number(t.amount_paid), 0);
-      const mOutOld = expenses.filter(e => e.type === 'expense' && e.category !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
-      const mOutNew = ledgerEntries.filter(e => e.type === 'expense' && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
-
-      chartData.push({
-        name: new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(current).toUpperCase(),
-        ingresos: tInc,
-        gastos: mOutOld + mOutNew
-      });
+    const diffDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 60) {
+      // AGRUPAR POR DÍA
+      minDate.setHours(0,0,0,0);
       
-      current.setMonth(current.getMonth() + 1);
+      const current = new Date(minDate);
+      while (current <= maxDate) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, '0');
+        const d = String(current.getDate()).padStart(2, '0');
+        const dayPrefix = `${y}-${m}-${d}`;
+
+        const tInc = transactions.filter((t) => (t.created_at || '').startsWith(dayPrefix)).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+        const mOutOld = expenses.filter(e => e.type === 'expense' && e.category !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(dayPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
+        const mOutNew = ledgerEntries.filter(e => e.type === 'expense' && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(dayPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
+
+        chartData.push({
+          name: `${d} ${new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(current).toUpperCase()}`,
+          ingresos: tInc,
+          gastos: mOutOld + mOutNew
+        });
+        
+        current.setDate(current.getDate() + 1);
+      }
+    } else {
+      // AGRUPAR POR MES
+      minDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+      maxDate = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+
+      const current = new Date(minDate);
+      while (current <= maxDate) {
+        const m = String(current.getMonth() + 1).padStart(2, '0');
+        const y = current.getFullYear();
+        const monthPrefix = `${y}-${m}`;
+
+        const tInc = transactions.filter((t) => (t.created_at || '').startsWith(monthPrefix)).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+        const mOutOld = expenses.filter(e => e.type === 'expense' && e.category !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
+        const mOutNew = ledgerEntries.filter(e => e.type === 'expense' && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
+
+        chartData.push({
+          name: new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(current).toUpperCase(),
+          ingresos: tInc,
+          gastos: mOutOld + mOutNew
+        });
+        
+        current.setMonth(current.getMonth() + 1);
+      }
     }
 
     // === 3. INGRESOS POR CONCEPTO ===
@@ -521,7 +548,7 @@ export const FinanceDashboard = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Flujo de Caja (Últimos 6 meses)
+              Flujo de Caja (Histórico)
             </h3>
             <p className="text-sm font-black text-slate-800 mt-1">Comparativa Ingresos vs Egresos</p>
           </div>
