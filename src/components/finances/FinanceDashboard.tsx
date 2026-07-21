@@ -39,10 +39,11 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'
 
 export const FinanceDashboard = () => {
   const { state } = useApp();
-  const { invoices, transactions, expenses, products, createProductInvoice, loading } = useFinance({
+  const { invoices, transactions, expenses, ledgerEntries, products, loading } = useFinance({
     invoices: true,
     transactions: true,
     expenses: true,
+    ledger: true,
     products: true
   });
 
@@ -238,49 +239,84 @@ export const FinanceDashboard = () => {
 
   const stats = useMemo(() => {
     // 1. Cálculos de Cajas (Filtrado por dashboardDate = HOY u otra fecha seleccionada)
-    const dailyTransactions = transactions.filter(t => t.created_at.startsWith(dashboardDate));
-    const dailyExpenses = expenses.filter(e => (e.created_at?.startsWith(dashboardDate) || e.date === dashboardDate));
+    const dailyLedger = ledgerEntries.filter(e => e.date === dashboardDate || e.created_at?.startsWith(dashboardDate));
 
-    const incomeCajaChica = dailyTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    const extraIncomeCajaChica = dailyExpenses
-      .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica')
-      .reduce((acc, e) => acc + Number(e.amount), 0);
-    const extraIncomeBanco = dailyExpenses
-      .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco')
-      .reduce((acc, e) => acc + Number(e.amount), 0);
+    const sumIn = (entries: any[]) => entries.filter(e => e.type === 'income').reduce((acc, e) => acc + Number(e.amount), 0);
+    const sumOut = (entries: any[]) => entries.filter(e => e.type === 'expense').reduce((acc, e) => acc + Number(e.amount), 0);
 
-    const outCajaChica = dailyExpenses
-      .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica')
-      .reduce((acc, e) => acc + Number(e.amount), 0);
-    const outBanco = dailyExpenses
-      .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco')
-      .reduce((acc, e) => acc + Number(e.amount), 0);
+    const cajaChicaEntries = dailyLedger.filter(e => (e.cash_account || 'caja_chica') === 'caja_chica');
+    const bancoEntries = dailyLedger.filter(e => (e.cash_account || 'caja_chica') === 'banco');
 
     const cajaChica = {
-      in: incomeCajaChica + extraIncomeCajaChica,
-      out: outCajaChica,
-      net: incomeCajaChica + extraIncomeCajaChica - outCajaChica
+      in: sumIn(cajaChicaEntries),
+      out: sumOut(cajaChicaEntries),
+      net: sumIn(cajaChicaEntries) - sumOut(cajaChicaEntries)
     };
 
     const banco = {
-      in: extraIncomeBanco,
-      out: outBanco,
-      net: extraIncomeBanco - outBanco
+      in: sumIn(bancoEntries),
+      out: sumOut(bancoEntries),
+      net: sumIn(bancoEntries) - sumOut(bancoEntries)
     };
 
     // Filtros por Año Académico para Gráficos
     const currentYear = state.selectedYear || '2025-2026';
-    
-    // Invoices del año seleccionado
-    const yearInvoices = invoices.filter(i => i.period === currentYear);
-    const yearInvoiceIds = new Set(yearInvoices.map(i => i.id));
-    
-    // Transacciones del año seleccionado (las que pertenecen a facturas de este año)
-    const yearTransactions = transactions.filter(t => yearInvoiceIds.has(t.invoice_id) || !t.invoice_id);
+    const yearStart = parseInt(currentYear.split('-')[0], 10);
+    const startDate = new Date(yearStart, 7, 1); // Aug 1
+    const endDate = new Date(yearStart + 1, 6, 31); // Jul 31
 
-    const totalIncome = yearTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    
-    // Morosidad del año seleccionado
+    const yearLedger = ledgerEntries.filter(e => {
+      const d = new Date(e.date);
+      return d >= startDate && d <= endDate;
+    });
+
+    const totalIncome = sumIn(yearLedger);
+
+    // 2. Gráfico Flujo de Caja (Últimos 6 meses)
+    const chartData = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const y = d.getFullYear();
+      const monthPrefix = `${y}-${m}`;
+
+      const monthLedger = ledgerEntries.filter((e) => e.date.startsWith(monthPrefix));
+      const ingresos = sumIn(monthLedger);
+      const egresos = sumOut(monthLedger.filter(e => e.account !== 'TRANSFERENCIA ENTRE CAJAS'));
+
+      chartData.push({
+        name: new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(d).toUpperCase(),
+        Ingresos: ingresos,
+        Egresos: egresos
+      });
+    }
+
+    // 3. Ingresos por Concepto (basado en cuentas de ledger)
+    const incomeByConceptMap: Record<string, number> = {};
+    yearLedger.filter(e => e.type === 'income').forEach(e => {
+      let concept = 'Otros';
+      const acc = e.account?.toUpperCase() || '';
+      if (acc.includes('COLEGIATURA')) concept = 'Cuotas';
+      else if (acc.includes('INSCRIPCI')) concept = 'Inscripción';
+      else if (acc.includes('INVENTARIO') || acc.includes('UNIFORME') || acc.includes('LIBRO') || acc.includes('MATERIAL')) concept = 'Ventas Inventario';
+      
+      incomeByConceptMap[concept] = (incomeByConceptMap[concept] || 0) + Number(e.amount);
+    });
+    const incomeByConcept = Object.entries(incomeByConceptMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+    // 4. Egresos por Categoría
+    const expensesByCategoryMap: Record<string, number> = {};
+    yearLedger.filter(e => e.type === 'expense').forEach(e => {
+      const cat = e.account || 'Otros';
+      if (cat !== 'TRANSFERENCIA ENTRE CAJAS') {
+        expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
+      }
+    });
+    const expensesByCategory = Object.entries(expensesByCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+    // 5. Nivel de Cobro y Morosidad (a partir de invoices)
+    const yearInvoices = invoices.filter(i => i.period === currentYear);
     const overdueInvoices = yearInvoices.filter(
       (i) =>
         !String(i.concept).toLowerCase().includes('inscrib') &&
@@ -288,83 +324,12 @@ export const FinanceDashboard = () => {
         (i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date()))
     );
     const totalOverdue = overdueInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
-
-    // 2. Gráfico de Línea de Tiempo (Últimos 6 meses)
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const chartDataMap: Record<string, { name: string; ingresos: number; gastos: number; order: number }> = {};
     
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      chartDataMap[key] = {
-        name: monthNames[d.getMonth()],
-        ingresos: 0,
-        gastos: 0,
-        order: d.getTime()
-      };
-    }
-
-    transactions.forEach(t => {
-      const d = new Date(t.created_at);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (chartDataMap[key]) chartDataMap[key].ingresos += Number(t.amount_paid);
-    });
-
-    expenses.forEach(e => {
-      const d = new Date(e.created_at || e.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (chartDataMap[key]) {
-        if (e.type === 'income') chartDataMap[key].ingresos += Number(e.amount);
-        else chartDataMap[key].gastos += Number(e.amount);
-      }
-    });
-
-    const chartData = Object.values(chartDataMap).sort((a, b) => a.order - b.order);
-
-    // 3. Ingresos por Concepto
-    const incomeByConceptMap: Record<string, number> = {};
-    yearTransactions.forEach(t => {
-      const inv = yearInvoices.find(i => i.id === t.invoice_id);
-      let concept = 'Varios';
-      if (inv) {
-        if (inv.product_id) concept = 'Ventas Inventario';
-        else if (String(inv.concept).toLowerCase().includes('inscrip')) concept = 'Inscripción';
-        else if (String(inv.concept).toLowerCase().includes('cuota')) concept = 'Cuotas';
-        else concept = 'Otros Cargos';
-      } else {
-        if (String(t.notes).toLowerCase().includes('venta')) concept = 'Ventas Inventario';
-      }
-      incomeByConceptMap[concept] = (incomeByConceptMap[concept] || 0) + Number(t.amount_paid);
-    });
-    const incomeByConcept = Object.entries(incomeByConceptMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
-
-    // 4. Egresos por Categoría
-    const expensesByCategoryMap: Record<string, number> = {};
-    // Asumimos que expenses para las gráficas inferiores queremos mostrarlas todas del año. 
-    // Wait, expenses doesn't have period. We can filter expenses from August 1st to July 31 of currentYear.
-    const yearStart = parseInt(currentYear.split('-')[0], 10);
-    const startDate = new Date(yearStart, 7, 1); // Aug 1
-    const endDate = new Date(yearStart + 1, 6, 31); // Jul 31
-    
-    const yearExpenses = expenses.filter(e => {
-      const d = new Date(e.created_at || e.date);
-      return d >= startDate && d <= endDate;
-    });
-
-    yearExpenses.filter(e => e.type === 'expense').forEach(e => {
-      const cat = e.category || e.account || 'Otros';
-      if (cat !== 'TRANSFERENCIA ENTRE CAJAS') {
-        expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
-      }
-    });
-    const expensesByCategory = Object.entries(expensesByCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
-
-    // 5. Becas Aplicadas (sólo del año seleccionado)
+    // 6. Becas Aplicadas (sólo del año seleccionado)
     const scholarshipsApplied = yearInvoices.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
 
     return { cajaChica, banco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
-  }, [invoices, transactions, expenses, dashboardDate, state.selectedYear]);
+  }, [invoices, ledgerEntries, dashboardDate, state.selectedYear]);
 
   if (loading)
     return (
