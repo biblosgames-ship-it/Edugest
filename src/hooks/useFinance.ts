@@ -102,14 +102,32 @@ export const useFinance = (options?: {
         keys.push('invoices');
       }
       if (fetchTransactions) {
-        promises.push(
-          supabase
-            .from('finance_transactions')
-            .select('*, students(names, first_surname)')
-            .eq('center_id', centerId)
-            .order('created_at', { ascending: false })
-            .limit(500)
-        );
+        const fetchAllTransactions = async () => {
+          let allT: any[] = [];
+          let from = 0;
+          const limit = 1000;
+          let hasMore = true;
+
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('finance_transactions')
+              .select('*, students(names, first_surname)')
+              .eq('center_id', centerId)
+              .order('created_at', { ascending: false })
+              .range(from, from + limit - 1);
+
+            if (error) return { data: null, error };
+            if (data && data.length > 0) {
+              allT = [...allT, ...data];
+              if (data.length < limit) hasMore = false;
+              else from += limit;
+            } else {
+              hasMore = false;
+            }
+          }
+          return { data: allT, error: null };
+        };
+        promises.push(fetchAllTransactions());
         keys.push('transactions');
       }
       if (fetchScholarships) {
@@ -122,13 +140,32 @@ export const useFinance = (options?: {
         keys.push('scholarships');
       }
       if (fetchExpenses) {
-        promises.push(
-          supabase
-            .from('finance_expenses')
-            .select('*, finance_suppliers(name)')
-            .eq('center_id', centerId)
-            .order('expense_date', { ascending: false })
-        );
+        const fetchAllExpenses = async () => {
+          let allE: any[] = [];
+          let from = 0;
+          const limit = 1000;
+          let hasMore = true;
+
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('finance_expenses')
+              .select('*, finance_suppliers(name)')
+              .eq('center_id', centerId)
+              .order('expense_date', { ascending: false })
+              .range(from, from + limit - 1);
+
+            if (error) return { data: null, error };
+            if (data && data.length > 0) {
+              allE = [...allE, ...data];
+              if (data.length < limit) hasMore = false;
+              else from += limit;
+            } else {
+              hasMore = false;
+            }
+          }
+          return { data: allE, error: null };
+        };
+        promises.push(fetchAllExpenses());
         keys.push('expenses');
       }
       if (fetchSuppliers) {

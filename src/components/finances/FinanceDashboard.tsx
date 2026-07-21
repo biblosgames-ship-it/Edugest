@@ -231,20 +231,28 @@ export const FinanceDashboard = () => {
     return state.students.find((s) => s.id === saleForm.student_id);
   }, [state.students, saleForm.student_id]);
 
+  const [dashboardDate, setDashboardDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+
   const stats = useMemo(() => {
-    // 1. Cálculos de Cajas
-    const incomeCajaChica = transactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    const extraIncomeCajaChica = expenses
+    // 1. Cálculos de Cajas (Filtrado por dashboardDate = HOY u otra fecha seleccionada)
+    const dailyTransactions = transactions.filter(t => t.created_at.startsWith(dashboardDate));
+    const dailyExpenses = expenses.filter(e => (e.created_at?.startsWith(dashboardDate) || e.date === dashboardDate));
+
+    const incomeCajaChica = dailyTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const extraIncomeCajaChica = dailyExpenses
       .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica')
       .reduce((acc, e) => acc + Number(e.amount), 0);
-    const extraIncomeBanco = expenses
+    const extraIncomeBanco = dailyExpenses
       .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco')
       .reduce((acc, e) => acc + Number(e.amount), 0);
 
-    const outCajaChica = expenses
+    const outCajaChica = dailyExpenses
       .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica')
       .reduce((acc, e) => acc + Number(e.amount), 0);
-    const outBanco = expenses
+    const outBanco = dailyExpenses
       .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco')
       .reduce((acc, e) => acc + Number(e.amount), 0);
 
@@ -260,10 +268,20 @@ export const FinanceDashboard = () => {
       net: extraIncomeBanco - outBanco
     };
 
-    const totalIncome = cajaChica.in + banco.in;
+    // Filtros por Año Académico para Gráficos
+    const currentYear = state.selectedYear || '2025-2026';
     
-    // Morosidad
-    const overdueInvoices = invoices.filter(
+    // Invoices del año seleccionado
+    const yearInvoices = invoices.filter(i => i.period === currentYear);
+    const yearInvoiceIds = new Set(yearInvoices.map(i => i.id));
+    
+    // Transacciones del año seleccionado (las que pertenecen a facturas de este año)
+    const yearTransactions = transactions.filter(t => yearInvoiceIds.has(t.invoice_id) || !t.invoice_id);
+
+    const totalIncome = yearTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    
+    // Morosidad del año seleccionado
+    const overdueInvoices = yearInvoices.filter(
       (i) =>
         !String(i.concept).toLowerCase().includes('inscrib') &&
         !String(i.concept).toLowerCase().includes('inscrip') &&
@@ -306,8 +324,8 @@ export const FinanceDashboard = () => {
 
     // 3. Ingresos por Concepto
     const incomeByConceptMap: Record<string, number> = {};
-    transactions.forEach(t => {
-      const inv = invoices.find(i => i.id === t.invoice_id);
+    yearTransactions.forEach(t => {
+      const inv = yearInvoices.find(i => i.id === t.invoice_id);
       let concept = 'Varios';
       if (inv) {
         if (inv.product_id) concept = 'Ventas Inventario';
@@ -323,7 +341,18 @@ export const FinanceDashboard = () => {
 
     // 4. Egresos por Categoría
     const expensesByCategoryMap: Record<string, number> = {};
-    expenses.filter(e => e.type === 'expense').forEach(e => {
+    // Asumimos que expenses para las gráficas inferiores queremos mostrarlas todas del año. 
+    // Wait, expenses doesn't have period. We can filter expenses from August 1st to July 31 of currentYear.
+    const yearStart = parseInt(currentYear.split('-')[0], 10);
+    const startDate = new Date(yearStart, 7, 1); // Aug 1
+    const endDate = new Date(yearStart + 1, 6, 31); // Jul 31
+    
+    const yearExpenses = expenses.filter(e => {
+      const d = new Date(e.created_at || e.date);
+      return d >= startDate && d <= endDate;
+    });
+
+    yearExpenses.filter(e => e.type === 'expense').forEach(e => {
       const cat = e.category || e.account || 'Otros';
       if (cat !== 'TRANSFERENCIA ENTRE CAJAS') {
         expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
@@ -331,11 +360,11 @@ export const FinanceDashboard = () => {
     });
     const expensesByCategory = Object.entries(expensesByCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
 
-    // 5. Becas Aplicadas
-    const scholarshipsApplied = invoices.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
+    // 5. Becas Aplicadas (sólo del año seleccionado)
+    const scholarshipsApplied = yearInvoices.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
 
     return { cajaChica, banco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
-  }, [invoices, transactions, expenses]);
+  }, [invoices, transactions, expenses, dashboardDate, state.selectedYear]);
 
   if (loading)
     return (
@@ -361,12 +390,25 @@ export const FinanceDashboard = () => {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleOpenSale}
-          className="flex items-center gap-3 bg-emerald-500 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-emerald-100/50"
-        >
-          <ShoppingCart size={18} /> Nueva Venta (Facturar)
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-2">
+              Fecha de Cuadre (Cajas)
+            </label>
+            <input
+              type="date"
+              value={dashboardDate}
+              onChange={(e) => setDashboardDate(e.target.value)}
+              className="bg-slate-50 border-none rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+            />
+          </div>
+          <button
+            onClick={handleOpenSale}
+            className="flex items-center gap-3 bg-emerald-500 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-emerald-100/50"
+          >
+            <ShoppingCart size={18} /> Nueva Venta
+          </button>
+        </div>
       </div>
 
       {/* 1. SECCIONES DE CAJAS (CAJA CHICA Y BANCO) */}
@@ -445,7 +487,7 @@ export const FinanceDashboard = () => {
             <Calendar size={14} /> Histórico
           </div>
         </div>
-        <div className="h-[350px] w-full">
+        <div className="h-[250px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={stats.chartData}>
               <defs>
