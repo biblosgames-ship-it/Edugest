@@ -579,6 +579,10 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     try {
       await onSaveEntry(newEntry);
       toast.success('Transacción registrada con éxito');
+      
+      if (entryDate < startDate) setStartDate(entryDate);
+      if (entryDate > endDate) setEndDate(entryDate);
+
       setShowModal(false);
       setCart([]);
       setDesc('');
@@ -633,6 +637,10 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       });
 
       toast.success('Transferencia registrada exitosamente');
+      
+      if (date < startDate) setStartDate(date);
+      if (date > endDate) setEndDate(date);
+
       setShowTransferModal(false);
       setTransferAmount(0);
       setTransferDesc('');
