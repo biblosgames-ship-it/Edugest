@@ -11,7 +11,9 @@ import {
   X,
   ShoppingCart,
   Users,
-  Trash2
+  Trash2,
+  Banknote,
+  GraduationCap
 } from 'lucide-react';
 import {
   BarChart,
@@ -32,6 +34,8 @@ import { useFinance } from '../../hooks/useFinance';
 import { useApp } from '../../context/AppContext';
 import { PaymentModal } from './PaymentModal';
 import { toast } from 'react-hot-toast';
+
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1'];
 
 export const FinanceDashboard = () => {
   const { state } = useApp();
@@ -76,7 +80,7 @@ export const FinanceDashboard = () => {
       }
     });
 
-    return result;
+    return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [transactions]);
 
   // Estados para Modal de Venta y Carrito
@@ -228,10 +232,37 @@ export const FinanceDashboard = () => {
   }, [state.students, saleForm.student_id]);
 
   const stats = useMemo(() => {
-    const totalIncome = transactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    const totalExpenses = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
-    const netProfit = totalIncome - totalExpenses;
+    // 1. Cálculos de Cajas
+    const incomeCajaChica = transactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const extraIncomeCajaChica = expenses
+      .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica')
+      .reduce((acc, e) => acc + Number(e.amount), 0);
+    const extraIncomeBanco = expenses
+      .filter((e) => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco')
+      .reduce((acc, e) => acc + Number(e.amount), 0);
 
+    const outCajaChica = expenses
+      .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica')
+      .reduce((acc, e) => acc + Number(e.amount), 0);
+    const outBanco = expenses
+      .filter((e) => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco')
+      .reduce((acc, e) => acc + Number(e.amount), 0);
+
+    const cajaChica = {
+      in: incomeCajaChica + extraIncomeCajaChica,
+      out: outCajaChica,
+      net: incomeCajaChica + extraIncomeCajaChica - outCajaChica
+    };
+
+    const banco = {
+      in: extraIncomeBanco,
+      out: outBanco,
+      net: extraIncomeBanco - outBanco
+    };
+
+    const totalIncome = cajaChica.in + banco.in;
+    
+    // Morosidad
     const overdueInvoices = invoices.filter(
       (i) =>
         !String(i.concept).toLowerCase().includes('inscrib') &&
@@ -240,16 +271,70 @@ export const FinanceDashboard = () => {
     );
     const totalOverdue = overdueInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
 
-    // Datos para gráfico de barras (Últimos 6 meses - Simulado con datos reales si existen)
-    const chartData = [
-      { name: 'Ene', ingresos: 45000, gastos: 32000 },
-      { name: 'Feb', ingresos: 52000, gastos: 34000 },
-      { name: 'Mar', ingresos: 48000, gastos: 31000 },
-      { name: 'Abr', ingresos: 61000, gastos: 38000 },
-      { name: 'May', ingresos: totalIncome, gastos: totalExpenses }
-    ];
+    // 2. Gráfico de Línea de Tiempo (Últimos 6 meses)
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const chartDataMap: Record<string, { name: string; ingresos: number; gastos: number; order: number }> = {};
+    
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      chartDataMap[key] = {
+        name: monthNames[d.getMonth()],
+        ingresos: 0,
+        gastos: 0,
+        order: d.getTime()
+      };
+    }
 
-    return { totalIncome, totalExpenses, netProfit, totalOverdue, chartData };
+    transactions.forEach(t => {
+      const d = new Date(t.created_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (chartDataMap[key]) chartDataMap[key].ingresos += Number(t.amount_paid);
+    });
+
+    expenses.forEach(e => {
+      const d = new Date(e.created_at || e.date);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (chartDataMap[key]) {
+        if (e.type === 'income') chartDataMap[key].ingresos += Number(e.amount);
+        else chartDataMap[key].gastos += Number(e.amount);
+      }
+    });
+
+    const chartData = Object.values(chartDataMap).sort((a, b) => a.order - b.order);
+
+    // 3. Ingresos por Concepto
+    const incomeByConceptMap: Record<string, number> = {};
+    transactions.forEach(t => {
+      const inv = invoices.find(i => i.id === t.invoice_id);
+      let concept = 'Varios';
+      if (inv) {
+        if (inv.product_id) concept = 'Ventas Inventario';
+        else if (String(inv.concept).toLowerCase().includes('inscrip')) concept = 'Inscripción';
+        else if (String(inv.concept).toLowerCase().includes('cuota')) concept = 'Cuotas';
+        else concept = 'Otros Cargos';
+      } else {
+        if (String(t.notes).toLowerCase().includes('venta')) concept = 'Ventas Inventario';
+      }
+      incomeByConceptMap[concept] = (incomeByConceptMap[concept] || 0) + Number(t.amount_paid);
+    });
+    const incomeByConcept = Object.entries(incomeByConceptMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+    // 4. Egresos por Categoría
+    const expensesByCategoryMap: Record<string, number> = {};
+    expenses.filter(e => e.type === 'expense').forEach(e => {
+      const cat = e.category || e.account || 'Otros';
+      if (cat !== 'TRANSFERENCIA ENTRE CAJAS') {
+        expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
+      }
+    });
+    const expensesByCategory = Object.entries(expensesByCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+    // 5. Becas Aplicadas
+    const scholarshipsApplied = invoices.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
+
+    return { cajaChica, banco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
   }, [invoices, transactions, expenses]);
 
   if (loading)
@@ -259,18 +344,20 @@ export const FinanceDashboard = () => {
       </div>
     );
 
+  const renderTooltipFormatter = (value: number) => `RD$ ${value.toLocaleString()}`;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* CABECERA CON ACCIONES RÁPIDAS */}
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-slate-900/20">
-            <ShoppingCart size={24} />
+            <Activity size={24} />
           </div>
           <div>
             <h2 className="text-2xl font-black uppercase tracking-tighter">Dashboard de Finanzas</h2>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              Control de balances, cobros e inventario
+              Control general de cajas, cobros e inventario
             </p>
           </div>
         </div>
@@ -282,191 +369,256 @@ export const FinanceDashboard = () => {
         </button>
       </div>
 
-      {/* 1. KPIs PRINCIPALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
-              <TrendingUp size={20} />
-            </div>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-              Ingresos Totales
-            </span>
-          </div>
-          <h4 className="text-3xl font-black text-slate-900 leading-none">
-            RD$ {stats.totalIncome.toLocaleString()}
-          </h4>
-          <p className="text-[9px] font-black text-emerald-600 mt-2 flex items-center gap-1">
-            <ArrowUpRight size={12} /> +12% vs mes anterior
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-lg shadow-rose-200 group-hover:scale-110 transition-transform">
-              <TrendingDown size={20} />
-            </div>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-              Egresos Totales
-            </span>
-          </div>
-          <h4 className="text-3xl font-black text-slate-900 leading-none">
-            RD$ {stats.totalExpenses.toLocaleString()}
-          </h4>
-          <p className="text-[9px] font-black text-rose-600 mt-2 flex items-center gap-1">
-            <ArrowDownRight size={12} /> +5% gasto operativo
-          </p>
-        </div>
-
-        <div className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-2xl group overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 blur-2xl rounded-full -mr-12 -mt-12"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="p-3 bg-indigo-500 text-white rounded-2xl shadow-lg shadow-indigo-500/40 group-hover:scale-110 transition-transform">
+      {/* 1. SECCIONES DE CAJAS (CAJA CHICA Y BANCO) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        
+        {/* CAJA CHICA */}
+        <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-emerald-50/50 p-6 flex items-center gap-4 border-b border-emerald-100">
+            <div className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
               <DollarSign size={20} />
             </div>
-            <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
-              Balance Neto
-            </span>
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-emerald-900">Caja Chica</h3>
+              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Efectivo y pagos diarios</p>
+            </div>
           </div>
-          <h4 className="text-3xl font-black text-white leading-none relative z-10">
-            RD$ {stats.netProfit.toLocaleString()}
-          </h4>
-          <p className="text-[9px] font-black text-indigo-300 mt-2 relative z-10 uppercase tracking-widest">
-            Flujo de caja positivo
-          </p>
+          <div className="p-8 grid grid-cols-3 gap-6 flex-1">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingUp size={12} className="text-emerald-500"/> Ingresos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cajaChica.in.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingDown size={12} className="text-rose-500"/> Gastos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cajaChica.out.toLocaleString()}</p>
+            </div>
+            <div className="bg-emerald-50 p-4 rounded-3xl text-center flex flex-col justify-center">
+              <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Balance</p>
+              <p className={`text-2xl font-black ${stats.cajaChica.net >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                RD$ {stats.cajaChica.net.toLocaleString()}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-amber-50 p-6 rounded-[2.5rem] border border-amber-100 shadow-sm hover:shadow-xl transition-all group">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
-              <AlertCircle size={20} />
+        {/* BANCO */}
+        <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-indigo-50/50 p-6 flex items-center gap-4 border-b border-indigo-100">
+            <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Banknote size={20} />
             </div>
-            <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest">
-              Morosidad
-            </span>
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-indigo-900">Cuenta de Banco</h3>
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Fondo general e ingresos pasivos</p>
+            </div>
           </div>
-          <h4 className="text-3xl font-black text-amber-900 leading-none">
-            RD$ {stats.totalOverdue.toLocaleString()}
-          </h4>
-          <p className="text-[9px] font-black text-amber-600 mt-2 uppercase tracking-widest">
-            Cuentas por cobrar
-          </p>
+          <div className="p-8 grid grid-cols-3 gap-6 flex-1">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingUp size={12} className="text-emerald-500"/> Ingresos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.banco.in.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingDown size={12} className="text-rose-500"/> Gastos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.banco.out.toLocaleString()}</p>
+            </div>
+            <div className="bg-indigo-50 p-4 rounded-3xl text-center flex flex-col justify-center">
+              <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1">Balance</p>
+              <p className={`text-2xl font-black ${stats.banco.net >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+                RD$ {stats.banco.net.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 2. GRÁFICO DE LÍNEA DE TIEMPO */}
+      <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Flujo de Caja (Últimos 6 meses)
+            </h3>
+            <p className="text-sm font-black text-slate-800 mt-1">Comparativa Ingresos vs Egresos</p>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase">
+            <Calendar size={14} /> Histórico
+          </div>
+        </div>
+        <div className="h-[350px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={stats.chartData}>
+              <defs>
+                <linearGradient id="colorIngresos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1} />
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                tickFormatter={(val) => `RD$${val / 1000}k`}
+              />
+              <Tooltip
+                formatter={renderTooltipFormatter}
+                contentStyle={{
+                  borderRadius: '20px',
+                  border: 'none',
+                  boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
+                  fontWeight: 'bold'
+                }}
+              />
+              <Legend verticalAlign="top" height={36} iconType="circle" />
+              <Area
+                type="monotone"
+                dataKey="ingresos"
+                name="Ingresos"
+                stroke="#10b981"
+                fillOpacity={1}
+                fill="url(#colorIngresos)"
+                strokeWidth={3}
+              />
+              <Area
+                type="monotone"
+                dataKey="gastos"
+                name="Egresos"
+                stroke="#f43f5e"
+                fillOpacity={1}
+                fill="url(#colorGastos)"
+                strokeWidth={3}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* 2. GRÁFICOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Flujo de Caja Mensual
-            </h3>
-            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase">
-              <Calendar size={14} /> Año Escolar 2026-2027
-            </div>
+      {/* 3. GRÁFICOS INFERIORES */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        
+        {/* Ingresos por Concepto */}
+        <div className="bg-white p-6 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col items-center">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center w-full">Ingresos por Concepto</h3>
+          <div className="h-[200px] w-full relative">
+            {stats.incomeByConcept.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.incomeByConcept} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                    {stats.incomeByConcept.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={renderTooltipFormatter} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 font-bold uppercase">Sin Datos</div>
+            )}
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.chartData}>
-                <defs>
-                  <linearGradient id="colorIngresos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '20px',
-                    border: 'none',
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="ingresos"
-                  stroke="#10b981"
-                  fillOpacity={1}
-                  fill="url(#colorIngresos)"
-                  strokeWidth={3}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="gastos"
-                  stroke="#f43f5e"
-                  fillOpacity={1}
-                  fill="url(#colorGastos)"
-                  strokeWidth={3}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="w-full mt-4 space-y-2">
+            {stats.incomeByConcept.slice(0, 3).map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-[9px] font-black uppercase">
+                <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[idx % COLORS.length]}}></div> {item.name}</span>
+                <span className="text-slate-600">RD$ {item.value.toLocaleString()}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-8">
-            Estado de Recaudación
-          </h3>
-          <div className="h-[250px] w-full">
+        {/* Egresos por Categoría */}
+        <div className="bg-white p-6 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col items-center">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center w-full">Egresos por Categoría</h3>
+          <div className="h-[200px] w-full relative">
+            {stats.expensesByCategory.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.expensesByCategory} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                    {stats.expensesByCategory.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={renderTooltipFormatter} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-300 font-bold uppercase">Sin Datos</div>
+            )}
+          </div>
+          <div className="w-full mt-4 space-y-2">
+            {stats.expensesByCategory.slice(0, 3).map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-[9px] font-black uppercase">
+                <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[(idx + 4) % COLORS.length]}}></div> {item.name}</span>
+                <span className="text-slate-600">RD$ {item.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Estado de Recaudación y Morosidad */}
+        <div className="bg-white p-6 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col items-center">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center w-full">Nivel de Cobro</h3>
+          <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={[
                     { name: 'Cobrado', value: stats.totalIncome, color: '#10b981' },
-                    { name: 'Pendiente', value: stats.totalOverdue, color: '#f59e0b' }
+                    { name: 'Morosidad', value: stats.totalOverdue, color: '#f59e0b' }
                   ]}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
+                  innerRadius={50}
+                  outerRadius={70}
                   paddingAngle={5}
                   dataKey="value"
                 >
                   <Cell fill="#10b981" />
                   <Cell fill="#f59e0b" />
                 </Pie>
-                <Tooltip />
-                <Legend verticalAlign="bottom" height={36} />
+                <Tooltip formatter={renderTooltipFormatter} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-              <span className="text-[10px] font-black uppercase text-slate-500">Tasa de Cobro</span>
-              <span className="text-sm font-black text-emerald-600">
-                {Math.round((stats.totalIncome / (stats.totalIncome + stats.totalOverdue)) * 100) ||
-                  0}
-                %
-              </span>
-            </div>
+          <div className="w-full mt-4 p-3 bg-slate-50 rounded-2xl flex justify-between items-center">
+            <span className="text-[10px] font-black uppercase text-slate-500">Tasa de Efectividad</span>
+            <span className="text-sm font-black text-emerald-600">
+              {Math.round((stats.totalIncome / (stats.totalIncome + stats.totalOverdue)) * 100) || 0}%
+            </span>
           </div>
         </div>
+
+        {/* Becas Aplicadas */}
+        <div className="bg-white p-6 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col justify-between group overflow-hidden relative">
+          <div className="absolute -right-8 -top-8 w-32 h-32 bg-amber-50 rounded-full blur-3xl z-0 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+              <GraduationCap size={24} />
+            </div>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Becas Aplicadas</h3>
+            <p className="text-3xl font-black text-amber-600 leading-none">RD$ {stats.scholarshipsApplied.toLocaleString()}</p>
+          </div>
+          <div className="mt-8 relative z-10 bg-amber-50/50 p-4 rounded-2xl">
+            <p className="text-[9px] font-bold text-amber-700/70 uppercase tracking-widest leading-relaxed">
+              Monto total descontado por becas y acuerdos especiales en el período actual.
+            </p>
+          </div>
+        </div>
+
       </div>
 
-      {/* 3. TRANSACCIONES RECIENTES */}
+      {/* 4. TRANSACCIONES RECIENTES */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
             <Activity size={16} /> Últimos Pagos Registrados
           </h3>
-          <button className="text-[9px] font-black uppercase text-indigo-600 hover:underline">
-            Ver Todo
-          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
