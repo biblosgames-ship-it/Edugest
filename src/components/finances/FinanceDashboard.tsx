@@ -39,12 +39,13 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'
 
 export const FinanceDashboard = () => {
   const { state } = useApp();
-  const { invoices, transactions, expenses, ledgerEntries, products, loading } = useFinance({
+  const { invoices, transactions, expenses, ledgerEntries, products, scholarships, loading } = useFinance({
     invoices: true,
     transactions: true,
     expenses: true,
     ledger: true,
-    products: true
+    products: true,
+    scholarships: true
   });
 
   const groupedTransactions = useMemo(() => {
@@ -238,41 +239,64 @@ export const FinanceDashboard = () => {
   });
 
   const stats = useMemo(() => {
-    // 1. Cálculos de Cajas (Filtrado por dashboardDate = HOY u otra fecha seleccionada)
+    // === 1. CAJA CHICA Y BANCO (Día seleccionado) ===
+    // Ingresos del día (Pagos de estudiantes)
+    const dailyTransactions = transactions.filter(t => (t.created_at || '').startsWith(dashboardDate));
+    
+    // Gastos e ingresos extras del sistema viejo (finance_expenses) para ese día
+    const dailyOldExpenses = expenses.filter(e => (e.created_at?.startsWith(dashboardDate) || e.date === dashboardDate));
+    
+    // Gastos e ingresos extras del sistema nuevo (finance_ledger_entries) para ese día
     const dailyLedger = ledgerEntries.filter(e => e.date === dashboardDate || e.created_at?.startsWith(dashboardDate));
 
-    const sumIn = (entries: any[]) => entries.filter(e => e.type === 'income').reduce((acc, e) => acc + Number(e.amount), 0);
-    const sumOut = (entries: any[]) => entries.filter(e => e.type === 'expense').reduce((acc, e) => acc + Number(e.amount), 0);
+    // Sumar ingresos
+    const txIncomeCajaChica = dailyTransactions.filter(t => (t.payment_method !== 'transfer' && t.payment_method !== 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const txIncomeBanco = dailyTransactions.filter(t => (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
 
-    const cajaChicaEntries = dailyLedger.filter(e => (e.cash_account || 'caja_chica') === 'caja_chica');
-    const bancoEntries = dailyLedger.filter(e => (e.cash_account || 'caja_chica') === 'banco');
+    const oldExtraIncomeCC = dailyOldExpenses.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldExtraIncomeBanco = dailyOldExpenses.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    
+    const newExtraIncomeCC = dailyLedger.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica' && e.account !== 'INGRESOS: COLEGIATURAS' && e.account !== 'INGRESOS: INSCRIPCIONES' && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const newExtraIncomeBanco = dailyLedger.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco' && e.account !== 'INGRESOS: COLEGIATURAS' && e.account !== 'INGRESOS: INSCRIPCIONES' && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
 
-    const cajaChica = {
-      in: sumIn(cajaChicaEntries),
-      out: sumOut(cajaChicaEntries),
-      net: sumIn(cajaChicaEntries) - sumOut(cajaChicaEntries)
-    };
+    // Sumar Egresos
+    const oldOutCC = dailyOldExpenses.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldOutBanco = dailyOldExpenses.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    
+    const newOutCC = dailyLedger.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
+    const newOutBanco = dailyLedger.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
 
-    const banco = {
-      in: sumIn(bancoEntries),
-      out: sumOut(bancoEntries),
-      net: sumIn(bancoEntries) - sumOut(bancoEntries)
-    };
+    const inCajaChica = txIncomeCajaChica + oldExtraIncomeCC + newExtraIncomeCC;
+    const inBanco = txIncomeBanco + oldExtraIncomeBanco + newExtraIncomeBanco;
+    const outCajaChica = oldOutCC + newOutCC;
+    const outBanco = oldOutBanco + newOutBanco;
 
-    // Filtros por Año Académico para Gráficos
+    const cajaChica = { in: inCajaChica, out: outCajaChica, net: inCajaChica - outCajaChica };
+    const banco = { in: inBanco, out: outBanco, net: inBanco - outBanco };
+
+    // === FILTROS DE AÑO ACADÉMICO ===
     const currentYear = state.selectedYear || '2025-2026';
     const yearStart = parseInt(currentYear.split('-')[0], 10);
     const startDate = new Date(yearStart, 7, 1); // Aug 1
     const endDate = new Date(yearStart + 1, 6, 31); // Jul 31
 
-    const yearLedger = ledgerEntries.filter(e => {
-      const d = new Date(e.date);
+    // Transacciones del año (por fecha)
+    const yearTransactions = transactions.filter(t => {
+      const d = new Date(t.created_at);
+      return d >= startDate && d <= endDate;
+    });
+    const totalIncome = yearTransactions.reduce((acc, t) => acc + Number(t.amount_paid), 0);
+
+    // Unificamos TODOS los gastos (históricos + nuevos) para gráficas
+    const allExpenses = [
+      ...expenses.filter(e => e.type === 'expense'),
+      ...ledgerEntries.filter(e => e.type === 'expense')
+    ].filter(e => {
+      const d = new Date(e.created_at || e.date);
       return d >= startDate && d <= endDate;
     });
 
-    const totalIncome = sumIn(yearLedger);
-
-    // 2. Gráfico Flujo de Caja (Últimos 6 meses)
+    // === 2. GRÁFICO FLUJO DE CAJA (Últimos 6 meses) ===
     const chartData = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -281,43 +305,52 @@ export const FinanceDashboard = () => {
       const y = d.getFullYear();
       const monthPrefix = `${y}-${m}`;
 
-      const monthLedger = ledgerEntries.filter((e) => e.date.startsWith(monthPrefix));
-      const ingresos = sumIn(monthLedger);
-      const egresos = sumOut(monthLedger.filter(e => e.account !== 'TRANSFERENCIA ENTRE CAJAS'));
+      const tInc = transactions.filter((t) => (t.created_at || '').startsWith(monthPrefix)).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+      const mOutOld = expenses.filter(e => e.type === 'expense' && e.category !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
+      const mOutNew = ledgerEntries.filter(e => e.type === 'expense' && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && (e.created_at || e.date || '').startsWith(monthPrefix)).reduce((acc, e) => acc + Number(e.amount), 0);
 
       chartData.push({
         name: new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(d).toUpperCase(),
-        Ingresos: ingresos,
-        Egresos: egresos
+        Ingresos: tInc,
+        Egresos: mOutOld + mOutNew
       });
     }
 
-    // 3. Ingresos por Concepto (basado en cuentas de ledger)
+    // === 3. INGRESOS POR CONCEPTO ===
     const incomeByConceptMap: Record<string, number> = {};
-    yearLedger.filter(e => e.type === 'income').forEach(e => {
+    yearTransactions.forEach(t => {
+      const inv = invoices.find(i => i.id === t.invoice_id);
       let concept = 'Otros';
-      const acc = e.account?.toUpperCase() || '';
-      if (acc.includes('COLEGIATURA')) concept = 'Cuotas';
-      else if (acc.includes('INSCRIPCI')) concept = 'Inscripción';
-      else if (acc.includes('INVENTARIO') || acc.includes('UNIFORME') || acc.includes('LIBRO') || acc.includes('MATERIAL')) concept = 'Ventas Inventario';
-      
-      incomeByConceptMap[concept] = (incomeByConceptMap[concept] || 0) + Number(e.amount);
+      if (inv) {
+        const invConcept = String(inv.concept).toUpperCase();
+        if (inv.product_id || invConcept.includes('VENTA') || invConcept.includes('INVENTARIO') || invConcept.includes('TELA') || invConcept.includes('LIBRO')) concept = 'Ventas Inventario';
+        else if (invConcept.includes('INSCRIPCI')) concept = 'Inscripción';
+        else if (invConcept.includes('CUOTA') || invConcept.includes('COLEGIATURA') || invConcept.includes('MENSUALIDAD')) concept = 'Cuotas';
+        else concept = 'Otros';
+      } else {
+        const tNotes = String(t.notes).toUpperCase();
+        if (tNotes.includes('VENTA') || tNotes.includes('TELA') || tNotes.includes('INVENTARIO')) concept = 'Ventas Inventario';
+        else if (tNotes.includes('INSCRIP')) concept = 'Inscripción';
+        else concept = 'Otros';
+      }
+      incomeByConceptMap[concept] = (incomeByConceptMap[concept] || 0) + Number(t.amount_paid);
     });
+    // Remove "Otros" if 0
+    if (incomeByConceptMap['Otros'] === 0) delete incomeByConceptMap['Otros'];
     const incomeByConcept = Object.entries(incomeByConceptMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
 
-    // 4. Egresos por Categoría
+    // === 4. EGRESOS POR CATEGORÍA ===
     const expensesByCategoryMap: Record<string, number> = {};
-    yearLedger.filter(e => e.type === 'expense').forEach(e => {
-      const cat = e.account || 'Otros';
-      if (cat !== 'TRANSFERENCIA ENTRE CAJAS') {
-        expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
-      }
+    allExpenses.forEach(e => {
+      let cat = (e.category || e.account || 'Gastos Generales').toUpperCase();
+      if (cat.includes('TRANSFERENCIA')) return; // Ignore transfers
+      if (cat === 'OTROS' || cat === '') cat = 'Gastos Generales';
+      expensesByCategoryMap[cat] = (expensesByCategoryMap[cat] || 0) + Number(e.amount);
     });
     const expensesByCategory = Object.entries(expensesByCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
 
-    // 5. Nivel de Cobro y Morosidad (a partir de invoices)
-    const yearInvoices = invoices.filter(i => i.period === currentYear);
-    const overdueInvoices = yearInvoices.filter(
+    // === 5. MOROSIDAD ===
+    const overdueInvoices = invoices.filter(
       (i) =>
         !String(i.concept).toLowerCase().includes('inscrib') &&
         !String(i.concept).toLowerCase().includes('inscrip') &&
@@ -325,11 +358,16 @@ export const FinanceDashboard = () => {
     );
     const totalOverdue = overdueInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
     
-    // 6. Becas Aplicadas (sólo del año seleccionado)
-    const scholarshipsApplied = yearInvoices.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
+    // === 6. BECAS APLICADAS ===
+    // We sum discount_applied from ALL invoices that fall within this academic year (by due_date)
+    const yearInvoicesByDate = invoices.filter(i => {
+      const d = new Date(i.due_date || i.created_at);
+      return d >= startDate && d <= endDate;
+    });
+    const scholarshipsApplied = yearInvoicesByDate.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
 
     return { cajaChica, banco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
-  }, [invoices, ledgerEntries, dashboardDate, state.selectedYear]);
+  }, [invoices, transactions, expenses, ledgerEntries, dashboardDate, state.selectedYear]);
 
   if (loading)
     return (
