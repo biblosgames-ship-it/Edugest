@@ -497,7 +497,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
           : acc === cashAccountFilter);
       const matchesSearch =
         (e.description || e.desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.item.toLowerCase().includes(searchTerm.toLowerCase());
+        (e.item || '').toLowerCase().includes(searchTerm.toLowerCase());
       return matchesDate && matchesAccount && matchesMethod && matchesCashAccount && matchesSearch;
     });
   }, [entries, startDate, endDate, accountFilter, methodFilter, cashAccountFilter, searchTerm]);
