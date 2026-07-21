@@ -178,12 +178,34 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const hasAttempted = useRef(false);
+  const [localStudentTransactions, setLocalStudentTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const { data } = await supabase
+          .from('finance_transactions')
+          .select('*')
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false });
+        if (data) {
+          setLocalStudentTransactions(data);
+        }
+      } catch (err) {
+        console.error('Error fetching student transactions:', err);
+      }
+    };
+    if (studentId) {
+      fetchTransactions();
+    }
+  }, [studentId, transactions]); // Depend on transactions so it re-fetches when a new global transaction happens
 
   const currentYear = selectedYear || '2025-2026';
   const student = state.students.find((s) => s.id === studentId);
   const studentInvoices = invoices.filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear);
   const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id && i.period === currentYear);
-  const studentTransactions = transactions.filter((t) => t.student_id === studentId);
+  // Use local full history instead of global limited history
+  const studentTransactions = localStudentTransactions;
 
   const course = student ? state.courses?.find((c) => c.id === student.course_id) : null;
   const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
