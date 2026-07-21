@@ -664,47 +664,49 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
           <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
             {studentInvoices.map((inv) => {
-              const isGhostPaid = inv.status === 'paid' && getInvoiceBalance(inv) === Number(inv.amount_final);
+              const isSelected = selectedInvoices.includes(inv.id);
               return (
                 <div
                   key={inv.id}
                   className={`p-5 rounded-3xl border transition-all flex items-center justify-between group ${
-                    isGhostPaid
-                      ? 'bg-rose-50/50 border-rose-200'
-                      : inv.status === 'paid'
+                    inv.status === 'paid'
                       ? 'bg-emerald-50/30 border-emerald-100'
-                      : inv.status === 'partial'
-                        ? 'bg-amber-50/20 border-amber-200 hover:border-amber-300'
-                        : 'bg-white border-slate-100 hover:border-slate-200'
+                      : isSelected
+                        ? 'bg-indigo-50 border-indigo-600 shadow-lg'
+                        : inv.status === 'partial'
+                          ? 'bg-amber-50/20 border-amber-200 hover:border-amber-300'
+                          : 'bg-white border-slate-100 hover:border-slate-200'
                   }`}
                 >
                   <div className="flex items-center gap-4">
                     {inv.status !== 'paid' && (
-                      <input
-                        type="checkbox"
-                        checked={selectedInvoices.includes(inv.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedInvoices([...selectedInvoices, inv.id]);
-                          } else {
-                            setSelectedInvoices(selectedInvoices.filter((id) => id !== inv.id));
-                          }
+                      <div
+                        onClick={() => {
+                          setSelectedInvoices((prev) =>
+                            prev.includes(inv.id)
+                              ? prev.filter((id) => id !== inv.id)
+                              : [...prev, inv.id]
+                          );
                         }}
-                        className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-600"
-                      />
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 border-indigo-600'
+                            : 'border-slate-200 hover:border-indigo-400'
+                        }`}
+                      >
+                        {isSelected && <CheckCircle2 size={12} className="text-white" />}
+                      </div>
                     )}
                     <div
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${
-                        isGhostPaid
-                          ? 'bg-rose-500 text-white'
-                          : inv.status === 'paid'
+                        inv.status === 'paid'
                           ? 'bg-emerald-500 text-white'
                           : inv.status === 'partial'
                             ? 'bg-amber-500 text-white'
                             : 'bg-slate-100 text-slate-400'
                       }`}
                     >
-                      {isGhostPaid ? <AlertCircle size={24} /> : inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+                      {inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
                     </div>
                     <div>
                       <h4 className="text-xs font-black text-slate-800 uppercase">{inv.concept}</h4>
@@ -725,7 +727,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className={`text-sm font-black ${isGhostPaid ? 'text-rose-600 line-through opacity-50' : 'text-slate-900'}`}>
+                      <p className="text-sm font-black text-slate-900">
                         RD$ {getInvoiceBalance(inv).toLocaleString()}
                       </p>
                       {inv.status === 'partial' && (
@@ -735,32 +737,28 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                       )}
                       <p
                         className={`text-[8px] font-black uppercase tracking-widest ${
-                          isGhostPaid
-                            ? 'text-rose-600'
-                            : inv.status === 'paid'
+                          inv.status === 'paid'
                             ? 'text-emerald-600'
                             : inv.status === 'partial'
                               ? 'text-amber-500'
                               : 'text-amber-600'
                         }`}
                       >
-                        {isGhostPaid ? 'Error: Borrar esta cuota' : inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
+                        {inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
                       </p>
                     </div>
-                    {(inv.status !== 'paid' || isGhostPaid) && (
+                    {inv.status !== 'paid' && (
                       <div className="flex items-center gap-2">
-                        {inv.status !== 'paid' && (
-                          <button
-                            onClick={() => setSelectedInvoice([inv])}
-                            className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                          >
-                            Cobrar
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setSelectedInvoice([inv])}
+                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                        >
+                          Cobrar
+                        </button>
                         <button
                           onClick={() => handleDeleteInvoice(inv.id)}
                           className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                          title={isGhostPaid ? 'Borrar cuota con error' : 'Eliminar Factura'}
+                          title="Eliminar Factura"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -788,15 +786,11 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {studentProductInvoices.map((inv) => {
-                const isGhostPaid = inv.status === 'paid' && getInvoiceBalance(inv) === Number(inv.amount_final);
-                return (
+              {studentProductInvoices.map((inv) => (
                 <div
                   key={inv.id}
                   className={`p-5 rounded-3xl border transition-all flex items-center justify-between group ${
-                    isGhostPaid
-                      ? 'bg-rose-50/50 border-rose-200'
-                      : inv.status === 'paid'
+                    inv.status === 'paid'
                       ? 'bg-emerald-50/30 border-emerald-100'
                       : inv.status === 'partial'
                         ? 'bg-amber-50/20 border-amber-200 hover:border-amber-300'
@@ -806,16 +800,14 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                   <div className="flex items-center gap-4">
                     <div
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${
-                        isGhostPaid
-                          ? 'bg-rose-500 text-white'
-                          : inv.status === 'paid'
+                        inv.status === 'paid'
                           ? 'bg-emerald-500 text-white'
                           : inv.status === 'partial'
                             ? 'bg-amber-500 text-white'
                             : 'bg-slate-100 text-slate-400'
                       }`}
                     >
-                      {isGhostPaid ? <AlertCircle size={24} /> : inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+                      {inv.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
                     </div>
                     <div>
                       <h4 className="text-xs font-black text-slate-800 uppercase">{inv.concept}</h4>
@@ -826,7 +818,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className={`text-sm font-black ${isGhostPaid ? 'text-rose-600 line-through opacity-50' : 'text-slate-900'}`}>
+                      <p className="text-sm font-black text-slate-900">
                         RD$ {getInvoiceBalance(inv).toLocaleString()}
                       </p>
                       {inv.status === 'partial' && (
@@ -836,32 +828,28 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                       )}
                       <p
                         className={`text-[8px] font-black uppercase tracking-widest ${
-                          isGhostPaid
-                            ? 'text-rose-600'
-                            : inv.status === 'paid'
+                          inv.status === 'paid'
                             ? 'text-emerald-600'
                             : inv.status === 'partial'
                               ? 'text-amber-500'
                               : 'text-amber-600'
                         }`}
                       >
-                        {isGhostPaid ? 'Error: Borrar esta cuota' : inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
+                        {inv.status === 'paid' ? 'Pagado' : inv.status === 'partial' ? 'Parcial' : 'Pendiente'}
                       </p>
                     </div>
-                    {(inv.status !== 'paid' || isGhostPaid) && (
+                    {inv.status !== 'paid' && (
                       <div className="flex items-center gap-2">
-                        {inv.status !== 'paid' && (
-                          <button
-                            onClick={() => setSelectedInvoice([inv])}
-                            className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
-                          >
-                            Cobrar
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setSelectedInvoice([inv])}
+                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                        >
+                          Cobrar
+                        </button>
                         <button
                           onClick={() => handleDeleteInvoice(inv.id)}
                           className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                          title={isGhostPaid ? 'Borrar cuota con error' : 'Eliminar Factura'}
+                          title="Eliminar Factura"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -869,8 +857,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                     )}
                   </div>
                 </div>
-              );
-            })}
+              ))}
             </div>
           </div>
         )}
