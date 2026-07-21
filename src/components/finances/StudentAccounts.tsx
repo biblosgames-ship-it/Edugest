@@ -19,6 +19,48 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
 
+const normalizeInvoiceKey = (inv: any) => {
+  if (!inv) return 'UNKNOWN';
+  const c = (inv.concept || '').trim().toLowerCase();
+  const desc = (inv.description || '').trim().toLowerCase();
+
+  if (c.includes('inscrip') || c.includes('inscrib')) {
+    return 'INSCRIPCION';
+  }
+
+  const cuotaMatch = c.match(/cuota\s*0*(\d+)/);
+  if (cuotaMatch) {
+    return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
+  }
+
+  if (inv.month_number && typeof inv.month_number === 'number') {
+    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
+  }
+
+  const monthMap: Record<string, string> = {
+    septiembre: 'CUOTA_01', sept: 'CUOTA_01',
+    octubre: 'CUOTA_02', oct: 'CUOTA_02',
+    noviembre: 'CUOTA_03', nov: 'CUOTA_03',
+    diciembre: 'CUOTA_04', dic: 'CUOTA_04',
+    enero: 'CUOTA_05', ene: 'CUOTA_05',
+    febrero: 'CUOTA_06', feb: 'CUOTA_06',
+    marzo: 'CUOTA_07', mar: 'CUOTA_07',
+    abril: 'CUOTA_08', abr: 'CUOTA_08',
+    mayo: 'CUOTA_09',
+    junio: 'CUOTA_10', jun: 'CUOTA_10',
+    julio: 'CUOTA_11', jul: 'CUOTA_11',
+    agosto: 'CUOTA_12', ago: 'CUOTA_12'
+  };
+
+  for (const [mName, key] of Object.entries(monthMap)) {
+    if (c.includes(mName) || desc.includes(mName)) {
+      return key;
+    }
+  }
+
+  return (inv.concept || '').trim().toUpperCase();
+};
+
 export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) => void }) => {
   const { state, profile, selectedYear } = useApp();
   const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance({
@@ -125,7 +167,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
         // Inscripción (solo si no existe ya)
         const hasEnrollment = studentExistingInvoices.some(
-          (inv) => inv.concept.toLowerCase().includes('inscrip') || inv.concept.toLowerCase().includes('inscrib')
+          (inv) => normalizeInvoiceKey(inv) === 'INSCRIPCION'
         );
         if (!hasEnrollment) {
           newInvoices.push({
@@ -162,7 +204,8 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
         for (let i = 0; i < Number(plan.months_count); i++) {
           const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
-          const exists = studentExistingInvoices.some((inv) => inv.concept === conceptName);
+          const targetCuotaKey = `CUOTA_${(i + 1).toString().padStart(2, '0')}`;
+          const exists = studentExistingInvoices.some((inv) => normalizeInvoiceKey(inv) === targetCuotaKey);
           if (exists) continue; // Saltar si ya existe esta mensualidad
 
           const mIdx = (startMonthIdx + i) % 12;
@@ -320,11 +363,11 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
     try {
       const currentYear = selectedYear || '2025-2026';
-      // Agrupar facturas por student_id y concepto
+      // Agrupar facturas por student_id y concepto unificado
       const studentConceptGroups: { [key: string]: any[] } = {};
       invoices.forEach((inv) => {
         if (inv.product_id || inv.period !== currentYear) return;
-        const key = `${inv.student_id}_${inv.concept}`;
+        const key = `${inv.student_id}_${normalizeInvoiceKey(inv)}`;
         if (!studentConceptGroups[key]) {
           studentConceptGroups[key] = [];
         }

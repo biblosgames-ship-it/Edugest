@@ -13,7 +13,9 @@ import {
   Users,
   Trash2,
   Banknote,
-  GraduationCap
+  GraduationCap,
+  Building2,
+  Landmark
 } from 'lucide-react';
 import {
   BarChart,
@@ -39,7 +41,7 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'
 
 export const FinanceDashboard = () => {
   const { state } = useApp();
-  const { invoices, transactions, expenses, ledgerEntries, products, scholarships, loading } = useFinance({
+  const { invoices, transactions, expenses, ledgerEntries, products, scholarships, loading, createProductInvoice } = useFinance({
     invoices: true,
     transactions: true,
     expenses: true,
@@ -249,33 +251,41 @@ export const FinanceDashboard = () => {
     // Gastos e ingresos extras del sistema nuevo (finance_ledger_entries) para ese día
     const dailyLedger = ledgerEntries.filter(e => e.date === dashboardDate || e.created_at?.startsWith(dashboardDate));
 
-    // Sumar ingresos
+    // Ingresos y egresos de Caja Chica (Filtrados por la Fecha de Cuadre seleccionada)
     const txIncomeCajaChica = dailyTransactions.filter(t => (t.payment_method !== 'transfer' && t.payment_method !== 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    const txIncomeBanco = dailyTransactions.filter(t => (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
-
     const oldExtraIncomeCC = dailyOldExpenses.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
-    const oldExtraIncomeBanco = dailyOldExpenses.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
-    
     const newExtraIncomeCC = dailyLedger.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'caja_chica' && e.account !== 'INGRESOS: COLEGIATURAS' && e.account !== 'INGRESOS: INSCRIPCIONES' && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const newExtraIncomeBanco = dailyLedger.filter(e => e.type === 'income' && (e.cash_account || 'caja_chica') === 'banco' && e.account !== 'INGRESOS: COLEGIATURAS' && e.account !== 'INGRESOS: INSCRIPCIONES' && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
-
-    // Sumar Egresos
     const oldOutCC = dailyOldExpenses.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
-    const oldOutBanco = dailyOldExpenses.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
-    
     const newOutCC = dailyLedger.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'caja_chica').reduce((acc, e) => acc + Number(e.amount), 0);
-    const newOutBanco = dailyLedger.filter(e => e.type === 'expense' && (e.cash_account || 'caja_chica') === 'banco').reduce((acc, e) => acc + Number(e.amount), 0);
 
     const inCajaChica = txIncomeCajaChica + oldExtraIncomeCC + newExtraIncomeCC;
-    const inBanco = txIncomeBanco + oldExtraIncomeBanco + newExtraIncomeBanco;
     const outCajaChica = oldOutCC + newOutCC;
-    const outBanco = oldOutBanco + newOutBanco;
-
     const cajaChica = { in: inCajaChica, out: outCajaChica, net: inCajaChica - outCajaChica };
-    const banco = { in: inBanco, out: outBanco, net: inBanco - outBanco };
+
+    // Caja General (ACUMULADO HISTÓRICO COMPLETO)
+    const isSpecialCat = (accName: string) => accName === 'INGRESOS: COLEGIATURAS' || accName === 'INGRESOS: INSCRIPCIONES';
+    const oldIncomeCG = expenses.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerIncomeCG = ledgerEntries.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldOutCG = expenses.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerOutCG = ledgerEntries.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+
+    const inCajaGeneral = oldIncomeCG + ledgerIncomeCG;
+    const outCajaGeneral = oldOutCG + ledgerOutCG;
+    const cajaGeneral = { in: inCajaGeneral, out: outCajaGeneral, net: inCajaGeneral - outCajaGeneral };
+
+    // Cuenta de Banco (ACUMULADO HISTÓRICO COMPLETO)
+    const txIncomeCB = transactions.filter(t => (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const oldIncomeCB = expenses.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerIncomeCB = ledgerEntries.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco' && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldOutCB = expenses.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerOutCB = ledgerEntries.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+
+    const inCuentaBanco = txIncomeCB + oldIncomeCB + ledgerIncomeCB;
+    const outCuentaBanco = oldOutCB + ledgerOutCB;
+    const cuentaBanco = { in: inCuentaBanco, out: outCuentaBanco, net: inCuentaBanco - outCuentaBanco };
 
     // === FILTROS DE AÑO ACADÉMICO ===
-    const currentYear = state.selectedYear || '2025-2026';
+    const currentYear = (state as any).selectedYear || '2025-2026';
     const yearStart = parseInt(currentYear.split('-')[0], 10);
     const startDate = new Date(yearStart, 7, 1); // Aug 1
     const endDate = new Date(yearStart + 1, 6, 31); // Jul 31
@@ -432,8 +442,8 @@ export const FinanceDashboard = () => {
     });
     const scholarshipsApplied = yearInvoicesByDate.reduce((acc, inv) => acc + Number(inv.discount_applied || 0), 0);
 
-    return { cajaChica, banco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
-  }, [invoices, transactions, expenses, ledgerEntries, dashboardDate, state.selectedYear]);
+    return { cajaChica, cajaGeneral, cuentaBanco, totalIncome, totalOverdue, chartData, incomeByConcept, expensesByCategory, scholarshipsApplied };
+  }, [invoices, transactions, expenses, ledgerEntries, dashboardDate, (state as any).selectedYear]);
 
   if (loading)
     return (
@@ -480,8 +490,8 @@ export const FinanceDashboard = () => {
         </div>
       </div>
 
-      {/* 1. SECCIONES DE CAJAS (CAJA CHICA Y BANCO) */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* 1. SECCIONES DE CAJAS (CAJA CHICA, CAJA GENERAL Y CUENTA BANCO) */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
         {/* CAJA CHICA */}
         <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
@@ -512,30 +522,59 @@ export const FinanceDashboard = () => {
           </div>
         </div>
 
-        {/* BANCO */}
+        {/* CAJA GENERAL */}
         <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-          <div className="bg-indigo-50/50 p-6 flex items-center gap-4 border-b border-indigo-100">
-            <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
-              <Banknote size={20} />
+          <div className="bg-amber-50/50 p-6 flex items-center gap-4 border-b border-amber-100">
+            <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
+              <Building2 size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-indigo-900">Cuenta de Banco</h3>
-              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Fondo general e ingresos pasivos</p>
+              <h3 className="text-lg font-black uppercase tracking-tight text-amber-900">Caja General</h3>
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Fondo general de cajas</p>
             </div>
           </div>
           <div className="p-8 grid grid-cols-3 gap-6 flex-1">
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingUp size={12} className="text-emerald-500"/> Ingresos</p>
-              <p className="text-xl font-black text-slate-800">RD$ {stats.banco.in.toLocaleString()}</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cajaGeneral.in.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingDown size={12} className="text-rose-500"/> Gastos</p>
-              <p className="text-xl font-black text-slate-800">RD$ {stats.banco.out.toLocaleString()}</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cajaGeneral.out.toLocaleString()}</p>
+            </div>
+            <div className="bg-amber-50 p-4 rounded-3xl text-center flex flex-col justify-center">
+              <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Balance</p>
+              <p className={`text-2xl font-black ${stats.cajaGeneral.net >= 0 ? 'text-amber-700' : 'text-rose-600'}`}>
+                RD$ {stats.cajaGeneral.net.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* CUENTA BANCO */}
+        <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-indigo-50/50 p-6 flex items-center gap-4 border-b border-indigo-100">
+            <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Landmark size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-tight text-indigo-900">Cuenta de Banco</h3>
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Depósitos y Transferencias</p>
+            </div>
+          </div>
+          <div className="p-8 grid grid-cols-3 gap-6 flex-1">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingUp size={12} className="text-emerald-500"/> Ingresos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cuentaBanco.in.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1"><TrendingDown size={12} className="text-rose-500"/> Gastos</p>
+              <p className="text-xl font-black text-slate-800">RD$ {stats.cuentaBanco.out.toLocaleString()}</p>
             </div>
             <div className="bg-indigo-50 p-4 rounded-3xl text-center flex flex-col justify-center">
               <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1">Balance</p>
-              <p className={`text-2xl font-black ${stats.banco.net >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
-                RD$ {stats.banco.net.toLocaleString()}
+              <p className={`text-2xl font-black ${stats.cuentaBanco.net >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+                RD$ {stats.cuentaBanco.net.toLocaleString()}
               </p>
             </div>
           </div>

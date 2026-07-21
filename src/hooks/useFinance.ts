@@ -399,6 +399,7 @@ export const useFinance = (options?: {
             }
           }
 
+          const isTransfer = paymentData.payment_method === 'transfer' || paymentData.payment_method === 'bank_transfer';
           await supabase.from('finance_ledger_entries').insert({
             center_id: centerId || profile?.center_id,
             transaction_id: transRow.id,
@@ -409,7 +410,7 @@ export const useFinance = (options?: {
             type: 'income',
             amount: Number(paymentData.amount_paid),
             method: paymentData.payment_method,
-            cash_account: 'caja_chica'
+            cash_account: isTransfer ? 'cuenta_banco' : 'caja_chica'
           });
         } catch (e) {
           console.error('Error auto-syncing transaction with ledger:', e);

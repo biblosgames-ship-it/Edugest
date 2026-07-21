@@ -300,6 +300,48 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     }
   };
 
+const normalizeInvoiceKey = (inv: any) => {
+  if (!inv) return 'UNKNOWN';
+  const c = (inv.concept || '').trim().toLowerCase();
+  const desc = (inv.description || '').trim().toLowerCase();
+
+  if (c.includes('inscrip') || c.includes('inscrib')) {
+    return 'INSCRIPCION';
+  }
+
+  const cuotaMatch = c.match(/cuota\s*0*(\d+)/);
+  if (cuotaMatch) {
+    return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
+  }
+
+  if (inv.month_number && typeof inv.month_number === 'number') {
+    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
+  }
+
+  const monthMap: Record<string, string> = {
+    septiembre: 'CUOTA_01', sept: 'CUOTA_01',
+    octubre: 'CUOTA_02', oct: 'CUOTA_02',
+    noviembre: 'CUOTA_03', nov: 'CUOTA_03',
+    diciembre: 'CUOTA_04', dic: 'CUOTA_04',
+    enero: 'CUOTA_05', ene: 'CUOTA_05',
+    febrero: 'CUOTA_06', feb: 'CUOTA_06',
+    marzo: 'CUOTA_07', mar: 'CUOTA_07',
+    abril: 'CUOTA_08', abr: 'CUOTA_08',
+    mayo: 'CUOTA_09',
+    junio: 'CUOTA_10', jun: 'CUOTA_10',
+    julio: 'CUOTA_11', jul: 'CUOTA_11',
+    agosto: 'CUOTA_12', ago: 'CUOTA_12'
+  };
+
+  for (const [mName, key] of Object.entries(monthMap)) {
+    if (c.includes(mName) || desc.includes(mName)) {
+      return key;
+    }
+  }
+
+  return (inv.concept || '').trim().toUpperCase();
+};
+
   const handleGenerateInvoices = async () => {
     if (!student || isGenerating || isGeneratingRef.current) return;
     isGeneratingRef.current = true;
@@ -336,7 +378,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       // FETCH FRESCO PARA EVITAR DUPLICADOS POR RACE CONDITIONS
       const { data: existingInvoices } = await supabase
         .from('finance_invoices')
-        .select('concept, product_id')
+        .select('concept, product_id, description, month_number')
         .eq('student_id', studentId)
         .eq('period', currentYear);
       
@@ -368,7 +410,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       // Inscripción (solo si no existe)
       const hasEnrollment = freshStudentInvoices.some(
-        (inv) => (inv.concept || '').toLowerCase().includes('inscrip') || (inv.concept || '').toLowerCase().includes('inscrib')
+        (inv) => normalizeInvoiceKey(inv) === 'INSCRIPCION'
       );
       if (!hasEnrollment) {
         newInvoices.push({
@@ -396,7 +438,8 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       for (let i = 0; i < monthsCount; i++) {
         const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
-        const exists = freshStudentInvoices.some((inv) => (inv.concept || '').trim() === conceptName);
+        const targetCuotaKey = `CUOTA_${(i + 1).toString().padStart(2, '0')}`;
+        const exists = freshStudentInvoices.some((inv) => normalizeInvoiceKey(inv) === targetCuotaKey);
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
@@ -460,13 +503,15 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     const loadingToast = toast.loading('Eliminando facturas duplicadas...');
 
     try {
-      // 1. Agrupar facturas por concepto
+      // 1. Agrupar facturas por concepto unificado
       const conceptGroups: { [key: string]: any[] } = {};
       studentInvoices.forEach((inv) => {
-        if (!conceptGroups[inv.concept]) {
-          conceptGroups[inv.concept] = [];
+        if (inv.product_id) return;
+        const normKey = normalizeInvoiceKey(inv);
+        if (!conceptGroups[normKey]) {
+          conceptGroups[normKey] = [];
         }
-        conceptGroups[inv.concept].push(inv);
+        conceptGroups[normKey].push(inv);
       });
 
       const idsToDelete: string[] = [];
