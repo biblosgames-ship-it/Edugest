@@ -348,8 +348,8 @@ export const FinanceDashboard = () => {
 
       chartData.push({
         name: new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(current).toUpperCase(),
-        Ingresos: tInc,
-        Egresos: mOutOld + mOutNew
+        ingresos: tInc,
+        gastos: mOutOld + mOutNew
       });
       
       current.setMonth(current.getMonth() + 1);
