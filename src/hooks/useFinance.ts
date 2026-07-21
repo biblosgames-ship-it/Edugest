@@ -205,14 +205,43 @@ export const useFinance = (options?: {
             .order('name', { ascending: true })
         );
         keys.push('ledger_categories');
-        promises.push(
-          supabase
-            .from('finance_ledger_entries')
-            .select('*')
-            .eq('center_id', centerId)
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false })
-        );
+
+        const fetchAllLedgerEntries = async () => {
+          let allEntries: any[] = [];
+          let from = 0;
+          const limit = 1000;
+          let hasMore = true;
+
+          // Calcular rango de fechas para el período académico seleccionado (e.g. 2025-2026 -> 2025-08-01 a 2026-07-31)
+          const currentYear = selectedYear || '2025-2026';
+          const periodYearMatch = currentYear.match(/^(\d{4})/);
+          const startYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
+          const startDateStr = `${startYear}-08-01`;
+          const endDateStr = `${startYear + 1}-07-31`;
+
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('finance_ledger_entries')
+              .select('*')
+              .eq('center_id', centerId)
+              .gte('date', startDateStr)
+              .lte('date', endDateStr)
+              .order('date', { ascending: false })
+              .order('created_at', { ascending: false })
+              .range(from, from + limit - 1);
+
+            if (error) return { data: null, error };
+            if (data && data.length > 0) {
+              allEntries = [...allEntries, ...data];
+              if (data.length < limit) hasMore = false;
+              else from += limit;
+            } else {
+              hasMore = false;
+            }
+          }
+          return { data: allEntries, error: null };
+        };
+        promises.push(fetchAllLedgerEntries());
         keys.push('ledger_entries');
       }
 
