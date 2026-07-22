@@ -334,7 +334,8 @@ const normalizeInvoiceKey = (inv: any) => {
   };
 
   for (const [mName, key] of Object.entries(monthMap)) {
-    if (c.includes(mName) || desc.includes(mName)) {
+    const regex = new RegExp(`\\b${mName}\\b`, 'i');
+    if (regex.test(c) || regex.test(desc)) {
       return key;
     }
   }

@@ -152,7 +152,7 @@ export const InvitationForm = () => {
       const { count: profilesCount, error: profilesErr } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
-        .eq('course_code', detectedCourse.course_id)
+        .eq('course_code', sanitizedCode)
         .in('role', ['student', 'parent'])
         .neq('id', user.id);
 

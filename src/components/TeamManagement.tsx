@@ -24,7 +24,7 @@ export const TeamManagement = () => {
     deleteTeacher
   } = useTeachers();
   const [activeTab, setActiveTab] = useState<
-    'all' | 'management' | 'administrative' | 'support' | 'teacher'
+    'all' | 'management' | 'administrative' | 'cashier' | 'support' | 'teacher'
   >('all');
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -88,6 +88,7 @@ export const TeamManagement = () => {
           { id: 'all', label: 'Todos' },
           { id: 'management', label: 'Gestión' },
           { id: 'administrative', label: 'Admin' },
+          { id: 'cashier', label: 'Caja' },
           { id: 'support', label: 'Apoyo' },
           { id: 'teacher', label: 'Docentes' }
         ].map((t) => (
@@ -140,9 +141,11 @@ export const TeamManagement = () => {
                               ? 'Gestión'
                               : user.role === 'administrative'
                                 ? 'Administrativo'
-                                : user.role === 'support'
-                                  ? 'Apoyo'
-                                  : user.role}
+                                : user.role === 'cashier'
+                                  ? 'Caja / Finanzas'
+                                  : user.role === 'support'
+                                    ? 'Apoyo'
+                                    : user.role}
                       </div>
                     </div>
                   </div>
@@ -233,6 +236,7 @@ export const TeamManagement = () => {
                 <option value="management_teacher">Docente y Gestión</option>
                 <option value="management">Gestión</option>
                 <option value="administrative">Admin</option>
+                <option value="cashier">Caja / Finanzas</option>
                 <option value="support">Apoyo</option>
               </select>
 

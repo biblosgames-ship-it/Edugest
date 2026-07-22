@@ -84,6 +84,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
       const currentDay = today.getDate().toString();
 
       const defaultAdminName =
+        state.teachers?.find((t) => t.role === 'cashier')?.name ||
         state.teachers?.find(
           (t) =>
             t.role === 'management' ||
@@ -240,14 +241,16 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         const splitIntro = doc.splitTextToSize(introText, 175);
         doc.text(splitIntro, 20, 95);
 
+        let introYOffset = 95 + (splitIntro.length * 7);
+
         // 5. Datos del Estudiante (Párrafo fluido)
         const studentDataText = `${formData.studentName}, Código del Sigerd No.: ${formData.rne} del Grado ${formData.courseName}, Año Escolar: ${formData.schoolYear}. Hijo(a) de los señores: ${formData.tutorName}.`;
         const splitStudentData = doc.splitTextToSize(studentDataText, 175);
-        doc.text(splitStudentData, 20, 105);
+        doc.text(splitStudentData, 20, introYOffset);
 
         // Calculamos la siguiente posición Y dinámicamente
         const studentLines = splitStudentData.length;
-        let currentY = 105 + studentLines * 7 + 5;
+        let currentY = introYOffset + studentLines * 7 + 5;
 
         // 6. Conducta
         doc.setFont('times', 'bold');
@@ -294,13 +297,15 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         const splitIntro = doc.splitTextToSize(introText, 175);
         doc.text(splitIntro, 20, 95);
 
+        let introYOffset = 95 + (splitIntro.length * 7);
+
         // 5. Datos del Estudiante
         const studentDataText = `${formData.studentName}, del Grado ${formData.courseName}. Hijo(a) de los señores: ${formData.tutorName}.`;
         const splitStudentData = doc.splitTextToSize(studentDataText, 175);
-        doc.text(splitStudentData, 20, 105);
+        doc.text(splitStudentData, 20, introYOffset);
 
         const studentLines = splitStudentData.length;
-        let currentY = 105 + studentLines * 7 + 5;
+        let currentY = introYOffset + studentLines * 7 + 5;
 
         // 6. Detalle de Costos
         doc.setFont('times', 'bold');
@@ -344,20 +349,30 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
       const sigY = 240;
       doc.setLineWidth(0.5);
 
-      // Firma Director
-      doc.line(30, sigY, 90, sigY);
-      doc.setFont('times', 'bold');
-      doc.setFontSize(11);
-      doc.text(formData.directorName, 60, sigY + 5, { align: 'center' });
-      doc.setFont('times', 'normal');
-      doc.text(formData.directorTitle, 60, sigY + 10, { align: 'center' });
+      if (certificateType === 'conduct-balance') {
+        // Firma Director Centro (centered)
+        doc.line(77.95, sigY, 137.95, sigY);
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        doc.text(formData.directorName, centerX, sigY + 5, { align: 'center' });
+        doc.setFont('times', 'normal');
+        doc.text(formData.directorTitle, centerX, sigY + 10, { align: 'center' });
+      } else {
+        // Firma Director
+        doc.line(30, sigY, 90, sigY);
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        doc.text(formData.directorName, 60, sigY + 5, { align: 'center' });
+        doc.setFont('times', 'normal');
+        doc.text(formData.directorTitle, 60, sigY + 10, { align: 'center' });
 
-      // Firma Admin
-      doc.line(125, sigY, 185, sigY);
-      doc.setFont('times', 'bold');
-      doc.text(formData.adminName, 155, sigY + 5, { align: 'center' });
-      doc.setFont('times', 'normal');
-      doc.text(formData.adminTitle, 155, sigY + 10, { align: 'center' });
+        // Firma Admin
+        doc.line(125, sigY, 185, sigY);
+        doc.setFont('times', 'bold');
+        doc.text(formData.adminName, 155, sigY + 5, { align: 'center' });
+        doc.setFont('times', 'normal');
+        doc.text(formData.adminTitle, 155, sigY + 10, { align: 'center' });
+      }
 
       doc.save(
         `Certificacion_${certificateType === 'conduct-balance' ? 'Conducta_Saldo' : 'Cotizacion_Escolar'}_${formData.studentName ? formData.studentName.replace(/\s+/g, '_') : 'Estudiante'}.pdf`
@@ -885,20 +900,31 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
 
             {/* Firmas */}
             <div className="mt-auto pt-10">
-              <div className="grid grid-cols-2 gap-16 text-center">
-                <div>
-                  <div className="border-b border-[#000000] mb-2 mx-4 h-12 flex items-end justify-center pb-1">
-                    <span className="font-bold">{formData.directorName}</span>
+              {certificateType === 'conduct-balance' ? (
+                <div className="grid grid-cols-1 gap-16 text-center w-1/2 mx-auto">
+                  <div>
+                    <div className="border-b border-[#000000] mb-2 mx-4 h-12 flex items-end justify-center pb-1">
+                      <span className="font-bold">{formData.directorName}</span>
+                    </div>
+                    <p className="text-sm font-bold uppercase">{formData.directorTitle}</p>
                   </div>
-                  <p className="text-sm font-bold uppercase">{formData.directorTitle}</p>
                 </div>
-                <div>
-                  <div className="border-b border-[#000000] mb-2 mx-4 h-12 flex items-end justify-center pb-1">
-                    <span className="font-bold">{formData.adminName}</span>
+              ) : (
+                <div className="grid grid-cols-2 gap-16 text-center">
+                  <div>
+                    <div className="border-b border-[#000000] mb-2 mx-4 h-12 flex items-end justify-center pb-1">
+                      <span className="font-bold">{formData.directorName}</span>
+                    </div>
+                    <p className="text-sm font-bold uppercase">{formData.directorTitle}</p>
                   </div>
-                  <p className="text-sm font-bold uppercase">{formData.adminTitle}</p>
+                  <div>
+                    <div className="border-b border-[#000000] mb-2 mx-4 h-12 flex items-end justify-center pb-1">
+                      <span className="font-bold">{formData.adminName}</span>
+                    </div>
+                    <p className="text-sm font-bold uppercase">{formData.adminTitle}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="mt-16 text-center">
                 <div className="w-32 h-32 border-2 border-dashed border-[#9ca3af] rounded-full mx-auto flex items-center justify-center mb-2">
