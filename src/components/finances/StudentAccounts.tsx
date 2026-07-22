@@ -28,7 +28,7 @@ const normalizeInvoiceKey = (inv: any) => {
     return 'INSCRIPCION';
   }
 
-  const cuotaMatch = c.match(/cuota\s*0*(\d+)/);
+  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i) || desc.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
   if (cuotaMatch) {
     return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
   }

@@ -202,7 +202,20 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
   const currentYear = selectedYear || '2025-2026';
   const student = state.students.find((s) => s.id === studentId);
-  const studentInvoices = invoices.filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear);
+  const studentInvoices = invoices
+    .filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear)
+    .sort((a, b) => {
+      const getNum = (inv: any) => {
+        const key = normalizeInvoiceKey(inv);
+        if (key === 'INSCRIPCION') return -1;
+        if (key.startsWith('CUOTA_')) return parseInt(key.replace('CUOTA_', ''), 10);
+        return 999;
+      };
+      const numA = getNum(a);
+      const numB = getNum(b);
+      if (numA !== numB) return numA - numB;
+      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+    });
   const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id && i.period === currentYear);
   // Use local full history instead of global limited history
   const studentTransactions = localStudentTransactions;
@@ -309,7 +322,7 @@ const normalizeInvoiceKey = (inv: any) => {
     return 'INSCRIPCION';
   }
 
-  const cuotaMatch = c.match(/cuota\s*0*(\d+)/);
+  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i) || desc.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
   if (cuotaMatch) {
     return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
   }
