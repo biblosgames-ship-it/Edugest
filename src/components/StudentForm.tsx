@@ -87,7 +87,8 @@ export const StudentForm = ({
     parentsCivilStatus: initialData?.parents_civil_status || 'Casados',
     authorizedPerson: initialData?.authorized_person || '',
     legalRestrictions: initialData?.legal_restrictions || '',
-    familyId: initialData?.family_id || ''
+    familyId: initialData?.family_id || '',
+    created_at: initialData?.created_at || ''
   });
 
   const [family, setFamily] = useState({
@@ -245,7 +246,8 @@ export const StudentForm = ({
             parentsCivilStatus: full.parents_civil_status || prev.parentsCivilStatus,
             authorizedPerson: full.authorized_person || prev.authorizedPerson,
             legalRestrictions: full.legal_restrictions || prev.legalRestrictions,
-            familyId: full.family_id || prev.familyId
+            familyId: full.family_id || prev.familyId,
+            created_at: full.created_at || prev.created_at
           }));
           if (full.course_id) setSelectedGradeId(full.course_id);
         } else {

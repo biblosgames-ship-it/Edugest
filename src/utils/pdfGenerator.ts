@@ -15,6 +15,22 @@ export const generateStudentPDF = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 20;
 
+  // Formatear la fecha de inscripción
+  let formattedEnrollmentDate = '---';
+  try {
+    const enrollDate = student.created_at ? new Date(student.created_at) : new Date();
+    formattedEnrollmentDate = format(enrollDate, 'dd/MM/yyyy');
+  } catch (e) {
+    console.error('Error formatting enrollment date:', e);
+    try {
+      const enrollDate = student.created_at ? new Date(student.created_at) : new Date();
+      const day = String(enrollDate.getDate()).padStart(2, '0');
+      const month = String(enrollDate.getMonth() + 1).padStart(2, '0');
+      const year = enrollDate.getFullYear();
+      formattedEnrollmentDate = `${day}/${month}/${year}`;
+    } catch (e2) {}
+  }
+
   // DATOS DE RESPALDO SI FALLA LA DB
   const center = (centerData && centerData.name) ? centerData : {
     name: 'CENTRO EDUCATIVO',
@@ -75,6 +91,7 @@ export const generateStudentPDF = (
         `${student.names || student.first_name || ''} ${student.firstSurname || student.first_surname || ''} ${student.secondSurname || student.second_surname || ''}`.trim().toUpperCase()
       ],
       ['Código Alumno / SIGERD:', `${student.student_code || '---'}  /  ${student.sigerdCode || student.sigerd_code || '---'}`],
+      ['Fecha de Inscripción:', formattedEnrollmentDate],
       ['Fecha y Lugar de Nac.:', `${student.birthDate || student.birth_date || '---'}  |  ${student.placeOfBirth || student.place_of_birth || '---'}`],
       ['Sexo / Nacionalidad / Folio:', `${student.sex || '---'}  /  ${student.nationality || 'Dominicana'}  /  Folio: ${student.birthCertificateFolio || student.birth_certificate_folio || '---'}`],
       ['Cédula:', student.idCard || student.id_card || '---'],

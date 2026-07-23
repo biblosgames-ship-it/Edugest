@@ -21,6 +21,7 @@ export interface Student {
   status: 'Active' | 'Retired' | 'Graduated';
   orderNumber?: number;
   parents: ParentGuardian[];
+  created_at?: string;
 }
 
 export interface Grade {

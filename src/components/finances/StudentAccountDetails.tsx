@@ -31,41 +31,49 @@ interface Props {
 }
 export const normalizeInvoiceKey = (inv: any) => {
   if (!inv) return 'UNKNOWN';
+
+  if (inv.product_id) {
+    return `PRODUCT_${inv.product_id}`;
+  }
+
   const c = (inv.concept || '').trim().toLowerCase();
-  const desc = (inv.description || '').trim().toLowerCase();
 
   if (c.includes('inscrip') || c.includes('inscrib')) {
     return 'INSCRIPCION';
   }
 
-  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i) || desc.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
+  if (typeof inv.month_number === 'number' && inv.month_number > 0) {
+    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
+  }
+
+  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
   if (cuotaMatch) {
     return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
   }
 
-  if (inv.month_number && typeof inv.month_number === 'number') {
-    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
-  }
+  const desc = (inv.description || '').trim().toLowerCase();
 
-  const monthMap: Record<string, string> = {
-    septiembre: 'CUOTA_01', sept: 'CUOTA_01',
-    octubre: 'CUOTA_02', oct: 'CUOTA_02',
-    noviembre: 'CUOTA_03', nov: 'CUOTA_03',
-    diciembre: 'CUOTA_04', dic: 'CUOTA_04',
-    enero: 'CUOTA_05', ene: 'CUOTA_05',
-    febrero: 'CUOTA_06', feb: 'CUOTA_06',
-    marzo: 'CUOTA_07', mar: 'CUOTA_07',
-    abril: 'CUOTA_08', abr: 'CUOTA_08',
-    mayo: 'CUOTA_09',
-    junio: 'CUOTA_10', jun: 'CUOTA_10',
-    julio: 'CUOTA_11', jul: 'CUOTA_11',
-    agosto: 'CUOTA_12', ago: 'CUOTA_12'
-  };
+  if (c.includes('colegiatura') || c.includes('mensualidad') || c.includes('cuota')) {
+    const monthMap: Record<string, string> = {
+      septiembre: 'CUOTA_01', sept: 'CUOTA_01',
+      octubre: 'CUOTA_02', oct: 'CUOTA_02',
+      noviembre: 'CUOTA_03', nov: 'CUOTA_03',
+      diciembre: 'CUOTA_04', dic: 'CUOTA_04',
+      enero: 'CUOTA_05', ene: 'CUOTA_05',
+      febrero: 'CUOTA_06', feb: 'CUOTA_06',
+      marzo: 'CUOTA_07', mar: 'CUOTA_07',
+      abril: 'CUOTA_08', abr: 'CUOTA_08',
+      mayo: 'CUOTA_09',
+      junio: 'CUOTA_10', jun: 'CUOTA_10',
+      julio: 'CUOTA_11', jul: 'CUOTA_11',
+      agosto: 'CUOTA_12', ago: 'CUOTA_12'
+    };
 
-  for (const [mName, key] of Object.entries(monthMap)) {
-    const regex = new RegExp(`\\b${mName}\\b`, 'i');
-    if (regex.test(c) || regex.test(desc)) {
-      return key;
+    for (const [mName, key] of Object.entries(monthMap)) {
+      const regex = new RegExp(`\\b${mName}\\b`, 'i');
+      if (regex.test(c) || regex.test(desc)) {
+        return key;
+      }
     }
   }
 
@@ -452,7 +460,8 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       for (let i = 0; i < monthsCount; i++) {
         const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
         const targetCuotaKey = `CUOTA_${(i + 1).toString().padStart(2, '0')}`;
-        const exists = freshStudentInvoices.some((inv) => normalizeInvoiceKey(inv) === targetCuotaKey);
+        const cuotaNum = i + 1;
+        const exists = freshStudentInvoices.some((inv) => inv.month_number === cuotaNum || normalizeInvoiceKey(inv) === targetCuotaKey);
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
@@ -521,6 +530,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       studentInvoices.forEach((inv) => {
         if (inv.product_id) return;
         const normKey = normalizeInvoiceKey(inv);
+        if (normKey === 'UNKNOWN' || (!normKey.startsWith('CUOTA_') && normKey !== 'INSCRIPCION')) return;
         if (!conceptGroups[normKey]) {
           conceptGroups[normKey] = [];
         }

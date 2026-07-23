@@ -470,6 +470,50 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const [transferTo, setTransferTo] = useState('caja_general');
   const [transferDate, setTransferDate] = useState(getLocalDateString);
 
+  // ESTADO Y LÓGICA PARA EDITAR MOVIMIENTO/CONCEPTO
+  const [editingEntry, setEditingEntry] = useState<any>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editAccount, setEditAccount] = useState('');
+  const [editItem, setEditItem] = useState('');
+  const [editAmount, setEditAmount] = useState(0);
+  const [editDate, setEditDate] = useState('');
+  const [editCashAccount, setEditCashAccount] = useState('caja_chica');
+  const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
+
+  const handleOpenEditEntry = (entry: any) => {
+    setEditingEntry(entry);
+    setEditDesc(entry.description || entry.desc || '');
+    setEditAccount(entry.account || '');
+    setEditItem(entry.item || '');
+    setEditAmount(entry.amount || 0);
+    setEditDate(entry.date || getLocalDateString());
+    setEditCashAccount(entry.cash_account || 'caja_chica');
+  };
+
+  const handleSaveEditEntry = async () => {
+    if (!editingEntry) return;
+    setIsUpdatingEntry(true);
+    try {
+      const updatedEntry = {
+        ...editingEntry,
+        date: editDate,
+        account: editAccount,
+        item: editItem,
+        description: editDesc,
+        amount: Number(editAmount),
+        cash_account: editCashAccount
+      };
+      await onSaveEntry(updatedEntry);
+      toast.success('Movimiento actualizado correctamente');
+      setEditingEntry(null);
+    } catch (e: any) {
+      console.error('Error updating entry:', e);
+      toast.error('Error al actualizar movimiento: ' + (e.message || ''));
+    } finally {
+      setIsUpdatingEntry(false);
+    }
+  };
+
   useEffect(() => {
     if (showModal) {
       setEntryDate(getLocalDateString());
@@ -1303,8 +1347,16 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     <button
                       onClick={() => handlePrintReceipt(entry)}
                       className="p-2 text-slate-400 hover:text-indigo-600"
+                      title="Imprimir comprobante"
                     >
                       <Printer size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEditEntry(entry)}
+                      className="p-2 text-slate-400 hover:text-amber-600"
+                      title="Editar concepto / movimiento"
+                    >
+                      <Edit2 size={16} />
                     </button>
                     <button
                       onClick={async () => {
@@ -1666,13 +1718,26 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
-                  Fecha
+                  Fecha de Transferencia
                 </label>
                 <input
                   type="date"
                   value={transferDate}
                   onChange={(e) => setTransferDate(e.target.value)}
                   className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Monto a Transferir (RD$)
+                </label>
+                <input
+                  type="number"
+                  value={transferAmount || ''}
+                  onChange={(e) => setTransferAmount(Number(e.target.value))}
+                  placeholder="0.00"
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 focus:ring-2 focus:ring-indigo-600"
                 />
               </div>
 
@@ -1708,6 +1773,110 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                   }`}
                 >
                   {isSavingEntry ? 'PROCESANDO...' : 'TRANSFERIR'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA EDITAR MOVIMIENTO / CONCEPTO */}
+      {editingEntry && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white w-full max-w-xl rounded-[3rem] p-8 sm:p-10 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[95vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3">
+                <Edit2 className="text-amber-500" size={22} />
+                Editar Movimiento Contable
+              </h3>
+              <button
+                onClick={() => setEditingEntry(null)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-5 overflow-y-auto pr-2">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Concepto / Descripción
+                </label>
+                <input
+                  type="text"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  placeholder="Ej: Transferencia por reajuste de efectivo..."
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Detalle / Ítem
+                </label>
+                <input
+                  type="text"
+                  value={editItem}
+                  onChange={(e) => setEditItem(e.target.value)}
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Monto (RD$)
+                </label>
+                <input
+                  type="number"
+                  value={editAmount || ''}
+                  onChange={(e) => setEditAmount(Number(e.target.value))}
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">
+                  Caja Asociada
+                </label>
+                <select
+                  value={editCashAccount}
+                  onChange={(e) => setEditCashAccount(e.target.value)}
+                  className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
+                >
+                  <option value="caja_chica">💵 Caja Chica</option>
+                  <option value="caja_general">🏢 Caja General</option>
+                  <option value="cuenta_banco">🏦 Cuenta Banco</option>
+                </select>
+              </div>
+
+              <div className="flex gap-4 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingEntry(null)}
+                  className="flex-1 py-4 bg-slate-100 rounded-2xl text-xs font-black uppercase text-slate-600"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditEntry}
+                  disabled={isUpdatingEntry}
+                  className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-100"
+                >
+                  {isUpdatingEntry ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
                 </button>
               </div>
             </div>
