@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSupabase, useApp } from '../context/AppContext';
+import { useSupabase, useApp, normalizeNameString } from '../context/AppContext';
 
 export const useTeachers = () => {
   const { profile } = useSupabase();
@@ -80,9 +80,17 @@ export const useTeachers = () => {
 
         if (fetchError) throw fetchError;
 
-        // Contar cuántos pertenecen a la categoría detectada
+        // Contar únicamente personas ÚNICAS (por nombre normalizado) para evitar falsos positivos por duplicados
+        const seenNames = new Set<string>();
         let currentCount = 0;
         (currentStaff || []).forEach((member: any) => {
+          const rawName = member.full_name || member.name || '';
+          const normName = normalizeNameString(rawName);
+          if (normName && seenNames.has(normName)) {
+            return; // Omitir duplicados de la misma persona
+          }
+          if (normName) seenNames.add(normName);
+
           const mRole = (
             member.team ||
             member.role ||
@@ -168,9 +176,42 @@ export const useTeachers = () => {
 
   const deleteTeacherMutation = useMutation({
     mutationFn: async (id: string) => {
+      // 1. Obtener el docente desde el estado para conocer su nombre objetivo
+      const targetTeacher = (state.teachers || []).find((t: any) => t.id === id);
+      const targetName = targetTeacher
+        ? normalizeNameString(targetTeacher.full_name || targetTeacher.name || '')
+        : '';
+
+      // 2. Obtener registros existentes en el centro para buscar duplicados
+      const [staffRes, teachersRes] = await Promise.all([
+        supabase.from('staff').select('id, full_name, name').eq('center_id', centerId),
+        supabase.from('teachers').select('id, name, full_name').eq('center_id', centerId)
+      ]);
+
+      const idsToDelete = new Set<string>();
+      idsToDelete.add(id);
+
+      if (targetName) {
+        (staffRes.data || []).forEach((s: any) => {
+          if (normalizeNameString(s.full_name || s.name || '') === targetName) {
+            idsToDelete.add(s.id);
+          }
+        });
+        (teachersRes.data || []).forEach((t: any) => {
+          if (normalizeNameString(t.name || t.full_name || '') === targetName) {
+            idsToDelete.add(t.id);
+          }
+        });
+      }
+
+      const idArray = Array.from(idsToDelete);
+
+      // 3. Eliminar todas las filas asociadas en staff, teachers, asignaciones y preferencias
       await Promise.all([
-        supabase.from('staff').delete().eq('id', id),
-        supabase.from('teachers').delete().eq('id', id)
+        supabase.from('staff').delete().in('id', idArray),
+        supabase.from('teachers').delete().in('id', idArray),
+        supabase.from('assignments').delete().in('teacher_id', idArray),
+        supabase.from('teacher_preferences').delete().in('teacher_id', idArray)
       ]);
     },
     onSuccess: () => {

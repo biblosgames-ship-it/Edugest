@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+export const normalizeNameString = (name: string): string => {
+  if (!name) return '';
+  return name
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
 export interface AppState {
   courses: any[];
   subjects: any[];
@@ -347,7 +357,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return 0;
             })
             .forEach((p) => {
-              const n = p.full_name.toUpperCase().trim();
+              const n = normalizeNameString(p.full_name);
               if (n && n !== 'SIN NOMBRE' && !n.includes('GENESIS') && !seenNames.has(n)) {
                 seenNames.add(n);
                 uniquePersonnel.push(p);
@@ -357,8 +367,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Mapa de traducción de IDs originales a IDs unificados
           const idMap: Record<string, string> = {};
           rawList.forEach((raw) => {
-            const n = raw.full_name.toUpperCase().trim();
-            const unified = uniquePersonnel.find((u) => u.full_name.toUpperCase().trim() === n);
+            const n = normalizeNameString(raw.full_name);
+            const unified = uniquePersonnel.find((u) => normalizeNameString(u.full_name) === n);
             if (unified) {
               idMap[raw.id] = unified.id;
             }
