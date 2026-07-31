@@ -494,8 +494,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         (course.tanda || '').toLowerCase().includes('mat') ||
         (course.tanda || '').toLowerCase().includes('mañ') ||
         !(course.tanda || '').toLowerCase().includes('ves');
-      const startT = isMorning ? 480 : 840; // 08:00 o 14:00
-      const endT = isMorning ? 720 : 1095; // 18:15 default
+      const official = (state.levelSchedules || []).find(
+        (ls: any) =>
+          ls.level === course.level &&
+          (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
+      );
+      const startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
+      const endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
 
       const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
         let bpMins = toMins(bp.startTime);
@@ -559,7 +564,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       const targetTotalLocal =
         isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
-      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
       const totalAvailableLocal = Math.max(1, bStart - classStart + (endT - bEnd));
       const preCountLocal = Math.min(
         targetTotalLocal - 1,

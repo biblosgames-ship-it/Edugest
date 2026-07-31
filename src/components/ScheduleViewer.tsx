@@ -378,8 +378,11 @@ export const ScheduleViewer = () => {
       slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
     }
 
-    // Inicio de clases a las 08:00 (Mañana) o Hora Oficial (Tarde)
-    let classStart = isMorning && startT <= 480 ? 480 : startT;
+    // Inicio de clases según Hora Oficial (si existe) o a las 08:00 (por defecto)
+    const hasOfficial = (state.levelSchedules || []).find(
+      (ls: any) => ls.shift === selectedShift && ls.start_time
+    );
+    let classStart = hasOfficial ? startT : isMorning && startT <= 480 ? 480 : startT;
     const targetTotalGen = isMorning ? 5 : 6;
     const totalAvailableGen = Math.max(1, bStartMaster - classStart + (endT - bEndMaster));
     const preCountGen = Math.min(

@@ -125,7 +125,7 @@ export const scheduleService = {
       const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
 
       const targetTotal = isMorning || levelNorm.includes('primar') ? 5 : 6;
-      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
       const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
       const preCount = Math.min(
         targetTotal - 1,
@@ -794,7 +794,7 @@ export const scheduleService = {
       if (!isMorning && bStart < 420) bStart += 720;
       const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
       const targetTotal = isMorning || levelNorm.includes('primar') ? 5 : 6;
-      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
       const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
       const preCount = Math.min(
         targetTotal - 1,
