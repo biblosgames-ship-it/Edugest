@@ -519,6 +519,7 @@ export const ScheduleViewer = () => {
   const handleRegenerate = async () => {
     if (!confirm(`¿Generar nuevo horario para Tanda ${selectedShift}?`)) return;
     setIsGenerating(true);
+    await new Promise((r) => setTimeout(r, 100));
     try {
       const { entries, diagnostics } = await scheduleService.generateSchedule(
         state,
@@ -546,6 +547,7 @@ export const ScheduleViewer = () => {
   const handleRepair = async () => {
     if (!confirm(`¿Intentar reparar los choques actuales del horario ${selectedShift}?`)) return;
     setIsRepairing(true);
+    await new Promise((r) => setTimeout(r, 100));
     try {
       const { diagnostics } = await scheduleService.repairSchedule(
         state,
@@ -578,6 +580,7 @@ export const ScheduleViewer = () => {
       return;
     setIsDeepRepairing(true);
     setDeepRepairAttempt(0);
+    await new Promise((r) => setTimeout(r, 100));
     let lastDiagnostics: string[] = [];
     let allDone = false;
     try {
@@ -766,6 +769,19 @@ export const ScheduleViewer = () => {
       `
         }}
       />
+      {(isGenerating || isRepairing || isDeepRepairing) && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[999] flex flex-col items-center justify-center p-6 text-white animate-fade-in no-print">
+          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-md text-center space-y-4">
+            <RefreshCw size={44} className="animate-spin text-indigo-400" />
+            <h3 className="text-lg font-black uppercase tracking-wider text-white">
+              {isGenerating ? 'Generando Horario...' : isRepairing ? 'Reparando Choques...' : `Ajustando Horas (${deepRepairAttempt}/5)...`}
+            </h3>
+            <p className="text-xs text-slate-300 font-medium leading-relaxed">
+              El motor inteligente está evaluando combinaciones, asignaciones y restricciones. Por favor espere unos segundos...
+            </p>
+          </div>
+        </div>
+      )}
       {/* Header Panel */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
         <div className="flex flex-wrap items-center gap-4">
