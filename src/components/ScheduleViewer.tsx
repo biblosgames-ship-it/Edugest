@@ -208,8 +208,12 @@ export const ScheduleViewer = () => {
         const levelNormBP = (bp.level || '').toLowerCase();
         const levelNormCourse = (course.level || '').toLowerCase();
 
-        // Coincidencia permisiva (Primario vs Primaria)
-        return levelNormBP.substring(0, 4) === levelNormCourse.substring(0, 4);
+        // Coincidencia permisiva (General, Todo el Centro, Primario vs Primaria)
+        if (!levelNormBP || levelNormBP.includes('gen') || levelNormBP.includes('todo')) return true;
+        return (
+          levelNormBP.substring(0, 3) === levelNormCourse.substring(0, 3) ||
+          levelNormCourse.includes(levelNormBP.substring(0, 3))
+        );
       });
 
       let bPref = applicableBPs.find((bp: any) => {
@@ -241,11 +245,18 @@ export const ScheduleViewer = () => {
 
       const slots = [];
 
-      // El Acto de Apertura va de 07:30 hasta classStart (si la clase empieza entre 07:30 y 08:00)
-      if (isMorning && classStart > 450 && classStart <= 480) {
-        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-      } else if (isMorning && startT <= 450) {
-        slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+      // Evitar duplicar si la DB ya tiene un Evento Fijo para Acto de Bandera/Apertura
+      const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      });
+
+      if (!hasDbActo) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+        }
       }
 
       // CÁLCULO PROPORCIONAL ANTES DEL RECREO
@@ -387,11 +398,18 @@ export const ScheduleViewer = () => {
     );
     let classStart = hasOfficial ? startT : isMorning && startT <= 480 ? 480 : startT;
 
-    // El Acto de Apertura va de 07:30 hasta classStart (si la clase empieza entre 07:30 y 08:00)
-    if (isMorning && classStart > 450 && classStart <= 480) {
-      slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-    } else if (isMorning && startT <= 450) {
-      slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+    // Evitar duplicar si la DB ya tiene un Evento Fijo para Acto de Bandera/Apertura
+    const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+      const feName = (fe.name || '').toLowerCase();
+      return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+    });
+
+    if (!hasDbActo) {
+      if (isMorning && classStart > 450 && classStart <= 480) {
+        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+      } else if (isMorning && startT <= 450) {
+        slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+      }
     }
     const targetTotalGen = isMorning ? 5 : 6;
     const totalAvailableGen = Math.max(1, bStartMaster - classStart + (endT - bEndMaster));
@@ -644,7 +662,7 @@ export const ScheduleViewer = () => {
             const feTimeMatch = Math.abs(feStartMins - toMins(slot.start)) < 5;
             return feDayMatch && feTimeMatch;
           });
-          rowData.push(fixedEvent ? fixedEvent.name : 'RECREO');
+          rowData.push(fixedEvent ? fixedEvent.name : slot.label || 'RECREO');
         } else if (cellEntries.length > 0) {
           const texts = cellEntries.map((e) => {
             const subject = state.subjects.find((s) => s.id === e.subject_id);
@@ -1267,7 +1285,7 @@ export const ScheduleViewer = () => {
                     const isRecreoRaw = slot.isBreak;
                     const isRecreo =
                       isRecreoRaw && !(filterType === 'teacher' && entries.length > 0);
-                    const blockName = fixedEvent ? fixedEvent.name : isRecreo ? 'RECREO' : null;
+                    const blockName = fixedEvent ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
 
                     return (
                       <div key={day} className="px-2 h-full">

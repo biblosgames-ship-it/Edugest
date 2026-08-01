@@ -102,7 +102,11 @@ export const scheduleService = {
         if (isMorning !== isBpMorning) return false;
 
         const bpLevel = (bp.level || '').toLowerCase();
-        return bpLevel.substring(0, 4) === levelNorm.substring(0, 4);
+        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
+        return (
+          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(bpLevel.substring(0, 3))
+        );
       });
 
       let bPref = applicableBPs.find((bp: any) => {
@@ -134,11 +138,17 @@ export const scheduleService = {
       const postCount = targetTotal - preCount;
       const slots = [];
 
-      // El Acto de Apertura va de 07:30 a classStart (si la clase empieza entre 07:30 y 08:00)
-      if (isMorning && classStart > 450 && classStart <= 480) {
-        slots.push({ start: '07:30', end: fromMins(classStart), isBreak: true, label: 'ACTO APERTURA' });
-      } else if (isMorning && startT <= 450) {
-        slots.push({ start: '07:30', end: '08:00', isBreak: true, label: 'ACTO APERTURA' });
+      const hasDbActo = (fixedEvents || []).some((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      });
+
+      if (!hasDbActo) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30', end: fromMins(classStart), isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30', end: '08:00', isBreak: true, label: 'ACTO APERTURA' });
+        }
       }
 
       // CLASES INICIAN A LAS 08:00 (Mañana) o Hora Oficial (Tarde)
@@ -774,7 +784,11 @@ export const scheduleService = {
         if (isMorning !== isBpMorning) return false;
 
         const bpLevel = (bp.level || '').toLowerCase();
-        return bpLevel.substring(0, 4) === levelNorm.substring(0, 4);
+        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
+        return (
+          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(bpLevel.substring(0, 3))
+        );
       });
 
       let bPref = applicableBPs.find((bp: any) => {
@@ -805,10 +819,17 @@ export const scheduleService = {
       const postCount = targetTotal - preCount;
       const slots = [];
 
-      if (isMorning && classStart > 450 && classStart <= 480) {
-        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-      } else if (isMorning && startT <= 450) {
-        slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+      const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      });
+
+      if (!hasDbActo) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+        }
       }
 
       const preDuration = Math.floor((bStart - classStart) / preCount);
