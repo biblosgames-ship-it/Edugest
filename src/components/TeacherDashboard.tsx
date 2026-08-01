@@ -574,7 +574,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       const slots = [];
 
-      if (isMorning && startT <= 450) {
+      if (isMorning && classStart > 450 && classStart <= 480) {
+        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+      } else if (isMorning && startT <= 450) {
         slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
       }
 

@@ -134,8 +134,10 @@ export const scheduleService = {
       const postCount = targetTotal - preCount;
       const slots = [];
 
-      // El Acto de Apertura siempre es de 07:30 a 08:00
-      if (isMorning && startT <= 450) {
+      // El Acto de Apertura va de 07:30 a classStart (si la clase empieza entre 07:30 y 08:00)
+      if (isMorning && classStart > 450 && classStart <= 480) {
+        slots.push({ start: '07:30', end: fromMins(classStart), isBreak: true, label: 'ACTO APERTURA' });
+      } else if (isMorning && startT <= 450) {
         slots.push({ start: '07:30', end: '08:00', isBreak: true, label: 'ACTO APERTURA' });
       }
 
@@ -803,7 +805,9 @@ export const scheduleService = {
       const postCount = targetTotal - preCount;
       const slots = [];
 
-      if (isMorning && startT <= 450) {
+      if (isMorning && classStart > 450 && classStart <= 480) {
+        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+      } else if (isMorning && startT <= 450) {
         slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
       }
 

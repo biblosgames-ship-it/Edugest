@@ -225,7 +225,7 @@ export const ScheduleViewer = () => {
       // DURACIONES UNIFICADAS CON EL MOTOR
       const targetTotalLocal =
         isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
-      let classStart = isMorning && startT <= 480 ? 480 : startT;
+      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
       const totalAvailableLocal = Math.max(1, bStart - classStart + (endT - bEnd));
       const preCountLocal = Math.min(
         targetTotalLocal - 1,
@@ -235,8 +235,10 @@ export const ScheduleViewer = () => {
 
       const slots = [];
 
-      // El Acto de Apertura siempre es de 07:30 a 08:00
-      if (isMorning && startT <= 450) {
+      // El Acto de Apertura va de 07:30 hasta classStart (si la clase empieza entre 07:30 y 08:00)
+      if (isMorning && classStart > 450 && classStart <= 480) {
+        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+      } else if (isMorning && startT <= 450) {
         slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
       }
 
@@ -373,16 +375,18 @@ export const ScheduleViewer = () => {
     if (!isMorning && bStartMaster < 420) bStartMaster += 720;
     const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || 20);
 
-    // El Acto de Apertura siempre es de 07:30 a 08:00
-    if (isMorning && startT <= 450) {
-      slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
-    }
-
     // Inicio de clases según Hora Oficial (si existe) o a las 08:00 (por defecto)
     const hasOfficial = (state.levelSchedules || []).find(
       (ls: any) => ls.shift === selectedShift && ls.start_time
     );
     let classStart = hasOfficial ? startT : isMorning && startT <= 480 ? 480 : startT;
+
+    // El Acto de Apertura va de 07:30 hasta classStart (si la clase empieza entre 07:30 y 08:00)
+    if (isMorning && classStart > 450 && classStart <= 480) {
+      slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+    } else if (isMorning && startT <= 450) {
+      slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+    }
     const targetTotalGen = isMorning ? 5 : 6;
     const totalAvailableGen = Math.max(1, bStartMaster - classStart + (endT - bEndMaster));
     const preCountGen = Math.min(
