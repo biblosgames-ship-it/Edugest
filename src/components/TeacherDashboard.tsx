@@ -583,33 +583,24 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       const slots = [];
 
-      if (!dbActoEvent) {
-        if (isMorning && classStart > 450 && classStart <= 480) {
-          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-        } else if (isMorning && startT <= 450) {
-          slots.push({ start: '07:30:00', end: '07:50:00', isBreak: true, label: 'ACTO APERTURA' });
-        }
+      if (isMorning && (startT <= 450 || classStart === 470 || dbActoEvent)) {
+        slots.push({
+          start: '07:30:00',
+          end: '07:50:00',
+          isBreak: true,
+          label: dbActoEvent?.name || 'ACTO DE BANDERA'
+        });
       }
 
       // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (40 a 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCountLocal = 2;
-      if (preWindow >= 120) {
-        preCountLocal = 3;
-      } else if (preWindow < 70) {
-        preCountLocal = 1;
-      }
+      let preCountLocal = preWindow >= 120 ? 3 : (preWindow < 70 ? 1 : 2);
 
       let currTimePre = classStart;
       for (let i = 0; i < preCountLocal; i++) {
         const remainingSlots = preCountLocal - i;
         const remainingTime = bStart - currTimePre;
-        let dur = 45;
-        if (remainingSlots === 1) {
-          dur = remainingTime;
-        } else {
-          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
-        }
+        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
         let sTime = currTimePre;
         let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -622,17 +613,24 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         });
       }
 
-      slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
+      slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
 
-      const targetTotalLocal = isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
-      const postCountLocal = Math.max(1, targetTotalLocal - preCountLocal);
-      const postDuration = Math.floor((endT - bEnd) / postCountLocal);
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO HASTA LA HORA DE CIERRE
+      const postWindow = Math.max(0, endT - bEnd);
+      let postCountLocal = Math.max(1, Math.round(postWindow / 45));
+
+      let currTimePost = bEnd;
       for (let i = 0; i < postCountLocal; i++) {
-        let sTime = bEnd + i * postDuration;
-        let eTime = i === postCountLocal - 1 ? endT : sTime + postDuration;
+        const remainingSlots = postCountLocal - i;
+        const remainingTime = endT - currTimePost;
+        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
+        let sTime = currTimePost;
+        let eTime = i === postCountLocal - 1 ? endT : sTime + dur;
+        currTimePost = eTime;
+
         slots.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
+          start: fromMins(sTime) + ':00',
+          end: fromMins(eTime) + ':00',
           isBreak: false,
           label: `${preCountLocal + i + 1}ra Hora`
         });
