@@ -175,6 +175,12 @@ export const ScheduleViewer = () => {
     };
 
     const getSlotsForCourse = (course: any) => {
+      const courseOfficial = (state.levelSchedules || []).find(
+        (ls: any) => ls.level === course.level && ls.shift === selectedShift
+      );
+      const courseStartT = courseOfficial?.start_time ? toMins(courseOfficial.start_time) : startT;
+      const courseEndT = courseOfficial?.end_time ? toMins(courseOfficial.end_time) : endT;
+
       const grade = course.grade?.toLowerCase() || '';
       const isFirstCycle =
         /^[1-3]/.test(grade) ||
@@ -225,8 +231,8 @@ export const ScheduleViewer = () => {
       // DURACIONES UNIFICADAS CON EL MOTOR
       const targetTotalLocal =
         isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
-      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
-      const totalAvailableLocal = Math.max(1, bStart - classStart + (endT - bEnd));
+      let classStart = courseOfficial?.start_time ? courseStartT : (isMorning && startT <= 480 ? 480 : startT);
+      const totalAvailableLocal = Math.max(1, bStart - classStart + (courseEndT - bEnd));
       const preCountLocal = Math.min(
         targetTotalLocal - 1,
         Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal))
