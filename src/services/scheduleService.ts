@@ -65,13 +65,34 @@ export const scheduleService = {
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
     };
 
+    const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
+      if (!schedules || schedules.length === 0) return null;
+      const lNorm = (levelName || '').toLowerCase().substring(0, 3);
+      const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
+
+      let match = schedules.find((ls: any) => {
+        const lsLvl = (ls.level || '').toLowerCase();
+        const lsShift = (ls.shift || '').toLowerCase();
+        const lvlMatch = lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+        const shiftMatch =
+          lsShift.substring(0, 3) === sNorm ||
+          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')));
+        return lvlMatch && shiftMatch;
+      });
+
+      if (!match) {
+        match = schedules.find((ls: any) => {
+          const lsLvl = (ls.level || '').toLowerCase();
+          return lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+        });
+      }
+      return match || null;
+    };
+
     const getCourseSlots = (course: any) => {
       const isMorning = shift === 'Matutina';
       const levelNorm = (course.level || '').toLowerCase();
-      const official = (levelSchedules || []).find(
-        (ls: any) =>
-          (ls.level || '').toLowerCase().startsWith(levelNorm.substring(0, 5)) && ls.shift === shift
-      );
+      const official = findOfficialSchedule(levelSchedules, course.level, shift);
 
       const startT = toMins(official?.start_time || (isMorning ? '08:00' : '14:00'));
       const endT = toMins(official?.end_time || (isMorning ? '12:00' : '18:15'));
@@ -751,10 +772,7 @@ export const scheduleService = {
     const getCourseSlots = (course: any) => {
       const isMorning = shift === 'Matutina';
       const levelNorm = (course.level || '').toLowerCase();
-      const official = (levelSchedules || []).find(
-        (ls: any) =>
-          (ls.level || '').toLowerCase().startsWith(levelNorm.substring(0, 5)) && ls.shift === shift
-      );
+      const official = findOfficialSchedule(levelSchedules, course.level, shift);
 
       const startT = toMins(official?.start_time || (isMorning ? '08:00:00' : '14:00:00'));
       const endT = toMins(official?.end_time || (isMorning ? '12:00:00' : '18:15:00'));

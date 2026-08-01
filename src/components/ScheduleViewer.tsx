@@ -134,13 +134,35 @@ export const ScheduleViewer = () => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
     let endT = isMorning ? 720 : 1095; // 18:15 default
 
+    const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
+      if (!schedules || schedules.length === 0) return null;
+      const lNorm = (levelName || '').toLowerCase().substring(0, 3);
+      const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
+
+      let match = schedules.find((ls: any) => {
+        const lsLvl = (ls.level || '').toLowerCase();
+        const lsShift = (ls.shift || '').toLowerCase();
+        const lvlMatch = lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+        const shiftMatch =
+          lsShift.substring(0, 3) === sNorm ||
+          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')));
+        return lvlMatch && shiftMatch;
+      });
+
+      if (!match) {
+        match = schedules.find((ls: any) => {
+          const lsLvl = (ls.level || '').toLowerCase();
+          return lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+        });
+      }
+      return match || null;
+    };
+
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
       const course = state.courses.find((c) => c.id === filterId);
       if (course) {
-        const official = (state.levelSchedules || []).find(
-          (ls: any) => ls.level === course.level && ls.shift === selectedShift
-        );
+        const official = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
         if (official) {
           startT = toMins(official.start_time);
           endT = toMins(official.end_time);
@@ -148,9 +170,7 @@ export const ScheduleViewer = () => {
       }
     } else if (filterType === 'all') {
       // En vista general, buscamos el horario más común o el de Primaria por defecto
-      const primaryOfficial = (state.levelSchedules || []).find(
-        (ls: any) => ls.level === 'Primario' && ls.shift === selectedShift
-      );
+      const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', selectedShift) || (state.levelSchedules || [])[0];
       if (primaryOfficial) {
         startT = toMins(primaryOfficial.start_time);
         endT = toMins(primaryOfficial.end_time);
@@ -175,9 +195,7 @@ export const ScheduleViewer = () => {
     };
 
     const getSlotsForCourse = (course: any) => {
-      const courseOfficial = (state.levelSchedules || []).find(
-        (ls: any) => ls.level === course.level && ls.shift === selectedShift
-      );
+      const courseOfficial = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
       const courseStartT = courseOfficial?.start_time ? toMins(courseOfficial.start_time) : startT;
       const courseEndT = courseOfficial?.end_time ? toMins(courseOfficial.end_time) : endT;
 
