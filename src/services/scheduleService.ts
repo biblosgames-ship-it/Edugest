@@ -205,20 +205,36 @@ export const scheduleService = {
       // RECREO
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO HASTA LA HORA DE CIERRE (ej. 1:00 PM / 13:00)
-      const postWindow = Math.max(0, endT - bEnd);
+      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo)
+      let currTimePost = bEnd;
+      const postFixedEvents = (fixedEvents || []).filter((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        const feStartMins = toMins(fe.start_time);
+        return !isActo && feStartMins >= bStart - 5 && feStartMins < endT;
+      });
+
+      postFixedEvents.forEach((fe: any) => {
+        const feEndMins = toMins(fe.end_time);
+        if (feEndMins > currTimePost) {
+          slots.push({
+            start: fe.start_time,
+            end: fe.end_time,
+            isBreak: true,
+            label: fe.name
+          });
+          currTimePost = Math.max(currTimePost, feEndMins);
+        }
+      });
+
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE (ej. 1:00 PM / 13:00)
+      const postWindow = Math.max(0, endT - currTimePost);
       let postCount = Math.max(1, Math.round(postWindow / 45));
 
-      let currTimePost = bEnd;
       for (let i = 0; i < postCount; i++) {
         const remainingSlots = postCount - i;
         const remainingTime = endT - currTimePost;
-        let dur = 45;
-        if (remainingSlots === 1) {
-          dur = remainingTime;
-        } else {
-          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
-        }
+        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
         let sTime = currTimePost;
         let eTime = i === postCount - 1 ? endT : sTime + dur;
         currTimePost = eTime;
@@ -898,10 +914,32 @@ export const scheduleService = {
       }
       slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
 
-      const postWindow = Math.max(0, endT - bEnd);
+      let currTimePost = bEnd;
+      const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        const feStartMins = toMins(fe.start_time);
+        return !isActo && feStartMins >= bStart - 5 && feStartMins < endT;
+      });
+
+      postFixedEvents.forEach((fe: any) => {
+        const feEndMins = toMins(fe.end_time);
+        if (feEndMins > currTimePost) {
+          const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
+          const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
+          slots.push({
+            start: sFormatted,
+            end: eFormatted,
+            isBreak: true,
+            label: fe.name
+          });
+          currTimePost = Math.max(currTimePost, feEndMins);
+        }
+      });
+
+      const postWindow = Math.max(0, endT - currTimePost);
       let postCount = Math.max(1, Math.round(postWindow / 45));
 
-      let currTimePost = bEnd;
       for (let i = 0; i < postCount; i++) {
         const remainingSlots = postCount - i;
         const remainingTime = endT - currTimePost;
