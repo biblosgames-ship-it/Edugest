@@ -624,6 +624,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
+      const targetTotalLocal = isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
+      const postCountLocal = Math.max(1, targetTotalLocal - preCountLocal);
       const postDuration = Math.floor((endT - bEnd) / postCountLocal);
       for (let i = 0; i < postCountLocal; i++) {
         let sTime = bEnd + i * postDuration;

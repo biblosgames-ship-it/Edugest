@@ -211,6 +211,7 @@ export const scheduleService = {
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
       // CÁLCULO PROPORCIONAL DESPUÉS DEL RECREO
+      const postCount = Math.max(1, targetTotal - preCount);
       const postDuration = Math.floor((endT - bEnd) / postCount);
       for (let i = 0; i < postCount; i++) {
         let sTime = bEnd + i * postDuration;
@@ -905,6 +906,7 @@ export const scheduleService = {
         });
       }
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
+      const postCount = Math.max(1, targetTotal - preCount);
       const postDuration = Math.floor((endT - bEnd) / postCount);
       for (let i = 0; i < postCount; i++) {
         let sTime = bEnd + i * postDuration;
