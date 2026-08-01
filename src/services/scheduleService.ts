@@ -150,35 +150,55 @@ export const scheduleService = {
       const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
 
       const targetTotal = isMorning || levelNorm.includes('primar') ? 5 : 6;
-      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
-      const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
-      const preCount = Math.min(
-        targetTotal - 1,
-        Math.max(1, Math.round(((bStart - classStart) / totalAvailable) * targetTotal))
-      );
-      const postCount = targetTotal - preCount;
-      const slots = [];
-
-      const hasDbActo = (fixedEvents || []).some((fe: any) => {
+      const dbActoEvent = (fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
       });
 
-      if (!hasDbActo) {
-        if (isMorning && classStart > 450 && classStart <= 480) {
-          slots.push({ start: '07:30', end: fromMins(classStart), isBreak: true, label: 'ACTO APERTURA' });
-        } else if (isMorning && startT <= 450) {
-          slots.push({ start: '07:30', end: '08:00', isBreak: true, label: 'ACTO APERTURA' });
+      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
+      if (isMorning) {
+        if (dbActoEvent && dbActoEvent.end_time) {
+          const feEndMins = toMins(dbActoEvent.end_time);
+          if (feEndMins > 0) classStart = Math.max(classStart, feEndMins);
+        } else if (startT <= 450) {
+          classStart = 470; // 07:50 AM por defecto tras Acto de Bandera
         }
       }
 
-      // CLASES INICIAN A LAS 08:00 (Mañana) o Hora Oficial (Tarde)
+      const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
+      const slots = [];
 
-      // CÁLCULO PROPORCIONAL ANTES DEL RECREO
-      const preDuration = Math.floor((bStart - classStart) / preCount);
+      if (!dbActoEvent) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30', end: fromMins(classStart), isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30', end: '07:50', isBreak: true, label: 'ACTO APERTURA' });
+        }
+      }
+
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (40 a 45 minutos por clase)
+      const preWindow = Math.max(0, bStart - classStart);
+      let preCount = 2;
+      if (preWindow >= 120) {
+        preCount = 3;
+      } else if (preWindow < 70) {
+        preCount = 1;
+      }
+
+      let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
-        let sTime = classStart + i * preDuration;
-        let eTime = i === preCount - 1 ? bStart : sTime + preDuration;
+        const remainingSlots = preCount - i;
+        const remainingTime = bStart - currTimePre;
+        let dur = 45;
+        if (remainingSlots === 1) {
+          dur = remainingTime;
+        } else {
+          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
+        }
+        let sTime = currTimePre;
+        let eTime = i === preCount - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+
         slots.push({
           start: fromMins(sTime),
           end: fromMins(eTime),
@@ -828,35 +848,58 @@ export const scheduleService = {
       if (!isMorning && bStart < 420) bStart += 720;
       const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
       const targetTotal = isMorning || levelNorm.includes('primar') ? 5 : 6;
-      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
-      const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
-      const preCount = Math.min(
-        targetTotal - 1,
-        Math.max(1, Math.round(((bStart - classStart) / totalAvailable) * targetTotal))
-      );
-      const postCount = targetTotal - preCount;
-      const slots = [];
-
-      const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
       });
 
-      if (!hasDbActo) {
-        if (isMorning && classStart > 450 && classStart <= 480) {
-          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-        } else if (isMorning && startT <= 450) {
-          slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+      let classStart = official?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
+      if (isMorning) {
+        if (dbActoEvent && dbActoEvent.end_time) {
+          const feEndMins = toMins(dbActoEvent.end_time);
+          if (feEndMins > 0) classStart = Math.max(classStart, feEndMins);
+        } else if (startT <= 450) {
+          classStart = 470; // 07:50 AM por defecto tras Acto de Bandera
         }
       }
 
-      const preDuration = Math.floor((bStart - classStart) / preCount);
+      const totalAvailable = Math.max(1, bStart - classStart + (endT - bEnd));
+      const slots = [];
+
+      if (!dbActoEvent) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30:00', end: '07:50:00', isBreak: true, label: 'ACTO APERTURA' });
+        }
+      }
+
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (40 a 45 minutos por clase)
+      const preWindow = Math.max(0, bStart - classStart);
+      let preCount = 2;
+      if (preWindow >= 120) {
+        preCount = 3;
+      } else if (preWindow < 70) {
+        preCount = 1;
+      }
+
+      let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
-        let sTime = classStart + i * preDuration;
-        let eTime = i === preCount - 1 ? bStart : sTime + preDuration;
+        const remainingSlots = preCount - i;
+        const remainingTime = bStart - currTimePre;
+        let dur = 45;
+        if (remainingSlots === 1) {
+          dur = remainingTime;
+        } else {
+          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
+        }
+        let sTime = currTimePre;
+        let eTime = i === preCount - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+
         slots.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
+          start: fromMins(sTime) + ':00',
+          end: fromMins(eTime) + ':00',
           isBreak: false,
           label: `${i + 1}ra Hora`
         });

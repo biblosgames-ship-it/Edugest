@@ -251,40 +251,57 @@ export const ScheduleViewer = () => {
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
       // DURACIONES UNIFICADAS CON EL MOTOR
-      const targetTotalLocal =
-        isMorning || (course.level || '').toLowerCase().includes('primar') ? 5 : 6;
-      let classStart = courseOfficial?.start_time ? courseStartT : (isMorning && startT <= 480 ? 480 : startT);
-      const totalAvailableLocal = Math.max(1, bStart - classStart + (courseEndT - bEnd));
-      const preCountLocal = Math.min(
-        targetTotalLocal - 1,
-        Math.max(1, Math.round(((bStart - classStart) / totalAvailableLocal) * targetTotalLocal))
-      );
-      const postCountLocal = targetTotalLocal - preCountLocal;
-
-      const slots = [];
-
-      // Evitar duplicar si la DB ya tiene un Evento Fijo para Acto de Bandera/Apertura
-      const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
       });
 
-      if (!hasDbActo) {
-        if (isMorning && classStart > 450 && classStart <= 480) {
-          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-        } else if (isMorning && startT <= 450) {
-          slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
+      let classStart = courseOfficial?.start_time ? courseStartT : (isMorning && startT <= 480 ? 480 : startT);
+      if (isMorning) {
+        if (dbActoEvent && dbActoEvent.end_time) {
+          const feEndMins = toMins(dbActoEvent.end_time);
+          if (feEndMins > 0) classStart = Math.max(classStart, feEndMins);
+        } else if (startT <= 450) {
+          classStart = 470; // 07:50 AM por defecto tras Acto de Bandera
         }
       }
 
-      // CÁLCULO PROPORCIONAL ANTES DEL RECREO
-      const preDuration = Math.floor((bStart - classStart) / preCountLocal);
+      const slots = [];
+
+      if (!dbActoEvent) {
+        if (isMorning && classStart > 450 && classStart <= 480) {
+          slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
+        } else if (isMorning && startT <= 450) {
+          slots.push({ start: '07:30:00', end: '07:50:00', isBreak: true, label: 'ACTO APERTURA' });
+        }
+      }
+
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (40 a 45 minutos por clase)
+      const preWindow = Math.max(0, bStart - classStart);
+      let preCountLocal = 2;
+      if (preWindow >= 120) {
+        preCountLocal = 3;
+      } else if (preWindow < 70) {
+        preCountLocal = 1;
+      }
+
+      let currTimePre = classStart;
       for (let i = 0; i < preCountLocal; i++) {
-        let sTime = classStart + i * preDuration;
-        let eTime = i === preCountLocal - 1 ? bStart : sTime + preDuration;
+        const remainingSlots = preCountLocal - i;
+        const remainingTime = bStart - currTimePre;
+        let dur = 45;
+        if (remainingSlots === 1) {
+          dur = remainingTime;
+        } else {
+          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
+        }
+        let sTime = currTimePre;
+        let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+
         slots.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
+          start: fromMins(sTime) + ':00',
+          end: fromMins(eTime) + ':00',
           isBreak: false,
           label: `${i + 1}ra Hora`
         });
