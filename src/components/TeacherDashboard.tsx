@@ -566,29 +566,24 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       if (!isMorning && bStart < 420) bStart += 720;
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
+      // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
       const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
       });
 
       let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
-      if (isMorning) {
-        if (dbActoEvent && dbActoEvent.end_time) {
-          const feEndMins = toMins(dbActoEvent.end_time);
-          if (feEndMins > 0) classStart = Math.max(classStart, feEndMins);
-        } else if (startT <= 450) {
-          classStart = 470; // 07:50 AM por defecto tras Acto de Bandera
-        }
-      }
-
       const slots = [];
 
-      if (isMorning && (startT <= 450 || classStart === 470 || dbActoEvent)) {
+      if (isMorning && dbActoEvent) {
+        const feEndMins = toMins(dbActoEvent.end_time);
+        if (feEndMins > 0) classStart = feEndMins;
+
         slots.push({
-          start: '07:30:00',
-          end: '07:50:00',
+          start: dbActoEvent.start_time,
+          end: dbActoEvent.end_time,
           isBreak: true,
-          label: dbActoEvent?.name || 'ACTO DE BANDERA'
+          label: dbActoEvent.name
         });
       }
 
