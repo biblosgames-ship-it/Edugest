@@ -211,11 +211,22 @@ function AppContent() {
     );
   }
 
+  const localParentCourses = localStorage.getItem('parent_course_ids');
+  const localCourseCode = localStorage.getItem('course_code') || localStorage.getItem('selected_course_id');
+  let hasLocalCourse = false;
+  try {
+    const parsed = localParentCourses ? JSON.parse(localParentCourses) : [];
+    hasLocalCourse = (Array.isArray(parsed) && parsed.length > 0) || !!localCourseCode;
+  } catch {
+    hasLocalCourse = !!localCourseCode;
+  }
+
   const needsActivation =
     !profile ||
     (!profile.invitation_code &&
       !profile.course_code &&
       (!profile.parent_course_ids || profile.parent_course_ids.length === 0) &&
+      !hasLocalCourse &&
       profile.role !== 'admin' &&
       profile.role !== 'superAdmin' &&
       profile.role !== 'finance' &&

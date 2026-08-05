@@ -211,6 +211,13 @@ export const InvitationForm = () => {
       const finalFullName =
         role === 'parent' ? `${selectedName} (Padre/Madre)` : selectedName;
 
+      // Guardar inmediatamente la vinculación en localStorage para persistencia visual inmediata
+      localStorage.setItem('selected_course_id', detectedCourse.course_id);
+      localStorage.setItem('course_code', sanitizedCode);
+      if (role === 'parent') {
+        localStorage.setItem('parent_course_ids', JSON.stringify([detectedCourse.course_id]));
+      }
+
       // Intentar completar el registro vía RPC
       let rpcSuccess = false;
       try {
@@ -235,12 +242,14 @@ export const InvitationForm = () => {
         profileUpdates.parent_course_ids = [detectedCourse.course_id];
       }
 
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .update(profileUpdates)
-        .eq('id', user.id);
-
-      if (profileErr && !rpcSuccess) throw profileErr;
+      try {
+        await supabase
+          .from('profiles')
+          .update(profileUpdates)
+          .eq('id', user.id);
+      } catch (e) {
+        console.warn('Profile direct update fallback error:', e);
+      }
 
       window.location.reload();
     } catch (err: any) {

@@ -56,12 +56,19 @@ export const dataService = {
 
   // CURSOS
   async getCourses(centerId: string, schoolYear: string) {
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*')
-      .eq('center_id', centerId)
-      .eq('school_year', schoolYear);
-    if (error) return [];
+    if (!centerId) return [];
+    let query = supabase.from('courses').select('*').eq('center_id', centerId);
+    if (schoolYear) {
+      query = query.eq('school_year', schoolYear);
+    }
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      const { data: fallbackData } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('center_id', centerId);
+      return fallbackData || [];
+    }
     return data;
   },
 
