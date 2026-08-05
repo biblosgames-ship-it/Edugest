@@ -161,10 +161,15 @@ export const InvitationForm = () => {
     } else if (selectedStudentId) {
       const matchSt = courseStudents.find((s) => s.id === selectedStudentId);
       if (matchSt) {
-        selectedName =
-          matchSt.first_name && matchSt.last_name
-            ? `${matchSt.first_name} ${matchSt.last_name}`
-            : matchSt.name || '';
+        if (matchSt.first_surname || matchSt.names) {
+          const surnames = `${matchSt.first_surname || ''} ${matchSt.second_surname || ''}`.trim();
+          const names = matchSt.names || '';
+          selectedName = surnames ? `${names} ${surnames}`.trim() : names;
+        } else if (matchSt.first_name || matchSt.last_name) {
+          selectedName = `${matchSt.first_name || ''} ${matchSt.last_name || ''}`.trim();
+        } else {
+          selectedName = matchSt.name || '';
+        }
       }
     }
 
@@ -215,31 +220,27 @@ export const InvitationForm = () => {
         console.warn('RPC registerMemberWithCode tuvo una alerta, aplicando fallback directo:', rpcErr);
       }
 
-      // Fallback o actualización directa del perfil para asegurar que quede vinculado sin errores
+      // Actualización segura y directa del perfil del usuario
+      const profileUpdates: any = {
+        center_id: detectedCourse.center_id,
+        role: role,
+        full_name: finalFullName,
+        course_code: sanitizedCode,
+        course_id: detectedCourse.course_id,
+        is_active: true,
+        allowed_panels: ['dashboard', 'schedule', 'agenda']
+      };
+
+      if (role === 'parent') {
+        profileUpdates.parent_course_ids = [detectedCourse.course_id];
+      }
+
       const { error: profileErr } = await supabase
         .from('profiles')
-        .update({
-          center_id: detectedCourse.center_id,
-          role: role,
-          full_name: finalFullName,
-          course_code: sanitizedCode,
-          course_id: detectedCourse.course_id,
-          is_active: true,
-          allowed_panels: role === 'parent' ? ['parent_dashboard'] : ['student_dashboard']
-        })
+        .update(profileUpdates)
         .eq('id', user.id);
 
       if (profileErr && !rpcSuccess) throw profileErr;
-
-      // Si es un padre, actualizamos parent_course_ids
-      if (role === 'parent') {
-        await supabase
-          .from('profiles')
-          .update({
-            parent_course_ids: [detectedCourse.course_id]
-          })
-          .eq('id', user.id);
-      }
 
       window.location.reload();
     } catch (err: any) {
@@ -491,10 +492,16 @@ export const InvitationForm = () => {
             >
               <option value="">-- Seleccionar de la lista oficial del curso --</option>
               {courseStudents.map((st: any) => {
-                const displayName =
-                  st.first_name && st.last_name
-                    ? `${st.last_name}, ${st.first_name}`
-                    : st.name || 'Estudiante';
+                let displayName = '';
+                if (st.first_surname || st.names) {
+                  const surnames = `${st.first_surname || ''} ${st.second_surname || ''}`.trim();
+                  const names = st.names || '';
+                  displayName = surnames ? `${surnames}, ${names}` : names;
+                } else if (st.first_name || st.last_name) {
+                  displayName = `${st.last_name || ''}, ${st.first_name || ''}`.trim();
+                } else {
+                  displayName = st.name || 'Estudiante';
+                }
                 const orderStr = st.order_number ? `#${st.order_number} - ` : '';
                 return (
                   <option key={st.id} value={st.id}>
