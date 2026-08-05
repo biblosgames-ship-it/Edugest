@@ -113,7 +113,7 @@ export const PaymentModal = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [tutorName, setTutorName] = useState<string>('No registrado');
-  const [printFormat, setPrintFormat] = useState<'letter' | 'ticket'>('letter');
+  const [printFormat, setPrintFormat] = useState<'letter' | 'ticket' | 'ticket58'>('letter');
   const isSubmittingPayment = React.useRef(false);
 
   // CARGAR DATOS DEL TUTOR
@@ -443,20 +443,20 @@ export const PaymentModal = ({
                 position: absolute; 
                 left: 0; 
                 top: 0; 
-                width: ${printFormat === 'ticket' ? '76mm' : '100%'};
-                padding: ${printFormat === 'ticket' ? '4mm' : '40px'};
+                width: ${printFormat === 'ticket58' ? '48mm' : printFormat === 'ticket' ? '76mm' : '100%'};
+                padding: ${printFormat === 'ticket58' ? '1mm' : printFormat === 'ticket' ? '4mm' : '40px'};
                 color: black !important;
                 background: white !important;
               }
               .no-print { display: none !important; }
               @page {
-                size: ${printFormat === 'ticket' ? 'auto' : 'letter'};
-                margin: ${printFormat === 'ticket' ? '0mm' : '15mm'};
+                size: ${printFormat === 'letter' ? 'letter' : 'auto'};
+                margin: ${printFormat === 'letter' ? '15mm' : '0mm'};
               }
             }
           `}
         </style>
-        <div className={`bg-white w-full ${printFormat === 'ticket' ? 'max-w-[360px]' : 'max-w-md'} rounded-[3rem] shadow-2xl overflow-hidden p-8 md:p-10 text-center animate-in zoom-in duration-300 my-auto`}>
+        <div className={`bg-white w-full ${printFormat === 'ticket58' ? 'max-w-[280px]' : printFormat === 'ticket' ? 'max-w-[360px]' : 'max-w-md'} rounded-[3rem] shadow-2xl overflow-hidden p-6 md:p-10 text-center animate-in zoom-in duration-300 my-auto`}>
           
           {/* FORMAT SELECTOR */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 no-print gap-1 select-none">
@@ -480,77 +480,88 @@ export const PaymentModal = ({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Ticket (POS)
+              Ticket (80mm)
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintFormat('ticket58')}
+              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                printFormat === 'ticket58'
+                  ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Ticket (58mm)
             </button>
           </div>
 
           <div 
             id="printable-receipt" 
             className={`text-left font-sans text-slate-900 ${
-              printFormat === 'ticket' ? 'text-[10px] leading-snug p-1' : 'p-2'
+              printFormat === 'ticket58' ? 'text-[8px] leading-tight p-0' : printFormat === 'ticket' ? 'text-[10px] leading-snug p-1' : 'p-2'
             }`}
           >
-            <div className={`flex items-center ${printFormat === 'ticket' ? 'gap-3 mb-4 border-b pb-3 border-slate-900' : 'gap-4 mb-8 border-b-2 pb-6 border-slate-900'}`}>
+            <div className={`flex items-center ${printFormat === 'ticket58' ? 'gap-2 mb-2 border-b pb-2 border-slate-900' : printFormat === 'ticket' ? 'gap-3 mb-4 border-b pb-3 border-slate-900' : 'gap-4 mb-8 border-b-2 pb-6 border-slate-900'}`}>
               {centerLogo && (
                 <img 
                   src={centerLogo} 
                   alt="Logo" 
-                  className={printFormat === 'ticket' ? 'w-10 h-10 object-contain rounded-lg' : 'w-16 h-16 object-contain rounded-xl'} 
+                  className={printFormat === 'ticket58' ? 'w-7 h-7 object-contain rounded' : printFormat === 'ticket' ? 'w-10 h-10 object-contain rounded-lg' : 'w-16 h-16 object-contain rounded-xl'} 
                 />
               )}
               <div className="flex-1">
-                <h2 className={printFormat === 'ticket' ? 'text-sm font-black uppercase tracking-tight leading-tight' : 'text-xl font-black uppercase tracking-tighter leading-tight'}>
+                <h2 className={printFormat === 'ticket58' ? 'text-xs font-black uppercase tracking-tight leading-tight' : printFormat === 'ticket' ? 'text-sm font-black uppercase tracking-tight leading-tight' : 'text-xl font-black uppercase tracking-tighter leading-tight'}>
                   {centerName}
                 </h2>
                 {center?.address && (
-                  <p className={printFormat === 'ticket' ? 'text-[8px] text-slate-500 font-bold uppercase mt-0.5' : 'text-xs text-slate-500 font-bold uppercase tracking-wide mt-1'}>
+                  <p className={printFormat === 'ticket58' ? 'text-[7px] text-slate-500 font-bold uppercase mt-0.5' : printFormat === 'ticket' ? 'text-[8px] text-slate-500 font-bold uppercase mt-0.5' : 'text-xs text-slate-500 font-bold uppercase tracking-wide mt-1'}>
                     Dirección: {center.address}
                   </p>
                 )}
                 {center?.phone && (
-                  <p className={printFormat === 'ticket' ? 'text-[8px] text-slate-500 font-bold uppercase' : 'text-xs text-slate-500 font-bold uppercase tracking-wide mt-0.5'}>
+                  <p className={printFormat === 'ticket58' ? 'text-[7px] text-slate-500 font-bold uppercase' : printFormat === 'ticket' ? 'text-[8px] text-slate-500 font-bold uppercase' : 'text-xs text-slate-500 font-bold uppercase tracking-wide mt-0.5'}>
                     Teléfono: {center.phone}
                   </p>
                 )}
-                <p className={printFormat === 'ticket' ? 'text-[8px] font-bold text-slate-400 uppercase mt-0.5' : 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1'}>
+                <p className={printFormat === 'ticket58' ? 'text-[7px] font-bold text-slate-400 uppercase mt-0.5' : printFormat === 'ticket' ? 'text-[8px] font-bold text-slate-400 uppercase mt-0.5' : 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1'}>
                   Sistema de Gestión Escolar
                 </p>
               </div>
             </div>
 
-            <div className={printFormat === 'ticket' ? 'text-center mb-4' : 'text-center mb-8'}>
-              <div className={printFormat === 'ticket' ? 'bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-xl inline-block text-sm font-black mb-1 shadow-sm' : 'bg-indigo-50 text-indigo-600 px-6 py-2 rounded-2xl inline-block text-xl font-black mb-2 shadow-sm border border-indigo-100'}>
+            <div className={printFormat === 'ticket58' ? 'text-center mb-2' : printFormat === 'ticket' ? 'text-center mb-4' : 'text-center mb-8'}>
+              <div className={printFormat === 'ticket58' ? 'bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg inline-block text-xs font-black mb-0.5' : printFormat === 'ticket' ? 'bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-xl inline-block text-sm font-black mb-1 shadow-sm' : 'bg-indigo-50 text-indigo-600 px-6 py-2 rounded-2xl inline-block text-xl font-black mb-2 shadow-sm border border-indigo-100'}>
                 Recibo No. {receiptData?.receiptNumbers?.[0]?.toString().padStart(4, '0') || '0001'}
               </div>
-              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+              <p className={printFormat === 'ticket58' ? 'text-[7px] font-black uppercase tracking-wider text-slate-400' : 'text-[9px] font-black uppercase tracking-[0.3em] text-slate-400'}>
                 Comprobante de Pago Oficial
               </p>
             </div>
 
-            <div className={printFormat === 'ticket' ? 'py-2 mb-2 space-y-3' : 'py-6 mb-6 space-y-5'}>
+            <div className={printFormat === 'ticket58' ? 'py-1 mb-1 space-y-2' : printFormat === 'ticket' ? 'py-2 mb-2 space-y-3' : 'py-6 mb-6 space-y-5'}>
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-0.5' : 'text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest'}>
                   Estudiante / Alumna
                 </p>
-                <p className={printFormat === 'ticket' ? 'text-base font-black text-slate-900 leading-tight' : 'text-2xl font-black text-slate-900 leading-tight'}>
+                <p className={printFormat === 'ticket58' ? 'text-sm font-black text-slate-900 leading-tight' : printFormat === 'ticket' ? 'text-base font-black text-slate-900 leading-tight' : 'text-2xl font-black text-slate-900 leading-tight'}>
                   {student.names} {student.first_surname}
                 </p>
-                <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase mt-2">
+                <div className={`inline-flex items-center gap-2 bg-slate-100 text-slate-600 ${printFormat === 'ticket58' ? 'px-2 py-0.5 text-[8px]' : 'px-3 py-1 text-[10px]'} rounded-lg font-black uppercase mt-1`}>
                   {courseName}
                 </div>
               </div>
               {/* Desglose de Productos / Conceptos */}
-              <div className="border-t border-b border-slate-100 py-4 my-2">
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-3 tracking-widest">
+              <div className="border-t border-b border-slate-100 py-2 my-1">
+                <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-1' : 'text-[9px] font-black text-slate-400 uppercase mb-3 tracking-widest'}>
                   Detalle del Recibo
                 </p>
                 <div className="overflow-x-auto">
-                  <table className={`w-full text-left border-collapse ${printFormat === 'ticket' ? 'text-[10px]' : 'text-[11px]'}`}>
+                  <table className={`w-full text-left border-collapse ${printFormat === 'ticket58' ? 'text-[8px]' : printFormat === 'ticket' ? 'text-[10px]' : 'text-[11px]'}`}>
                     <thead>
-                      <tr className="border-b border-slate-200 text-[8px] font-black uppercase tracking-wider text-slate-400">
-                        <th className="pb-2 font-black">Detalle</th>
-                        <th className="pb-2 text-center font-black">Cant.</th>
-                        <th className="pb-2 text-right font-black">Monto</th>
+                      <tr className="border-b border-slate-200 text-[7px] font-black uppercase tracking-wider text-slate-400">
+                        <th className="pb-1 font-black">Detalle</th>
+                        <th className="pb-1 text-center font-black">Cant.</th>
+                        <th className="pb-1 text-right font-black">Monto</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -562,18 +573,18 @@ export const PaymentModal = ({
                         const price = Number(inv.amount_final) / qty;
                         return (
                           <tr key={inv.id || idx} className="hover:bg-slate-50/50">
-                            <td className={`${printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-slate-700 font-bold pr-2 leading-tight`}>
+                            <td className={`${printFormat === 'ticket58' ? 'py-1' : printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-slate-700 font-bold pr-1 leading-tight`}>
                               {conceptName}
                               {qty > 1 && (
-                                <span className="text-[9px] font-normal text-slate-400 block mt-0.5">
-                                  Precio unitario: RD$ {price.toLocaleString()}
+                                <span className={printFormat === 'ticket58' ? 'text-[7px] font-normal text-slate-400 block' : 'text-[9px] font-normal text-slate-400 block mt-0.5'}>
+                                  P.U: RD$ {price.toLocaleString()}
                                 </span>
                               )}
                             </td>
-                            <td className={`${printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-center text-slate-500 font-black`}>
+                            <td className={`${printFormat === 'ticket58' ? 'py-1' : printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-center text-slate-500 font-black`}>
                               {qty}
                             </td>
-                            <td className={`${printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-right text-slate-900 font-black`}>
+                            <td className={`${printFormat === 'ticket58' ? 'py-1' : printFormat === 'ticket' ? 'py-1.5' : 'py-2.5'} text-right text-slate-900 font-black`}>
                               RD$ {Number(inv.amount_final).toLocaleString()}
                             </td>
                           </tr>
@@ -584,28 +595,28 @@ export const PaymentModal = ({
                 </div>
               </div>
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-0.5' : 'text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest'}>
                   Tutor / Responsable
                 </p>
-                <p className="text-sm font-bold text-slate-900 leading-tight uppercase">
+                <p className={printFormat === 'ticket58' ? 'text-xs font-bold text-slate-900 leading-tight uppercase' : 'text-sm font-bold text-slate-900 leading-tight uppercase'}>
                   {tutorName}
                 </p>
               </div>
-              <div className="flex justify-between items-end pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-end pt-2 border-t border-slate-100">
                 <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                  <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-0.5' : 'text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest'}>
                     Método de Pago
                   </p>
-                  <p className="text-xs font-bold uppercase text-slate-900">
+                  <p className={printFormat === 'ticket58' ? 'text-[9px] font-bold uppercase text-slate-900' : 'text-xs font-bold uppercase text-slate-900'}>
                     {receiptData?.method || formData.payment_method}{' '}
                     {(receiptData?.ref || formData.reference_number) && `(Ref: ${receiptData?.ref || formData.reference_number})`}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                  <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-0.5' : 'text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest'}>
                     Total Pagado
                   </p>
-                  <p className={printFormat === 'ticket' ? 'text-xl font-black text-slate-900' : 'text-3xl font-black text-slate-900'}>
+                  <p className={printFormat === 'ticket58' ? 'text-base font-black text-slate-900' : printFormat === 'ticket' ? 'text-xl font-black text-slate-900' : 'text-3xl font-black text-slate-900'}>
                     RD$ {(receiptData?.amount || formData.amount_paid).toLocaleString()}
                   </p>
                 </div>
@@ -613,14 +624,14 @@ export const PaymentModal = ({
             </div>
 
             {/* Signature / Stamp line */}
-            <div className={`mt-8 mb-6 flex flex-col items-center justify-center text-center ${printFormat === 'ticket' ? 'mt-6 mb-4' : 'mt-10 mb-8'}`}>
-              <div className={`border-t border-slate-400 pt-1.5 ${printFormat === 'ticket' ? 'w-36' : 'w-48'}`}></div>
-              <p className={`${printFormat === 'ticket' ? 'text-[8px]' : 'text-[10px]'} font-black uppercase text-slate-400 tracking-wider`}>
+            <div className={`mt-4 mb-4 flex flex-col items-center justify-center text-center ${printFormat === 'ticket58' ? 'mt-4 mb-2' : printFormat === 'ticket' ? 'mt-6 mb-4' : 'mt-10 mb-8'}`}>
+              <div className={`border-t border-slate-400 pt-1 ${printFormat === 'ticket58' ? 'w-28' : printFormat === 'ticket' ? 'w-36' : 'w-48'}`}></div>
+              <p className={`${printFormat === 'ticket58' ? 'text-[7px]' : printFormat === 'ticket' ? 'text-[8px]' : 'text-[10px]'} font-black uppercase text-slate-400 tracking-wider`}>
                 Firma Autorizada / Sello
               </p>
             </div>
 
-            <div className={`text-center font-bold text-slate-500 uppercase border-t border-dashed border-slate-200 pt-6 ${printFormat === 'ticket' ? 'text-[10px]' : 'text-xs'}`}>
+            <div className={`text-center font-bold text-slate-500 uppercase border-t border-dashed border-slate-200 pt-4 ${printFormat === 'ticket58' ? 'text-[8px]' : printFormat === 'ticket' ? 'text-[10px]' : 'text-xs'}`}>
               Fecha de Emisión: {new Date().toLocaleString()}
             </div>
           </div>

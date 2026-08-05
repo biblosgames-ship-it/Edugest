@@ -1,5 +1,27 @@
 import { supabase } from '../lib/supabase';
 
+const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
+  if (!schedules || schedules.length === 0) return null;
+  const lNorm = (levelName || '').toLowerCase().substring(0, 3);
+  const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
+
+  let match = schedules.find((ls: any) => {
+    const lsLvl = (ls.level || '').toLowerCase();
+    const lsShift = (ls.shift || '').toLowerCase();
+    const lvlMatch = lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+    const shiftMatch =
+      lsShift.substring(0, 3) === sNorm ||
+      (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')));
+    return lvlMatch && shiftMatch;
+  });
+
+  if (!match) {
+    match = schedules.find((ls: any) => (ls.level || '').toLowerCase().substring(0, 3) === lNorm);
+  }
+
+  return match || schedules[0] || null;
+};
+
 export const scheduleService = {
   generateSchedule: async (
     state: any,
@@ -63,30 +85,6 @@ export const scheduleService = {
       const h = Math.floor(mins / 60);
       const m = mins % 60;
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-    };
-
-    const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
-      if (!schedules || schedules.length === 0) return null;
-      const lNorm = (levelName || '').toLowerCase().substring(0, 3);
-      const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
-
-      let match = schedules.find((ls: any) => {
-        const lsLvl = (ls.level || '').toLowerCase();
-        const lsShift = (ls.shift || '').toLowerCase();
-        const lvlMatch = lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
-        const shiftMatch =
-          lsShift.substring(0, 3) === sNorm ||
-          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')));
-        return lvlMatch && shiftMatch;
-      });
-
-      if (!match) {
-        match = schedules.find((ls: any) => {
-          const lsLvl = (ls.level || '').toLowerCase();
-          return lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
-        });
-      }
-      return match || null;
     };
 
     const getCourseSlots = (course: any) => {

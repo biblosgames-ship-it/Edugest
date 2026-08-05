@@ -264,16 +264,16 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4 text-left animate-fade-in">
-          <div className="bg-white p-8 rounded-[3rem] w-full max-w-md shadow-2xl space-y-6 relative border border-white">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-3 sm:p-4 text-left animate-fade-in">
+          <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl relative border border-white">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-8 right-8 text-slate-300 hover:text-slate-600 transition-colors"
+              className="absolute top-6 right-6 text-slate-300 hover:text-slate-600 transition-colors z-10"
             >
               <X size={24} />
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0 mb-4">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedEventId ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}
               >
@@ -284,7 +284,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               </h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin my-2">
               <div>
                 <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                   Tipo de Registro
@@ -292,21 +292,21 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     onClick={() => setNewActivity({ ...newActivity, type: 'event' })}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-2xl border transition-all ${newActivity.type === 'event' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                    className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border transition-all ${newActivity.type === 'event' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
                   >
                     <Star size={18} />
                     <span className="text-[8px] font-black uppercase">Evento</span>
                   </button>
                   <button
                     onClick={() => setNewActivity({ ...newActivity, type: 'incident' })}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-2xl border transition-all ${newActivity.type === 'incident' ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                    className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl border transition-all ${newActivity.type === 'incident' ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
                   >
                     <AlertTriangle size={18} />
                     <span className="text-[8px] font-black uppercase">Incidencia</span>
                   </button>
                   <button
                     onClick={() => setNewActivity({ ...newActivity, type: 'meeting' })}
-                    className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'meeting' ? 'bg-cyan-50 border-cyan-200 text-cyan-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-16 w-full`}
+                    className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'meeting' ? 'bg-cyan-50 border-cyan-200 text-cyan-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-14 w-full`}
                   >
                     <UsersIcon size={16} />
                     <span className="text-[7px] font-black uppercase text-center leading-none">
@@ -315,7 +315,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                   </button>
                   <button
                     onClick={() => setNewActivity({ ...newActivity, type: 'pedagogical_group' })}
-                    className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'pedagogical_group' ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-16 w-full`}
+                    className={`flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border transition-all ${newActivity.type === 'pedagogical_group' ? 'bg-violet-50 border-violet-200 text-violet-600' : 'bg-slate-50 border-slate-100 text-slate-400'} h-14 w-full`}
                   >
                     <BookOpen size={16} />
                     <span className="text-[7px] font-black uppercase text-center leading-none">
@@ -333,7 +333,8 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                   type="text"
                   value={newActivity.title}
                   onChange={(e) => setNewActivity({ ...newActivity, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                  className="w-full bg-slate-50 border border-slate-100 p-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm"
+                  placeholder="Título del evento"
                 />
               </div>
 
@@ -344,7 +345,8 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                 <textarea
                   value={newActivity.description}
                   onChange={(e) => setNewActivity({ ...newActivity, description: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 h-48 resize-none font-medium text-sm"
+                  className="w-full bg-slate-50 border border-slate-100 p-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 h-24 sm:h-28 resize-none font-medium text-sm"
+                  placeholder="Detalles adicionales..."
                 />
               </div>
 
@@ -357,7 +359,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                     type="time"
                     value={newActivity.startTime}
                     onChange={(e) => setNewActivity({ ...newActivity, startTime: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 p-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm"
                   />
                 </div>
                 <div className="flex-1">
@@ -368,7 +370,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                     type="time"
                     value={newActivity.endTime}
                     onChange={(e) => setNewActivity({ ...newActivity, endTime: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 p-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm"
                   />
                 </div>
               </div>
@@ -382,7 +384,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                   onChange={(e) =>
                     setNewActivity({ ...newActivity, scheduleEntryId: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-100 p-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                 >
                   <option value="">Ninguno</option>
                   {state.schedule.map((s) => {
@@ -398,25 +400,25 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               </div>
             </div>
 
-            <div className="flex gap-3 pt-6 border-t border-slate-50">
+            <div className="flex gap-3 pt-4 border-t border-slate-100 mt-2 shrink-0">
               {selectedEventId && (
                 <button
                   onClick={handleDelete}
-                  className="w-12 h-12 flex items-center justify-center bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-100"
+                  className="w-12 h-12 flex items-center justify-center bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-100 shrink-0"
                 >
                   <Trash2 size={20} />
                 </button>
               )}
               <button
                 onClick={() => setShowModal(false)}
-                className="flex-1 px-4 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
+                className="flex-1 px-4 py-3.5 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveActivity}
                 disabled={isSaving}
-                className="flex-[2] px-4 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all disabled:opacity-50"
+                className="flex-[2] px-4 py-3.5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all disabled:opacity-50"
               >
                 {isSaving ? 'Guardando...' : selectedEventId ? 'Actualizar' : 'Guardar'}
               </button>

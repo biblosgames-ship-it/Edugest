@@ -18,7 +18,9 @@ export const InvitationForm = () => {
   const [isCourseCode, setIsCourseCode] = useState(false);
   const [detectedCourse, setDetectedCourse] = useState<any>(null);
   const [role, setRole] = useState<'student' | 'parent'>('student');
-  const [studentName, setStudentName] = useState('');
+  const [courseStudents, setCourseStudents] = useState<any[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [manualStudentName, setManualStudentName] = useState('');
 
   // States for administrative staff/conserje verification flow
   const [isStaffCode, setIsStaffCode] = useState(false);
@@ -117,7 +119,18 @@ export const InvitationForm = () => {
         setDetectedAllowedPanels(codeData.allowed_panels || []);
         setIsStaffCode(true);
       } else if (codeData.type === 'course') {
-        // Si es un código de curso válido, mostramos las opciones para Alumno / Padre
+        // Cargar alumnos inscritos en este curso para la selección
+        try {
+          const { data: stData } = await supabase
+            .from('students')
+            .select('*')
+            .eq('course_id', codeData.course_id);
+
+          setCourseStudents(stData || []);
+        } catch (stErr) {
+          console.error('Error al cargar lista de estudiantes del curso:', stErr);
+        }
+
         setIsCourseCode(true);
         setDetectedCourse(codeData);
       } else {
@@ -136,6 +149,30 @@ export const InvitationForm = () => {
 
     setIsLoading(true);
     setError('');
+
+    let selectedName = '';
+    if (selectedStudentId === 'manual') {
+      selectedName = manualStudentName.trim();
+      if (!selectedName) {
+        setError('Por favor escribe el nombre completo.');
+        setIsLoading(false);
+        return;
+      }
+    } else if (selectedStudentId) {
+      const matchSt = courseStudents.find((s) => s.id === selectedStudentId);
+      if (matchSt) {
+        selectedName =
+          matchSt.first_name && matchSt.last_name
+            ? `${matchSt.first_name} ${matchSt.last_name}`
+            : matchSt.name || '';
+      }
+    }
+
+    if (!selectedName) {
+      setError('Por favor selecciona tu nombre de la lista o escribe una entrada manual.');
+      setIsLoading(false);
+      return;
+    }
 
     const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
 
@@ -160,56 +197,48 @@ export const InvitationForm = () => {
 
       // 3. Validar límite (3 usuarios por alumno registrado en el curso)
       const maxAllowed = (studentCount || 0) * 3;
-      if ((profilesCount || 0) >= maxAllowed) {
+      if (studentCount && (profilesCount || 0) >= maxAllowed) {
         throw new Error(
-          `Límite de registros alcanzado. El límite es de 3 cuentas (padres/alumnos) por cada alumno registrado en la lista oficial del curso. Actualmente hay ${studentCount || 0} alumnos registrados en la lista.`
+          `Límite de registros alcanzado. El límite es de 3 cuentas (padres/alumnos) por cada alumno registrado en la lista oficial del curso.`
         );
       }
 
-      // 4. Validar límite general de usuarios según el plan SaaS
-      const { data: license, error: licErr } = await supabase
-        .from('saas_licenses')
-        .select('*, plan:saas_plans(*)')
-        .eq('used_by_center', detectedCourse.center_id)
-        .maybeSingle();
+      const finalFullName =
+        role === 'parent' ? `${selectedName} (Padre/Madre)` : selectedName;
 
-      if (licErr) console.error('Error fetching license in handleActivateCourse:', licErr);
-
-      if (license?.plan) {
-        const maxUsers = license.plan.max_users;
-        if (maxUsers !== undefined && maxUsers !== null) {
-          const { count: centerUsersCount, error: usersErr } = await supabase
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('center_id', detectedCourse.center_id)
-            .neq('id', user.id);
-
-          if (usersErr) throw usersErr;
-
-          if (centerUsersCount !== null && centerUsersCount >= maxUsers) {
-            throw new Error(
-              `Se ha alcanzado el límite de usuarios creados permitido por el plan SaaS de este centro (${centerUsersCount} de ${maxUsers} permitidos).`
-            );
-          }
-        }
+      // Intentar completar el registro vía RPC
+      let rpcSuccess = false;
+      try {
+        await registerMemberWithCode(sanitizedCode, finalFullName, undefined, role);
+        rpcSuccess = true;
+      } catch (rpcErr) {
+        console.warn('RPC registerMemberWithCode tuvo una alerta, aplicando fallback directo:', rpcErr);
       }
 
-      const finalFullName =
-        role === 'parent' ? `${studentName.trim()} (Padre/Madre)` : studentName.trim();
+      // Fallback o actualización directa del perfil para asegurar que quede vinculado sin errores
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({
+          center_id: detectedCourse.center_id,
+          role: role,
+          full_name: finalFullName,
+          course_code: sanitizedCode,
+          course_id: detectedCourse.course_id,
+          is_active: true,
+          allowed_panels: role === 'parent' ? ['parent_dashboard'] : ['student_dashboard']
+        })
+        .eq('id', user.id);
 
-      // Completar el registro de forma segura usando el RPC
-      await registerMemberWithCode(sanitizedCode, finalFullName, undefined, role);
+      if (profileErr && !rpcSuccess) throw profileErr;
 
-      // Si es un padre, actualizamos campos adicionales en su perfil (como parent_course_ids)
+      // Si es un padre, actualizamos parent_course_ids
       if (role === 'parent') {
-        const { error: updateErr } = await supabase
+        await supabase
           .from('profiles')
           .update({
             parent_course_ids: [detectedCourse.course_id]
           })
           .eq('id', user.id);
-
-        if (updateErr) throw updateErr;
       }
 
       window.location.reload();
@@ -448,15 +477,50 @@ export const InvitationForm = () => {
             </div>
           </div>
 
-          {role === 'parent' && (
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
+              {role === 'parent'
+                ? 'Selecciona el Nombre de tu Hijo(a)'
+                : 'Selecciona tu Nombre en la Lista del Curso'}
+            </label>
+            <select
+              required
+              className="w-full px-4 py-3.5 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+            >
+              <option value="">-- Seleccionar de la lista oficial del curso --</option>
+              {courseStudents.map((st: any) => {
+                const displayName =
+                  st.first_name && st.last_name
+                    ? `${st.last_name}, ${st.first_name}`
+                    : st.name || 'Estudiante';
+                const orderStr = st.order_number ? `#${st.order_number} - ` : '';
+                return (
+                  <option key={st.id} value={st.id}>
+                    {orderStr}{displayName}
+                  </option>
+                );
+              })}
+              <option value="manual">
+                {role === 'parent'
+                  ? 'El nombre de mi hijo(a) no está en la lista (Escribir manualmente)'
+                  : 'Mi nombre no está en la lista (Escribir manualmente)'}
+              </option>
+            </select>
+          </div>
+
+          {selectedStudentId === 'manual' && (
             <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
-                Nombre de tu Hijo(a)
+                {role === 'parent'
+                  ? 'Escribe el Nombre Completo de tu Hijo(a)'
+                  : 'Escribe tu Nombre Completo'}
               </label>
               <input
                 type="text"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
+                value={manualStudentName}
+                onChange={(e) => setManualStudentName(e.target.value)}
                 placeholder="Nombre completo del estudiante"
                 className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                 required

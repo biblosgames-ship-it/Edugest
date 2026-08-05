@@ -1,5 +1,6 @@
 /** VERSION 54.0 - FIX IMPRESIÓN (CID ANCLADO) **/
 import React, { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';
 import { supabase } from '../lib/supabase';
@@ -28,9 +29,10 @@ import { PromoteStudentModal } from './PromoteStudentModal';
 import { BulkPromoteModal } from './BulkPromoteModal';
 
 export const StudentManagement = () => {
+  const queryClient = useQueryClient();
   const { state, selectedYear, refreshData } = useApp();
   const { profile } = useSupabase();
-  const { students: allStudents, isLoading: loading, deleteStudent } = useStudents();
+  const { students: allStudents, isLoading: loading, deleteStudent, updateStudent } = useStudents();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -116,9 +118,14 @@ export const StudentManagement = () => {
   };
 
   const handleOrderChange = async (studentId: string, newOrder: string) => {
-    const numOrder = newOrder === '' ? null : parseInt(newOrder);
-    // Nota: El listado se actualizará solo tras la mutación
-    await supabase.from('students').update({ order_number: numOrder }).eq('id', studentId);
+    const numOrder = newOrder === '' ? null : parseInt(newOrder, 10);
+    try {
+      await updateStudent({ id: studentId, updates: { order_number: numOrder } });
+      await queryClient.invalidateQueries({ queryKey: ['students'] });
+      refreshData();
+    } catch (err) {
+      console.error('Error al actualizar número de orden:', err);
+    }
   };
 
   const autoAssignOrder = async () => {
@@ -131,9 +138,9 @@ export const StudentManagement = () => {
     try {
       const sorted = [...courseStudents].sort((a, b) => {
         const nameA =
-          `${a.first_surname || ''} ${a.second_surname || ''} ${a.names || ''}`.toLowerCase();
+          `${a.first_surname || ''} ${a.second_surname || ''} ${a.names || ''}`.trim().toLowerCase();
         const nameB =
-          `${b.first_surname || ''} ${b.second_surname || ''} ${b.names || ''}`.toLowerCase();
+          `${b.first_surname || ''} ${b.second_surname || ''} ${b.names || ''}`.trim().toLowerCase();
         return nameA.localeCompare(nameB);
       });
 
@@ -148,6 +155,8 @@ export const StudentManagement = () => {
         )
       );
 
+      await queryClient.invalidateQueries({ queryKey: ['students'] });
+      refreshData();
       alert('Números de orden asignados correctamente.');
     } catch (e) {
       console.error(e);
@@ -430,7 +439,8 @@ export const StudentManagement = () => {
                       type="number"
                       value={s.order_number ?? ''}
                       onChange={(e) => handleOrderChange(s.id, e.target.value)}
-                      className="w-10 px-1 py-0.5 bg-brand-bg border border-border-main rounded text-center font-black text-indigo-600 text-[10px] outline-none"
+                      className="w-12 px-1.5 py-1 bg-white border border-slate-300 rounded-lg text-center font-black text-indigo-700 text-xs outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                      placeholder="#"
                     />
                   </td>
                   <td className="py-1 px-4">
