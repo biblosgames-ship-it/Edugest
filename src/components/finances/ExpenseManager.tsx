@@ -716,32 +716,59 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text(entry.type === 'income' ? 'RECIBO DE INGRESO' : 'COMPROBANTE DE EGRESO', 10, 32);
-    doc.text(`NO: ${entry.id.slice(-6).toUpperCase()}`, 70, 32);
+    const titleText =
+      entry.account === 'TRANSFERENCIA ENTRE CAJAS'
+        ? 'COMPROBANTE DE TRANSFERENCIA'
+        : entry.type === 'income'
+          ? 'RECIBO DE INGRESO'
+          : 'COMPROBANTE DE EGRESO';
+    doc.text(titleText, 10, 32);
+    doc.text(`NO: ${entry.id ? entry.id.slice(-6).toUpperCase() : '000000'}`, 70, 32);
 
     // CUERPO
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`FECHA: ${entry.date}`, 10, 42);
-    doc.text(`CUENTA: ${entry.account}`, 10, 48);
-    doc.text(`CONCEPTO: ${entry.item}`, 10, 54);
+    doc.text(`FECHA: ${entry.date}`, 10, 40);
+    doc.text(`CUENTA / ORIGEN: ${entry.account || 'GENERAL'}`, 10, 46);
+
+    const conceptText = `CONCEPTO: ${entry.item || 'N/A'}`;
+    const splitConcept = doc.splitTextToSize(conceptText, 80);
+    doc.text(splitConcept, 10, 52);
+
+    let currentY = 52 + splitConcept.length * 4.5;
+
+    // Comentario / Notas / Referencia (Detalle del movimiento)
+    const descText = entry.description || entry.notes || entry.comment || entry.reference_note || '';
+    if (descText) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('COMENTARIO / NOTAS:', 10, currentY);
+      currentY += 4;
+      doc.setFont('helvetica', 'normal');
+      const splitDesc = doc.splitTextToSize(descText, 80);
+      doc.text(splitDesc, 10, currentY);
+      currentY += splitDesc.length * 4 + 4;
+    } else {
+      currentY += 4;
+    }
 
     doc.setFillColor(245, 245, 245);
-    doc.rect(10, 65, 80, 12, 'F');
-    doc.setFontSize(12);
+    doc.rect(10, currentY, 80, 12, 'F');
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text(`MONTO TOTAL: RD$ ${entry.amount.toLocaleString()}`, 15, 73);
+    doc.text(`MONTO TOTAL: RD$ ${Number(entry.amount || 0).toLocaleString()}`, 15, currentY + 8);
+
+    currentY += 18;
 
     // FIRMAS
     doc.setFontSize(7);
-    doc.line(15, 110, 45, 110);
-    doc.text('FIRMA AUTORIZADA', 18, 114);
+    doc.line(15, currentY + 18, 45, currentY + 18);
+    doc.text('FIRMA AUTORIZADA', 18, currentY + 22);
 
-    doc.line(55, 110, 85, 110);
-    doc.text('RECIBÍ CONFORME', 58, 114);
+    doc.line(55, currentY + 18, 85, currentY + 18);
+    doc.text('RECIBÍ CONFORME', 58, currentY + 22);
 
     doc.setFontSize(6);
-    doc.text(`Impreso el: ${new Date().toLocaleString()}`, 10, 140);
+    doc.text(`Impreso el: ${new Date().toLocaleString()}`, 10, 145);
 
     const blob = doc.output('bloburl');
     window.open(blob, '_blank');

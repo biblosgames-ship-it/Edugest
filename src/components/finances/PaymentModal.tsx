@@ -621,6 +621,16 @@ export const PaymentModal = ({
                   </p>
                 </div>
               </div>
+              {(formData.notes || receiptData?.notes) && (
+                <div className="pt-2 border-t border-slate-100 mt-2 text-left">
+                  <p className={printFormat === 'ticket58' ? 'text-[7px] font-black text-slate-400 uppercase mb-0.5' : 'text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest'}>
+                    Comentario / Notas
+                  </p>
+                  <p className={printFormat === 'ticket58' ? 'text-[8px] font-medium text-slate-700' : 'text-xs font-medium text-slate-700'}>
+                    {formData.notes || receiptData?.notes}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Signature / Stamp line */}
