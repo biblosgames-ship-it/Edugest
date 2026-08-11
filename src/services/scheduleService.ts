@@ -65,7 +65,7 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
     taskSubjectName.includes('educacion fisica');
 
   if (isStrictTogether) {
-    score += 50000; // Máxima prioridad global: ubicar bloques dobles de Deporte de primero en toda la escuela
+    score += 10000000; // Prioridad suprema global (10 millones): ubicar PE de TODOS los cursos antes que cualquier otra materia
   }
 
   if (manualPriority) {
