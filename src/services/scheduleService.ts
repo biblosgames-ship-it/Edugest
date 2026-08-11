@@ -255,30 +255,8 @@ export const scheduleService = {
         grade.includes('quinto') ||
         grade.includes('sexto');
 
-      if (!isMorning) {
-        if (isFirstCycle) {
-          return [
-            { start: '14:00', end: '14:40', isBreak: false, label: '1ra Hora' },
-            { start: '14:40', end: '15:15', isBreak: false, label: '2da Hora' },
-            { start: '15:15', end: '15:50', isBreak: false, label: '3ra Hora' },
-            { start: '15:50', end: '16:10', isBreak: true, label: 'RECREO' },
-            { start: '16:30', end: '17:05', isBreak: false, label: '4ta Hora' },
-            { start: '17:05', end: '17:40', isBreak: false, label: '5ta Hora' },
-            { start: '17:40', end: '18:15', isBreak: false, label: '6ta Hora' }
-          ].map((s, i) => ({ ...s, originalIdx: i }));
-        } else {
-          return [
-            { start: '14:00', end: '14:40', isBreak: false, label: '1ra Hora' },
-            { start: '14:40', end: '15:15', isBreak: false, label: '2da Hora' },
-            { start: '15:15', end: '15:50', isBreak: false, label: '3ra Hora' },
-            { start: '15:50', end: '16:10', isBreak: false, label: '4ta Hora' },
-            { start: '16:10', end: '16:30', isBreak: true, label: 'RECREO' },
-            { start: '16:30', end: '17:05', isBreak: false, label: '5ta Hora' },
-            { start: '17:05', end: '17:40', isBreak: false, label: '6ta Hora' },
-            { start: '17:40', end: '18:15', isBreak: false, label: '7ma Hora' }
-          ].map((s, i) => ({ ...s, originalIdx: i }));
-        }
-      }
+      const startT = toMins(official?.start_time || (isMorning ? '08:00' : '14:00'));
+      const endT = toMins(official?.end_time || (isMorning ? '12:00' : '18:15'));
 
       const applicableBPs = (breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime);
@@ -1039,30 +1017,8 @@ export const scheduleService = {
         grade.includes('quinto') ||
         grade.includes('sexto');
 
-      if (!isMorning) {
-        if (isFirstCycle) {
-          return [
-            { start: '14:00:00', end: '14:40:00', isBreak: false, label: '1ra Hora' },
-            { start: '14:40:00', end: '15:15:00', isBreak: false, label: '2da Hora' },
-            { start: '15:15:00', end: '15:50:00', isBreak: false, label: '3ra Hora' },
-            { start: '15:50:00', end: '16:10:00', isBreak: true, label: 'RECREO' },
-            { start: '16:30:00', end: '17:05:00', isBreak: false, label: '4ta Hora' },
-            { start: '17:05:00', end: '17:40:00', isBreak: false, label: '5ta Hora' },
-            { start: '17:40:00', end: '18:15:00', isBreak: false, label: '6ta Hora' }
-          ].map((s, i) => ({ ...s, originalIdx: i }));
-        } else {
-          return [
-            { start: '14:00:00', end: '14:40:00', isBreak: false, label: '1ra Hora' },
-            { start: '14:40:00', end: '15:15:00', isBreak: false, label: '2da Hora' },
-            { start: '15:15:00', end: '15:50:00', isBreak: false, label: '3ra Hora' },
-            { start: '15:50:00', end: '16:10:00', isBreak: false, label: '4ta Hora' },
-            { start: '16:10:00', end: '16:30:00', isBreak: true, label: 'RECREO' },
-            { start: '16:30:00', end: '17:05:00', isBreak: false, label: '5ta Hora' },
-            { start: '17:05:00', end: '17:40:00', isBreak: false, label: '6ta Hora' },
-            { start: '17:40:00', end: '18:15:00', isBreak: false, label: '7ma Hora' }
-          ].map((s, i) => ({ ...s, originalIdx: i }));
-        }
-      }
+      const startT = toMins(official?.start_time || (isMorning ? '08:00:00' : '14:00:00'));
+      const endT = toMins(official?.end_time || (isMorning ? '12:00:00' : '18:15:00'));
 
       const applicableBPs = (breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime);
