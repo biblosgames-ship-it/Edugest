@@ -429,7 +429,7 @@ export const ScheduleViewer = () => {
               });
               return closest.start === slot.start && bestDiff <= 25;
             });
-            return hasEntry || slot.isBreak;
+            return hasEntry;
           });
         }
 
@@ -1360,8 +1360,7 @@ export const ScheduleViewer = () => {
                     // que enseña en varios ciclos con distintos recreos), las clases tienen
                     // prioridad sobre el recreo — nunca se ocultan detrás del banner de recreo.
                     const isRecreoRaw = slot.isBreak;
-                    const isRecreo =
-                      isRecreoRaw && !(filterType === 'teacher' && entries.length > 0);
+                    const isRecreo = filterType === 'teacher' ? false : isRecreoRaw;
                     const blockName = fixedEvent ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
 
                     return (

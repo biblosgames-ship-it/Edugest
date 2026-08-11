@@ -398,7 +398,20 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     sortedSlots.forEach((slot) => {
       matrix[slot.start] = {};
       weekDays.forEach((day) => {
-        if (slot.isBreak) {
+        // Buscar si hay clase este día a esta hora primero (prevalece la clase sobre el recreo)
+        const match = teacherEntries.find((e) => {
+          const entryDay = e.day || '';
+          const dayMatches = normalize(entryDay) === normalize(day);
+          return dayMatches && Math.abs(e.startMinutes - slot.startMinutes) <= 25;
+        });
+
+        if (match) {
+          matrix[slot.start][day] = {
+            isBreak: false,
+            isFree: false,
+            ...match
+          };
+        } else if (slot.isBreak) {
           matrix[slot.start][day] = {
             isBreak: true,
             label: slot.label,
@@ -406,27 +419,12 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             eTime: slot.end
           };
         } else {
-          // Buscar si hay clase este día a esta hora
-          const match = teacherEntries.find((e) => {
-            const entryDay = e.day || '';
-            const dayMatches = normalize(entryDay) === normalize(day);
-            return dayMatches && Math.abs(e.startMinutes - slot.startMinutes) <= 25;
-          });
-
-          if (match) {
-            matrix[slot.start][day] = {
-              isBreak: false,
-              isFree: false,
-              ...match
-            };
-          } else {
-            matrix[slot.start][day] = {
-              isBreak: false,
-              isFree: true,
-              sTime: slot.start,
-              eTime: slot.end
-            };
-          }
+          matrix[slot.start][day] = {
+            isBreak: false,
+            isFree: true,
+            sTime: slot.start,
+            eTime: slot.end
+          };
         }
       });
     });
