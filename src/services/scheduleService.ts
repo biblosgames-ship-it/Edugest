@@ -22,6 +22,61 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
   return match || schedules[0] || null;
 };
 
+const doesOverlapCourseBreak = (
+  sStart: number,
+  sEnd: number,
+  course: any,
+  breakPreferences: any[],
+  shift: string,
+  toMins: (t: string) => number
+) => {
+  const cGrade = (course?.grade || '').toLowerCase();
+  const cLevel = (course?.level || '').toLowerCase();
+  const isFirstCycleCourse =
+    /^[1-3]/.test(cGrade) ||
+    cGrade.includes('1') ||
+    cGrade.includes('2') ||
+    cGrade.includes('3') ||
+    cGrade.includes('primer') ||
+    (cGrade.includes('segundo') && !cGrade.includes('ciclo')) ||
+    cGrade.includes('tercer');
+  const isSecondCycleCourse =
+    /^[4-6]/.test(cGrade) ||
+    cGrade.includes('4') ||
+    cGrade.includes('5') ||
+    cGrade.includes('6') ||
+    cGrade.includes('cuarto') ||
+    cGrade.includes('quinto') ||
+    cGrade.includes('sexto');
+
+  return (breakPreferences || []).some((bp: any) => {
+    let bpMins = toMins(bp.startTime);
+    if (shift === 'Vespertina' && bpMins < 420) bpMins += 720;
+    const isBpMorning = bpMins < 780;
+    if ((shift === 'Matutina') !== isBpMorning) return false;
+
+    const bpLevel = (bp.level || '').toLowerCase();
+    if (bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
+      const matchLvl =
+        bpLevel.substring(0, 3) === cLevel.substring(0, 3) ||
+        cLevel.includes(bpLevel.substring(0, 3));
+      if (!matchLvl) return false;
+    }
+
+    const bpCycle = (bp.cycle || '').toLowerCase();
+    if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
+      if (isFirstCycleCourse && (bpCycle.includes('segundo') || bpCycle.includes('2do')))
+        return false;
+      if (isSecondCycleCourse && (bpCycle.includes('primer') || bpCycle.includes('1er')))
+        return false;
+    }
+
+    const bpStart = bpMins;
+    const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
+    return sStart < bpEnd && sEnd > bpStart;
+  });
+};
+
 export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Record<string, number> = {}) => {
   let score = task.priorityBoost || 0;
 
@@ -552,12 +607,14 @@ export const scheduleService = {
                   sName.includes('educación física') ||
                   sName.includes('educacion fisica')
                 ) {
-                  const overlapsBreak = (breakPreferences || []).some((bp: any) => {
-                    let bpStart = toMins(bp.startTime);
-                    if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
-                    const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
-                    return sStart < bpEnd && sEnd > bpStart;
-                  });
+                  const overlapsBreak = doesOverlapCourseBreak(
+                    sStart,
+                    sEnd,
+                    course,
+                    breakPreferences,
+                    shift,
+                    toMins
+                  );
                   if (overlapsBreak) return true;
                 }
               }
@@ -1376,12 +1433,14 @@ export const scheduleService = {
                         sName.includes('educación física') ||
                         sName.includes('educacion fisica')
                       ) {
-                        return (breakPreferences || []).some((bp: any) => {
-                          let bpStart = toMins(bp.startTime);
-                          if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
-                          const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
-                          return sStart < bpEnd && sEnd > bpStart;
-                        });
+                        return doesOverlapCourseBreak(
+                          sStart,
+                          sEnd,
+                          course,
+                          breakPreferences,
+                          shift,
+                          toMins
+                        );
                       }
                       return false;
                     })())
@@ -1703,12 +1762,14 @@ export const scheduleService = {
                           sName.includes('educación física') ||
                           sName.includes('educacion fisica')
                         ) {
-                          return (breakPreferences || []).some((bp: any) => {
-                            let bpStart = toMins(bp.startTime);
-                            if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
-                            const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
-                            return sStart < bpEnd && sEnd > bpStart;
-                          });
+                          return doesOverlapCourseBreak(
+                            sStart,
+                            sEnd,
+                            course,
+                            breakPreferences,
+                            shift,
+                            toMins
+                          );
                         }
                         return false;
                       })())
