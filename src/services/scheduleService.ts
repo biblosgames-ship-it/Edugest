@@ -236,6 +236,7 @@ export const scheduleService = {
     const getCourseSlots = (course: any) => {
       const isMorning = shift === 'Matutina';
       const levelNorm = (course.level || '').toLowerCase();
+      const official = findOfficialSchedule(levelSchedules, course.level, shift);
       const grade = (course.grade || '').toLowerCase();
 
       const isFirstCycle =
@@ -998,6 +999,7 @@ export const scheduleService = {
     const getCourseSlots = (course: any) => {
       const isMorning = shift === 'Matutina';
       const levelNorm = (course.level || '').toLowerCase();
+      const official = findOfficialSchedule(levelSchedules, course.level, shift);
       const grade = (course.grade || '').toLowerCase();
 
       const isFirstCycle =
