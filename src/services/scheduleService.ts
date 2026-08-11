@@ -57,6 +57,17 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
     return false;
   });
 
+  const distType = taskSubject?.distributionType || taskSubject?.distribution_type;
+  const isStrictTogether =
+    distType === 'together' ||
+    taskSubjectName.includes('deporte') ||
+    taskSubjectName.includes('educación física') ||
+    taskSubjectName.includes('educacion fisica');
+
+  if (isStrictTogether) {
+    score += 50000; // Máxima prioridad global: ubicar bloques dobles de Deporte de primero en toda la escuela
+  }
+
   if (manualPriority) {
     score += (Number(manualPriority.score) || 100) * 100;
   } else {
@@ -69,7 +80,6 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
       taskSubjectName.includes('sociales')
     )
       score += 200;
-    if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500;
     if (taskSubjectName.includes('artística')) score += 300;
     if (
       taskSubjectName.includes('inglés') ||
@@ -652,7 +662,16 @@ export const scheduleService = {
 
       const finalPending: any[] = [];
       for (const task of pending3) {
-        if (task.isDouble) {
+        const subObj = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
+        const sName = subObj?.name?.toLowerCase() || '';
+        const distType = subObj?.distributionType || subObj?.distribution_type;
+        const isStrictTogether =
+          distType === 'together' ||
+          sName.includes('deporte') ||
+          sName.includes('educación física') ||
+          sName.includes('educacion fisica');
+
+        if (task.isDouble && !isStrictTogether) {
           const tSingle1 = { ...task, isDouble: false };
           const tSingle2 = { ...task, isDouble: false };
           const p1 = placeTask(tSingle1, true, true);
@@ -1717,7 +1736,16 @@ export const scheduleService = {
         }
         const pending4: any[] = [];
         for (const t of pending3) {
-          if (t.isDouble) {
+          const subObj = state.subjects?.find((s: any) => s.id === t.assign?.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isStrictTogether =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
+          if (t.isDouble && !isStrictTogether) {
             const tSingle1 = { ...t, isDouble: false };
             const tSingle2 = { ...t, isDouble: false };
             const p1 = placeTask(tSingle1, true, true);
