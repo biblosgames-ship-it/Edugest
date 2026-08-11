@@ -1100,9 +1100,9 @@ export const PreferencesForm = () => {
               <div>
                 <label className={labelClass}>Nivel de Prioridad</label>
                 <select id="priority-score" className={inputClass}>
-                  <option value="100">🔥 Muy Alta (Se asigna de primero)</option>
-                  <option value="80">⭐ Alta</option>
-                  <option value="60">✅ Media</option>
+                  <option value="10000">🔥 Máxima VIP (Garantiza asignación de primero)</option>
+                  <option value="5000">⭐ Alta</option>
+                  <option value="2500">✅ Media</option>
                 </select>
               </div>
             </div>

@@ -320,9 +320,9 @@ export const scheduleService = {
     const getPriority = (task: any) => {
       let score = task.priorityBoost || 0;
 
-      const grade = task.course.grade?.toLowerCase() || '';
+      const grade = task.course?.grade?.toLowerCase() || '';
       const cLevel =
-        task.course.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
+        task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
       const isFirstCycle =
         /^[1-3]/.test(grade) ||
         grade.includes('1') ||
@@ -333,49 +333,49 @@ export const scheduleService = {
         grade.includes('tercer');
       const cCycle = isFirstCycle ? 'Primer Ciclo' : 'Segundo Ciclo';
 
-      const manualPriority = (state.priorityPreferences || []).find((p: any) => {
-        const matchLevel = p.level === 'General' || p.level === cLevel;
-        const matchCycle = p.cycle === 'General' || p.cycle === cCycle;
+      const taskSubject = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
+      const taskSubjectName = (taskSubject?.name || '').toLowerCase().trim();
 
+      const manualPriority = (state.priorityPreferences || []).find((p: any) => {
+        const matchLevel = !p.level || p.level === 'General' || p.level === cLevel;
+        const matchCycle = !p.cycle || p.cycle === 'General' || p.cycle === cCycle;
         if (!matchLevel || !matchCycle) return false;
 
-        if (p.targetType === 'subject' && p.targetId === task.assign.subject_id) return true;
-        if (p.targetType === 'teacher' && p.targetId === task.assign.teacher_id) return true;
+        if (p.targetType === 'subject') {
+          if (p.targetId === task.assign?.subject_id) return true;
+          const pSub = state.subjects?.find((s: any) => s.id === p.targetId);
+          const pSubName = (pSub?.name || '').toLowerCase().trim();
+          if (pSubName && taskSubjectName && pSubName === taskSubjectName) return true;
+        }
 
+        if (p.targetType === 'teacher' && p.targetId === task.assign?.teacher_id) return true;
         return false;
       });
 
       if (manualPriority) {
-        score += Number(manualPriority.score);
+        score += (Number(manualPriority.score) || 100) * 100; // Multiplicar por 100 para dominar el ordenamiento
       } else {
-        const sName =
-          state.subjects?.find((s: any) => s.id === task.assign.subject_id)?.name?.toLowerCase() ||
-          '';
         if (
-          sName.includes('matemática') ||
-          sName.includes('lengua') ||
-          sName.includes('español') ||
-          sName.includes('ciencias') ||
-          sName.includes('naturales') ||
-          sName.includes('sociales')
+          taskSubjectName.includes('matemática') ||
+          taskSubjectName.includes('lengua') ||
+          taskSubjectName.includes('español') ||
+          taskSubjectName.includes('ciencias') ||
+          taskSubjectName.includes('naturales') ||
+          taskSubjectName.includes('sociales')
         )
           score += 200;
-        if (sName.includes('física') || sName.includes('deporte')) score += 500; // Prioridad Máxima
-        if (sName.includes('artística')) score += 300;
-        if (sName.includes('inglés') || sName.includes('francés') || sName.includes('idioma'))
-          score += 80;
+        if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500; // Prioridad ultra-alta por defecto
+        if (taskSubjectName.includes('artística')) score += 300;
         if (
-          sName.includes('fihr') ||
-          sName.includes('humana') ||
-          sName.includes('religiosa') ||
-          sName.includes('formación integral')
+          taskSubjectName.includes('inglés') ||
+          taskSubjectName.includes('francés') ||
+          taskSubjectName.includes('idioma')
         )
-          score += 60;
+          score += 80;
       }
 
-      score += teacherLoad[task.assign.teacher_id] || 0;
-
-      if (task.isDouble) score += 10;
+      score += (teacherLoad[task.assign?.teacher_id] || 0) * 10;
+      if (task.isDouble) score += 50;
       return score;
     };
 
@@ -1165,29 +1165,14 @@ export const scheduleService = {
         (teacherLoadMap[a.teacher_id] || 0) + (Number(a.hours_per_week || a.hoursPerWeek) || 0);
     });
 
-    // Helper de ordenamiento de máxima prioridad: 1ro Educación Física, 2do Carga docente + bloque doble
+    // Helper de ordenamiento de máxima prioridad respetando preferencias del usuario (VIP) y bloques dobles
     const sortTasksPriority = (tasksList: any[]) => {
       return [...tasksList].sort((a, b) => {
-        const sA =
-          state.subjects?.find((s: any) => s.id === a.assign.subject_id)?.name?.toLowerCase() || '';
-        const sB =
-          state.subjects?.find((s: any) => s.id === b.assign.subject_id)?.name?.toLowerCase() || '';
-        const peA =
-          sA.includes('educación física') ||
-          sA.includes('educacion fisica') ||
-          sA.includes('deporte');
-        const peB =
-          sB.includes('educación física') ||
-          sB.includes('educacion fisica') ||
-          sB.includes('deporte');
-        if (peA && !peB) return -1;
-        if (!peA && peB) return 1;
-
-        const loadA = teacherLoadMap[a.assign?.teacher_id] || 0;
-        const loadB = teacherLoadMap[b.assign?.teacher_id] || 0;
-        const scoreA = loadA * 10 + (a.isDouble ? 30 : 0) + Math.random() * 60;
-        const scoreB = loadB * 10 + (b.isDouble ? 30 : 0) + Math.random() * 60;
-        return scoreB - scoreA;
+        const scoreA = getPriority(a);
+        const scoreB = getPriority(b);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        if (a.isDouble !== b.isDouble) return b.isDouble ? -1 : 1;
+        return Math.random() - 0.5;
       });
     };
 
