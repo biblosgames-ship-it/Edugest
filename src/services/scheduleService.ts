@@ -32,6 +32,25 @@ const doesOverlapCourseBreak = (
 ) => {
   const cGrade = (course?.grade || '').toLowerCase();
   const cLevel = (course?.level || '').toLowerCase();
+
+  const isInicialLevel =
+    cLevel.includes('inic') ||
+    cLevel.includes('preesc') ||
+    cLevel.includes('kinder') ||
+    cLevel.includes('parvul') ||
+    cGrade.includes('inic') ||
+    cGrade.includes('kínder') ||
+    cGrade.includes('kinder') ||
+    cGrade.includes('párvulo') ||
+    cGrade.includes('parvulo') ||
+    cGrade.includes('pre-primario') ||
+    cGrade.includes('preprimario');
+
+  // Regla Estricta: Deporte NO puede tener clases entre 09:30 (570m) y 10:30 (630m) para Primaria/Secundaria
+  if (shift === 'Matutina' && !isInicialLevel) {
+    if (sStart < 630 && sEnd > 570) return true;
+  }
+
   const isFirstCycleCourse =
     /^[1-3]/.test(cGrade) ||
     cGrade.includes('1') ||
