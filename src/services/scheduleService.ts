@@ -415,7 +415,11 @@ export const scheduleService = {
           let slotCombinations: any[][] = [];
           if (isDouble) {
             for (let i = 0; i < classSlots.length - 1; i++) {
-              slotCombinations.push([classSlots[i], classSlots[i + 1]]);
+              const endPrev = toMins(classSlots[i].end);
+              const startNext = toMins(classSlots[i + 1].start);
+              if (startNext === endPrev) {
+                slotCombinations.push([classSlots[i], classSlots[i + 1]]);
+              }
             }
           } else {
             for (let i = 0; i < classSlots.length; i++) {
@@ -1192,7 +1196,13 @@ export const scheduleService = {
 
           const combinations: any[][] = [];
           if (isDouble) {
-            for (let i = 0; i < slots.length - 1; i++) combinations.push([slots[i], slots[i + 1]]);
+            for (let i = 0; i < slots.length - 1; i++) {
+              const endPrev = toMins(slots[i].end);
+              const startNext = toMins(slots[i + 1].start);
+              if (startNext === endPrev) {
+                combinations.push([slots[i], slots[i + 1]]);
+              }
+            }
           } else {
             for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
           }
@@ -1462,8 +1472,13 @@ export const scheduleService = {
 
             const combinations: any[][] = [];
             if (isDouble) {
-              for (let i = 0; i < slots.length - 1; i++)
-                combinations.push([slots[i], slots[i + 1]]);
+              for (let i = 0; i < slots.length - 1; i++) {
+                const endPrev = toMins(slots[i].end);
+                const startNext = toMins(slots[i + 1].start);
+                if (startNext === endPrev) {
+                  combinations.push([slots[i], slots[i + 1]]);
+                }
+              }
             } else {
               for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
             }
