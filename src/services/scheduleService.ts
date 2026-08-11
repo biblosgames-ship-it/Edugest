@@ -424,20 +424,27 @@ export const scheduleService = {
 
           let slotCombinations: any[][] = [];
           if (isDouble) {
+            const strictPairs: any[][] = [];
+            const recessPairs: any[][] = [];
             for (let i = 0; i < classSlots.length - 1; i++) {
               const endPrev = toMins(classSlots[i].end);
               const startNext = toMins(classSlots[i + 1].start);
-              if (startNext === endPrev) {
-                slotCombinations.push([classSlots[i], classSlots[i + 1]]);
+              const gap = startNext - endPrev;
+              if (gap === 0) {
+                strictPairs.push([classSlots[i], classSlots[i + 1]]);
+              } else if (gap > 0 && gap <= 35) {
+                recessPairs.push([classSlots[i], classSlots[i + 1]]);
               }
             }
+            strictPairs.sort(() => Math.random() - 0.5);
+            recessPairs.sort(() => Math.random() - 0.5);
+            slotCombinations = [...strictPairs, ...recessPairs];
           } else {
             for (let i = 0; i < classSlots.length; i++) {
               slotCombinations.push([classSlots[i]]);
             }
+            slotCombinations.sort(() => Math.random() - 0.5);
           }
-
-          slotCombinations.sort(() => Math.random() - 0.5);
 
           for (const slotsToUse of slotCombinations) {
             if (!relaxedRules && daySubjectCount + slotsToUse.length > 2) continue;
@@ -1265,17 +1272,25 @@ export const scheduleService = {
 
           const combinations: any[][] = [];
           if (isDouble) {
+            const strictPairs: any[][] = [];
+            const recessPairs: any[][] = [];
             for (let i = 0; i < slots.length - 1; i++) {
               const endPrev = toMins(slots[i].end);
               const startNext = toMins(slots[i + 1].start);
-              if (startNext === endPrev) {
-                combinations.push([slots[i], slots[i + 1]]);
+              const gap = startNext - endPrev;
+              if (gap === 0) {
+                strictPairs.push([slots[i], slots[i + 1]]);
+              } else if (gap > 0 && gap <= 35) {
+                recessPairs.push([slots[i], slots[i + 1]]);
               }
             }
+            strictPairs.sort(() => Math.random() - 0.5);
+            recessPairs.sort(() => Math.random() - 0.5);
+            combinations.push(...strictPairs, ...recessPairs);
           } else {
             for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
+            combinations.sort(() => Math.random() - 0.5);
           }
-          combinations.sort(() => Math.random() - 0.5);
 
           for (const toUse of combinations) {
             const existingSameSubject = finalEntries.filter(
@@ -1571,24 +1586,37 @@ export const scheduleService = {
 
             const combinations: any[][] = [];
             if (isDouble) {
+              const strictPairs: any[][] = [];
+              const recessPairs: any[][] = [];
               for (let i = 0; i < slots.length - 1; i++) {
                 const endPrev = toMins(slots[i].end);
                 const startNext = toMins(slots[i + 1].start);
-                if (startNext === endPrev) {
-                  combinations.push([slots[i], slots[i + 1]]);
+                const gap = startNext - endPrev;
+                if (gap === 0) {
+                  strictPairs.push([slots[i], slots[i + 1]]);
+                } else if (gap > 0 && gap <= 35) {
+                  recessPairs.push([slots[i], slots[i + 1]]);
                 }
               }
+              strictPairs.sort((a, b) => {
+                const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
+                const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
+                if (aHasPref && !bHasPref) return -1;
+                if (!aHasPref && bHasPref) return 1;
+                return Math.random() - 0.5;
+              });
+              recessPairs.sort(() => Math.random() - 0.5);
+              combinations.push(...strictPairs, ...recessPairs);
             } else {
               for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
+              combinations.sort((a, b) => {
+                const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
+                const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
+                if (aHasPref && !bHasPref) return -1;
+                if (!aHasPref && bHasPref) return 1;
+                return Math.random() - 0.5;
+              });
             }
-
-            combinations.sort((a, b) => {
-              const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
-              const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
-              if (aHasPref && !bHasPref) return -1;
-              if (!aHasPref && bHasPref) return 1;
-              return Math.random() - 0.5;
-            });
 
             for (const toUse of combinations) {
               const existingSameSubject = finalEntries.filter(
