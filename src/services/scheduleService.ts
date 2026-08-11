@@ -637,7 +637,28 @@ export const scheduleService = {
 
       const finalPending: any[] = [];
       for (const task of pending3) {
-        finalPending.push(task);
+        if (task.isDouble) {
+          const tSingle1 = { ...task, isDouble: false };
+          const tSingle2 = { ...task, isDouble: false };
+          const p1 = placeTask(tSingle1, true, true);
+          const p2 = placeTask(tSingle2, true, true);
+          if (p1 && p2) {
+            relaxedCount += 2;
+            superRelaxedCount += 2;
+          } else if (p1) {
+            relaxedCount++;
+            superRelaxedCount++;
+            finalPending.push(tSingle2);
+          } else if (p2) {
+            relaxedCount++;
+            superRelaxedCount++;
+            finalPending.push(tSingle1);
+          } else {
+            finalPending.push(task);
+          }
+        } else {
+          finalPending.push(task);
+        }
       }
 
       return { entries: finalEntries, pendingTasks: finalPending, relaxedCount, superRelaxedCount };
@@ -1671,7 +1692,32 @@ export const scheduleService = {
             pending3.push(t);
           }
         }
-        return { entries: finalEntries, pendingTasks: pending3, relaxedCount, superRelaxedCount };
+        const pending4: any[] = [];
+        for (const t of pending3) {
+          if (t.isDouble) {
+            const tSingle1 = { ...t, isDouble: false };
+            const tSingle2 = { ...t, isDouble: false };
+            const p1 = placeTask(tSingle1, true, true);
+            const p2 = placeTask(tSingle2, true, true);
+            if (p1 && p2) {
+              relaxedCount += 2;
+              superRelaxedCount += 2;
+            } else if (p1) {
+              relaxedCount++;
+              superRelaxedCount++;
+              pending4.push(tSingle2);
+            } else if (p2) {
+              relaxedCount++;
+              superRelaxedCount++;
+              pending4.push(tSingle1);
+            } else {
+              pending4.push(t);
+            }
+          } else {
+            pending4.push(t);
+          }
+        }
+        return { entries: finalEntries, pendingTasks: pending4, relaxedCount, superRelaxedCount };
       };
 
       let bestFlexibleResult = {
