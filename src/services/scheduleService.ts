@@ -310,27 +310,7 @@ export const scheduleService = {
       return slots.map((s, i) => ({ ...s, originalIdx: i }));
     };
 
-    const generateSchedule = (state: AppState) => {
-  try {
-    const centerId = state.centerId;
-    const schoolYear = state.selectedSchoolYear;
-    const shift = state.selectedShift;
 
-    if (!centerId) {
-      return { success: false, entries: [], message: 'No hay un centro seleccionado' };
-    }
-
-    const courses = (state.courses || []).filter(
-      (c: any) =>
-        c.center_id === centerId && (c.tanda === shift || c.shift === shift || !c.tanda)
-    );
-    const assignments = (state.assignments || []).filter((a: any) => a.center_id === centerId);
-    const teacherPreferences = (state.teacherPreferences || []).filter(
-      (tp: any) => tp.center_id === centerId
-    );
-    const breakPreferences = (state.breakPreferences || []).filter(
-      (bp: any) => bp.center_id === centerId && bp.shift === shift
-    );
 
     const allTasks: any[] = [];
     const taskSummary: Record<string, number> = {};
