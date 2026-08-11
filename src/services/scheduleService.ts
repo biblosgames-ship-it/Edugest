@@ -432,6 +432,33 @@ export const scheduleService = {
           for (const slotsToUse of slotCombinations) {
             if (!relaxedRules && daySubjectCount + slotsToUse.length > 2) continue;
 
+            const existingSameSubject = finalEntries.filter(
+              (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
+            );
+            if (existingSameSubject.length > 0) {
+              const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+              const sName = subObj?.name?.toLowerCase() || '';
+              const distType = subObj?.distributionType || subObj?.distribution_type;
+              const isTogetherSubject =
+                distType === 'together' ||
+                sName.includes('deporte') ||
+                sName.includes('educación física') ||
+                sName.includes('educacion fisica');
+
+              if (isTogetherSubject) {
+                const isAdjacent = slotsToUse.some((slot) => {
+                  const pStart = toMins(slot.start);
+                  const pEnd = toMins(slot.end);
+                  return existingSameSubject.some((exist) => {
+                    const eStart = toMins(exist.start_time);
+                    const eEnd = toMins(exist.end_time);
+                    return pStart === eEnd || pEnd === eStart;
+                  });
+                });
+                if (!isAdjacent) continue;
+              }
+            }
+
             const hasConflict = slotsToUse.some((s) => {
               const sStart = toMins(s.start);
               const sEnd = toMins(s.end);
@@ -1209,6 +1236,32 @@ export const scheduleService = {
           combinations.sort(() => Math.random() - 0.5);
 
           for (const toUse of combinations) {
+            const existingSameSubject = finalEntries.filter(
+              (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
+            );
+            if (existingSameSubject.length > 0) {
+              const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+              const sName = subObj?.name?.toLowerCase() || '';
+              const distType = subObj?.distributionType || subObj?.distribution_type;
+              const isTogetherSubject =
+                distType === 'together' ||
+                sName.includes('deporte') ||
+                sName.includes('educación física') ||
+                sName.includes('educacion fisica');
+
+              if (isTogetherSubject) {
+                const isAdjacent = toUse.some((slot) => {
+                  const pStart = toMins(slot.start);
+                  const pEnd = toMins(slot.end);
+                  return existingSameSubject.some((exist) => {
+                    const eStart = toMins(exist.start_time);
+                    const eEnd = toMins(exist.end_time);
+                    return pStart === eEnd || pEnd === eStart;
+                  });
+                });
+                if (!isAdjacent) continue;
+              }
+            }
             const hasConflict = toUse.some((s) => {
               const sStart = toMins(s.start);
               const sEnd = toMins(s.end);
@@ -1492,6 +1545,32 @@ export const scheduleService = {
             });
 
             for (const toUse of combinations) {
+              const existingSameSubject = finalEntries.filter(
+                (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
+              );
+              if (existingSameSubject.length > 0) {
+                const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+                const sName = subObj?.name?.toLowerCase() || '';
+                const distType = subObj?.distributionType || subObj?.distribution_type;
+                const isTogetherSubject =
+                  distType === 'together' ||
+                  sName.includes('deporte') ||
+                  sName.includes('educación física') ||
+                  sName.includes('educacion fisica');
+
+                if (isTogetherSubject) {
+                  const isAdjacent = toUse.some((slot) => {
+                    const pStart = toMins(slot.start);
+                    const pEnd = toMins(slot.end);
+                    return existingSameSubject.some((exist) => {
+                      const eStart = toMins(exist.start_time);
+                      const eEnd = toMins(exist.end_time);
+                      return pStart === eEnd || pEnd === eStart;
+                    });
+                  });
+                  if (!isAdjacent) continue;
+                }
+              }
               const hasConflict = toUse.some((s) => {
                 const sStart = toMins(s.start);
                 const sEnd = toMins(s.end);
