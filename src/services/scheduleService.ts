@@ -511,7 +511,22 @@ export const scheduleService = {
               });
               if (isBusy) return true;
 
-              if (!superRelaxed && state.avoidDeporteDuringAnyBreak) {
+              const cLevelNorm = (course.level || '').toLowerCase();
+              const cGradeNorm = (course.grade || '').toLowerCase();
+              const isInicialLevel =
+                cLevelNorm.includes('inic') ||
+                cLevelNorm.includes('preesc') ||
+                cLevelNorm.includes('kinder') ||
+                cLevelNorm.includes('parvul') ||
+                cGradeNorm.includes('inic') ||
+                cGradeNorm.includes('kínder') ||
+                cGradeNorm.includes('kinder') ||
+                cGradeNorm.includes('párvulo') ||
+                cGradeNorm.includes('parvulo') ||
+                cGradeNorm.includes('pre-primario') ||
+                cGradeNorm.includes('preprimario');
+
+              if (!superRelaxed && state.avoidDeporteDuringAnyBreak && !isInicialLevel) {
                 const sName = (
                   state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
                 ).toLowerCase();
@@ -1313,6 +1328,9 @@ export const scheduleService = {
                   isFixedEventConflict(sStart, sEnd, day, course) ||
                   (!superRelaxed &&
                     state.avoidDeporteDuringAnyBreak &&
+                    !/inic|preesc|kinder|parvul|kínder|párvulo|pre-primario|preprimario/.test(
+                      ((course.level || '') + ' ' + (course.grade || '')).toLowerCase()
+                    ) &&
                     (() => {
                       const sName = (
                         state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
@@ -1624,6 +1642,9 @@ export const scheduleService = {
                     isFixedEventConflict(sStart, sEnd, day, course) ||
                     (!superRelaxed &&
                       state.avoidDeporteDuringAnyBreak &&
+                      !/inic|preesc|kinder|parvul|kínder|párvulo|pre-primario|preprimario/.test(
+                        ((course.level || '') + ' ' + (course.grade || '')).toLowerCase()
+                      ) &&
                       (() => {
                         const sName = (
                           state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
