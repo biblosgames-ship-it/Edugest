@@ -248,6 +248,173 @@ export const scheduleService = {
       return slots.map((s, i) => ({ ...s, originalIdx: i }));
     };
 
+export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Record<string, number> = {}) => {
+  let score = task.priorityBoost || 0;
+
+  const grade = task.course?.grade?.toLowerCase() || '';
+  const cLevel =
+    task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
+  const isFirstCycle =
+    /^[1-3]/.test(grade) ||
+    grade.includes('1') ||
+    grade.includes('2') ||
+    grade.includes('3') ||
+    grade.includes('primer') ||
+    (grade.includes('segundo') && !grade.includes('ciclo')) ||
+    grade.includes('tercer');
+  const cCycle = isFirstCycle ? 'Primer Ciclo' : 'Segundo Ciclo';
+
+  const taskSubject = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
+  const taskSubjectName = (taskSubject?.name || '').toLowerCase().trim();
+
+  const manualPriority = (state.priorityPreferences || []).find((p: any) => {
+    const matchLevel = !p.level || p.level === 'General' || p.level === cLevel;
+    const matchCycle = !p.cycle || p.cycle === 'General' || p.cycle === cCycle;
+    if (!matchLevel || !matchCycle) return false;
+
+    if (p.targetType === 'subject') {
+      if (p.targetId === task.assign?.subject_id) return true;
+      const pSub = state.subjects?.find((s: any) => s.id === p.targetId);
+      const pSubName = (pSub?.name || '').toLowerCase().trim();
+      if (pSubName && taskSubjectName && pSubName === taskSubjectName) return true;
+    }
+
+    if (p.targetType === 'teacher' && p.targetId === task.assign?.teacher_id) return true;
+    return false;
+  });
+
+  if (manualPriority) {
+    score += (Number(manualPriority.score) || 100) * 100;
+  } else {
+    if (
+      taskSubjectName.includes('matemática') ||
+      taskSubjectName.includes('lengua') ||
+      taskSubjectName.includes('español') ||
+      taskSubjectName.includes('ciencias') ||
+      taskSubjectName.includes('naturales') ||
+      taskSubjectName.includes('sociales')
+    )
+      score += 200;
+    if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500;
+    if (taskSubjectName.includes('artística')) score += 300;
+    if (
+      taskSubjectName.includes('inglés') ||
+      taskSubjectName.includes('francés') ||
+      taskSubjectName.includes('idioma')
+    )
+      score += 80;
+  }
+
+  score += (teacherLoadMap[task.assign?.teacher_id] || 0) * 10;
+  if (task.isDouble) score += 50;
+  return score;
+};
+
+export const generateSchedule = (state: AppState) => {
+  try {
+    const centerId = state.centerId;
+    const schoolYear = state.selectedSchoolYear;
+    const shift = state.selectedShift;
+
+    if (!centerId) {
+      return { success: false, entries: [], message: 'No hay un centro seleccionado' };
+    }
+
+    const courses = (state.courses || []).filter(
+      (c: any) =>
+        c.center_id === centerId && (c.tanda === shift || c.shift === shift || !c.tanda)
+    );
+    const assignments = (state.assignments || []).filter((a: any) => a.center_id === centerId);
+    const teacherPreferences = (state.teacherPreferences || []).filter(
+      (tp: any) => tp.center_id === centerId
+    );
+    const breakPreferences = (state.breakPreferences || []).filter(
+      (bp: any) => bp.center_id === centerId && bp.shift === shift
+    );
+
+    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+    const allTasks: any[] = [];
+    const taskSummary: Record<string, number> = {};
+
+    courses.forEach((course: any) => {
+      const levelKey = course.level || 'Desconocido';
+      const courseAssignments = assignments.filter(
+        (a: any) => a.course_id === course.id || a.courseId === course.id
+      );
+
+      if (courseAssignments.length === 0) {
+        taskSummary[levelKey + ' (Sin Materias)'] =
+          (taskSummary[levelKey + ' (Sin Materias)'] || 0) + 1;
+      }
+
+      courseAssignments.forEach((assign: any) => {
+        let remaining = Number(assign.hours_per_week || assign.hoursPerWeek) || 0;
+        taskSummary[levelKey] = (taskSummary[levelKey] || 0) + remaining;
+
+        const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+        const sName = subObj?.name?.toLowerCase() || '';
+        const distType = subObj?.distributionType || subObj?.distribution_type;
+        const requiresDouble =
+          distType === 'together' ||
+          sName.includes('matemática') ||
+          sName.includes('matematica') ||
+          sName.includes('lengua') ||
+          sName.includes('español') ||
+          sName.includes('espanol') ||
+          sName.includes('ciencias') ||
+          sName.includes('física') ||
+          sName.includes('fisica') ||
+          sName.includes('educación física') ||
+          sName.includes('educacion fisica') ||
+          sName.includes('deporte') ||
+          sName.includes('recreo') ||
+          sName.includes('artística') ||
+          sName.includes('artistica');
+
+        while (remaining > 0) {
+          if (remaining >= 2 && requiresDouble) {
+            allTasks.push({ course, assign, isDouble: true });
+            remaining -= 2;
+          } else {
+            allTasks.push({ course, assign, isDouble: false });
+            remaining -= 1;
+          }
+        }
+      });
+    });
+
+    allTasks.forEach((task) => {
+      const grade = (task.course.grade || '').toLowerCase();
+      task.priorityBoost = 0;
+      if (grade.includes('1') || grade.includes('primer')) task.priorityBoost = 1000;
+      if (grade.includes('2') || grade.includes('segundo')) task.priorityBoost = 500;
+    });
+
+export const generateSchedule = (state: AppState) => {
+  try {
+    const centerId = state.centerId;
+    const schoolYear = state.selectedSchoolYear;
+    const shift = state.selectedShift;
+
+    if (!centerId) {
+      return { success: false, entries: [], message: 'No hay un centro seleccionado' };
+    }
+
+    const courses = (state.courses || []).filter(
+      (c: any) =>
+        c.center_id === centerId && (c.tanda === shift || c.shift === shift || !c.tanda)
+    );
+    const assignments = (state.assignments || []).filter((a: any) => a.center_id === centerId);
+    const teacherPreferences = (state.teacherPreferences || []).filter(
+      (tp: any) => tp.center_id === centerId
+    );
+    const breakPreferences = (state.breakPreferences || []).filter(
+      (bp: any) => bp.center_id === centerId && bp.shift === shift
+    );
+
+    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
     const allTasks: any[] = [];
     const taskSummary: Record<string, number> = {};
 
@@ -307,77 +474,13 @@ export const scheduleService = {
       if (grade.includes('2') || grade.includes('segundo')) task.priorityBoost = 500;
     });
 
-    const debugInfo = Object.entries(taskSummary)
-      .map(([k, v]) => `${k}: ${v}h`)
-      .join(' | ');
-
     const teacherLoad: Record<string, number> = {};
     assignments.forEach((a: any) => {
       teacherLoad[a.teacher_id] =
         (teacherLoad[a.teacher_id] || 0) + Number(a.hours_per_week || a.hoursPerWeek || 0);
     });
 
-    const getPriority = (task: any) => {
-      let score = task.priorityBoost || 0;
-
-      const grade = task.course?.grade?.toLowerCase() || '';
-      const cLevel =
-        task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
-      const isFirstCycle =
-        /^[1-3]/.test(grade) ||
-        grade.includes('1') ||
-        grade.includes('2') ||
-        grade.includes('3') ||
-        grade.includes('primer') ||
-        (grade.includes('segundo') && !grade.includes('ciclo')) ||
-        grade.includes('tercer');
-      const cCycle = isFirstCycle ? 'Primer Ciclo' : 'Segundo Ciclo';
-
-      const taskSubject = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
-      const taskSubjectName = (taskSubject?.name || '').toLowerCase().trim();
-
-      const manualPriority = (state.priorityPreferences || []).find((p: any) => {
-        const matchLevel = !p.level || p.level === 'General' || p.level === cLevel;
-        const matchCycle = !p.cycle || p.cycle === 'General' || p.cycle === cCycle;
-        if (!matchLevel || !matchCycle) return false;
-
-        if (p.targetType === 'subject') {
-          if (p.targetId === task.assign?.subject_id) return true;
-          const pSub = state.subjects?.find((s: any) => s.id === p.targetId);
-          const pSubName = (pSub?.name || '').toLowerCase().trim();
-          if (pSubName && taskSubjectName && pSubName === taskSubjectName) return true;
-        }
-
-        if (p.targetType === 'teacher' && p.targetId === task.assign?.teacher_id) return true;
-        return false;
-      });
-
-      if (manualPriority) {
-        score += (Number(manualPriority.score) || 100) * 100; // Multiplicar por 100 para dominar el ordenamiento
-      } else {
-        if (
-          taskSubjectName.includes('matemática') ||
-          taskSubjectName.includes('lengua') ||
-          taskSubjectName.includes('español') ||
-          taskSubjectName.includes('ciencias') ||
-          taskSubjectName.includes('naturales') ||
-          taskSubjectName.includes('sociales')
-        )
-          score += 200;
-        if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500; // Prioridad ultra-alta por defecto
-        if (taskSubjectName.includes('artística')) score += 300;
-        if (
-          taskSubjectName.includes('inglés') ||
-          taskSubjectName.includes('francés') ||
-          taskSubjectName.includes('idioma')
-        )
-          score += 80;
-      }
-
-      score += (teacherLoad[task.assign?.teacher_id] || 0) * 10;
-      if (task.isDouble) score += 50;
-      return score;
-    };
+    const getPriority = (task: any) => computeTaskPriority(task, state, teacherLoad);
 
     const attemptGeneration = () => {
       const currentTasks = [...allTasks].sort((a, b) => {
@@ -1200,6 +1303,8 @@ export const scheduleService = {
       teacherLoadMap[a.teacher_id] =
         (teacherLoadMap[a.teacher_id] || 0) + (Number(a.hours_per_week || a.hoursPerWeek) || 0);
     });
+
+    const getPriority = (task: any) => computeTaskPriority(task, state, teacherLoadMap);
 
     // Helper de ordenamiento de máxima prioridad respetando preferencias del usuario (VIP) y bloques dobles
     const sortTasksPriority = (tasksList: any[]) => {
