@@ -445,7 +445,7 @@ export const scheduleService = {
                 sName.includes('educación física') ||
                 sName.includes('educacion fisica');
 
-              if (isTogetherSubject) {
+              if (!superRelaxed && isTogetherSubject) {
                 const isAdjacent = slotsToUse.some((slot) => {
                   const pStart = toMins(slot.start);
                   const pEnd = toMins(slot.end);
@@ -511,7 +511,7 @@ export const scheduleService = {
               });
               if (isBusy) return true;
 
-              if (state.avoidDeporteDuringAnyBreak) {
+              if (!superRelaxed && state.avoidDeporteDuringAnyBreak) {
                 const sName = (
                   state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
                 ).toLowerCase();
@@ -1234,7 +1234,7 @@ export const scheduleService = {
                 sName.includes('educación física') ||
                 sName.includes('educacion fisica');
 
-              if (isTogetherSubject) {
+              if (!superRelaxed && isTogetherSubject) {
                 const isAdjacent = toUse.some((slot) => {
                   const pStart = toMins(slot.start);
                   const pEnd = toMins(slot.end);
@@ -1290,7 +1290,8 @@ export const scheduleService = {
                     );
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
-                  (state.avoidDeporteDuringAnyBreak &&
+                  (!superRelaxed &&
+                    state.avoidDeporteDuringAnyBreak &&
                     (() => {
                       const sName = (
                         state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
@@ -1543,7 +1544,7 @@ export const scheduleService = {
                   sName.includes('educación física') ||
                   sName.includes('educacion fisica');
 
-                if (isTogetherSubject) {
+                if (!superRelaxed && isTogetherSubject) {
                   const isAdjacent = toUse.some((slot) => {
                     const pStart = toMins(slot.start);
                     const pEnd = toMins(slot.end);
@@ -1600,7 +1601,8 @@ export const scheduleService = {
                       );
                     }) ||
                     isFixedEventConflict(sStart, sEnd, day, course) ||
-                    (state.avoidDeporteDuringAnyBreak &&
+                    (!superRelaxed &&
+                      state.avoidDeporteDuringAnyBreak &&
                       (() => {
                         const sName = (
                           state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
