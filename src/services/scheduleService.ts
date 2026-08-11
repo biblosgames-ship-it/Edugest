@@ -266,10 +266,12 @@ export const scheduleService = {
         let remaining = Number(assign.hours_per_week || assign.hoursPerWeek) || 0;
         taskSummary[levelKey] = (taskSummary[levelKey] || 0) + remaining;
 
-        const sName =
-          state.subjects?.find((s: any) => s.id === assign.subject_id)?.name?.toLowerCase() || '';
+        const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+        const sName = subObj?.name?.toLowerCase() || '';
+        const distType = subObj?.distributionType || subObj?.distribution_type;
         // Materias que requieren bloque doble (horas consecutivas)
         const requiresDouble =
+          distType === 'together' ||
           sName.includes('matemática') ||
           sName.includes('matematica') ||
           sName.includes('lengua') ||
@@ -1095,9 +1097,11 @@ export const scheduleService = {
       const alreadyPlaced = placedCount[course.id]?.[a.subject_id] || 0;
       let remaining = required - alreadyPlaced;
 
-      const sName =
-        state.subjects?.find((s: any) => s.id === a.subject_id)?.name?.toLowerCase() || '';
+      const subObj = state.subjects?.find((s: any) => s.id === a.subject_id);
+      const sName = subObj?.name?.toLowerCase() || '';
+      const distType = subObj?.distributionType || subObj?.distribution_type;
       const requiresDouble =
+        distType === 'together' ||
         sName.includes('educación física') ||
         sName.includes('educacion fisica') ||
         sName.includes('deporte') ||
@@ -1335,13 +1339,15 @@ export const scheduleService = {
     if (bestResult.pendingTasks.length > 0) {
       const remainingTasksStrategy2: any[] = [];
       remainingTasksStrategy1.forEach((t) => {
-        const sName =
-          state.subjects?.find((s: any) => s.id === t.assign.subject_id)?.name?.toLowerCase() || '';
-        const isPE =
+        const subObj = state.subjects?.find((s: any) => s.id === t.assign.subject_id);
+        const sName = subObj?.name?.toLowerCase() || '';
+        const distType = subObj?.distributionType || subObj?.distribution_type;
+        const mustStayTogether =
+          distType === 'together' ||
           sName.includes('educación física') ||
           sName.includes('educacion fisica') ||
           sName.includes('deporte');
-        if (t.isDouble && !isPE) {
+        if (t.isDouble && !mustStayTogether) {
           remainingTasksStrategy2.push({ ...t, isDouble: false });
           remainingTasksStrategy2.push({ ...t, isDouble: false });
         } else {
@@ -1395,9 +1401,11 @@ export const scheduleService = {
         const course = courses.find((c) => c.id === (a.course_id || a.courseId));
         if (!course) return;
         let remaining = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-        const sName =
-          state.subjects?.find((s: any) => s.id === a.subject_id)?.name?.toLowerCase() || '';
+        const subObj = state.subjects?.find((s: any) => s.id === a.subject_id);
+        const sName = subObj?.name?.toLowerCase() || '';
+        const distType = subObj?.distributionType || subObj?.distribution_type;
         const requiresDouble =
+          distType === 'together' ||
           sName.includes('educación física') ||
           sName.includes('educacion fisica') ||
           sName.includes('deporte') ||
@@ -1610,14 +1618,15 @@ export const scheduleService = {
       if (bestFlexibleResult.pendingTasks.length > 0) {
         const allTasksFlexibleSplit: any[] = [];
         allTasksFlexible.forEach((t) => {
-          const sName =
-            state.subjects?.find((s: any) => s.id === t.assign.subject_id)?.name?.toLowerCase() ||
-            '';
-          const isPE =
+          const subObj = state.subjects?.find((s: any) => s.id === t.assign.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const mustStayTogether =
+            distType === 'together' ||
             sName.includes('educación física') ||
             sName.includes('educacion fisica') ||
             sName.includes('deporte');
-          if (t.isDouble && !isPE) {
+          if (t.isDouble && !mustStayTogether) {
             allTasksFlexibleSplit.push({ ...t, isDouble: false });
             allTasksFlexibleSplit.push({ ...t, isDouble: false });
           } else {
