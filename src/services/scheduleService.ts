@@ -315,25 +315,18 @@ export const scheduleService = {
         });
       }
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (40 a 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = 2;
-      if (preWindow >= 120) {
-        preCount = 3;
-      } else if (preWindow < 70) {
-        preCount = 1;
-      }
+      let preCount = preWindow >= 105 ? 3 : preWindow < 70 ? 1 : 2;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
         const remainingSlots = preCount - i;
         const remainingTime = bStart - currTimePre;
-        let dur = 45;
-        if (remainingSlots === 1) {
-          dur = remainingTime;
-        } else {
-          dur = remainingTime >= remainingSlots * 40 + 5 ? 45 : 40;
-        }
+        let dur =
+          remainingSlots === 1
+            ? remainingTime
+            : Math.max(35, Math.min(45, Math.floor(remainingTime / remainingSlots)));
         let sTime = currTimePre;
         let eTime = i === preCount - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -371,14 +364,17 @@ export const scheduleService = {
         }
       });
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE (ej. 1:00 PM / 13:00)
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCount = Math.max(1, Math.round(postWindow / 45));
+      let postCount = postWindow >= 105 ? 3 : postWindow < 70 ? 1 : 2;
 
       for (let i = 0; i < postCount; i++) {
         const remainingSlots = postCount - i;
         const remainingTime = endT - currTimePost;
-        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
+        let dur =
+          remainingSlots === 1
+            ? remainingTime
+            : Math.max(35, Math.min(45, Math.floor(remainingTime / remainingSlots)));
         let sTime = currTimePost;
         let eTime = i === postCount - 1 ? endT : sTime + dur;
         currTimePost = eTime;
@@ -1082,13 +1078,16 @@ export const scheduleService = {
       }
 
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = preWindow >= 120 ? 3 : (preWindow < 70 ? 1 : 2);
+      let preCount = preWindow >= 105 ? 3 : preWindow < 70 ? 1 : 2;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
         const remainingSlots = preCount - i;
         const remainingTime = bStart - currTimePre;
-        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
+        let dur =
+          remainingSlots === 1
+            ? remainingTime
+            : Math.max(35, Math.min(45, Math.floor(remainingTime / remainingSlots)));
         let sTime = currTimePre;
         let eTime = i === preCount - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -1126,12 +1125,15 @@ export const scheduleService = {
       });
 
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCount = Math.max(1, Math.round(postWindow / 45));
+      let postCount = postWindow >= 105 ? 3 : postWindow < 70 ? 1 : 2;
 
       for (let i = 0; i < postCount; i++) {
         const remainingSlots = postCount - i;
         const remainingTime = endT - currTimePost;
-        let dur = remainingSlots === 1 ? remainingTime : (remainingTime >= remainingSlots * 40 + 5 ? 45 : 40);
+        let dur =
+          remainingSlots === 1
+            ? remainingTime
+            : Math.max(35, Math.min(45, Math.floor(remainingTime / remainingSlots)));
         let sTime = currTimePost;
         let eTime = i === postCount - 1 ? endT : sTime + dur;
         currTimePost = eTime;
