@@ -310,7 +310,7 @@ export const scheduleService = {
       return slots.map((s, i) => ({ ...s, originalIdx: i }));
     };
 
-export const generateSchedule = (state: AppState) => {
+    const generateSchedule = (state: AppState) => {
   try {
     const centerId = state.centerId;
     const schoolYear = state.selectedSchoolYear;
