@@ -22,6 +22,68 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
   return match || schedules[0] || null;
 };
 
+export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Record<string, number> = {}) => {
+  let score = task.priorityBoost || 0;
+
+  const grade = task.course?.grade?.toLowerCase() || '';
+  const cLevel =
+    task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
+  const isFirstCycle =
+    /^[1-3]/.test(grade) ||
+    grade.includes('1') ||
+    grade.includes('2') ||
+    grade.includes('3') ||
+    grade.includes('primer') ||
+    (grade.includes('segundo') && !grade.includes('ciclo')) ||
+    grade.includes('tercer');
+  const cCycle = isFirstCycle ? 'Primer Ciclo' : 'Segundo Ciclo';
+
+  const taskSubject = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
+  const taskSubjectName = (taskSubject?.name || '').toLowerCase().trim();
+
+  const manualPriority = (state.priorityPreferences || []).find((p: any) => {
+    const matchLevel = !p.level || p.level === 'General' || p.level === cLevel;
+    const matchCycle = !p.cycle || p.cycle === 'General' || p.cycle === cCycle;
+    if (!matchLevel || !matchCycle) return false;
+
+    if (p.targetType === 'subject') {
+      if (p.targetId === task.assign?.subject_id) return true;
+      const pSub = state.subjects?.find((s: any) => s.id === p.targetId);
+      const pSubName = (pSub?.name || '').toLowerCase().trim();
+      if (pSubName && taskSubjectName && pSubName === taskSubjectName) return true;
+    }
+
+    if (p.targetType === 'teacher' && p.targetId === task.assign?.teacher_id) return true;
+    return false;
+  });
+
+  if (manualPriority) {
+    score += (Number(manualPriority.score) || 100) * 100;
+  } else {
+    if (
+      taskSubjectName.includes('matemática') ||
+      taskSubjectName.includes('lengua') ||
+      taskSubjectName.includes('español') ||
+      taskSubjectName.includes('ciencias') ||
+      taskSubjectName.includes('naturales') ||
+      taskSubjectName.includes('sociales')
+    )
+      score += 200;
+    if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500;
+    if (taskSubjectName.includes('artística')) score += 300;
+    if (
+      taskSubjectName.includes('inglés') ||
+      taskSubjectName.includes('francés') ||
+      taskSubjectName.includes('idioma')
+    )
+      score += 80;
+  }
+
+  score += (teacherLoadMap[task.assign?.teacher_id] || 0) * 10;
+  if (task.isDouble) score += 50;
+  return score;
+};
+
 export const scheduleService = {
   generateSchedule: async (
     state: any,
@@ -247,68 +309,6 @@ export const scheduleService = {
 
       return slots.map((s, i) => ({ ...s, originalIdx: i }));
     };
-
-export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Record<string, number> = {}) => {
-  let score = task.priorityBoost || 0;
-
-  const grade = task.course?.grade?.toLowerCase() || '';
-  const cLevel =
-    task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
-  const isFirstCycle =
-    /^[1-3]/.test(grade) ||
-    grade.includes('1') ||
-    grade.includes('2') ||
-    grade.includes('3') ||
-    grade.includes('primer') ||
-    (grade.includes('segundo') && !grade.includes('ciclo')) ||
-    grade.includes('tercer');
-  const cCycle = isFirstCycle ? 'Primer Ciclo' : 'Segundo Ciclo';
-
-  const taskSubject = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
-  const taskSubjectName = (taskSubject?.name || '').toLowerCase().trim();
-
-  const manualPriority = (state.priorityPreferences || []).find((p: any) => {
-    const matchLevel = !p.level || p.level === 'General' || p.level === cLevel;
-    const matchCycle = !p.cycle || p.cycle === 'General' || p.cycle === cCycle;
-    if (!matchLevel || !matchCycle) return false;
-
-    if (p.targetType === 'subject') {
-      if (p.targetId === task.assign?.subject_id) return true;
-      const pSub = state.subjects?.find((s: any) => s.id === p.targetId);
-      const pSubName = (pSub?.name || '').toLowerCase().trim();
-      if (pSubName && taskSubjectName && pSubName === taskSubjectName) return true;
-    }
-
-    if (p.targetType === 'teacher' && p.targetId === task.assign?.teacher_id) return true;
-    return false;
-  });
-
-  if (manualPriority) {
-    score += (Number(manualPriority.score) || 100) * 100;
-  } else {
-    if (
-      taskSubjectName.includes('matemática') ||
-      taskSubjectName.includes('lengua') ||
-      taskSubjectName.includes('español') ||
-      taskSubjectName.includes('ciencias') ||
-      taskSubjectName.includes('naturales') ||
-      taskSubjectName.includes('sociales')
-    )
-      score += 200;
-    if (taskSubjectName.includes('física') || taskSubjectName.includes('deporte')) score += 1500;
-    if (taskSubjectName.includes('artística')) score += 300;
-    if (
-      taskSubjectName.includes('inglés') ||
-      taskSubjectName.includes('francés') ||
-      taskSubjectName.includes('idioma')
-    )
-      score += 80;
-  }
-
-  score += (teacherLoadMap[task.assign?.teacher_id] || 0) * 10;
-  if (task.isDouble) score += 50;
-  return score;
-};
 
 export const generateSchedule = (state: AppState) => {
   try {
