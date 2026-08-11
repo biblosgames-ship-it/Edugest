@@ -23,7 +23,7 @@ import { SEO } from './SEO';
 import { scheduleService } from '../services/scheduleService';
 
 export const ScheduleViewer = () => {
-  const { state, profile, refreshData, selectedYear } = useApp();
+  const { state, profile, refreshData, selectedYear, setAvoidDeporteDuringAnyBreak } = useApp();
 
   const isAdminOrStaff =
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
@@ -933,6 +933,16 @@ export const ScheduleViewer = () => {
 
           {isAdminOrStaff && (
             <>
+              <label className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-200 rounded-2xl text-[10px] font-black uppercase text-indigo-900 cursor-pointer transition-all no-print select-none">
+                <input
+                  type="checkbox"
+                  checked={!!state.avoidDeporteDuringAnyBreak}
+                  onChange={(e) => setAvoidDeporteDuringAnyBreak(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>Bloquear Deporte en Recreo de cualquier ciclo</span>
+              </label>
+
               <button
                 onClick={handleRegenerate}
                 disabled={isGenerating || isRepairing || isDeepRepairing}

@@ -30,7 +30,7 @@ export const PreferencesForm = () => {
   } = usePreferences();
 
   const { teachers: allTeachers } = useTeachers();
-  const { state, profile, refreshData, addPriorityPreference, deletePriorityPreference } = useApp();
+  const { state, profile, refreshData, addPriorityPreference, deletePriorityPreference, setAvoidDeporteDuringAnyBreak } = useApp();
 
   // Estado para Preferencias de Docente
   const [teacherPref, setTeacherPref] = useState({
@@ -471,6 +471,32 @@ export const PreferencesForm = () => {
             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
               Configurar Recreos
             </h3>
+          </div>
+
+          {/* REGLA DE PROTECCIÓN DE PATIO Y RECREO */}
+          <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shrink-0">
+                <Coffee size={20} />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                  Prohibir Deporte durante Recreos de Cualquier Ciclo
+                </h4>
+                <p className="text-[10px] font-semibold text-slate-500">
+                  Protección de Patio: Bloquea clases de Educación Física / Deporte mientras cualquier ciclo esté en recreo.
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={!!state.avoidDeporteDuringAnyBreak}
+                onChange={(e) => setAvoidDeporteDuringAnyBreak(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
           </div>
           <form className="grid grid-cols-2 gap-4">
             <div>

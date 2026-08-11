@@ -125,6 +125,11 @@ export interface ScheduleEntry {
   timeBlockId: string;
 }
 
+export interface AppState {
+  attendanceRecords: any[];
+  avoidDeporteDuringAnyBreak?: boolean;
+}
+
 export interface AttendanceRecord {
   id: string;
   teacherId: string;

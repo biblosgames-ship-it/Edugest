@@ -32,6 +32,7 @@ export interface AppState {
   students: any[]; // NUEVO
   grades: any[]; // NUEVO
   activities: any[]; // NUEVO: Agenda Escolar
+  avoidDeporteDuringAnyBreak?: boolean;
   loading: boolean;
   error: string | null;
   teacherPerformanceStats?: any[];
@@ -72,6 +73,7 @@ interface AppContextType {
   updateActivity: (id: string, u: any) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   addAttendanceRecord: (record: any) => Promise<void>;
+  setAvoidDeporteDuringAnyBreak: (val: boolean) => void;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
   loadAllGrades: () => Promise<any[]>;
 }
@@ -114,8 +116,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (profile?.center_id) {
       const stored = localStorage.getItem(`edugest_selected_year_${profile.center_id}`);
       setSelectedYear(stored || '');
+      const storedDeporteBreak = localStorage.getItem(`edugest_avoid_deporte_break_${profile.center_id}`);
+      setState((prev) => ({
+        ...prev,
+        avoidDeporteDuringAnyBreak: storedDeporteBreak === 'true'
+      }));
     }
   }, [profile?.center_id]);
+
+  const setAvoidDeporteDuringAnyBreak = (val: boolean) => {
+    setState((prev) => ({ ...prev, avoidDeporteDuringAnyBreak: val }));
+    if (profile?.center_id) {
+      localStorage.setItem(`edugest_avoid_deporte_break_${profile.center_id}`, val ? 'true' : 'false');
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && profile?.center_id && selectedYear) {
@@ -830,6 +844,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deletePriorityPreference,
         setWinterSchedulePreference,
         addAttendanceRecord,
+        setAvoidDeporteDuringAnyBreak,
         setAppState: setState,
         addActivity: async (a: any) => {
           if (!profile?.center_id) return;

@@ -478,6 +478,25 @@ export const scheduleService = {
               });
               if (isBusy) return true;
 
+              if (state.avoidDeporteDuringAnyBreak) {
+                const sName = (
+                  state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
+                ).toLowerCase();
+                if (
+                  sName.includes('deporte') ||
+                  sName.includes('educación física') ||
+                  sName.includes('educacion fisica')
+                ) {
+                  const overlapsBreak = (breakPreferences || []).some((bp: any) => {
+                    let bpStart = toMins(bp.startTime);
+                    if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
+                    const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
+                    return sStart < bpEnd && sEnd > bpStart;
+                  });
+                  if (overlapsBreak) return true;
+                }
+              }
+
               const isFixed = (fixedEvents || []).some((fe: any) => {
                 if (fe.day !== 'Todos' && fe.day !== day) return false;
                 const feStart = toMins(fe.start_time);
@@ -1209,17 +1228,37 @@ export const scheduleService = {
 
               return (
                 finalEntries.some((e) => {
-                  if (e.day !== day) return false;
-                  const eStart = toMins(e.start_time);
-                  const eEnd = toMins(e.end_time);
-                  return (
-                    sStart < eEnd &&
-                    sEnd > eStart &&
-                    (e.teacher_id === assign.teacher_id || e.course_id === course.id)
-                  );
-                }) || isFixedEventConflict(sStart, sEnd, day, course)
-              );
-            });
+                    if (e.day !== day) return false;
+                    const eStart = toMins(e.start_time);
+                    const eEnd = toMins(e.end_time);
+                    return (
+                      sStart < eEnd &&
+                      sEnd > eStart &&
+                      (e.teacher_id === assign.teacher_id || e.course_id === course.id)
+                    );
+                  }) ||
+                  isFixedEventConflict(sStart, sEnd, day, course) ||
+                  (state.avoidDeporteDuringAnyBreak &&
+                    (() => {
+                      const sName = (
+                        state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
+                      ).toLowerCase();
+                      if (
+                        sName.includes('deporte') ||
+                        sName.includes('educación física') ||
+                        sName.includes('educacion fisica')
+                      ) {
+                        return (breakPreferences || []).some((bp: any) => {
+                          let bpStart = toMins(bp.startTime);
+                          if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
+                          const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
+                          return sStart < bpEnd && sEnd > bpStart;
+                        });
+                      }
+                      return false;
+                    })())
+                );
+              });
 
             if (!hasConflict) {
               toUse.forEach((s) => {
@@ -1464,17 +1503,37 @@ export const scheduleService = {
 
                 return (
                   finalEntries.some((e) => {
-                    if (e.day !== day) return false;
-                    const eStart = toMins(e.start_time);
-                    const eEnd = toMins(e.end_time);
-                    return (
-                      sStart < eEnd &&
-                      sEnd > eStart &&
-                      (e.teacher_id === assign.teacher_id || e.course_id === course.id)
-                    );
-                  }) || isFixedEventConflict(sStart, sEnd, day, course)
-                );
-              });
+                      if (e.day !== day) return false;
+                      const eStart = toMins(e.start_time);
+                      const eEnd = toMins(e.end_time);
+                      return (
+                        sStart < eEnd &&
+                        sEnd > eStart &&
+                        (e.teacher_id === assign.teacher_id || e.course_id === course.id)
+                      );
+                    }) ||
+                    isFixedEventConflict(sStart, sEnd, day, course) ||
+                    (state.avoidDeporteDuringAnyBreak &&
+                      (() => {
+                        const sName = (
+                          state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
+                        ).toLowerCase();
+                        if (
+                          sName.includes('deporte') ||
+                          sName.includes('educación física') ||
+                          sName.includes('educacion fisica')
+                        ) {
+                          return (breakPreferences || []).some((bp: any) => {
+                            let bpStart = toMins(bp.startTime);
+                            if (shift === 'Vespertina' && bpStart < 420) bpStart += 720;
+                            const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
+                            return sStart < bpEnd && sEnd > bpStart;
+                          });
+                        }
+                        return false;
+                      })())
+                  );
+                });
 
               if (!hasConflict) {
                 toUse.forEach((s) => {
