@@ -797,7 +797,16 @@ export const scheduleService = {
         } else {
           // FALLBACK INSTANTÁNEO PARA MATERIAS COMO ARTE O BLOQUES DOBLES:
           // Si no cupo como bloque doble de 2 horas seguidas, desglosarlo en 2 horas sueltas
-          if (task.isDouble) {
+          const subObj = state.subjects?.find((s: any) => s.id === task.assign?.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isStrictTogether =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
+          if (task.isDouble && !isStrictTogether) {
             const single1 = { ...task, isDouble: false };
             const single2 = { ...task, isDouble: false };
             const p1 = placeTask(single1, true, true);
@@ -1614,7 +1623,16 @@ export const scheduleService = {
           relaxedCount++;
           superRelaxedCount++;
         } else {
-          if (t.isDouble) {
+          const subObj = state.subjects?.find((s: any) => s.id === t.assign?.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isStrictTogether =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
+          if (t.isDouble && !isStrictTogether) {
             const single1 = { ...t, isDouble: false };
             const single2 = { ...t, isDouble: false };
             const p1 = placeTask(single1, true, true);
