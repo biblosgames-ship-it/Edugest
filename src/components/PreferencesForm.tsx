@@ -822,22 +822,37 @@ export const PreferencesForm = () => {
                 const end = (document.getElementById('official-end') as HTMLInputElement).value;
 
                 try {
-                  const { error } = await supabase.from('level_schedules').upsert(
-                    {
-                      center_id: profile?.center_id,
-                      level,
-                      shift,
-                      start_time: start,
-                      end_time: end
-                    },
-                    { onConflict: 'center_id,level,shift' }
-                  );
+                  const { data: existing } = await supabase
+                    .from('level_schedules')
+                    .select('id')
+                    .eq('center_id', profile?.center_id)
+                    .eq('level', level)
+                    .eq('shift', shift)
+                    .maybeSingle();
 
-                  if (error) throw error;
+                  if (existing) {
+                    const { error } = await supabase
+                      .from('level_schedules')
+                      .update({ start_time: start, end_time: end })
+                      .eq('id', existing.id);
+                    if (error) throw error;
+                  } else {
+                    const { error } = await supabase
+                      .from('level_schedules')
+                      .insert({
+                        center_id: profile?.center_id,
+                        level,
+                        shift,
+                        start_time: start,
+                        end_time: end
+                      });
+                    if (error) throw error;
+                  }
+
                   alert('Horario oficial guardado correctamente');
                   await refreshData(undefined, true);
                 } catch (e: any) {
-                  alert('Error: ' + e.message);
+                  alert('Error al guardar horario oficial: ' + e.message);
                 }
               }}
               className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl flex items-center justify-center gap-2"

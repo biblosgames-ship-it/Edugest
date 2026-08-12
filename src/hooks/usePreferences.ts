@@ -17,8 +17,7 @@ export function usePreferences() {
   // Mutations
   const addTeacherPreference = useMutation({
     mutationFn: async (pref: any) => {
-      const { error } = await supabase.from('teacher_preferences').upsert({
-        id: pref.id || undefined,
+      const payload: any = {
         teacher_id: pref.teacherId,
         working_days: pref.workingDays,
         morning_start: pref.morningStart,
@@ -27,8 +26,35 @@ export function usePreferences() {
         afternoon_end: pref.afternoonEnd,
         daily_config: pref.dailyConfig,
         center_id: centerId
-      });
-      if (error) throw error;
+      };
+
+      if (pref.id) {
+        const { error } = await supabase
+          .from('teacher_preferences')
+          .update(payload)
+          .eq('id', pref.id);
+        if (error) throw error;
+      } else {
+        const { data: existing } = await supabase
+          .from('teacher_preferences')
+          .select('id')
+          .eq('center_id', centerId)
+          .eq('teacher_id', pref.teacherId)
+          .maybeSingle();
+
+        if (existing) {
+          const { error } = await supabase
+            .from('teacher_preferences')
+            .update(payload)
+            .eq('id', existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('teacher_preferences')
+            .insert([payload]);
+          if (error) throw error;
+        }
+      }
     },
     onSuccess: () => {
       refreshData(centerId, true);
@@ -47,15 +73,26 @@ export function usePreferences() {
 
   const addBreakPreference = useMutation({
     mutationFn: async (b: any) => {
-      const { error } = await supabase.from('break_preferences').upsert({
-        id: b.id || undefined,
+      const payload: any = {
         start_time: b.startTime,
         duration_minutes: b.durationMinutes,
         level: b.level,
         cycle: b.cycle,
         center_id: centerId
-      });
-      if (error) throw error;
+      };
+
+      if (b.id) {
+        const { error } = await supabase
+          .from('break_preferences')
+          .update(payload)
+          .eq('id', b.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('break_preferences')
+          .insert([payload]);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       refreshData(centerId, true);
