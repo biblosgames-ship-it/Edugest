@@ -17,7 +17,8 @@ import {
   Wrench,
   Lock,
   Unlock,
-  Zap
+  Zap,
+  Trash2
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
@@ -1478,7 +1479,7 @@ export const ScheduleViewer = () => {
                                     className={`p-2.5 rounded-xl border shadow-sm group-hover:shadow-md transition-all relative ${
                                       lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
                                         ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/50'
-                                        : 'bg-white border-slate-200'
+                        : 'bg-white border-slate-200'
                                     }`}
                                   >
                                     <div className="flex items-start justify-between gap-1">
@@ -1486,28 +1487,48 @@ export const ScheduleViewer = () => {
                                         {subject?.name || 'Materia'}
                                       </p>
                                       {isAdminOrStaff && (
-                                        <button
-                                          onClick={(evt) => {
-                                            evt.stopPropagation();
-                                            toggleLock(e);
-                                          }}
-                                          title={
-                                            lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
-                                              ? 'Clase Bloqueada 🔒 (Inviolable en reparación)'
-                                              : 'Bloquear Clase 🔓'
-                                          }
-                                          className={`p-1 rounded-lg transition-all no-print cursor-pointer ${
-                                            lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
-                                              ? 'bg-amber-500 text-white shadow-sm scale-110'
-                                              : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'
-                                          }`}
-                                        >
-                                          {lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`) ? (
-                                            <Lock size={12} />
-                                          ) : (
-                                            <Unlock size={12} />
-                                          )}
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={(evt) => {
+                                              evt.stopPropagation();
+                                              toggleLock(e);
+                                            }}
+                                            title={
+                                              lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                                ? 'Clase Bloqueada 🔒 (Inviolable en reparación)'
+                                                : 'Bloquear Clase 🔓'
+                                            }
+                                            className={`p-1 rounded-lg transition-all no-print cursor-pointer ${
+                                              lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                                ? 'bg-amber-500 text-white shadow-sm scale-110'
+                                                : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                          >
+                                            {lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`) ? (
+                                              <Lock size={12} />
+                                            ) : (
+                                              <Unlock size={12} />
+                                            )}
+                                          </button>
+                                          <button
+                                            onClick={async (evt) => {
+                                              evt.stopPropagation();
+                                              if (confirm(`¿Eliminar la clase de "${subject?.name || 'esta materia'}" de esta casilla?`)) {
+                                                try {
+                                                  const { error } = await supabase.from('schedule_entries').delete().eq('id', e.id);
+                                                  if (error) throw error;
+                                                  await refreshData(undefined, true);
+                                                } catch (err: any) {
+                                                  alert('Error al eliminar: ' + err.message);
+                                                }
+                                              }
+                                            }}
+                                            title="Eliminar esta clase 🗑️"
+                                            className="p-1 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all no-print cursor-pointer"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                     {filterType === 'teacher' ? (
