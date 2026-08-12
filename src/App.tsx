@@ -157,15 +157,20 @@ function AppContent() {
       ? profile.allowed_panels
       : ROLE_FALLBACKS[profile?.role || 'student'] || ROLE_FALLBACKS.student;
 
-  // Garantizar que 'classroom' esté disponible para docentes, coordinadores y administradores
+  // Garantizar que 'classroom' y 'digital-register' (Calificaciones) estén SIEMPRE disponibles para docentes, coordinadores y administradores
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
+    let panels = [...rawAllowed];
+
     if (['teacher', 'management_teacher', 'coordinator', 'admin'].includes(userRole)) {
-      if (!rawAllowed.includes('classroom')) {
-        return [...rawAllowed, 'classroom'];
+      if (!panels.includes('classroom')) {
+        panels.push('classroom');
+      }
+      if (!panels.includes('digital-register')) {
+        panels.push('digital-register');
       }
     }
-    return rawAllowed;
+    return panels;
   }, [profile?.role, rawAllowed]);
 
   // Redirigir al primer panel permitido si intenta acceder a uno no autorizado
