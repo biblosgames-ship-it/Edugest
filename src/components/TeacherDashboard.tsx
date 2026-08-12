@@ -84,6 +84,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   const [initialFormType, setInitialFormType] = useState<'task' | 'announcement'>('task');
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState<boolean>(false);
+  const [hidePeriodAlert, setHidePeriodAlert] = useState<boolean>(() => {
+    return localStorage.getItem('edugens_hide_period_alert') === 'true';
+  });
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Reloj interno
@@ -893,13 +896,26 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               Ver Mi Horario Completo
             </button>
           )}
+
+          {hidePeriodAlert && (
+            <button
+              onClick={() => {
+                setHidePeriodAlert(false);
+                localStorage.setItem('edugens_hide_period_alert', 'false');
+              }}
+              className="w-full md:w-auto text-[9px] font-black text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200 px-4 py-3 rounded-2xl uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+              title="Activar Alerta de Cambio de Hora"
+            >
+              <Bell size={12} /> Activar Alerta de Hora
+            </button>
+          )}
         </div>
       </div>
 
-      {/* BANNER ALERTA VIVA DE CAMBIO DE HORA */}
-      {periodAlert && (
+      {/* BANNER ALERTA VIVA DE CAMBIO DE HORA (SI NO ESTA DESACTIVADA) */}
+      {periodAlert && !hidePeriodAlert && (
         <div
-          className={`p-6 rounded-[2.5rem] shadow-xl border transition-all duration-500 ${
+          className={`p-6 rounded-[2.5rem] shadow-xl border transition-all duration-500 relative ${
             periodAlert.type === 'current' && periodAlert.minsLeft <= 10
               ? 'bg-gradient-to-r from-amber-500 via-rose-600 to-amber-600 text-white border-amber-300 animate-pulse'
               : 'bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-indigo-500/30'
@@ -943,8 +959,20 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               </div>
             </div>
 
-            <div className="bg-white/10 px-4 py-2.5 rounded-2xl border border-white/20 text-center font-mono font-black text-xs shrink-0">
-              {currentDay} • {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <div className="flex items-center gap-3 self-end md:self-auto">
+              <div className="bg-white/10 px-4 py-2.5 rounded-2xl border border-white/20 text-center font-mono font-black text-xs shrink-0">
+                {currentDay} • {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <button
+                onClick={() => {
+                  setHidePeriodAlert(true);
+                  localStorage.setItem('edugens_hide_period_alert', 'true');
+                }}
+                className="p-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-white/80 hover:text-white transition-all cursor-pointer"
+                title="Desactivar / Ocultar Alerta"
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
         </div>

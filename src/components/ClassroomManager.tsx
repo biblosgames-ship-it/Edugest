@@ -102,12 +102,27 @@ export const ClassroomManager = () => {
     }
   }, [availableCourses, selectedCourseId]);
 
+  // Helper para obtener el nombre completo del estudiante (soporta names, surnames, full_name, etc.)
+  const getStudentFullName = (s: any) => {
+    if (!s) return 'Estudiante';
+    if (s.full_name && s.full_name.trim()) return s.full_name;
+    if (s.name && s.name.trim()) return s.name;
+    if (s.names && s.names.trim()) {
+      const surnames = [s.first_surname, s.second_surname, s.apellidos, s.last_name].filter(Boolean).join(' ');
+      return surnames ? `${s.names} ${surnames}`.trim() : s.names.trim();
+    }
+    if (s.first_name || s.last_name) {
+      return `${s.first_name || ''} ${s.last_name || ''}`.trim();
+    }
+    return s.student_code || s.rne || 'Estudiante';
+  };
+
   // Estudiantes del curso seleccionado
   const courseStudents = useMemo(() => {
     if (!selectedCourseId) return [];
     return (allStudents || [])
       .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
-      .sort((a: any, b: any) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || ''));
+      .sort((a: any, b: any) => getStudentFullName(a).localeCompare(getStudentFullName(b)));
   }, [allStudents, selectedCourseId]);
 
   // Filtrar estudiantes por búsqueda
@@ -115,7 +130,7 @@ export const ClassroomManager = () => {
     if (!searchTerm.trim()) return courseStudents;
     const term = searchTerm.toLowerCase();
     return courseStudents.filter((s: any) =>
-      (s.full_name || s.name || '').toLowerCase().includes(term) ||
+      getStudentFullName(s).toLowerCase().includes(term) ||
       (s.rne || '').toLowerCase().includes(term)
     );
   }, [courseStudents, searchTerm]);
@@ -407,7 +422,7 @@ export const ClassroomManager = () => {
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
                           <td className="px-6 py-4 font-black text-text-muted">{idx + 1}</td>
                           <td className="px-6 py-4 font-bold text-text-main">
-                            {s.full_name || s.name}
+                            {getStudentFullName(s)}
                           </td>
                           <td className="px-6 py-4 font-mono text-[11px] text-text-muted">
                             {s.rne || s.student_code || '---'}
@@ -508,7 +523,7 @@ export const ClassroomManager = () => {
                 <option value="">-- Elige un Alumno --</option>
                 {courseStudents.map((s: any) => (
                   <option key={s.id} value={s.id}>
-                    {s.full_name || s.name}
+                    {getStudentFullName(s)}
                   </option>
                 ))}
               </select>
@@ -575,7 +590,7 @@ export const ClassroomManager = () => {
                     <div key={n.id} className="p-4 rounded-2xl border border-border-main bg-brand-bg/50 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-black text-sm text-brand-blue">
-                          {studentObj?.full_name || studentObj?.name || 'Estudiante'}
+                          {getStudentFullName(studentObj)}
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-black text-[9px] uppercase tracking-wider rounded-lg">
@@ -645,7 +660,7 @@ export const ClassroomManager = () => {
                     return (
                       <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
                         <td className="px-6 py-4 font-bold text-text-main">
-                          {s.full_name || s.name}
+                          {getStudentFullName(s)}
                         </td>
                         {partialActivities.map((act) => (
                           <td key={act.id} className="px-4 py-4 text-center">
@@ -694,7 +709,7 @@ export const ClassroomManager = () => {
                       : 'bg-brand-bg text-text-main border-border-main hover:border-brand-blue'
                   }`}
                 >
-                  <span className="font-bold text-xs">{s.full_name || s.name}</span>
+                  <span className="font-bold text-xs">{getStudentFullName(s)}</span>
                   <span className="text-[10px] font-mono opacity-70">{s.rne || 'RNE'}</span>
                 </button>
               ))}
@@ -711,16 +726,17 @@ export const ClassroomManager = () => {
               const student = courseStudents.find((s: any) => s.id === folderStudentId);
               const studentNotes = notesList.filter((n) => n.studentId === folderStudentId);
               if (!student) return null;
+              const sFullName = getStudentFullName(student);
 
               return (
                 <div className="space-y-6">
                   <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-slate-900 text-white rounded-3xl border border-white/10">
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg">
-                        {(student.full_name || student.name || 'A')[0]}
+                        {sFullName[0]}
                       </div>
                       <div>
-                        <h3 className="text-xl font-black">{student.full_name || student.name}</h3>
+                        <h3 className="text-xl font-black">{sFullName}</h3>
                         <p className="text-xs text-slate-400 font-mono">RNE: {student.rne || 'Sin RNE'}</p>
                       </div>
                     </div>
