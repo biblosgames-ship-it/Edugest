@@ -156,8 +156,14 @@ export const ScheduleViewer = () => {
 
   const filteredSchedule = useMemo(() => {
     let list = [...(state.schedule || [])];
-    // FILTRO CRÍTICO POR AÑO Y TANDA
-    list = list.filter((s: any) => s.shift === selectedShift && s.school_year === selectedYear);
+    const shiftBase = selectedShift.toLowerCase().substring(0, 3);
+    // FILTRO ROBUSUTO POR AÑO Y TANDA
+    list = list.filter((s: any) => {
+      const sShift = (s.shift || '').toLowerCase();
+      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
+      const yearMatch = !s.school_year || !selectedYear || s.school_year === selectedYear;
+      return shiftMatch && yearMatch;
+    });
 
     if (filterType === 'teacher' && filterId)
       list = list.filter((s: any) => s.teacher_id === filterId);
@@ -614,8 +620,8 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // We only assign it to the closest slot if the difference is within 25 minutes
-      if (closestSlot && minDiff <= 25) {
+      // Asignar siempre la entrada a su slot más cercano para garantizar visibilidad total
+      if (closestSlot) {
         const key = `${entry.day}-${closestSlot.start}`;
         map.get(key)?.push(entry);
       }
