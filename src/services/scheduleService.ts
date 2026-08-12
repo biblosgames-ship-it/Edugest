@@ -156,15 +156,12 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
       taskSubjectName.includes('sociales')
     )
       score += 200;
-    
-    // BOOST DE PRIORIDAD PARA ARTE / EDUCACIÓN ARTÍSTICA
+
     if (
-      taskSubjectName.includes('arte') ||
       taskSubjectName.includes('artística') ||
-      taskSubjectName.includes('artistica') ||
-      taskSubjectName.includes('taller')
+      taskSubjectName.includes('artistica')
     )
-      score += 5000;
+      score += 150;
 
     if (
       taskSubjectName.includes('inglés') ||
@@ -173,16 +170,10 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
       taskSubjectName.includes('frances') ||
       taskSubjectName.includes('idioma')
     )
-      score += 300;
+      score += 100;
   }
 
-  // BOOST PARA DOCENTES CON CARGA ACOTADA O PARCIAL (12 A 16 HORAS)
-  const teacherLoad = teacherLoadMap[task.assign?.teacher_id] || 0;
-  if (teacherLoad > 0 && teacherLoad <= 18) {
-    score += (30 - teacherLoad) * 50; // A menor horas disponibles, mayor prioridad para asegurar su lugar
-  } else {
-    score += teacherLoad * 10;
-  }
+  score += (teacherLoadMap[task.assign?.teacher_id] || 0) * 10;
 
   if (task.isDouble) score += 50;
   return score;
