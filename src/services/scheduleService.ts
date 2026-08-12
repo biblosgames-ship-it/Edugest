@@ -328,13 +328,19 @@ export const scheduleService = {
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, count: number) => {
-        if (count <= 0) return [];
-        if (totalMins === 110 && count === 3) return [40, 35, 35];
-        if (totalMins === 120 && count === 3) return [40, 40, 40];
-        if (totalMins === 135 && count === 3) return [45, 45, 45];
-        if (totalMins === 90 && count === 2) return [45, 45];
-        if (totalMins === 90 && count === 3) return [30, 30, 30];
+      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+        if (totalMins <= 0 || preferredCount <= 0) return [];
+        let count = preferredCount;
+
+        // Regla estricta: Cada bloque debe durar entre 33 y 45 minutos.
+        // Si el conteo preferido hace que las clases duren menos de 33 min, reducir el número de bloques.
+        while (count > 1 && totalMins / count < 33) {
+          count--;
+        }
+        // Si el conteo hace que las clases duren más de 45 min, aumentar el número de bloques.
+        while (totalMins / count > 45 && count < 6) {
+          count++;
+        }
 
         const base = Math.floor(totalMins / count);
         let rem = totalMins - base * count;
@@ -346,26 +352,15 @@ export const scheduleService = {
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 30 y 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 33 y 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = 2;
-      if (targetTotal === 5) {
-        // En Primaria/Inicial (5 bloques por día): si preWindow <= 100 min (ej. 8:00 a 9:30 AM), son exactamente 2 bloques de 45 min
-        if (preWindow <= 100) {
-          preCount = 2;
-        } else {
-          preCount = Math.min(3, Math.floor(preWindow / 35));
-        }
-      } else {
-        // En Secundaria (6 bloques por día):
-        if (preWindow >= 85) {
-          preCount = 3;
-        } else {
-          preCount = 2;
-        }
+      let preCount = targetTotal === 5 ? 2 : 3;
+      if (preWindow / preCount < 33) {
+        preCount = Math.max(1, Math.floor(preWindow / 33));
       }
 
       const preDurs = calculateSlotDurations(preWindow, preCount);
+      preCount = preDurs.length;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
@@ -1143,30 +1138,37 @@ export const scheduleService = {
       const isSecundaria = levelNorm.includes('secun');
       const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
 
+      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+        if (totalMins <= 0 || preferredCount <= 0) return [];
+        let count = preferredCount;
+        while (count > 1 && totalMins / count < 33) {
+          count--;
+        }
+        while (totalMins / count > 45 && count < 6) {
+          count++;
+        }
+        const base = Math.floor(totalMins / count);
+        let rem = totalMins - base * count;
+        const durs = new Array(count).fill(base);
+        for (let idx = 0; idx < count && rem > 0; idx++) {
+          durs[idx] += 1;
+          rem -= 1;
+        }
+        return durs;
+      };
+
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = 2;
-      if (targetTotal === 5) {
-        if (preWindow <= 100) {
-          preCount = 2;
-        } else {
-          preCount = Math.min(3, Math.floor(preWindow / 35));
-        }
-      } else {
-        if (preWindow >= 85) {
-          preCount = 3;
-        } else {
-          preCount = 2;
-        }
+      let preCount = targetTotal === 5 ? 2 : 3;
+      if (preWindow / preCount < 33) {
+        preCount = Math.max(1, Math.floor(preWindow / 33));
       }
+
+      const preDurs = calculateSlotDurations(preWindow, preCount);
+      preCount = preDurs.length;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
-        const remainingSlots = preCount - i;
-        const remainingTime = bStart - currTimePre;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+        let dur = preDurs[i];
         let sTime = currTimePre;
         let eTime = i === preCount - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -1205,16 +1207,12 @@ export const scheduleService = {
 
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = Math.max(1, targetTotal - preCount);
+      const postDurs = calculateSlotDurations(postWindow, postCount);
 
-      for (let i = 0; i < postCount; i++) {
-        const remainingSlots = postCount - i;
-        const remainingTime = endT - currTimePost;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
         let sTime = currTimePost;
-        let eTime = i === postCount - 1 ? endT : sTime + dur;
+        let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
         currTimePost = eTime;
 
         slots.push({
