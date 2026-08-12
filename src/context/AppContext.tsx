@@ -223,7 +223,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             studRes,
             actRes,
             centRes,
-            licRes
+            licRes,
+            pPrefRes
           ] = await Promise.all([
             supabase
               .from('courses')
@@ -281,7 +282,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .from('saas_licenses')
               .select('*, plan:saas_plans(*)')
               .eq('used_by_center', targetCid)
-              .maybeSingle()
+              .maybeSingle(),
+            supabase.from('priority_preferences').select('*').eq('center_id', targetCid)
           ]);
 
           if (centRes.data) setCenter(centRes.data);
@@ -416,7 +418,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cycle: b.cycle
           }));
 
-          const priorityPrefs = JSON.parse(localStorage.getItem('edugens_priority_prefs') || '[]');
+          const dbPriorityList = (pPrefRes?.data || []).map((p: any) => ({
+            id: p.id,
+            level: p.level,
+            cycle: p.cycle,
+            targetType: p.target_type || p.targetType,
+            targetId: p.target_id || p.targetId,
+            score: Number(p.score) || 2500
+          }));
+
+          const localPriorityPrefs = JSON.parse(localStorage.getItem('edugens_priority_prefs') || '[]');
+          
+          const combinedMap = new Map();
+          localPriorityPrefs.forEach((p: any) => combinedMap.set(`${p.targetType}-${p.targetId}`, p));
+          dbPriorityList.forEach((p: any) => combinedMap.set(`${p.targetType}-${p.targetId}`, p));
+          const priorityPrefs = Array.from(combinedMap.values());
+
+          if (priorityPrefs.length > 0) {
+            try {
+              localStorage.setItem('edugens_priority_prefs', JSON.stringify(priorityPrefs));
+            } catch (err) {}
+          }
+
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
               return {
@@ -726,6 +749,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addPriorityPreference = async (p: any) => {
+    const cid = profile?.center_id;
     const current = JSON.parse(localStorage.getItem('edugens_priority_prefs') || '[]');
     const newPref = { ...p, id: p.id || Math.random().toString(36).substring(7) };
     const updated = p.id
@@ -733,21 +757,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : [...current, newPref];
     localStorage.setItem('edugens_priority_prefs', JSON.stringify(updated));
 
+    if (cid) {
+      const payload = {
+        center_id: cid,
+        level: p.level,
+        cycle: p.cycle,
+        target_type: p.targetType,
+        target_id: p.targetId,
+        score: p.score
+      };
+      try {
+        if (p.id && typeof p.id === 'string' && p.id.length > 20) {
+          await supabase.from('priority_preferences').update(payload).eq('id', p.id);
+        } else {
+          await supabase.from('priority_preferences').insert([payload]);
+        }
+      } catch (err) {
+        console.warn('Priority preference persisted locally:', err);
+      }
+    }
+
     setState((prev) => ({
       ...prev,
       priorityPreferences: updated
     }));
+
+    if (cid) await refreshData(undefined, true);
   };
 
   const deletePriorityPreference = async (id: string) => {
+    const cid = profile?.center_id;
     const current = JSON.parse(localStorage.getItem('edugens_priority_prefs') || '[]');
     const updated = current.filter((c: any) => c.id !== id);
     localStorage.setItem('edugens_priority_prefs', JSON.stringify(updated));
 
+    if (cid && id) {
+      try {
+        await supabase.from('priority_preferences').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Priority preference deleted locally:', err);
+      }
+    }
+
     setState((prev) => ({
       ...prev,
       priorityPreferences: updated
     }));
+
+    if (cid) await refreshData(undefined, true);
   };
 
   const addAttendanceRecord = async (record: any) => {

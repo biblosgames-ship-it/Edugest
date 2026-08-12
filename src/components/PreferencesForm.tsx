@@ -1190,7 +1190,7 @@ export const PreferencesForm = () => {
               * Nota: El sistema prioriza automáticamente a los profesores con más horas, pero las
               reglas que añadas aquí sumarán puntos extra para forzar que ciertas materias (ej.
               Arte) se acomoden antes. <br />
-              (Se guarda localmente en este dispositivo).
+              (Se guarda de forma permanente e institucional en la nube).
             </p>
           </div>
 
