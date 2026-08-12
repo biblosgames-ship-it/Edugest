@@ -77,6 +77,12 @@ export const CourseForm = () => {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainers = document.querySelectorAll('.overflow-y-auto');
+    scrollContainers.forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
   const handleEdit = (course: any) => {
     setEditingCourseId(course.id);
     setIsCodeManuallyEdited(!!course.code);
@@ -91,7 +97,7 @@ export const CourseForm = () => {
       modality: course.modality,
       output: course.output
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleDelete = async (courseId: string) => {

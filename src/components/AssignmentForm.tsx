@@ -65,6 +65,12 @@ export const AssignmentForm = () => {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainers = document.querySelectorAll('.overflow-y-auto');
+    scrollContainers.forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
   const handleEdit = (assignment: any) => {
     setEditingAssignmentId(assignment.id);
     setFormData({
@@ -73,7 +79,7 @@ export const AssignmentForm = () => {
       teacherId: assignment.teacherId || (assignment as any).teacher_id,
       hoursPerWeek: assignment.hoursPerWeek || (assignment as any).hours_per_week || 0
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleDelete = async (id: string) => {

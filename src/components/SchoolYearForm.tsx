@@ -43,6 +43,12 @@ export const SchoolYearForm = () => {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainers = document.querySelectorAll('.overflow-y-auto');
+    scrollContainers.forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
   const handleEdit = (year: any) => {
     setEditingId(year.id);
     setFormData({
@@ -51,7 +57,7 @@ export const SchoolYearForm = () => {
       end_date: year.end_date || '',
       status: year.status || 'planificacion'
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleDelete = async (id: string, name: string) => {

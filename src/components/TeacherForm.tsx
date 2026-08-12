@@ -48,6 +48,12 @@ export const TeacherForm = () => {
       t.role === 'management_teacher'
   );
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainers = document.querySelectorAll('.overflow-y-auto');
+    scrollContainers.forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
   const handleEdit = (teacher: any) => {
     setEditingTeacherId(teacher.id);
     setFormData({
@@ -65,7 +71,7 @@ export const TeacherForm = () => {
         hoursPerWeek: a.hours_per_week || a.hoursPerWeek
       }))
     );
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleAddPending = () => {
@@ -93,6 +99,7 @@ export const TeacherForm = () => {
       hours: a.hoursPerWeek
     });
     setEditingIdx(idx);
+    scrollToTop();
   };
 
   // PERSISTENCIA DE BORRADOR

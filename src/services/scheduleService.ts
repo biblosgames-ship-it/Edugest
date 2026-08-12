@@ -525,6 +525,9 @@ export const scheduleService = {
           }
 
           for (const slotsToUse of slotCombinations) {
+            // REGLA ESTRICTA Y ABSOLUTA: JAMÁS PERMITIR 4 O MÁS HORAS DE LA MISMA MATERIA EL MISMO DÍA
+            if (daySubjectCount + slotsToUse.length >= 4) continue;
+
             if (!relaxedRules && daySubjectCount + slotsToUse.length > 2) continue;
 
             const existingSameSubject = finalEntries.filter(
@@ -1379,6 +1382,8 @@ export const scheduleService = {
           }
 
           for (const toUse of combinations) {
+            // REGLA ESTRICTA Y ABSOLUTA: JAMÁS PERMITIR 4 O MÁS HORAS DE LA MISMA MATERIA EL MISMO DÍA
+            if (dayCount + toUse.length >= 4) continue;
             const existingSameSubject = finalEntries.filter(
               (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
             );

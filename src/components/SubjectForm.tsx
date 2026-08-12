@@ -44,6 +44,12 @@ export const SubjectForm = () => {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainers = document.querySelectorAll('.overflow-y-auto');
+    scrollContainers.forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
   const handleEdit = (subject: any) => {
     setEditingSubjectId(subject.id);
     setFormData({
@@ -53,7 +59,7 @@ export const SubjectForm = () => {
       isPedagogicalBlock: subject.isPedagogicalBlock || subject.is_pedagogical_block || false,
       distributionType: subject.distributionType || subject.distribution_type || 'together'
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleDelete = async (subjectId: string) => {

@@ -166,6 +166,8 @@ export const TeamManagement = () => {
                       onClick={() => {
                         setEditingUser(user);
                         setIsCreating(false);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        document.querySelectorAll('.overflow-y-auto').forEach((c) => c.scrollTo({ top: 0, behavior: 'smooth' }));
                       }}
                       className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"
                     >
