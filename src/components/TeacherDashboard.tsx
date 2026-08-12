@@ -21,7 +21,9 @@ import {
   X,
   Printer,
   Download,
-  CalendarDays
+  CalendarDays,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
@@ -82,8 +84,34 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     'horario' | 'tareas' | 'comunicados' | 'excusas'
   >('horario');
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
   const [initialFormType, setInitialFormType] = useState<'task' | 'announcement'>('task');
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState<boolean>(false);
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarea publicada?')) return;
+    try {
+      await dataService.deleteTask(taskId);
+      setCourseTasks((prev) => prev.filter((t) => t.id !== taskId));
+      alert('¡Tarea eliminada con éxito!');
+    } catch (err: any) {
+      console.error('Error al eliminar tarea:', err);
+      alert('Error al eliminar la tarea.');
+    }
+  };
+
+  const handleDeleteAnnouncement = async (annId: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta circular?')) return;
+    try {
+      await dataService.deleteAnnouncement(annId);
+      setCourseAnnouncements((prev) => prev.filter((a) => a.id !== annId));
+      alert('¡Circular eliminada con éxito!');
+    } catch (err: any) {
+      console.error('Error al eliminar circular:', err);
+      alert('Error al eliminar la circular.');
+    }
+  };
   const [hidePeriodAlert, setHidePeriodAlert] = useState<boolean>(() => {
     return localStorage.getItem('edugens_hide_period_alert') === 'true';
   });
@@ -1015,19 +1043,33 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             </p>
           </div>
         </div>
-      ) : showCreateForm ? (
-        // FORMULARIO DE CREACIÓN DE TAREA / COMUNICADO
+      ) : showCreateForm || editingTask || editingAnnouncement ? (
+        // FORMULARIO DE CREACIÓN / EDICIÓN DE TAREA / COMUNICADO
         <div className="relative">
           <button
-            onClick={() => setShowCreateForm(false)}
-            className="absolute top-6 right-6 z-20 w-10 h-10 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white transition-all shadow-md"
+            onClick={() => {
+              setShowCreateForm(false);
+              setEditingTask(null);
+              setEditingAnnouncement(null);
+            }}
+            className="absolute top-6 right-6 z-20 w-10 h-10 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white transition-all shadow-md cursor-pointer"
           >
             <X size={20} />
           </button>
           <TeacherTaskAnnouncement
             userData={profile}
             initialCourseId={selectedCourse?.id}
-            onClose={() => setShowCreateForm(false)}
+            taskToEdit={editingTask}
+            announcementToEdit={editingAnnouncement}
+            onClose={() => {
+              setShowCreateForm(false);
+              setEditingTask(null);
+              setEditingAnnouncement(null);
+              if (selectedCourse?.id) {
+                dataService.getCourseTasks(selectedCourse.id).then((t) => setCourseTasks(t));
+                dataService.getCourseAnnouncements(selectedCourse.id).then((a) => setCourseAnnouncements(a));
+              }
+            }}
           />
         </div>
       ) : selectedCourse ? (
@@ -1220,7 +1262,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                     </div>
                   ) : (
                     courseTasks.map((t: any) => {
-                      const isLate = new Date(t.due_date) < new Date();
+                      const isLate = t.due_date ? new Date(t.due_date) < new Date() : false;
                       const subject = state.subjects.find((s) => s.id === t.subject_id);
                       return (
                         <div
@@ -1232,11 +1274,27 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                               <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase tracking-widest">
                                 {subject?.name || 'General'}
                               </span>
-                              <span
-                                className={`text-[8px] font-black px-2 py-0.5 rounded ${isLate ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}
-                              >
-                                {isLate ? 'VENCIDA' : 'ACTIVA'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-[8px] font-black px-2 py-0.5 rounded ${isLate ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}
+                                >
+                                  {isLate ? 'VENCIDA' : 'ACTIVA'}
+                                </span>
+                                <button
+                                  onClick={() => setEditingTask(t)}
+                                  className="p-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-md transition-all cursor-pointer"
+                                  title="Editar Tarea"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTask(t.id)}
+                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md transition-all cursor-pointer"
+                                  title="Eliminar Tarea"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
                             </div>
                             <h5 className="text-sm font-black text-slate-900 uppercase tracking-tight mt-1">
                               {t.title}
@@ -1248,7 +1306,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
                           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-[9px] font-black text-slate-400">
                             <span>ENTREGA:</span>
-                            <span>{new Date(t.due_date).toLocaleDateString()}</span>
+                            <span>{t.due_date ? new Date(t.due_date).toLocaleDateString() : 'Sin fecha'}</span>
                           </div>
                         </div>
                       );
@@ -1289,9 +1347,25 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                       >
                         <div className="flex justify-between items-start gap-3">
                           <h5 className="text-sm font-black text-slate-900 uppercase">{a.title}</h5>
-                          <span className="text-[8px] font-black text-slate-400">
-                            {new Date(a.created_at || a.timestamp).toLocaleDateString()}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-black text-slate-400">
+                              {new Date(a.created_at || a.timestamp).toLocaleDateString()}
+                            </span>
+                            <button
+                              onClick={() => setEditingAnnouncement(a)}
+                              className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-md transition-all cursor-pointer"
+                              title="Editar Circular"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAnnouncement(a.id)}
+                              className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md transition-all cursor-pointer"
+                              title="Eliminar Circular"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
                         <p className="text-xs text-slate-600 mt-2 leading-relaxed">{a.content}</p>
                       </div>

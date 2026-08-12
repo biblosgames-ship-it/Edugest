@@ -259,8 +259,28 @@ export const dataService = {
     if (error) throw error;
   },
 
+  async updateTask(id: string, updates: any) {
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteTask(id: string) {
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   async addAnnouncement(data: any) {
     const { error } = await supabase.from('announcements').insert([data]);
+    if (error) throw error;
+  },
+
+  async updateAnnouncement(id: string, updates: any) {
+    const { error } = await supabase.from('announcements').update(updates).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteAnnouncement(id: string) {
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
     if (error) throw error;
   },
 

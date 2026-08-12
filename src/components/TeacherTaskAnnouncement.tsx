@@ -18,22 +18,28 @@ import {
 export const TeacherTaskAnnouncement = ({
   userData: profile,
   initialCourseId,
+  taskToEdit,
+  announcementToEdit,
   onClose
 }: {
   userData: any;
   initialCourseId?: string;
+  taskToEdit?: any;
+  announcementToEdit?: any;
   onClose?: () => void;
 }) => {
   const { state } = useApp();
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [courseId, setCourseId] = useState(initialCourseId || '');
-  const [type, setType] = useState<'task' | 'announcement'>('task');
-  const [dueDate, setDueDate] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [mediaUrl, setMediaUrl] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
-  const [classroomUrl, setClassroomUrl] = useState('');
+  const [title, setTitle] = useState(taskToEdit?.title || announcementToEdit?.title || '');
+  const [content, setContent] = useState(taskToEdit?.description || announcementToEdit?.content || '');
+  const [courseId, setCourseId] = useState(initialCourseId || taskToEdit?.course_id || announcementToEdit?.course_id || '');
+  const [type, setType] = useState<'task' | 'announcement'>(announcementToEdit ? 'announcement' : 'task');
+  const [dueDate, setDueDate] = useState(
+    taskToEdit?.due_date ? new Date(taskToEdit.due_date).toISOString().slice(0, 16) : ''
+  );
+  const [subjectId, setSubjectId] = useState(taskToEdit?.subject_id || announcementToEdit?.subject_id || '');
+  const [mediaUrl, setMediaUrl] = useState(taskToEdit?.media_url || announcementToEdit?.media_url || '');
+  const [linkUrl, setLinkUrl] = useState(taskToEdit?.link_url || announcementToEdit?.link_url || '');
+  const [classroomUrl, setClassroomUrl] = useState(taskToEdit?.classroom_url || '');
   const [isSaving, setIsSaving] = useState(false);
 
   // Extraer ID de YouTube para vista previa
@@ -63,7 +69,21 @@ export const TeacherTaskAnnouncement = ({
         link_url: linkUrl || null
       };
 
-      if (type === 'task') {
+      if (taskToEdit?.id) {
+        await dataService.updateTask(taskToEdit.id, {
+          ...payload,
+          description: content,
+          classroom_url: classroomUrl || null,
+          due_date: dueDate ? new Date(dueDate).toISOString() : null
+        });
+        alert('¡Tarea actualizada con éxito!');
+      } else if (announcementToEdit?.id) {
+        await dataService.updateAnnouncement(announcementToEdit.id, {
+          ...payload,
+          content: content
+        });
+        alert('¡Comunicado actualizado con éxito!');
+      } else if (type === 'task') {
         await dataService.addTask({
           ...payload,
           teacher_id: profile.teacher_id || profile.id,
@@ -71,6 +91,7 @@ export const TeacherTaskAnnouncement = ({
           classroom_url: classroomUrl || null,
           due_date: dueDate ? new Date(dueDate).toISOString() : null
         });
+        alert('¡Tarea publicada con éxito!');
       } else {
         await dataService.addAnnouncement({
           ...payload,
@@ -78,6 +99,7 @@ export const TeacherTaskAnnouncement = ({
           sender_role: profile.role,
           content: content
         });
+        alert('¡Comunicado publicado con éxito!');
       }
 
       // Reset Form
