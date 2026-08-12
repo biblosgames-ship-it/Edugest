@@ -273,6 +273,46 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     return teacherTodaySchedule.find((c) => c.isNow && !c.isBreak);
   }, [teacherTodaySchedule]);
 
+  const periodAlert = useMemo(() => {
+    if (!teacherTodaySchedule || teacherTodaySchedule.length === 0) return null;
+
+    const currentClass = teacherTodaySchedule.find((c) => c.isNow && !c.isBreak);
+    const upcomingClasses = teacherTodaySchedule.filter(
+      (c) => !c.isBreak && (c.startMinutes || getMinutes(c.sTime)) > currentTimeMinutes
+    );
+    const nextClass = upcomingClasses[0];
+
+    if (currentClass) {
+      const endMins = currentClass.endMinutes || getMinutes(currentClass.eTime);
+      const minsLeft = endMins - currentTimeMinutes;
+      return {
+        type: 'current',
+        minsLeft: Math.max(1, minsLeft),
+        currentSubject: currentClass.sub?.name || 'Materia Actual',
+        currentCourse: `${currentClass.course?.grade || ''} ${currentClass.course?.section || ''}`.trim(),
+        nextSubject: nextClass?.sub?.name || null,
+        nextCourse: nextClass ? `${nextClass.course?.grade || ''} ${nextClass.course?.section || ''}`.trim() : null,
+        nextTime: nextClass?.sTime || null
+      };
+    }
+
+    if (nextClass) {
+      const startMins = nextClass.startMinutes || getMinutes(nextClass.sTime);
+      const minsUntilNext = startMins - currentTimeMinutes;
+      if (minsUntilNext > 0 && minsUntilNext <= 20) {
+        return {
+          type: 'upcoming',
+          minsUntilNext,
+          nextSubject: nextClass.sub?.name || 'Próxima Clase',
+          nextCourse: `${nextClass.course?.grade || ''} ${nextClass.course?.section || ''}`.trim(),
+          nextTime: nextClass.sTime
+        };
+      }
+    }
+
+    return null;
+  }, [teacherTodaySchedule, currentTimeMinutes]);
+
   // Matriz semanal completa del docente (Lunes a Viernes)
   const teacherWeeklyScheduleMatrix = useMemo(() => {
     if (!selectedTeacherId) return { slots: [], matrix: {} };
@@ -855,6 +895,60 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
           )}
         </div>
       </div>
+
+      {/* BANNER ALERTA VIVA DE CAMBIO DE HORA */}
+      {periodAlert && (
+        <div
+          className={`p-6 rounded-[2.5rem] shadow-xl border transition-all duration-500 ${
+            periodAlert.type === 'current' && periodAlert.minsLeft <= 10
+              ? 'bg-gradient-to-r from-amber-500 via-rose-600 to-amber-600 text-white border-amber-300 animate-pulse'
+              : 'bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-indigo-500/30'
+          }`}
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0">
+                <Bell size={28} className="animate-bounce text-white" />
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-wider mb-1">
+                  <Clock size={12} /> Alerta de Tiempo Real
+                </div>
+                {periodAlert.type === 'current' ? (
+                  <>
+                    <h3 className="text-xl font-black tracking-tight">
+                      {periodAlert.minsLeft <= 10
+                        ? `¡Restan ${periodAlert.minsLeft} min para Cambio de Hora!`
+                        : `Clase en Curso: ${periodAlert.currentSubject}`}
+                    </h3>
+                    <p className="text-xs font-bold opacity-90">
+                      Impartiendo: <span className="underline font-extrabold">{periodAlert.currentSubject}</span> ({periodAlert.currentCourse})
+                      {periodAlert.nextSubject && (
+                        <span className="block sm:inline sm:ml-2">
+                          — Próxima clase: <strong className="text-amber-200">{periodAlert.nextSubject}</strong> en {periodAlert.nextCourse} ({periodAlert.nextTime})
+                        </span>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xl font-black tracking-tight">
+                      Próximo Cambio de Hora en {periodAlert.minsUntilNext} min
+                    </h3>
+                    <p className="text-xs font-bold opacity-90">
+                      Próxima asignatura: <span className="underline font-extrabold">{periodAlert.nextSubject}</span> ({periodAlert.nextCourse}) a las {periodAlert.nextTime}.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white/10 px-4 py-2.5 rounded-2xl border border-white/20 text-center font-mono font-black text-xs shrink-0">
+              {currentDay} • {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {!selectedTeacherId ? (
         <div className="space-y-6 max-w-xl mx-auto mt-6 animate-in fade-in slide-in-from-bottom-5 duration-300">
