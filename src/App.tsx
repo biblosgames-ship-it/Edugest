@@ -152,10 +152,21 @@ function AppContent() {
   const isSuperAdmin = !!profile?.is_superadmin;
 
   // Obtener paneles permitidos (del perfil o por defecto según su rol)
-  const allowed =
+  const rawAllowed =
     profile?.allowed_panels && profile.allowed_panels.length > 0
       ? profile.allowed_panels
       : ROLE_FALLBACKS[profile?.role || 'student'] || ROLE_FALLBACKS.student;
+
+  // Garantizar que 'classroom' esté disponible para docentes, coordinadores y administradores
+  const allowed = useMemo(() => {
+    const userRole = profile?.role || 'student';
+    if (['teacher', 'management_teacher', 'coordinator', 'admin'].includes(userRole)) {
+      if (!rawAllowed.includes('classroom')) {
+        return [...rawAllowed, 'classroom'];
+      }
+    }
+    return rawAllowed;
+  }, [profile?.role, rawAllowed]);
 
   // Redirigir al primer panel permitido si intenta acceder a uno no autorizado
   useEffect(() => {
