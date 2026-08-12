@@ -1745,32 +1745,16 @@ export const ScheduleViewer = () => {
                       </div>
                       <button
                         onClick={async () => {
-                          const course = state.courses.find((c) => c.id === swapCourseId);
-                          const assign = state.assignments.find(
-                            (a) => (a.course_id === swapCourseId || a.courseId === swapCourseId) && a.subject_id === swapSubjectId
-                          );
-                          if (!assign || !course) return;
-
                           try {
-                            if (sugg.type === 'swap' && sugg.swapWithEntry) {
-                              await supabase.from('schedule_entries').delete().eq('id', sugg.swapWithEntry.id);
-                            }
-
-                            const { error: insErr } = await supabase.from('schedule_entries').insert([
-                              {
-                                center_id: profile.center_id,
-                                course_id: swapCourseId,
-                                subject_id: swapSubjectId,
-                                teacher_id: assign.teacher_id,
-                                day: sugg.day,
-                                shift: selectedShift,
-                                start_time: sugg.targetSlot.start,
-                                end_time: sugg.targetSlot.end,
-                                school_year: selectedYear
-                              }
-                            ]);
-
-                            if (insErr) throw insErr;
+                            await scheduleService.applySmartSwap(
+                              state,
+                              profile,
+                              swapCourseId,
+                              swapSubjectId,
+                              sugg,
+                              selectedShift,
+                              selectedYear
+                            );
                             await refreshData(undefined, true);
                             alert('✅ ¡Intercambio aplicado con éxito!');
                             setShowSwapModal(false);

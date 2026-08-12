@@ -2290,5 +2290,45 @@ export const scheduleService = {
     });
 
     return suggestions.slice(0, 5); // Retornar hasta las 5 mejores sugerencias
+  },
+
+  applySmartSwap: async (
+    state: any,
+    profile: any,
+    targetCourseId: string,
+    targetSubjectId: string,
+    suggestion: any,
+    shift: string,
+    schoolYear: string
+  ) => {
+    const assign = (state.assignments || []).find(
+      (a: any) => (a.course_id === targetCourseId || a.courseId === targetCourseId) && a.subject_id === targetSubjectId
+    );
+    if (!assign) throw new Error('No se encontró la asignación académica.');
+
+    if (suggestion.type === 'swap' && suggestion.swapWithEntry?.id) {
+      const { error: delErr } = await supabase
+        .from('schedule_entries')
+        .delete()
+        .eq('id', suggestion.swapWithEntry.id);
+      if (delErr) throw new Error('Error al remover clase previa: ' + delErr.message);
+    }
+
+    const { error: insErr } = await supabase.from('schedule_entries').insert([
+      {
+        center_id: profile.center_id,
+        course_id: targetCourseId,
+        subject_id: targetSubjectId,
+        teacher_id: assign.teacher_id,
+        day: suggestion.day,
+        shift,
+        start_time: suggestion.targetSlot.start,
+        end_time: suggestion.targetSlot.end,
+        school_year: schoolYear
+      }
+    ]);
+
+    if (insErr) throw new Error('Error al insertar nueva clase: ' + insErr.message);
+    return true;
   }
 };
