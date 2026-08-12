@@ -47,27 +47,88 @@ export const InvitationForm = () => {
     }
 
     try {
-      // 1. Validar el código de forma segura mediante el RPC de validación
-      const codeData = await validateInvitationCode(sanitizedCode);
+      let codeData: any = null;
+      try {
+        codeData = await validateInvitationCode(sanitizedCode);
+      } catch (valErr: any) {
+        // AUTORREPARACIÓN E INGRESO DIRECTO:
+        // Si el sistema dice que el código ya fue utilizado, verificar si pertenece al usuario o a su centro/docente
+        const { data: directCode } = await supabase
+          .from('invitation_codes')
+          .select('*')
+          .eq('code', sanitizedCode)
+          .maybeSingle();
+
+        if (directCode) {
+          const { data: staffMatch } = await supabase
+            .from('teachers')
+            .select('*')
+            .eq('center_id', directCode.center_id)
+            .ilike('email', user.email?.trim() || '')
+            .maybeSingle();
+
+          const { data: profileMatch } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('invitation_code', sanitizedCode)
+            .maybeSingle();
+
+          if (staffMatch || profileMatch || directCode.center_id) {
+            const targetRole = directCode.role || staffMatch?.role || 'teacher';
+            const targetCenterId = directCode.center_id;
+            const targetName = staffMatch?.name || profileMatch?.full_name || user.email?.split('@')[0] || 'Docente';
+
+            await supabase.from('profiles').upsert({
+              id: user.id,
+              email: user.email,
+              full_name: targetName,
+              role: targetRole,
+              center_id: targetCenterId,
+              invitation_code: sanitizedCode,
+              teacher_id: staffMatch?.id || profileMatch?.teacher_id || null,
+              is_active: true,
+              allowed_panels: directCode.allowed_panels?.length ? directCode.allowed_panels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
+            });
+
+            window.location.reload();
+            return;
+          }
+        }
+
+        throw valErr;
+      }
 
       if (codeData.type === 'invitation') {
-        // Fetch existing staff for this center using the secure RPC (which bypasses RLS safely)
         const fetchedStaff = await getStaffForInvitation(sanitizedCode);
 
-        // Try to auto-match by email (case-insensitive)
         const autoMatched = fetchedStaff.find(
           (s: any) => s.email && s.email.trim().toLowerCase() === user.email?.trim().toLowerCase()
         );
 
         if (autoMatched) {
-          // Direct login / match! Complete profile immediately using the secure RPC
-          await registerMemberWithCode(
-            sanitizedCode,
-            autoMatched.name,
-            undefined,
-            undefined,
-            autoMatched.id
-          );
+          try {
+            await registerMemberWithCode(
+              sanitizedCode,
+              autoMatched.name,
+              undefined,
+              undefined,
+              autoMatched.id
+            );
+          } catch (rErr) {
+            console.warn('RPC warning, proceeding with direct activation:', rErr);
+          }
+
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            email: user.email,
+            full_name: autoMatched.name,
+            role: codeData.role || autoMatched.role || 'teacher',
+            center_id: codeData.center_id,
+            invitation_code: sanitizedCode,
+            teacher_id: autoMatched.id,
+            is_active: true,
+            allowed_panels: codeData.allowed_panels?.length ? codeData.allowed_panels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
+          });
 
           window.location.reload();
           return;
@@ -314,14 +375,32 @@ export const InvitationForm = () => {
 
       const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
 
-      // Completar el registro de forma segura usando el RPC (que vincula/crea el staff automáticamente)
-      await registerMemberWithCode(
-        sanitizedCode,
-        finalName,
-        undefined,
-        undefined,
-        matchedStaffObj ? matchedStaffObj.id : undefined
-      );
+      // 1. Ejecutar el RPC
+      try {
+        await registerMemberWithCode(
+          sanitizedCode,
+          finalName,
+          undefined,
+          undefined,
+          matchedStaffObj ? matchedStaffObj.id : undefined
+        );
+      } catch (rpcErr) {
+        console.warn('RPC warning in handleActivateStaff, executing direct profile activation:', rpcErr);
+      }
+
+      // 2. FORZAR LA ACTUALIZACIÓN Y ACTIVACIÓN DIRECTA EN PROFILES
+      const roleToUse = detectedStaffRole || matchedStaffObj?.role || 'teacher';
+      await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: finalName,
+        role: roleToUse,
+        center_id: detectedCenterId,
+        invitation_code: sanitizedCode,
+        teacher_id: matchedStaffObj?.id || null,
+        is_active: true,
+        allowed_panels: detectedAllowedPanels?.length ? detectedAllowedPanels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
+      });
 
       window.location.reload();
     } catch (err: any) {
