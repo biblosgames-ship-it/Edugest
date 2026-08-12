@@ -88,6 +88,7 @@ export const ScheduleViewer = () => {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapCourseId, setSwapCourseId] = useState('');
   const [swapSubjectId, setSwapSubjectId] = useState('');
+  const [swapDayFilter, setSwapDayFilter] = useState('Todos');
 
   // Sincronizar reactivamente el filtro de grado si cambia el perfil del alumno/padre
   useEffect(() => {
@@ -1719,14 +1720,34 @@ export const ScheduleViewer = () => {
               </div>
             </div>
 
-            {/* Resultados y Sugerencias de Intercambio */}
+            {/* Resultados y Sugerencias de Intercambio por Día */}
             {swapCourseId && swapSubjectId ? (
               <div className="flex flex-col gap-3 mt-2">
-                <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                  💡 Sugerencias de Ubicación e Intercambio Calculadas (Sin Choques)
-                </h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                    💡 Sugerencias de Ubicación (Sin Choques)
+                  </h4>
+
+                  {/* Pestañas de Días de la Semana */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                    {['Todos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setSwapDayFilter(d)}
+                        className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
+                          swapDayFilter === d
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {(() => {
-                  const suggestions = scheduleService.findSmartSwaps(
+                  const allSuggestions = scheduleService.findSmartSwaps(
                     state,
                     swapCourseId,
                     swapSubjectId,
@@ -1734,15 +1755,19 @@ export const ScheduleViewer = () => {
                     Array.from(lockedEntries)
                   );
 
+                  const suggestions = allSuggestions.filter(
+                    (s) => swapDayFilter === 'Todos' || s.day === swapDayFilter
+                  );
+
                   if (suggestions.length === 0) {
                     return (
-                      <div className="bg-rose-50 border border-rose-200 p-5 rounded-2xl text-center text-rose-700 space-y-2">
-                        <AlertCircle size={28} className="mx-auto text-rose-500" />
+                      <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl text-center text-amber-800 space-y-2">
+                        <AlertCircle size={28} className="mx-auto text-amber-500" />
                         <p className="text-xs font-black uppercase tracking-tight">
-                          No hay casillas libres ni intercambios directos sin choques para el docente
+                          No hay casillas libres para el {swapDayFilter === 'Todos' ? 'resto de la semana' : swapDayFilter}
                         </p>
                         <p className="text-[10px] text-slate-500 font-medium">
-                          Verifica en Preferencias de Docentes que el profesor tenga días asignados libres o desbloquea candados 🔓 en la tabla.
+                          Intenta seleccionar otro día arriba o verifica en Preferencias de Docentes que el profesor no tenga bloqueo de agenda.
                         </p>
                       </div>
                     );

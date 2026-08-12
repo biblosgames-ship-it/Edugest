@@ -2289,7 +2289,7 @@ export const scheduleService = {
       });
     });
 
-    return suggestions.slice(0, 5); // Retornar hasta las 5 mejores sugerencias
+    return suggestions; // Retornar todas las sugerencias válidas de la semana (Lunes a Viernes)
   },
 
   applySmartSwap: async (
