@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx';
 import { SEO } from './SEO';
 
 import { scheduleService } from '../services/scheduleService';
+import { supabase } from '../lib/supabase';
 
 export const ScheduleViewer = () => {
   const { state, profile, refreshData, selectedYear, setAvoidDeporteDuringAnyBreak } = useApp();
