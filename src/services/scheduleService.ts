@@ -1551,31 +1551,26 @@ export const scheduleService = {
                     );
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
-                  (!superRelaxed &&
-                    state.avoidDeporteDuringAnyBreak &&
-                    !/inic|preesc|kinder|parvul|kínder|párvulo|pre-primario|preprimario/.test(
-                      ((course.level || '') + ' ' + (course.grade || '')).toLowerCase()
-                    ) &&
-                    (() => {
-                      const sName = (
-                        state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
-                      ).toLowerCase();
-                      if (
-                        sName.includes('deporte') ||
-                        sName.includes('educación física') ||
-                        sName.includes('educacion fisica')
-                      ) {
-                        return doesOverlapCourseBreak(
-                          sStart,
-                          sEnd,
-                          course,
-                          breakPreferences,
-                          shift,
-                          toMins
-                        );
-                      }
-                      return false;
-                    })())
+                  ((() => {
+                    const sName = (
+                      state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
+                    ).toLowerCase();
+                    if (
+                      sName.includes('deporte') ||
+                      sName.includes('educación física') ||
+                      sName.includes('educacion fisica')
+                    ) {
+                      return doesOverlapCourseBreak(
+                        sStart,
+                        sEnd,
+                        course,
+                        breakPreferences,
+                        shift,
+                        toMins
+                      );
+                    }
+                    return false;
+                  })())
                 );
               });
 
@@ -1905,31 +1900,26 @@ export const scheduleService = {
                       );
                     }) ||
                     isFixedEventConflict(sStart, sEnd, day, course) ||
-                    (!superRelaxed &&
-                      state.avoidDeporteDuringAnyBreak &&
-                      !/inic|preesc|kinder|parvul|kínder|párvulo|pre-primario|preprimario/.test(
-                        ((course.level || '') + ' ' + (course.grade || '')).toLowerCase()
-                      ) &&
-                      (() => {
-                        const sName = (
-                          state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
-                        ).toLowerCase();
-                        if (
-                          sName.includes('deporte') ||
-                          sName.includes('educación física') ||
-                          sName.includes('educacion fisica')
-                        ) {
-                          return doesOverlapCourseBreak(
-                            sStart,
-                            sEnd,
-                            course,
-                            breakPreferences,
-                            shift,
-                            toMins
-                          );
-                        }
-                        return false;
-                      })())
+                    ((() => {
+                      const sName = (
+                        state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
+                      ).toLowerCase();
+                      if (
+                        sName.includes('deporte') ||
+                        sName.includes('educación física') ||
+                        sName.includes('educacion fisica')
+                      ) {
+                        return doesOverlapCourseBreak(
+                          sStart,
+                          sEnd,
+                          course,
+                          breakPreferences,
+                          shift,
+                          toMins
+                        );
+                      }
+                      return false;
+                    })())
                   );
                 });
 
