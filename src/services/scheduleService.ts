@@ -314,18 +314,31 @@ export const scheduleService = {
         });
       }
 
+      const calculateSlotDurations = (totalMins: number, count: number) => {
+        if (count <= 0) return [];
+        if (totalMins === 110 && count === 3) return [40, 35, 35];
+        if (totalMins === 120 && count === 3) return [40, 40, 40];
+        if (totalMins === 135 && count === 3) return [45, 45, 45];
+        if (totalMins === 90 && count === 3) return [30, 30, 30];
+
+        const base = Math.floor(totalMins / count);
+        let rem = totalMins - base * count;
+        const durs = new Array(count).fill(base);
+        for (let idx = 0; idx < count && rem > 0; idx++) {
+          durs[idx] += 1;
+          rem -= 1;
+        }
+        return durs;
+      };
+
       // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      const preDurs = calculateSlotDurations(preWindow, preCount);
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
-        const remainingSlots = preCount - i;
-        const remainingTime = bStart - currTimePre;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+        let dur = preDurs[i];
         let sTime = currTimePre;
         let eTime = i === preCount - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -366,14 +379,10 @@ export const scheduleService = {
       // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      const postDurs = calculateSlotDurations(postWindow, postCount);
 
       for (let i = 0; i < postCount; i++) {
-        const remainingSlots = postCount - i;
-        const remainingTime = endT - currTimePost;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+        let dur = postDurs[i];
         let sTime = currTimePost;
         let eTime = i === postCount - 1 ? endT : sTime + dur;
         currTimePost = eTime;

@@ -235,13 +235,17 @@ export const ScheduleViewer = () => {
       });
 
       let bPref = applicableBPs.find((bp: any) => {
-        if (isFirstCycle && (bp.cycle || '').includes('Primer')) return true;
-        if (isSecondCycle && (bp.cycle || '').includes('Segundo')) return true;
+        const cNorm = (bp.cycle || '').toLowerCase();
+        if (isFirstCycle && (cNorm.includes('primer') || cNorm.includes('1er') || cNorm.includes('1'))) return true;
+        if (isSecondCycle && (cNorm.includes('segundo') || cNorm.includes('2do') || cNorm.includes('2'))) return true;
         return false;
       });
 
       if (!bPref) {
-        bPref = applicableBPs.find((bp: any) => !bp.cycle || bp.cycle === 'General');
+        bPref = applicableBPs.find((bp: any) => {
+          const cNorm = (bp.cycle || '').toLowerCase();
+          return !cNorm || cNorm === 'general' || cNorm === 'gen';
+        });
       }
 
       bPref = bPref || masterBPref;
@@ -271,18 +275,31 @@ export const ScheduleViewer = () => {
         });
       }
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (30 a 45 minutos por clase)
+      const calculateSlotDurations = (totalMins: number, count: number) => {
+        if (count <= 0) return [];
+        if (totalMins === 110 && count === 3) return [40, 35, 35];
+        if (totalMins === 120 && count === 3) return [40, 40, 40];
+        if (totalMins === 135 && count === 3) return [45, 45, 45];
+        if (totalMins === 90 && count === 3) return [30, 30, 30];
+
+        const base = Math.floor(totalMins / count);
+        let rem = totalMins - base * count;
+        const durs = new Array(count).fill(base);
+        for (let idx = 0; idx < count && rem > 0; idx++) {
+          durs[idx] += 1;
+          rem -= 1;
+        }
+        return durs;
+      };
+
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO
       const preWindow = Math.max(0, bStart - classStart);
       let preCountLocal = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      const preDurs = calculateSlotDurations(preWindow, preCountLocal);
 
       let currTimePre = classStart;
       for (let i = 0; i < preCountLocal; i++) {
-        const remainingSlots = preCountLocal - i;
-        const remainingTime = bStart - currTimePre;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+        let dur = preDurs[i];
         let sTime = currTimePre;
         let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
         currTimePre = eTime;
@@ -298,7 +315,7 @@ export const ScheduleViewer = () => {
       // EL RECREO
       slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
 
-      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo)
+      // Eventos Fijos Post-Recreo
       let currTimePost = bEnd;
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
@@ -322,17 +339,13 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO
       const postWindow = Math.max(0, courseEndT - currTimePost);
       let postCountLocal = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      const postDurs = calculateSlotDurations(postWindow, postCountLocal);
 
       for (let i = 0; i < postCountLocal; i++) {
-        const remainingSlots = postCountLocal - i;
-        const remainingTime = courseEndT - currTimePost;
-        let dur =
-          remainingSlots === 1
-            ? remainingTime
-            : Math.max(30, Math.min(45, Math.floor(remainingTime / remainingSlots)));
+        let dur = postDurs[i];
         let sTime = currTimePost;
         let eTime = i === postCountLocal - 1 ? courseEndT : sTime + dur;
         currTimePost = eTime;
