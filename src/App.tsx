@@ -29,6 +29,7 @@ import { Login } from './components/Login';
 import { InvitationForm } from './components/InvitationForm';
 import { CenterRegistrationForm } from './components/CenterRegistrationForm';
 import { FacilityDashboard } from './components/facility/FacilityDashboard';
+import { ClassroomManager } from './components/ClassroomManager';
 import { AppProvider, useApp, useSupabase } from './context/AppContext';
 import {
   LayoutDashboard,
@@ -52,13 +53,15 @@ import {
   DollarSign,
   Wrench,
   Menu,
-  Lock
+  Lock,
+  UserCheck
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
 
 const ROLE_FALLBACKS: Record<string, string[]> = {
   admin: [
     'dashboard',
+    'classroom',
     'students',
     'digital-register',
     'data',
@@ -74,6 +77,7 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
   ],
   management_teacher: [
     'dashboard',
+    'classroom',
     'students',
     'digital-register',
     'data',
@@ -101,6 +105,7 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
   ],
   coordinator: [
     'dashboard',
+    'classroom',
     'students',
     'digital-register',
     'data',
@@ -112,7 +117,7 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'general-reports',
     'facility'
   ],
-  teacher: ['dashboard', 'schedule', 'agenda', 'digital-register', 'tasks', 'communications'],
+  teacher: ['dashboard', 'classroom', 'schedule', 'agenda', 'digital-register', 'tasks', 'communications'],
   student: ['dashboard', 'schedule', 'agenda'],
   parent: ['dashboard', 'schedule', 'agenda'],
   support: ['dashboard', 'facility', 'agenda'],
@@ -287,6 +292,7 @@ function AppContent() {
 
   const navItems = [
     { id: 'dashboard', label: 'Panel Principal', icon: LayoutDashboard },
+    { id: 'classroom', label: 'Mi Aula', icon: UserCheck },
     { id: 'students', label: 'Gestión de Alumnos', icon: Users },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
     { id: 'data', label: 'Gestión de Datos', icon: PlusCircle },
@@ -340,6 +346,16 @@ function AppContent() {
               ) : (
                 <Dashboard />
               )}
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('classroom') && (
+          <div
+            className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'classroom' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+          >
+            <div className="max-w-7xl mx-auto">
+              <ClassroomManager />
             </div>
           </div>
         )}
