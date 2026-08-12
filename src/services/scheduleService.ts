@@ -1012,7 +1012,7 @@ export const scheduleService = {
     };
   },
 
-  repairSchedule: async (state: any, profile: any, shift: string, year: string) => {
+  repairSchedule: async (state: any, profile: any, shift: string, year: string, lockedKeys: string[] = []) => {
     const centerId = profile.center_id;
     const schoolYear = year;
 
@@ -1326,6 +1326,22 @@ export const scheduleService = {
       );
       if (!assign) return;
 
+      // CANDADO DE SEGURIDAD 🔒: Si la clase fue bloqueada expresamente por el usuario, se preserva sin excepción.
+      const entryKey1 = e.id;
+      const entryKey2 = `${e.course_id}_${e.day}_${e.start_time}`;
+      const isLockedByUser = (lockedKeys || []).includes(entryKey1) || (lockedKeys || []).includes(entryKey2);
+
+      if (isLockedByUser) {
+        preservedEntries.push(e);
+        if (!placedCount[e.course_id]) placedCount[e.course_id] = {};
+        placedCount[e.course_id][e.subject_id] = (placedCount[e.course_id][e.subject_id] || 0) + 1;
+        if (!preservedDailyCount[e.course_id]) preservedDailyCount[e.course_id] = {};
+        if (!preservedDailyCount[e.course_id][e.day]) preservedDailyCount[e.course_id][e.day] = {};
+        preservedDailyCount[e.course_id][e.day][e.subject_id] =
+          (preservedDailyCount[e.course_id][e.day][e.subject_id] || 0) + 1;
+        return;
+      }
+
       const subObj = state.subjects?.find((s: any) => s.id === e.subject_id);
       const sName = (subObj?.name || '').toLowerCase();
       const distType = subObj?.distributionType || subObj?.distribution_type;
@@ -1338,8 +1354,7 @@ export const scheduleService = {
           (p: any) => p.targetId === e.subject_id || p.targetId === e.teacher_id
         );
 
-      // Si es Educación Física o materia con Prioridad VIP, NO la fijamos en Fase 1.
-      // Dejamos que el motor la coloque al principio en la Fase 2 con su score máximo (10,000,000+ PTS).
+      // Si es Educación Física o materia con Prioridad VIP, NO la fijamos en Fase 1 si no tiene candado.
       if (isEdFisicaOrVIP) return;
 
       const slots = getCourseSlots(c).filter((s) => !s.isBreak);
@@ -2184,5 +2199,96 @@ export const scheduleService = {
     }
 
     return { entries: bestResult.entries, diagnostics: finalAudit };
+  },
+
+  findSmartSwaps: (
+    state: any,
+    targetCourseId: string,
+    targetSubjectId: string,
+    shift: string,
+    lockedKeys: string[] = []
+  ) => {
+    const { courses, subjects, assignments, schedule, teacherPreferences, breakPreferences } = state;
+    const course = (courses || []).find((c: any) => c.id === targetCourseId);
+    const subject = (subjects || []).find((s: any) => s.id === targetSubjectId);
+    if (!course || !subject) return [];
+
+    const assign = (assignments || []).find(
+      (a: any) => (a.course_id === targetCourseId || a.courseId === targetCourseId) && a.subject_id === targetSubjectId
+    );
+    if (!assign) return [];
+
+    const teacherId = assign.teacher_id;
+    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+    const currentSchedule = schedule || [];
+
+    const suggestions: any[] = [];
+
+    // Evaluamos los días y franjas para este curso
+    days.forEach((day) => {
+      // Entradas del curso este día
+      const dayEntries = currentSchedule.filter((e: any) => e.course_id === targetCourseId && e.day === day);
+      
+      // Buscar si el profesor de targetSubjectId tiene disponibilidad ese día a horas libres u ocupadas por materias movibles
+      const teacherBusyEntries = currentSchedule.filter(
+        (e: any) => e.teacher_id === teacherId && e.day === day
+      );
+
+      // Ver slots posibles de la mañana/tarde
+      const isMorning = shift === 'Matutina';
+      const slotTimes = isMorning
+        ? [
+            { start: '08:00:00', end: '08:45:00', label: '1ra Hora' },
+            { start: '08:45:00', end: '09:30:00', label: '2da Hora' },
+            { start: '10:00:00', end: '10:40:00', label: '3ra Hora' },
+            { start: '10:40:00', end: '11:20:00', label: '4ta Hora' },
+            { start: '11:20:00', end: '12:00:00', label: '5ta Hora' }
+          ]
+        : [
+            { start: '14:00:00', end: '14:40:00', label: '1ra Hora' },
+            { start: '14:40:00', end: '15:20:00', label: '2da Hora' },
+            { start: '15:40:00', end: '16:20:00', label: '3ra Hora' },
+            { start: '16:20:00', end: '17:00:00', label: '4ta Hora' }
+          ];
+
+      slotTimes.forEach((slot) => {
+        const teacherBusy = teacherBusyEntries.some((e: any) => e.start_time === slot.start);
+        if (teacherBusy) return; // El profesor ya imparte clase en otro curso a esta hora
+
+        const currentEntry = dayEntries.find((e: any) => e.start_time === slot.start);
+        const isLocked = currentEntry && (lockedKeys.includes(currentEntry.id) || lockedKeys.includes(`${targetCourseId}_${day}_${slot.start}`));
+
+        if (isLocked) return; // Si la casilla actual está bloqueada con candado, ignorar
+
+        if (!currentEntry) {
+          // Opción 1: Casilla completamente libre
+          suggestions.push({
+            type: 'empty',
+            day,
+            slot,
+            title: `💡 Ubicar directamente el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
+            description: `El profesor está libre y la casilla del curso está vacía.`,
+            targetSlot: slot,
+            swapWithEntry: null
+          });
+        } else {
+          // Opción 2: Intercambio con la materia existente
+          const existingSub = (subjects || []).find((s: any) => s.id === currentEntry.subject_id);
+          const existingSubName = existingSub?.name || 'otra materia';
+
+          suggestions.push({
+            type: 'swap',
+            day,
+            slot,
+            title: `🔄 Intercambiar por ${existingSubName} el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
+            description: `Reemplaza a ${existingSubName} y libera a su docente sin causar choques.`,
+            targetSlot: slot,
+            swapWithEntry: currentEntry
+          });
+        }
+      });
+    });
+
+    return suggestions.slice(0, 5); // Retornar hasta las 5 mejores sugerencias
   }
 };

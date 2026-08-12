@@ -14,7 +14,10 @@ import {
   Clock,
   Calendar,
   ShieldCheck,
-  Wrench
+  Wrench,
+  Lock,
+  Unlock,
+  Zap
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
@@ -53,6 +56,36 @@ export const ScheduleViewer = () => {
   const [isDeepRepairing, setIsDeepRepairing] = useState(false);
   const [deepRepairAttempt, setDeepRepairAttempt] = useState(0);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // Candados de Seguridad 🔒 (Pinning de casillas aprobadas por el usuario)
+  const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}`;
+  const [lockedEntries, setLockedEntries] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(lockStorageKey);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleLock = (entry: any) => {
+    const key = entry.id || `${entry.course_id}_${entry.day}_${entry.start_time}`;
+    setLockedEntries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
+
+  // Asistente de Intercambio Directo Modal State
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapCourseId, setSwapCourseId] = useState('');
+  const [swapSubjectId, setSwapSubjectId] = useState('');
 
   // Sincronizar reactivamente el filtro de grado si cambia el perfil del alumno/padre
   useEffect(() => {
@@ -640,7 +673,8 @@ export const ScheduleViewer = () => {
         state,
         profile,
         selectedShift,
-        selectedYear
+        selectedYear,
+        Array.from(lockedEntries)
       );
       await refreshData(undefined, true);
       if (diagnostics && diagnostics.length > 0) {
@@ -677,7 +711,8 @@ export const ScheduleViewer = () => {
           state,
           profile,
           selectedShift,
-          selectedYear
+          selectedYear,
+          Array.from(lockedEntries)
         );
         lastDiagnostics = diagnostics || [];
         await refreshData(undefined, true);
@@ -1016,6 +1051,14 @@ export const ScheduleViewer = () => {
                 {isDeepRepairing
                   ? `Ajustando (${deepRepairAttempt}/5)...`
                   : 'Ajustar Horas Faltantes'}
+              </button>
+              <button
+                onClick={() => setShowSwapModal(true)}
+                disabled={isGenerating || isRepairing || isDeepRepairing}
+                className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-700 transition-all cursor-pointer"
+              >
+                <Zap size={16} className="text-amber-300 fill-amber-300" />
+                Asistente de Intercambio Directo
               </button>
             </>
           )}
@@ -1431,11 +1474,41 @@ export const ScheduleViewer = () => {
                                 return (
                                   <div
                                     key={i}
-                                    className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm group-hover:shadow-md transition-shadow"
+                                    className={`p-2.5 rounded-xl border shadow-sm group-hover:shadow-md transition-all relative ${
+                                      lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                        ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/50'
+                                        : 'bg-white border-slate-200'
+                                    }`}
                                   >
-                                    <p className="text-[10px] font-bold text-slate-800 leading-tight line-clamp-2 uppercase">
-                                      {subject?.name || 'Materia'}
-                                    </p>
+                                    <div className="flex items-start justify-between gap-1">
+                                      <p className="text-[10px] font-bold text-slate-800 leading-tight line-clamp-2 uppercase pr-4">
+                                        {subject?.name || 'Materia'}
+                                      </p>
+                                      {isAdminOrStaff && (
+                                        <button
+                                          onClick={(evt) => {
+                                            evt.stopPropagation();
+                                            toggleLock(e);
+                                          }}
+                                          title={
+                                            lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                              ? 'Clase Bloqueada 🔒 (Inviolable en reparación)'
+                                              : 'Bloquear Clase 🔓'
+                                          }
+                                          className={`p-1 rounded-lg transition-all no-print cursor-pointer ${
+                                            lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                              ? 'bg-amber-500 text-white shadow-sm scale-110'
+                                              : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'
+                                          }`}
+                                        >
+                                          {lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`) ? (
+                                            <Lock size={12} />
+                                          ) : (
+                                            <Unlock size={12} />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
                                     {filterType === 'teacher' ? (
                                       <p className="text-[9px] text-emerald-600 font-black mt-1 uppercase tracking-tighter">
                                         {courseName}
@@ -1540,6 +1613,186 @@ export const ScheduleViewer = () => {
                   </div>
                 );
               })}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASISTENTE DE INTERCAMBIO DIRECTO */}
+      {showSwapModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[999] flex items-center justify-center p-6 animate-fade-in no-print">
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl p-8 max-w-2xl w-full flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl">
+                  <Zap size={22} className="fill-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">
+                    Asistente de Intercambio Directo
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    Selecciona la materia faltante para ver sugerencias exactas sin choques
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSwapModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-xl px-3 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Selección de Curso y Materia Faltante */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                  1. Seleccionar Curso
+                </label>
+                <select
+                  value={swapCourseId}
+                  onChange={(e) => {
+                    setSwapCourseId(e.target.value);
+                    setSwapSubjectId('');
+                  }}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">-- Elige un Curso --</option>
+                  {state.courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.grade} {c.section || ''} ({c.level})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                  2. Seleccionar Materia Faltante
+                </label>
+                <select
+                  value={swapSubjectId}
+                  onChange={(e) => setSwapSubjectId(e.target.value)}
+                  disabled={!swapCourseId}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">-- Elige una Materia --</option>
+                  {swapCourseId &&
+                    state.assignments
+                      .filter((a) => a.course_id === swapCourseId || a.courseId === swapCourseId)
+                      .map((a) => {
+                        const sub = state.subjects.find((s) => s.id === a.subject_id);
+                        const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+                        const placed = state.schedule.filter(
+                          (s) => s.course_id === swapCourseId && s.subject_id === a.subject_id
+                        ).length;
+                        const missing = assigned - placed;
+                        return (
+                          <option key={a.subject_id} value={a.subject_id}>
+                            {sub?.name || 'Materia'} ({placed}/{assigned}h {missing > 0 ? `- FALTAN ${missing}h` : '✓ COMPLETO'})
+                          </option>
+                        );
+                      })}
+                </select>
+              </div>
+            </div>
+
+            {/* Resultados y Sugerencias de Intercambio */}
+            {swapCourseId && swapSubjectId ? (
+              <div className="flex flex-col gap-3 mt-2">
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                  💡 Sugerencias de Intercambio Calculadas (Sin Choques)
+                </h4>
+                {(() => {
+                  const suggestions = scheduleService.findSmartSwaps(
+                    state,
+                    swapCourseId,
+                    swapSubjectId,
+                    selectedShift,
+                    Array.from(lockedEntries)
+                  );
+
+                  if (suggestions.length === 0) {
+                    return (
+                      <div className="bg-rose-50 border border-rose-200 p-5 rounded-2xl text-center text-rose-700 space-y-2">
+                        <AlertCircle size={28} className="mx-auto text-rose-500" />
+                        <p className="text-xs font-black uppercase tracking-tight">
+                          No hay casillas libres ni intercambios directos sin choques para el docente
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          Verifica en Preferencias de Docentes que el profesor tenga días asignados libres o desbloquea candados 🔓 en la tabla.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return suggestions.map((sugg, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-300 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
+                    >
+                      <div className="space-y-1">
+                        <span className="inline-block px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-wider">
+                          {sugg.type === 'empty' ? 'Casilla Libre' : 'Intercambio Seguro'}
+                        </span>
+                        <p className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                          {sugg.title}
+                        </p>
+                        <p className="text-[10px] font-medium text-slate-500">
+                          {sugg.description}
+                        </p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const course = state.courses.find((c) => c.id === swapCourseId);
+                          const assign = state.assignments.find(
+                            (a) => (a.course_id === swapCourseId || a.courseId === swapCourseId) && a.subject_id === swapSubjectId
+                          );
+                          if (!assign || !course) return;
+
+                          try {
+                            if (sugg.type === 'swap' && sugg.swapWithEntry) {
+                              await supabase.from('schedule_entries').delete().eq('id', sugg.swapWithEntry.id);
+                            }
+
+                            const { error: insErr } = await supabase.from('schedule_entries').insert([
+                              {
+                                center_id: profile.center_id,
+                                course_id: swapCourseId,
+                                subject_id: swapSubjectId,
+                                teacher_id: assign.teacher_id,
+                                day: sugg.day,
+                                shift: selectedShift,
+                                start_time: sugg.targetSlot.start,
+                                end_time: sugg.targetSlot.end,
+                                school_year: selectedYear
+                              }
+                            ]);
+
+                            if (insErr) throw insErr;
+                            await refreshData(undefined, true);
+                            alert('✅ ¡Intercambio aplicado con éxito!');
+                            setShowSwapModal(false);
+                          } catch (err: any) {
+                            alert('Error al aplicar intercambio: ' + err.message);
+                          }
+                        }}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md transition-all shrink-0 cursor-pointer"
+                      >
+                        Aplicar Cambio
+                      </button>
+                    </div>
+                  ));
+                })()}
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 p-8 rounded-3xl text-center text-slate-400">
+                <Clock size={32} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-xs font-bold uppercase tracking-widest">
+                  Selecciona un curso y materia arriba para calcular sugerencias en tiempo real
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
