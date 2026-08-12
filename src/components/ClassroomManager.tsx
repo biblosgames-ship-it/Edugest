@@ -125,12 +125,31 @@ export const ClassroomManager = () => {
     return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
   };
 
-  // Estudiantes del curso seleccionado
+  // Helper para clave de ordenamiento por Apellido Primero (Primer Apellido, Segundo Apellido, Nombres)
+  const getSortKeyBySurname = (s: any) => {
+    if (!s) return 'zzz';
+    if (s.first_surname || s.last_name || s.apellidos) {
+      const surname = [s.first_surname, s.second_surname, s.apellidos, s.last_name].filter(Boolean).join(' ');
+      const names = s.names || s.first_name || s.name || '';
+      return `${surname} ${names}`.trim().toLowerCase();
+    }
+    return getStudentFullName(s).toLowerCase();
+  };
+
+  // Estudiantes del curso seleccionado (ordenados exactamente igual a Gestión de Alumnos: Número de Orden -> Apellidos)
   const courseStudents = useMemo(() => {
     if (!selectedCourseId) return [];
     return (allStudents || [])
       .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
-      .sort((a: any, b: any) => getStudentFullName(a).localeCompare(getStudentFullName(b)));
+      .sort((a: any, b: any) => {
+        // 1. Prioridad: Número de Orden (order_number) asignado en Gestión de Alumnos
+        const orderA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : 9999;
+        const orderB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+
+        // 2. Secundario: Orden Alfabético por APELLIDO primero
+        return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
+      });
   }, [allStudents, selectedCourseId]);
 
   // Filtrar estudiantes por búsqueda
@@ -428,7 +447,9 @@ export const ClassroomManager = () => {
                       const currentStatus = attendanceState[s.id]?.status || 'presente';
                       return (
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
-                          <td className="px-6 py-4 font-black text-text-muted">{idx + 1}</td>
+                          <td className="px-6 py-4 font-black text-text-muted">
+                            {s.order_number != null && s.order_number !== '' ? s.order_number : (idx + 1)}
+                          </td>
                           <td className="px-6 py-4 font-bold text-text-main">
                             {getStudentFullName(s)}
                           </td>
