@@ -493,12 +493,18 @@ export const ScheduleViewer = () => {
       }
     }
     const targetTotalGen = isMorning ? 5 : 6;
-    const totalAvailableGen = Math.max(1, bStartMaster - classStart + (endT - bEndMaster));
-    const preCountGen = Math.min(
-      targetTotalGen - 1,
-      Math.max(1, Math.round(((bStartMaster - classStart) / totalAvailableGen) * targetTotalGen))
-    );
-    const postCountGen = targetTotalGen - preCountGen;
+    let preCountGen = 2;
+    if (isMorning) {
+      // Para la tanda matutina (8:00 a 9:30 AM = 90 min), son estrictamente 2 bloques de 45 min
+      if (bStartMaster - classStart <= 100) {
+        preCountGen = 2;
+      } else {
+        preCountGen = Math.min(3, Math.floor((bStartMaster - classStart) / 33));
+      }
+    } else {
+      preCountGen = 3;
+    }
+    const postCountGen = Math.max(1, targetTotalGen - preCountGen);
 
     const preDuration = Math.floor((bStartMaster - classStart) / preCountGen);
     for (let i = 0; i < preCountGen; i++) {
