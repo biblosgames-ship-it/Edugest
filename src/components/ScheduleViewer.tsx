@@ -275,13 +275,20 @@ export const ScheduleViewer = () => {
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, count: number) => {
-        if (count <= 0) return [];
-        if (totalMins === 110 && count === 3) return [40, 35, 35];
-        if (totalMins === 120 && count === 3) return [40, 40, 40];
-        if (totalMins === 135 && count === 3) return [45, 45, 45];
-        if (totalMins === 90 && count === 3) return [30, 30, 30];
+      const levelNormCourse = (course.level || '').toLowerCase();
+      const isPrimariaOrInicial = levelNormCourse.includes('primar') || levelNormCourse.includes('ini');
+      const isSecundaria = levelNormCourse.includes('secun');
+      const targetTotalLocal = isSecundaria ? 6 : 5;
 
+      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+        if (totalMins <= 0 || preferredCount <= 0) return [];
+        let count = preferredCount;
+        while (count > 1 && totalMins / count < 33) {
+          count--;
+        }
+        while (totalMins / count > 45 && count < 6) {
+          count++;
+        }
         const base = Math.floor(totalMins / count);
         let rem = totalMins - base * count;
         const durs = new Array(count).fill(base);
@@ -292,10 +299,14 @@ export const ScheduleViewer = () => {
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 33 y 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCountLocal = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      let preCountLocal = targetTotalLocal === 5 ? 2 : 3;
+      if (preWindow / preCountLocal < 33) {
+        preCountLocal = Math.max(1, Math.floor(preWindow / 33));
+      }
       const preDurs = calculateSlotDurations(preWindow, preCountLocal);
+      preCountLocal = preDurs.length;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCountLocal; i++) {
@@ -341,13 +352,13 @@ export const ScheduleViewer = () => {
 
       // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO
       const postWindow = Math.max(0, courseEndT - currTimePost);
-      let postCountLocal = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      let postCountLocal = Math.max(1, targetTotalLocal - preCountLocal);
       const postDurs = calculateSlotDurations(postWindow, postCountLocal);
 
-      for (let i = 0; i < postCountLocal; i++) {
+      for (let i = 0; i < postDurs.length; i++) {
         let dur = postDurs[i];
         let sTime = currTimePost;
-        let eTime = i === postCountLocal - 1 ? courseEndT : sTime + dur;
+        let eTime = i === postDurs.length - 1 ? courseEndT : sTime + dur;
         currTimePost = eTime;
 
         slots.push({
