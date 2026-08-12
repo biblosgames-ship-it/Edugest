@@ -165,10 +165,44 @@ export const ScheduleViewer = () => {
       return shiftMatch && yearMatch;
     });
 
-    if (filterType === 'teacher' && filterId)
-      list = list.filter((s: any) => s.teacher_id === filterId);
-    if (filterType === 'course' && filterId)
-      list = list.filter((s: any) => s.course_id === filterId);
+    if (filterType === 'teacher' && filterId) {
+      const teacherAssigns = (state.assignments || []).filter((a: any) => a.teacher_id === filterId);
+      const teacherSubjIds = teacherAssigns.map((a: any) => a.subject_id);
+      const teacherCourseIds = teacherAssigns.map((a: any) => a.course_id || a.courseId);
+
+      list = list.filter((s: any) => 
+        s.teacher_id === filterId || 
+        (teacherSubjIds.includes(s.subject_id) && teacherCourseIds.includes(s.course_id))
+      );
+    }
+
+    if (filterType === 'course' && filterId) {
+      const activeCourse = (state.courses || []).find((c: any) => c.id === filterId);
+      const activeGrade = (activeCourse?.grade || '').trim().toLowerCase();
+      const activeSection = (activeCourse?.section || '').trim().toLowerCase();
+
+      list = list.filter((s: any) => {
+        const sCid = s.course_id || s.courseId;
+        if (sCid === filterId) return true;
+
+        // Fallback 1: Coincidencia por asignación del subject_id y teacher_id en este curso
+        const assignMatch = (state.assignments || []).some((a: any) => 
+          (a.course_id === filterId || a.courseId === filterId) && 
+          a.subject_id === s.subject_id && 
+          a.teacher_id === s.teacher_id
+        );
+        if (assignMatch) return true;
+
+        // Fallback 2: Coincidencia por nombre de grado y sección del curso
+        const sCourse = (state.courses || []).find((c: any) => c.id === sCid);
+        if (sCourse && activeGrade && (sCourse.grade || '').trim().toLowerCase() === activeGrade) {
+          if (!activeSection || (sCourse.section || '').trim().toLowerCase() === activeSection) return true;
+        }
+
+        return false;
+      });
+    }
+
     return list;
   }, [state.schedule, filterType, filterId, selectedShift, selectedYear]);
 
