@@ -599,7 +599,8 @@ export const scheduleService = {
               // - Pase 2 (relaxedRules): se respeta (solo se relajan los límites diarios)
               // - Pase 3 (superRelaxed): se ignora como último recurso
               if (!superRelaxed) {
-                const marginEnd = shift === 'Vespertina' ? 20 : 5;
+                const isOfficialDefault = tEnd >= 1080;
+                const marginEnd = (shift === 'Vespertina' && isOfficialDefault) ? 20 : 5;
                 if (sStart < tStart - 5 || sEnd > tEnd + marginEnd) return true;
               }
 
@@ -1468,7 +1469,8 @@ export const scheduleService = {
               );
 
               if (!superRelaxed) {
-                const marginEnd = shift === 'Vespertina' ? 20 : 5;
+                const isOfficialDefault = tEnd >= 1080;
+                const marginEnd = (shift === 'Vespertina' && isOfficialDefault) ? 20 : 5;
                 if (sStart < tStart - 5 || sEnd > tEnd + marginEnd) return true;
               }
 
