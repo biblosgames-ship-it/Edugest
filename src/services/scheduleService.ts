@@ -46,29 +46,30 @@ const doesOverlapCourseBreak = (
     cGrade.includes('pre-primario') ||
     cGrade.includes('preprimario');
 
-  // 1. REGLA ESTRICTA: Ninguna clase de Educación Física puede traslaparse con el Recreo de Nivel Inicial
-  const inicialBreak = (breakPreferences || []).find((bp: any) => {
-    const lvl = (bp.level || '').toLowerCase();
-    const cyc = (bp.cycle || '').toLowerCase();
-    return (
-      lvl.includes('ini') ||
-      lvl.includes('pre') ||
-      lvl.includes('parv') ||
-      lvl.includes('kínder') ||
-      lvl.includes('kinder') ||
-      cyc.includes('ini')
-    );
-  });
+  // Si el curso actual pertenece a Nivel Inicial, su propia clase de Educación Física no puede ser a la hora de su Recreo
+  if (isInicialLevel && shift === 'Matutina') {
+    const inicialBreak = (breakPreferences || []).find((bp: any) => {
+      const lvl = (bp.level || '').toLowerCase();
+      const cyc = (bp.cycle || '').toLowerCase();
+      return (
+        lvl.includes('ini') ||
+        lvl.includes('pre') ||
+        lvl.includes('parv') ||
+        lvl.includes('kínder') ||
+        lvl.includes('kinder') ||
+        cyc.includes('ini')
+      );
+    });
 
-  if (inicialBreak && shift === 'Matutina') {
-    let ibStart = toMins(inicialBreak.startTime);
-    if (ibStart < 420) ibStart += 720;
-    const ibEnd = ibStart + (Number(inicialBreak.durationMinutes) || 30);
-    // Si la clase de Educación Física traslapa con el Recreo de Inicial, RECHAZAR
-    if (sStart < ibEnd && sEnd > ibStart) return true;
+    if (inicialBreak) {
+      let ibStart = toMins(inicialBreak.startTime);
+      if (ibStart < 420) ibStart += 720;
+      const ibEnd = ibStart + (Number(inicialBreak.durationMinutes) || 30);
+      if (sStart < ibEnd && sEnd > ibStart) return true;
+    }
   }
 
-  // 2. Regla Estricta: Deporte NO puede tener clases entre 09:30 (570m) y 10:30 (630m) para Primaria/Secundaria
+  // Regla Estricta: Deporte NO puede tener clases durante el recreo principal (09:30 a 10:30) para Primaria/Secundaria
   if (shift === 'Matutina' && !isInicialLevel) {
     if (sStart < 630 && sEnd > 570) return true;
   }
@@ -682,7 +683,6 @@ export const scheduleService = {
                 sNameCurrent.includes('educacion fisica');
 
               if (!superRelaxed && isEdFisicaCurrent) {
-                // 1. REGLA ESTRICTA DE RECREOS Y RECREO NIVEL INICIAL
                 const overlapsBreak = doesOverlapCourseBreak(
                   sStart,
                   sEnd,
@@ -692,47 +692,6 @@ export const scheduleService = {
                   toMins
                 );
                 if (overlapsBreak) return true;
-
-                // 2. REGLA EXCLUSIVA DE CANCHA PARA NIVEL INICIAL:
-                // Si Nivel Inicial tiene Educación Física a esa hora, o el curso actual es Nivel Inicial,
-                // no se permite simultaneidad con ninguna otra clase de Educación Física a esa misma hora.
-                const isInicialConflict = finalEntries.some((e: any) => {
-                  if (e.day !== day) return false;
-                  const eStart = toMins(e.start_time);
-                  const eEnd = toMins(e.end_time);
-                  if (!(sStart < eEnd && sEnd > eStart)) return false;
-
-                  const existingSubName = (
-                    state.subjects?.find((sub: any) => sub.id === e.subject_id)?.name || ''
-                  ).toLowerCase();
-                  const isExistingEdFisica =
-                    existingSubName.includes('deporte') ||
-                    existingSubName.includes('educación física') ||
-                    existingSubName.includes('educacion fisica');
-
-                  if (!isExistingEdFisica) return false;
-
-                  const eCourse = state.courses?.find((c: any) => c.id === e.course_id);
-                  const eLevelNorm = (eCourse?.level || '').toLowerCase();
-                  const eGradeNorm = (eCourse?.grade || '').toLowerCase();
-                  const eIsInicial =
-                    eLevelNorm.includes('inic') ||
-                    eLevelNorm.includes('preesc') ||
-                    eLevelNorm.includes('kinder') ||
-                    eLevelNorm.includes('parvul') ||
-                    eGradeNorm.includes('inic') ||
-                    eGradeNorm.includes('kínder') ||
-                    eGradeNorm.includes('kinder') ||
-                    eGradeNorm.includes('párvulo') ||
-                    eGradeNorm.includes('parvulo') ||
-                    eGradeNorm.includes('pre-primario') ||
-                    eGradeNorm.includes('preprimario');
-
-                  if (eIsInicial || isInicialLevel) return true;
-                  return false;
-                });
-
-                if (isInicialConflict) return true;
               }
 
               const isFixed = (fixedEvents || []).some((fe: any) => {
