@@ -2306,14 +2306,25 @@ export const scheduleService = {
     );
     if (!assign) throw new Error('No se encontró la asignación académica.');
 
-    if (suggestion.type === 'swap' && suggestion.swapWithEntry?.id) {
-      const { error: delErr } = await supabase
-        .from('schedule_entries')
-        .delete()
-        .eq('id', suggestion.swapWithEntry.id);
-      if (delErr) throw new Error('Error al remover clase previa: ' + delErr.message);
+    // 1. Limpieza absoluta: Eliminar CUALQUIER clase existente en esa casilla para evitar que se amontonen dos clases juntas
+    const { error: delSlotErr } = await supabase
+      .from('schedule_entries')
+      .delete()
+      .eq('center_id', profile.center_id)
+      .eq('course_id', targetCourseId)
+      .eq('day', suggestion.day)
+      .eq('start_time', suggestion.targetSlot.start)
+      .eq('shift', shift)
+      .eq('school_year', schoolYear);
+
+    if (delSlotErr) console.warn('Limpieza de slot:', delSlotErr.message);
+
+    // 2. Si se estaba moviendo una clase que ya estaba en otra hora, eliminar su posición vieja
+    if (suggestion.fromEntryId) {
+      await supabase.from('schedule_entries').delete().eq('id', suggestion.fromEntryId);
     }
 
+    // 3. Insertar la nueva clase de forma limpia en el espacio único
     const { error: insErr } = await supabase.from('schedule_entries').insert([
       {
         center_id: profile.center_id,
@@ -2328,7 +2339,7 @@ export const scheduleService = {
       }
     ]);
 
-    if (insErr) throw new Error('Error al insertar nueva clase: ' + insErr.message);
+    if (insErr) throw new Error('Error al guardar la nueva clase: ' + insErr.message);
     return true;
   }
 };

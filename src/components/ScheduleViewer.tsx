@@ -1644,7 +1644,7 @@ export const ScheduleViewer = () => {
               </button>
             </div>
 
-            {/* Selección de Curso y Materia Faltante */}
+            {/* Selección de Curso, Materia y Posición Existente (si aplica) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
@@ -1669,7 +1669,7 @@ export const ScheduleViewer = () => {
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                  2. Seleccionar Materia Faltante
+                  2. Seleccionar Materia
                 </label>
                 <select
                   value={swapSubjectId}
@@ -1702,7 +1702,7 @@ export const ScheduleViewer = () => {
             {swapCourseId && swapSubjectId ? (
               <div className="flex flex-col gap-3 mt-2">
                 <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                  💡 Sugerencias de Intercambio Calculadas (Sin Choques)
+                  💡 Sugerencias de Ubicación e Intercambio Calculadas (Sin Choques)
                 </h4>
                 {(() => {
                   const suggestions = scheduleService.findSmartSwaps(
@@ -1734,7 +1734,7 @@ export const ScheduleViewer = () => {
                     >
                       <div className="space-y-1">
                         <span className="inline-block px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-wider">
-                          {sugg.type === 'empty' ? 'Casilla Libre' : 'Intercambio Seguro'}
+                          {sugg.type === 'empty' ? 'Casilla Libre' : 'Reemplazo Limpio'}
                         </span>
                         <p className="text-xs font-black text-slate-800 uppercase tracking-tight">
                           {sugg.title}
@@ -1756,15 +1756,15 @@ export const ScheduleViewer = () => {
                               selectedYear
                             );
                             await refreshData(undefined, true);
-                            alert('✅ ¡Intercambio aplicado con éxito!');
+                            alert('✅ ¡Clase ubicada exitosamente!');
                             setShowSwapModal(false);
                           } catch (err: any) {
-                            alert('Error al aplicar intercambio: ' + err.message);
+                            alert('Error al aplicar ubicación: ' + err.message);
                           }
                         }}
                         className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md transition-all shrink-0 cursor-pointer"
                       >
-                        Aplicar Cambio
+                        Colocar Clase Aquí
                       </button>
                     </div>
                   ));
@@ -1774,7 +1774,7 @@ export const ScheduleViewer = () => {
               <div className="bg-slate-50 border border-slate-200 p-8 rounded-3xl text-center text-slate-400">
                 <Clock size={32} className="mx-auto mb-2 text-slate-300" />
                 <p className="text-xs font-bold uppercase tracking-widest">
-                  Selecciona un curso y materia arriba para calcular sugerencias en tiempo real
+                  Selecciona un curso y materia arriba para ver las opciones de ubicación sin choques
                 </p>
               </div>
             )}
