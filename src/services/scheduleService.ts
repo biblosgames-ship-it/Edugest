@@ -1309,7 +1309,8 @@ export const scheduleService = {
       courses.map((c: any) => c.id).includes(a.course_id || a.courseId)
     );
 
-    // FASE 1: PRESERVACIÓN ESTRICTA (PINNING)
+    // FASE 1: PRESERVACIÓN FIEL E INTELIGENTE (PINNING SELECTIVO)
+    // No fijamos materias con Alta Prioridad VIP ni Educación Física para permitir que el motor las ubique al principio como Bloques Dobles indivisibles.
     const preservedEntries: any[] = [];
     const placedCount: Record<string, Record<string, number>> = {};
     const preservedDailyCount: Record<string, Record<string, Record<string, number>>> = {};
@@ -1317,6 +1318,29 @@ export const scheduleService = {
     (currentSchedule || []).forEach((e) => {
       const c = courses.find((course: any) => course.id === e.course_id);
       if (!c) return;
+
+      const assign = filteredAssignments.find(
+        (a) =>
+          (a.course_id === e.course_id || a.courseId === e.course_id) &&
+          a.subject_id === e.subject_id
+      );
+      if (!assign) return;
+
+      const subObj = state.subjects?.find((s: any) => s.id === e.subject_id);
+      const sName = (subObj?.name || '').toLowerCase();
+      const distType = subObj?.distributionType || subObj?.distribution_type;
+      const isEdFisicaOrVIP =
+        distType === 'together' ||
+        sName.includes('deporte') ||
+        sName.includes('educación física') ||
+        sName.includes('educacion fisica') ||
+        (state.priorityPreferences || []).some(
+          (p: any) => p.targetId === e.subject_id || p.targetId === e.teacher_id
+        );
+
+      // Si es Educación Física o materia con Prioridad VIP, NO la fijamos en Fase 1.
+      // Dejamos que el motor la coloque al principio en la Fase 2 con su score máximo (10,000,000+ PTS).
+      if (isEdFisicaOrVIP) return;
 
       const slots = getCourseSlots(c).filter((s) => !s.isBreak);
       const isSlotValid = slots.some((s) => s.start === e.start_time && s.end === e.end_time);
@@ -1343,12 +1367,6 @@ export const scheduleService = {
       if (teacherBusy) return;
 
       // Verificar horas semanales requeridas
-      const assign = filteredAssignments.find(
-        (a) =>
-          (a.course_id === e.course_id || a.courseId === e.course_id) &&
-          a.subject_id === e.subject_id
-      );
-      if (!assign) return;
       const requiredHours = Number(assign.hours_per_week || assign.hoursPerWeek) || 0;
 
       if (!placedCount[e.course_id]) placedCount[e.course_id] = {};
