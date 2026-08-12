@@ -2208,7 +2208,7 @@ export const scheduleService = {
     shift: string,
     lockedKeys: string[] = []
   ) => {
-    const { courses, subjects, assignments, schedule, teacherPreferences, breakPreferences } = state;
+    const { courses, subjects, assignments, schedule, levelSchedules, breakPreferences } = state;
     const course = (courses || []).find((c: any) => c.id === targetCourseId);
     const subject = (subjects || []).find((s: any) => s.id === targetSubjectId);
     if (!course || !subject) return [];
@@ -2222,57 +2222,72 @@ export const scheduleService = {
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
     const currentSchedule = schedule || [];
 
+    const toMins = (val: string) => {
+      const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const isMorning = shift === 'Matutina';
+    const slotTimes = isMorning
+      ? [
+          { start: '08:00:00', end: '08:45:00', label: '1ra Hora' },
+          { start: '08:45:00', end: '09:30:00', label: '2da Hora' },
+          { start: '10:00:00', end: '10:40:00', label: '3ra Hora' },
+          { start: '10:40:00', end: '11:20:00', label: '4ta Hora' },
+          { start: '11:20:00', end: '12:00:00', label: '5ta Hora' }
+        ]
+      : [
+          { start: '14:00:00', end: '14:40:00', label: '1ra Hora' },
+          { start: '14:40:00', end: '15:20:00', label: '2da Hora' },
+          { start: '15:40:00', end: '16:20:00', label: '3ra Hora' },
+          { start: '16:20:00', end: '17:00:00', label: '4ta Hora' }
+        ];
+
     const suggestions: any[] = [];
 
-    // Evaluamos los días y franjas para este curso
     days.forEach((day) => {
-      // Entradas del curso este día
       const dayEntries = currentSchedule.filter((e: any) => e.course_id === targetCourseId && e.day === day);
-      
-      // Buscar si el profesor de targetSubjectId tiene disponibilidad ese día a horas libres u ocupadas por materias movibles
-      const teacherBusyEntries = currentSchedule.filter(
-        (e: any) => e.teacher_id === teacherId && e.day === day
+
+      const teacherOtherCourseEntries = currentSchedule.filter(
+        (e: any) => e.teacher_id === teacherId && e.day === day && e.course_id !== targetCourseId
       );
 
-      // Ver slots posibles de la mañana/tarde
-      const isMorning = shift === 'Matutina';
-      const slotTimes = isMorning
-        ? [
-            { start: '08:00:00', end: '08:45:00', label: '1ra Hora' },
-            { start: '08:45:00', end: '09:30:00', label: '2da Hora' },
-            { start: '10:00:00', end: '10:40:00', label: '3ra Hora' },
-            { start: '10:40:00', end: '11:20:00', label: '4ta Hora' },
-            { start: '11:20:00', end: '12:00:00', label: '5ta Hora' }
-          ]
-        : [
-            { start: '14:00:00', end: '14:40:00', label: '1ra Hora' },
-            { start: '14:40:00', end: '15:20:00', label: '2da Hora' },
-            { start: '15:40:00', end: '16:20:00', label: '3ra Hora' },
-            { start: '16:20:00', end: '17:00:00', label: '4ta Hora' }
-          ];
+      slotTimes.forEach((slot, idx) => {
+        const slotStartMins = toMins(slot.start);
+        const slotEndMins = toMins(slot.end);
 
-      slotTimes.forEach((slot) => {
-        const teacherBusy = teacherBusyEntries.some((e: any) => e.start_time === slot.start);
-        if (teacherBusy) return; // El profesor ya imparte clase en otro curso a esta hora
+        // ¿Docente ocupado en otro curso a esta hora?
+        const isTeacherBusyElsewhere = teacherOtherCourseEntries.some((e: any) => {
+          const eStart = toMins(e.start_time);
+          const eEnd = toMins(e.end_time);
+          return slotStartMins < eEnd && slotEndMins > eStart;
+        });
 
-        const currentEntry = dayEntries.find((e: any) => e.start_time === slot.start);
+        if (isTeacherBusyElsewhere) return;
+
+        // Buscar entrada en este curso comparando minutos
+        const currentEntry = dayEntries.find((e: any) => {
+          const eStart = toMins(e.start_time);
+          return Math.abs(eStart - slotStartMins) < 20;
+        });
+
         const isLocked = currentEntry && (lockedKeys.includes(currentEntry.id) || lockedKeys.includes(`${targetCourseId}_${day}_${slot.start}`));
-
-        if (isLocked) return; // Si la casilla actual está bloqueada con candado, ignorar
+        if (isLocked) return;
 
         if (!currentEntry) {
-          // Opción 1: Casilla completamente libre
+          // CASILLA 100% VACÍA
           suggestions.push({
             type: 'empty',
             day,
             slot,
-            title: `💡 Ubicar directamente el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
-            description: `El profesor está libre y la casilla del curso está vacía.`,
+            title: `🟢 Casilla VACÍA el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
+            description: `El espacio está totalmente libre en el curso y el docente tiene disponibilidad.`,
             targetSlot: slot,
             swapWithEntry: null
           });
         } else {
-          // Opción 2: Intercambio con la materia existente
+          // CASILLA OCUPADA POR OTRA MATERIA
+          if (currentEntry.subject_id === targetSubjectId) return; // Ya es esta misma materia
           const existingSub = (subjects || []).find((s: any) => s.id === currentEntry.subject_id);
           const existingSubName = existingSub?.name || 'otra materia';
 
@@ -2280,8 +2295,8 @@ export const scheduleService = {
             type: 'swap',
             day,
             slot,
-            title: `🔄 Intercambiar por ${existingSubName} el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
-            description: `Reemplaza a ${existingSubName} y libera a su docente sin causar choques.`,
+            title: `🔄 Reemplazar a ${existingSubName} el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
+            description: `Vaciará ${existingSubName} de esta hora y colocará la nueva materia de forma única.`,
             targetSlot: slot,
             swapWithEntry: currentEntry
           });
@@ -2289,7 +2304,7 @@ export const scheduleService = {
       });
     });
 
-    return suggestions; // Retornar todas las sugerencias válidas de la semana (Lunes a Viernes)
+    return suggestions;
   },
 
   applySmartSwap: async (
