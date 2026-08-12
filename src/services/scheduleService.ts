@@ -147,23 +147,43 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
   } else {
     if (
       taskSubjectName.includes('matemática') ||
+      taskSubjectName.includes('matematica') ||
       taskSubjectName.includes('lengua') ||
       taskSubjectName.includes('español') ||
+      taskSubjectName.includes('espanol') ||
       taskSubjectName.includes('ciencias') ||
       taskSubjectName.includes('naturales') ||
       taskSubjectName.includes('sociales')
     )
       score += 200;
-    if (taskSubjectName.includes('artística')) score += 300;
+    
+    // BOOST DE PRIORIDAD PARA ARTE / EDUCACIÓN ARTÍSTICA
+    if (
+      taskSubjectName.includes('arte') ||
+      taskSubjectName.includes('artística') ||
+      taskSubjectName.includes('artistica') ||
+      taskSubjectName.includes('taller')
+    )
+      score += 5000;
+
     if (
       taskSubjectName.includes('inglés') ||
+      taskSubjectName.includes('ingles') ||
       taskSubjectName.includes('francés') ||
+      taskSubjectName.includes('frances') ||
       taskSubjectName.includes('idioma')
     )
-      score += 80;
+      score += 300;
   }
 
-  score += (teacherLoadMap[task.assign?.teacher_id] || 0) * 10;
+  // BOOST PARA DOCENTES CON CARGA ACOTADA O PARCIAL (12 A 16 HORAS)
+  const teacherLoad = teacherLoadMap[task.assign?.teacher_id] || 0;
+  if (teacherLoad > 0 && teacherLoad <= 18) {
+    score += (30 - teacherLoad) * 50; // A menor horas disponibles, mayor prioridad para asegurar su lugar
+  } else {
+    score += teacherLoad * 10;
+  }
+
   if (task.isDouble) score += 50;
   return score;
 };
@@ -588,7 +608,8 @@ export const scheduleService = {
               // - Pase 2 (relaxedRules): se respeta (solo se relajan los límites diarios)
               // - Pase 3 (superRelaxed): se ignora como último recurso
               if (!superRelaxed) {
-                if (sStart < tStart - 5 || sEnd > tEnd + 5) return true;
+                const marginEnd = shift === 'Vespertina' ? 20 : 5;
+                if (sStart < tStart - 5 || sEnd > tEnd + marginEnd) return true;
               }
 
               const isBusy = finalEntries.some((e) => {
@@ -746,7 +767,25 @@ export const scheduleService = {
           relaxedCount++;
           superRelaxedCount++;
         } else {
-          pending3.push(task);
+          // FALLBACK INSTANTÁNEO PARA MATERIAS COMO ARTE O BLOQUES DOBLES:
+          // Si no cupo como bloque doble de 2 horas seguidas, desglosarlo en 2 horas sueltas
+          if (task.isDouble) {
+            const single1 = { ...task, isDouble: false };
+            const single2 = { ...task, isDouble: false };
+            const p1 = placeTask(single1, true, true);
+            const p2 = placeTask(single2, true, true);
+            if (p1) {
+              relaxedCount++;
+              superRelaxedCount++;
+            }
+            if (p2) {
+              relaxedCount++;
+              superRelaxedCount++;
+            }
+            if (!p1 || !p2) pending3.push(task);
+          } else {
+            pending3.push(task);
+          }
         }
       }
 
@@ -1438,7 +1477,8 @@ export const scheduleService = {
               );
 
               if (!superRelaxed) {
-                if (sStart < tStart - 5 || sEnd > tEnd + 5) return true;
+                const marginEnd = shift === 'Vespertina' ? 20 : 5;
+                if (sStart < tStart - 5 || sEnd > tEnd + marginEnd) return true;
               }
 
               return (
@@ -1525,7 +1565,23 @@ export const scheduleService = {
           relaxedCount++;
           superRelaxedCount++;
         } else {
-          pending3.push(t);
+          if (t.isDouble) {
+            const single1 = { ...t, isDouble: false };
+            const single2 = { ...t, isDouble: false };
+            const p1 = placeTask(single1, true, true);
+            const p2 = placeTask(single2, true, true);
+            if (p1) {
+              relaxedCount++;
+              superRelaxedCount++;
+            }
+            if (p2) {
+              relaxedCount++;
+              superRelaxedCount++;
+            }
+            if (!p1 || !p2) pending3.push(t);
+          } else {
+            pending3.push(t);
+          }
         }
       }
       return { entries: finalEntries, pendingTasks: pending3, relaxedCount, superRelaxedCount };
