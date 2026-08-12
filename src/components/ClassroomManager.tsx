@@ -105,16 +105,24 @@ export const ClassroomManager = () => {
   // Helper para obtener el nombre completo del estudiante (soporta names, surnames, full_name, etc.)
   const getStudentFullName = (s: any) => {
     if (!s) return 'Estudiante';
-    if (s.full_name && s.full_name.trim()) return s.full_name;
-    if (s.name && s.name.trim()) return s.name;
-    if (s.names && s.names.trim()) {
+    // 1. Campo oficial de la tabla 'students' de Supabase (names + surnames)
+    if (s.names && String(s.names).trim()) {
       const surnames = [s.first_surname, s.second_surname, s.apellidos, s.last_name].filter(Boolean).join(' ');
-      return surnames ? `${s.names} ${surnames}`.trim() : s.names.trim();
+      return surnames ? `${s.names} ${surnames}`.trim() : String(s.names).trim();
     }
+    // 2. first_name / last_name
     if (s.first_name || s.last_name) {
       return `${s.first_name || ''} ${s.last_name || ''}`.trim();
     }
-    return s.student_code || s.rne || 'Estudiante';
+    // 3. full_name / name / nombre
+    if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
+    if (s.name && String(s.name).trim()) return String(s.name).trim();
+    if (s.nombre_completo && String(s.nombre_completo).trim()) return String(s.nombre_completo).trim();
+    if (s.nombre) {
+      const ap = s.apellido || s.apellidos || '';
+      return `${s.nombre} ${ap}`.trim();
+    }
+    return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
   };
 
   // Estudiantes del curso seleccionado

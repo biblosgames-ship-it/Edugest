@@ -23,7 +23,7 @@ export const useStudents = () => {
       if (error) throw error;
       return data || [];
     },
-    staleTime: 1000 * 60 * 15 // 15 minutos de caché
+    staleTime: 1000 * 5 // 5 segundos de caché para reflejar cambios de inmediato
   });
 
   const addStudentMutation = useMutation({
