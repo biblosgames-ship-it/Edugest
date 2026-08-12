@@ -136,18 +136,24 @@ export const ClassroomManager = () => {
     return getStudentFullName(s).toLowerCase();
   };
 
-  // Estudiantes del curso seleccionado (ordenados exactamente igual a Gestión de Alumnos: Número de Orden -> Apellidos)
+  // Estudiantes del curso seleccionado (ordenados ESTRICTAMENTE por Número de Orden oficial de Gestión de Alumnos)
   const courseStudents = useMemo(() => {
     if (!selectedCourseId) return [];
     return (allStudents || [])
       .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
       .sort((a: any, b: any) => {
-        // 1. Prioridad: Número de Orden (order_number) asignado en Gestión de Alumnos
-        const orderA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : 9999;
-        const orderB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : 9999;
-        if (orderA !== orderB) return orderA - orderB;
+        const numA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : null;
+        const numB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : null;
 
-        // 2. Secundario: Orden Alfabético por APELLIDO primero
+        // SI TIENEN NÚMERO DE ORDEN ASIGNADO, EL ORDEN ES 100% ESTRICTO POR ESE NÚMERO
+        // (Ejemplo: Si un alumno con apellido 'Areche' tiene el orden #28 por inscribirse de último, aparecerá en el puesto #28 al final)
+        if (numA !== null && numB !== null) {
+          return numA - numB;
+        }
+        if (numA !== null) return -1;
+        if (numB !== null) return 1;
+
+        // Solo si no tienen número de orden asignado, se ordenan alfabéticamente por apellido
         return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
       });
   }, [allStudents, selectedCourseId]);
