@@ -605,10 +605,12 @@ export const ScheduleViewer = () => {
     filteredSchedule.forEach((entry) => {
       if (!entry.day || !entry.start_time) return;
 
+      const normDay = (entry.day || '').trim();
+      const matchedDay = days.find((d) => d.toLowerCase() === normDay.toLowerCase()) || days[0];
       const eMins = toMins(entry.start_time);
 
       // Find the slot that is closest to entry's start time
-      let closestSlot = null;
+      let closestSlot: any = null;
       let minDiff = Infinity;
 
       slots.forEach((slot) => {
@@ -622,7 +624,8 @@ export const ScheduleViewer = () => {
 
       // Asignar siempre la entrada a su slot más cercano para garantizar visibilidad total
       if (closestSlot) {
-        const key = `${entry.day}-${closestSlot.start}`;
+        const key = `${matchedDay}-${closestSlot.start}`;
+        if (!map.has(key)) map.set(key, []);
         map.get(key)?.push(entry);
       }
     });

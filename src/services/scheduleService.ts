@@ -2246,10 +2246,15 @@ export const scheduleService = {
     const suggestions: any[] = [];
 
     days.forEach((day) => {
-      const dayEntries = currentSchedule.filter((e: any) => e.course_id === targetCourseId && e.day === day);
+      const dayEntries = currentSchedule.filter(
+        (e: any) => e.course_id === targetCourseId && (e.day || '').trim().toLowerCase() === day.toLowerCase()
+      );
 
       const teacherOtherCourseEntries = currentSchedule.filter(
-        (e: any) => e.teacher_id === teacherId && e.day === day && e.course_id !== targetCourseId
+        (e: any) =>
+          e.teacher_id === teacherId &&
+          (e.day || '').trim().toLowerCase() === day.toLowerCase() &&
+          e.course_id !== targetCourseId
       );
 
       slotTimes.forEach((slot, idx) => {
@@ -2263,8 +2268,6 @@ export const scheduleService = {
           return slotStartMins < eEnd && slotEndMins > eStart;
         });
 
-        if (isTeacherBusyElsewhere) return;
-
         // Buscar entrada en este curso comparando minutos
         const currentEntry = dayEntries.find((e: any) => {
           const eStart = toMins(e.start_time);
@@ -2275,16 +2278,28 @@ export const scheduleService = {
         if (isLocked) return;
 
         if (!currentEntry) {
-          // CASILLA 100% VACÍA
-          suggestions.push({
-            type: 'empty',
-            day,
-            slot,
-            title: `🟢 Casilla VACÍA el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
-            description: `El espacio está totalmente libre en el curso y el docente tiene disponibilidad.`,
-            targetSlot: slot,
-            swapWithEntry: null
-          });
+          // CASILLA VACÍA
+          if (isTeacherBusyElsewhere) {
+            suggestions.push({
+              type: 'empty',
+              day,
+              slot,
+              title: `⚠️ Colocar el ${day} (${slot.label} ${slot.start.substring(0, 5)}) - Ojo: Docente con clase en otro grado`,
+              description: `Casilla libre en este curso. El docente tiene clase en otro grado pero puedes colocarla aquí si es necesario.`,
+              targetSlot: slot,
+              swapWithEntry: null
+            });
+          } else {
+            suggestions.push({
+              type: 'empty',
+              day,
+              slot,
+              title: `🟢 Casilla VACÍA el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
+              description: `El espacio está totalmente libre en el curso y el docente tiene disponibilidad.`,
+              targetSlot: slot,
+              swapWithEntry: null
+            });
+          }
         } else {
           // CASILLA OCUPADA POR OTRA MATERIA
           if (currentEntry.subject_id === targetSubjectId) return; // Ya es esta misma materia
