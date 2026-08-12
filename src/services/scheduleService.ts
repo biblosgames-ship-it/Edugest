@@ -303,7 +303,10 @@ export const scheduleService = {
       if (!isMorning && bStart < 420) bStart += 720;
       const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
 
-      const targetTotal = isMorning || levelNorm.includes('primar') ? 5 : 6;
+      const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
+      const isSecundaria = levelNorm.includes('secun');
+      const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
+
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
       const dbActoEvent = (fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
@@ -330,6 +333,7 @@ export const scheduleService = {
         if (totalMins === 110 && count === 3) return [40, 35, 35];
         if (totalMins === 120 && count === 3) return [40, 40, 40];
         if (totalMins === 135 && count === 3) return [45, 45, 45];
+        if (totalMins === 90 && count === 2) return [45, 45];
         if (totalMins === 90 && count === 3) return [30, 30, 30];
 
         const base = Math.floor(totalMins / count);
@@ -342,9 +346,25 @@ export const scheduleService = {
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 30 y 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      let preCount = 2;
+      if (targetTotal === 5) {
+        // En Primaria/Inicial (5 bloques por día): si preWindow <= 100 min (ej. 8:00 a 9:30 AM), son exactamente 2 bloques de 45 min
+        if (preWindow <= 100) {
+          preCount = 2;
+        } else {
+          preCount = Math.min(3, Math.floor(preWindow / 35));
+        }
+      } else {
+        // En Secundaria (6 bloques por día):
+        if (preWindow >= 85) {
+          preCount = 3;
+        } else {
+          preCount = 2;
+        }
+      }
+
       const preDurs = calculateSlotDurations(preWindow, preCount);
 
       let currTimePre = classStart;
@@ -389,7 +409,7 @@ export const scheduleService = {
 
       // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      let postCount = Math.max(1, targetTotal - preCount);
       const postDurs = calculateSlotDurations(postWindow, postCount);
 
       for (let i = 0; i < postCount; i++) {
@@ -1119,8 +1139,25 @@ export const scheduleService = {
         });
       }
 
+      const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
+      const isSecundaria = levelNorm.includes('secun');
+      const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
+
       const preWindow = Math.max(0, bStart - classStart);
-      let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      let preCount = 2;
+      if (targetTotal === 5) {
+        if (preWindow <= 100) {
+          preCount = 2;
+        } else {
+          preCount = Math.min(3, Math.floor(preWindow / 35));
+        }
+      } else {
+        if (preWindow >= 85) {
+          preCount = 3;
+        } else {
+          preCount = 2;
+        }
+      }
 
       let currTimePre = classStart;
       for (let i = 0; i < preCount; i++) {
@@ -1167,7 +1204,7 @@ export const scheduleService = {
       });
 
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      let postCount = Math.max(1, targetTotal - preCount);
 
       for (let i = 0; i < postCount; i++) {
         const remainingSlots = postCount - i;
