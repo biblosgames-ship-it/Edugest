@@ -1481,12 +1481,11 @@ export const ScheduleViewer = () => {
                     });
 
                     // 2. ¿ES UN RECREO SEGÚN LA REJILLA DINÁMICA?
-                    // En vista de DOCENTE: si hay clases en este bloque (ej. docente de Deporte
-                    // que enseña en varios ciclos con distintos recreos), las clases tienen
-                    // prioridad sobre el recreo — nunca se ocultan detrás del banner de recreo.
+                    // Las clases programadas siempre tienen prioridad sobre los recreos o eventos fijos.
+                    // Jamás se oculta una clase asignada detrás del banner de recreo.
                     const isRecreoRaw = slot.isBreak;
-                    const isRecreo = filterType === 'teacher' ? false : isRecreoRaw;
-                    const blockName = fixedEvent ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
+                    const isRecreo = filterType === 'teacher' || entries.length > 0 ? false : isRecreoRaw;
+                    const blockName = (fixedEvent && entries.length === 0) ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
 
                     return (
                       <div key={day} className="px-2 h-full">
