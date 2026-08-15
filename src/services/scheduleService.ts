@@ -2219,6 +2219,10 @@ export const scheduleService = {
         (e: any) => e.course_id === targetCourseId && (e.day || '').trim().toLowerCase() === day.toLowerCase()
       );
 
+      // REGLA ABSOLUTA 1: Si el curso ya tiene 2 o más horas de esta materia este día, no sugerir añadir más
+      const existingSameSubjectCount = dayEntries.filter((e: any) => e.subject_id === targetSubjectId).length;
+      if (existingSameSubjectCount >= 2) return;
+
       const teacherOtherCourseEntries = currentSchedule.filter(
         (e: any) =>
           e.teacher_id === teacherId &&
@@ -2226,9 +2230,20 @@ export const scheduleService = {
           e.course_id !== targetCourseId
       );
 
-      slotTimes.forEach((slot, idx) => {
+      slotTimes.forEach((slot) => {
         const slotStartMins = toMins(slot.start);
         const slotEndMins = toMins(slot.end);
+
+        // REGLA ABSOLUTA 2: JAMÁS sugerir colocar una clase en el horario de Recreo del curso
+        const overlapsBreak = doesOverlapCourseBreak(
+          slotStartMins,
+          slotEndMins,
+          course,
+          breakPreferences,
+          shift,
+          toMins
+        );
+        if (overlapsBreak) return;
 
         // ¿Docente ocupado en otro curso a esta hora?
         const isTeacherBusyElsewhere = teacherOtherCourseEntries.some((e: any) => {
@@ -2250,17 +2265,19 @@ export const scheduleService = {
           // CASILLA VACÍA
           if (isTeacherBusyElsewhere) {
             suggestions.push({
-              type: 'empty',
+              type: 'warning',
+              priority: 3,
               day,
               slot,
               title: `⚠️ Colocar el ${day} (${slot.label} ${slot.start.substring(0, 5)}) - Ojo: Docente con clase en otro grado`,
-              description: `Casilla libre en este curso. El docente tiene clase en otro grado pero puedes colocarla aquí si es necesario.`,
+              description: `Casilla libre en este curso. El docente tiene clase en otro grado pero puedes colocarla si es necesario.`,
               targetSlot: slot,
               swapWithEntry: null
             });
           } else {
             suggestions.push({
               type: 'empty',
+              priority: 1,
               day,
               slot,
               title: `🟢 Casilla VACÍA el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
@@ -2277,6 +2294,7 @@ export const scheduleService = {
 
           suggestions.push({
             type: 'swap',
+            priority: 2,
             day,
             slot,
             title: `🔄 Reemplazar a ${existingSubName} el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
@@ -2288,7 +2306,8 @@ export const scheduleService = {
       });
     });
 
-    return suggestions;
+    // Ordenar sugerencias: Primero casillas verdes totalmente libres, luego reemplazos, luego advertencias de choque
+    return suggestions.sort((a, b) => a.priority - b.priority);
   },
 
   applySmartSwap: async (
@@ -2305,25 +2324,47 @@ export const scheduleService = {
     );
     if (!assign) throw new Error('No se encontró la asignación académica.');
 
-    // 1. Limpieza absoluta: Eliminar CUALQUIER clase existente en esa casilla para evitar que se amontonen dos clases juntas
-    const { error: delSlotErr } = await supabase
+    const toMins = (val: string) => {
+      const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const targetStartMins = toMins(suggestion.targetSlot.start);
+
+    // 1. Si existe una entrada previa explícita a eliminar en la casilla
+    if (suggestion.swapWithEntry?.id) {
+      await supabase.from('schedule_entries').delete().eq('id', suggestion.swapWithEntry.id);
+    }
+
+    // 2. Limpieza de aproximación: Eliminar cualquier entrada del curso en ese día que coincida en horario (+-20 min)
+    const { data: existingSlots } = await supabase
       .from('schedule_entries')
-      .delete()
+      .select('id, start_time')
       .eq('center_id', profile.center_id)
       .eq('course_id', targetCourseId)
       .eq('day', suggestion.day)
-      .eq('start_time', suggestion.targetSlot.start)
       .eq('shift', shift)
       .eq('school_year', schoolYear);
 
-    if (delSlotErr) console.warn('Limpieza de slot:', delSlotErr.message);
+    if (existingSlots && existingSlots.length > 0) {
+      const idsToDelete = existingSlots
+        .filter((e) => Math.abs(toMins(e.start_time) - targetStartMins) < 20)
+        .map((e) => e.id);
+      if (idsToDelete.length > 0) {
+        await supabase.from('schedule_entries').delete().in('id', idsToDelete);
+      }
+    }
 
-    // 2. Si se estaba moviendo una clase que ya estaba en otra hora, eliminar su posición vieja
+    // 3. Si se estaba moviendo una clase que ya estaba en otra hora, eliminar su posición vieja
     if (suggestion.fromEntryId) {
       await supabase.from('schedule_entries').delete().eq('id', suggestion.fromEntryId);
     }
 
-    // 3. Insertar la nueva clase de forma limpia en el espacio único
+    // 4. Formatear hora de inicio y fin en formato HH:MM:SS
+    const sStart = suggestion.targetSlot.start.length === 5 ? suggestion.targetSlot.start + ':00' : suggestion.targetSlot.start;
+    const sEnd = suggestion.targetSlot.end.length === 5 ? suggestion.targetSlot.end + ':00' : suggestion.targetSlot.end;
+
+    // 5. Insertar la nueva clase de forma limpia
     const { error: insErr } = await supabase.from('schedule_entries').insert([
       {
         center_id: profile.center_id,
@@ -2332,8 +2373,8 @@ export const scheduleService = {
         teacher_id: assign.teacher_id,
         day: suggestion.day,
         shift,
-        start_time: suggestion.targetSlot.start,
-        end_time: suggestion.targetSlot.end,
+        start_time: sStart,
+        end_time: sEnd,
         school_year: schoolYear
       }
     ]);
