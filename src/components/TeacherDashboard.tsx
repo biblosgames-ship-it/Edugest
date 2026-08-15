@@ -1066,8 +1066,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               setEditingTask(null);
               setEditingAnnouncement(null);
               if (selectedCourse?.id) {
-                dataService.getCourseTasks(selectedCourse.id).then((t) => setCourseTasks(t));
-                dataService.getCourseAnnouncements(selectedCourse.id).then((a) => setCourseAnnouncements(a));
+                dataService.getTasks(selectedCourse.id).then((t) => setCourseTasks(t));
+                dataService.getAnnouncements(selectedCourse.id).then((a) => setCourseAnnouncements(a));
               }
             }}
           />

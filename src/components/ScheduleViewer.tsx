@@ -643,11 +643,14 @@ export const ScheduleViewer = () => {
       const matchedDay = days.find((d) => d.toLowerCase() === normDay.toLowerCase()) || days[0];
       const eMins = toMins(entry.start_time);
 
-      // Find the slot that is closest to entry's start time
+      // Buscar la franja de clase más cercana a la hora de inicio de la entrada (excluyendo recreos)
+      const classSlotsOnly = slots.filter((s) => !s.isBreak);
+      const targetSlots = classSlotsOnly.length > 0 ? classSlotsOnly : slots;
+
       let closestSlot: any = null;
       let minDiff = Infinity;
 
-      slots.forEach((slot) => {
+      targetSlots.forEach((slot) => {
         const slotMins = toMins(slot.start);
         const diff = Math.abs(eMins - slotMins);
         if (diff < minDiff) {
@@ -656,7 +659,7 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // Asignar siempre la entrada a su slot más cercano para garantizar visibilidad total
+      // Asignar la entrada a su slot correspondiente
       if (closestSlot) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
@@ -1481,10 +1484,8 @@ export const ScheduleViewer = () => {
                     });
 
                     // 2. ¿ES UN RECREO SEGÚN LA REJILLA DINÁMICA?
-                    // Las clases programadas siempre tienen prioridad sobre los recreos o eventos fijos.
-                    // Jamás se oculta una clase asignada detrás del banner de recreo.
-                    const isRecreoRaw = slot.isBreak;
-                    const isRecreo = filterType === 'teacher' || entries.length > 0 ? false : isRecreoRaw;
+                    // Las franjas de recreo son inviolables y se muestran de Lunes a Viernes
+                    const isRecreo = filterType === 'teacher' ? false : Boolean(slot.isBreak);
                     const blockName = (fixedEvent && entries.length === 0) ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
 
                     return (

@@ -473,25 +473,19 @@ export const scheduleService = {
         // Materias que requieren bloque doble (horas consecutivas)
         const requiresDouble =
           distType === 'together' ||
-          sName.includes('matemática') ||
-          sName.includes('matematica') ||
-          sName.includes('lengua') ||
-          sName.includes('español') ||
-          sName.includes('espanol') ||
-          sName.includes('ciencias') ||
-          sName.includes('física') ||
-          sName.includes('fisica') ||
           sName.includes('educación física') ||
           sName.includes('educacion fisica') ||
           sName.includes('deporte') ||
-          sName.includes('recreo') ||
+          sName.includes('laboratorio') ||
           sName.includes('artística') ||
           sName.includes('artistica');
 
+        let createdDouble = false;
         while (remaining > 0) {
-          if (remaining >= 2 && requiresDouble) {
+          if (remaining >= 2 && (requiresDouble || (!createdDouble && remaining >= 4 && distType !== 'separate'))) {
             allTasks.push({ course, assign, isDouble: true });
             remaining -= 2;
+            createdDouble = true;
           } else {
             allTasks.push({ course, assign, isDouble: false });
             remaining -= 1;
@@ -574,10 +568,8 @@ export const scheduleService = {
           }
 
           for (const slotsToUse of slotCombinations) {
-            // REGLA ESTRICTA Y ABSOLUTA: JAMÁS PERMITIR 4 O MÁS HORAS DE LA MISMA MATERIA EL MISMO DÍA
-            if (daySubjectCount + slotsToUse.length >= 4) continue;
-
-            if (!relaxedRules && daySubjectCount + slotsToUse.length > 2) continue;
+            // REGLA ESTRICTA Y ABSOLUTA: JAMÁS PERMITIR MÁS DE 2 HORAS DE LA MISMA MATERIA EL MISMO DÍA
+            if (daySubjectCount + slotsToUse.length > 2) continue;
 
             const existingSameSubject = finalEntries.filter(
               (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
@@ -660,39 +652,16 @@ export const scheduleService = {
               });
               if (isBusy) return true;
 
-              const cLevelNorm = (course.level || '').toLowerCase();
-              const cGradeNorm = (course.grade || '').toLowerCase();
-              const isInicialLevel =
-                cLevelNorm.includes('inic') ||
-                cLevelNorm.includes('preesc') ||
-                cLevelNorm.includes('kinder') ||
-                cLevelNorm.includes('parvul') ||
-                cGradeNorm.includes('inic') ||
-                cGradeNorm.includes('kínder') ||
-                cGradeNorm.includes('kinder') ||
-                cGradeNorm.includes('párvulo') ||
-                cGradeNorm.includes('parvulo') ||
-                cGradeNorm.includes('pre-primario') ||
-                cGradeNorm.includes('preprimario');
-
-              const subObjCurrent = state.subjects?.find((sub: any) => sub.id === assign.subject_id);
-              const sNameCurrent = (subObjCurrent?.name || '').toLowerCase();
-              const isEdFisicaCurrent =
-                sNameCurrent.includes('deporte') ||
-                sNameCurrent.includes('educación física') ||
-                sNameCurrent.includes('educacion fisica');
-
-              if (!superRelaxed && isEdFisicaCurrent) {
-                const overlapsBreak = doesOverlapCourseBreak(
-                  sStart,
-                  sEnd,
-                  course,
-                  breakPreferences,
-                  shift,
-                  toMins
-                );
-                if (overlapsBreak) return true;
-              }
+              // NINGUNA materia debe colocarse sobre la hora del recreo del curso
+              const overlapsBreak = doesOverlapCourseBreak(
+                sStart,
+                sEnd,
+                course,
+                breakPreferences,
+                shift,
+                toMins
+              );
+              if (overlapsBreak) return true;
 
               const isFixed = (fixedEvents || []).some((fe: any) => {
                 if (fe.day !== 'Todos' && fe.day !== day) return false;
