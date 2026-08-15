@@ -177,29 +177,9 @@ export const ScheduleViewer = () => {
     }
 
     if (filterType === 'course' && filterId) {
-      const activeCourse = (state.courses || []).find((c: any) => c.id === filterId);
-      const activeGrade = (activeCourse?.grade || '').trim().toLowerCase();
-      const activeSection = (activeCourse?.section || '').trim().toLowerCase();
-
       list = list.filter((s: any) => {
         const sCid = s.course_id || s.courseId;
-        if (sCid === filterId) return true;
-
-        // Fallback 1: Coincidencia por asignación del subject_id y teacher_id en este curso
-        const assignMatch = (state.assignments || []).some((a: any) => 
-          (a.course_id === filterId || a.courseId === filterId) && 
-          a.subject_id === s.subject_id && 
-          a.teacher_id === s.teacher_id
-        );
-        if (assignMatch) return true;
-
-        // Fallback 2: Coincidencia por nombre de grado y sección del curso
-        const sCourse = (state.courses || []).find((c: any) => c.id === sCid);
-        if (sCourse && activeGrade && (sCourse.grade || '').trim().toLowerCase() === activeGrade) {
-          if (!activeSection || (sCourse.section || '').trim().toLowerCase() === activeSection) return true;
-        }
-
-        return false;
+        return sCid === filterId;
       });
     }
 
@@ -643,14 +623,10 @@ export const ScheduleViewer = () => {
       const matchedDay = days.find((d) => d.toLowerCase() === normDay.toLowerCase()) || days[0];
       const eMins = toMins(entry.start_time);
 
-      // Buscar la franja de clase más cercana a la hora de inicio de la entrada (excluyendo recreos)
-      const classSlotsOnly = slots.filter((s) => !s.isBreak);
-      const targetSlots = classSlotsOnly.length > 0 ? classSlotsOnly : slots;
-
       let closestSlot: any = null;
       let minDiff = Infinity;
 
-      targetSlots.forEach((slot) => {
+      slots.forEach((slot) => {
         const slotMins = toMins(slot.start);
         const diff = Math.abs(eMins - slotMins);
         if (diff < minDiff) {
@@ -659,11 +635,27 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // Asignar la entrada a su slot correspondiente
-      if (closestSlot) {
+      // Solo asociar si la entrada está a 25 min o menos del slot
+      if (closestSlot && minDiff <= 25) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
-        map.get(key)?.push(entry);
+        const listInSlot = map.get(key)!;
+
+        // En vista de curso, la casilla solo debe tener una materia asignada (evitar amontonamiento)
+        if (filterType === 'course') {
+          if (listInSlot.length === 0) {
+            listInSlot.push(entry);
+          }
+        } else {
+          // En vista general o docente, evitar duplicados exactos
+          const isDup = listInSlot.some(
+            (existing: any) =>
+              existing.course_id === entry.course_id &&
+              existing.subject_id === entry.subject_id &&
+              existing.start_time === entry.start_time
+          );
+          if (!isDup) listInSlot.push(entry);
+        }
       }
     });
 
