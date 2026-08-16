@@ -65,16 +65,68 @@ export const ClassroomManager = () => {
   const [newNoteCategory, setNewNoteCategory] = useState<NoteCategory>('Conducta');
   const [newNoteContent, setNewNoteContent] = useState<string>('');
 
-  // Estado de Calificaciones Parciales
-  const [partialActivities, setPartialActivities] = useState<Array<{ id: string; name: string; maxScore: number }>>([
-    { id: 'act_1', name: 'Práctica 1', maxScore: 100 },
-    { id: 'act_2', name: 'Examen Parcial', maxScore: 100 }
-  ]);
-  const [partialScores, setPartialScores] = useState<Record<string, Record<string, number>>>(() => {
-    const saved = localStorage.getItem('edugest_partial_scores');
-    return saved ? JSON.parse(saved) : {};
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
+
+  // Asignaturas del curso seleccionado
+  const availableSubjects = useMemo(() => {
+    if (!selectedCourseId) return [];
+    let subs = (allAssignments || [])
+      .filter((a: any) => (a.course_id || a.courseId) === selectedCourseId)
+      .map((a: any) => (allSubjects || []).find((s: any) => s.id === (a.subject_id || a.subjectId)))
+      .filter(Boolean);
+    if (subs.length === 0) subs = allSubjects || [];
+    return subs;
+  }, [selectedCourseId, allAssignments, allSubjects]);
+
+  // Autoseleccionar primera asignatura
+  React.useEffect(() => {
+    if (availableSubjects.length > 0 && !selectedSubjectId) {
+      setSelectedSubjectId(availableSubjects[0].id);
+    }
+  }, [availableSubjects, selectedSubjectId]);
+
+  // Clave de scope estricto: centro_año_docente_curso_asignatura_periodo
+  const storageScopeKey = useMemo(() => {
+    const centerId = profile?.center_id || 'default_center';
+    const year = selectedYear || '2025-2026';
+    const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
+    const courseId = selectedCourseId || 'nocourse';
+    const subjectId = selectedSubjectId || 'nosubject';
+    const period = selectedPeriod || 'P1';
+    return `edugens_partials_${centerId}_${year}_${teacherId}_${courseId}_${subjectId}_${period}`;
+  }, [profile, selectedYear, selectedCourseId, selectedSubjectId, selectedPeriod]);
+
+  // Estado de Calificaciones Parciales por Competencias
+  const [competencyActivities, setCompetencyActivities] = useState<Record<string, Array<{ id: string; name: string; maxScore: number }>>>({
+    'c1': [{ id: 'act_c1_1', name: 'Actividad 1', maxScore: 100 }],
+    'c2': [{ id: 'act_c2_1', name: 'Actividad 1', maxScore: 100 }],
+    'c3': [{ id: 'act_c3_1', name: 'Actividad 1', maxScore: 100 }],
+    'c4': [{ id: 'act_c4_1', name: 'Actividad 1', maxScore: 100 }],
   });
+
+  const [partialScores, setPartialScores] = useState<Record<string, Record<string, number>>>({});
+  const [isSavingPartials, setIsSavingPartials] = useState<boolean>(false);
+  const [savePartialsSuccess, setSavePartialsSuccess] = useState<boolean>(false);
+
+  // Cargar calificaciones parciales especificas del scope bajo demanda (Lazy Load)
+  React.useEffect(() => {
+    if (!selectedCourseId || !selectedSubjectId) return;
+    const saved = localStorage.getItem(storageScopeKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setPartialScores(parsed.scores || {});
+        if (parsed.activities) setCompetencyActivities(parsed.activities);
+      } catch (e) {
+        setPartialScores({});
+      }
+    } else {
+      setPartialScores({});
+    }
+  }, [storageScopeKey, selectedCourseId, selectedSubjectId]);
+
   const [newActivityName, setNewActivityName] = useState<string>('');
+  const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
 
   // Ficha de Estudiante Seleccionado
   const [folderStudentId, setFolderStudentId] = useState<string>('');
@@ -249,28 +301,92 @@ export const ClassroomManager = () => {
     alert('¡Apunte registrado exitosamente!');
   };
 
-  // Agregar nueva actividad parcial
+  // Determinar número de competencias según nivel del curso (3 para Primaria/Inicial, 4 para Secundaria)
+  const selectedCourseObj = availableCourses.find((c) => c.id === selectedCourseId);
+  const isSecondary = (selectedCourseObj?.level || '').toLowerCase().includes('secundar');
+  const competencyCount = isSecondary ? 4 : 3;
+
+  // Lista activa de competencias para el curso seleccionado
+  const activeCompetencies = useMemo(() => {
+    const list = [
+      { id: 'c1', label: 'Competencia 1' },
+      { id: 'c2', label: 'Competencia 2' },
+      { id: 'c3', label: 'Competencia 3' },
+    ];
+    if (isSecondary) {
+      list.push({ id: 'c4', label: 'Competencia 4' });
+    }
+    return list;
+  }, [isSecondary]);
+
+  // Agregar nueva actividad parcial a una competencia específica
   const handleAddActivity = () => {
     if (!newActivityName.trim()) return;
-    const act = { id: `act_${Date.now()}`, name: newActivityName.trim(), maxScore: 100 };
-    setPartialActivities((prev) => [...prev, act]);
+    const compId = selectedCompetencyForNewAct || 'c1';
+    const act = { id: `act_${compId}_${Date.now()}`, name: newActivityName.trim(), maxScore: 100 };
+    setCompetencyActivities((prev) => ({
+      ...prev,
+      [compId]: [...(prev[compId] || []), act]
+    }));
     setNewActivityName('');
+  };
+
+  // Eliminar actividad parcial
+  const handleDeleteActivity = (compId: string, actId: string) => {
+    setCompetencyActivities((prev) => ({
+      ...prev,
+      [compId]: (prev[compId] || []).filter((a) => a.id !== actId)
+    }));
   };
 
   // Cambiar nota parcial de alumno
   const handlePartialScoreChange = (studentId: string, activityId: string, val: number) => {
     setPartialScores((prev) => {
       const studentScores = prev[studentId] || {};
-      const updated = {
+      const updatedScores = {
         ...prev,
         [studentId]: {
           ...studentScores,
-          [activityId]: Math.min(100, Math.max(0, val))
+          [activityId]: isNaN(val) ? 0 : Math.min(100, Math.max(0, val))
         }
       };
-      localStorage.setItem('edugens_partial_scores', JSON.stringify(updated));
-      return updated;
+      // Guardar localmente en el scope estricto
+      localStorage.setItem(storageScopeKey, JSON.stringify({
+        scores: updatedScores,
+        activities: competencyActivities,
+        period: selectedPeriod,
+        subjectId: selectedSubjectId,
+        courseId: selectedCourseId,
+        teacherId: profile?.teacher_id || profile?.id,
+        centerId: profile?.center_id,
+        year: selectedYear
+      }));
+      return updatedScores;
     });
+  };
+
+  // Guardar calificaciones del período explicitamente
+  const handleSavePartials = () => {
+    setIsSavingPartials(true);
+    try {
+      localStorage.setItem(storageScopeKey, JSON.stringify({
+        scores: partialScores,
+        activities: competencyActivities,
+        period: selectedPeriod,
+        subjectId: selectedSubjectId,
+        courseId: selectedCourseId,
+        teacherId: profile?.teacher_id || profile?.id,
+        centerId: profile?.center_id,
+        year: selectedYear,
+        updatedAt: new Date().toISOString()
+      }));
+      setSavePartialsSuccess(true);
+      setTimeout(() => setSavePartialsSuccess(false), 3000);
+    } catch (e) {
+      alert('Error al guardar parciales');
+    } finally {
+      setIsSavingPartials(false);
+    }
   };
 
   // Métricas rápidas de asistencia de hoy
@@ -285,8 +401,6 @@ export const ClassroomManager = () => {
     });
     return { presente, tardanza, excusa, ausente, total: courseStudents.length };
   }, [courseStudents, attendanceState]);
-
-  const selectedCourseObj = availableCourses.find((c) => c.id === selectedCourseId);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -307,7 +421,7 @@ export const ClassroomManager = () => {
             </p>
           </div>
 
-          {/* SELECTOR DE CURSO Y FECHA */}
+          {/* SELECTOR DE CURSO, ASIGNATURA Y PERIODO */}
           <div className="flex flex-wrap items-center gap-3 bg-white/5 p-3 rounded-3xl border border-white/10 backdrop-blur-md">
             <div>
               <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
@@ -315,7 +429,10 @@ export const ClassroomManager = () => {
               </label>
               <select
                 value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCourseId(e.target.value);
+                  setSelectedSubjectId('');
+                }}
                 className="bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-2xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
               >
                 {availableCourses.map((c: any) => (
@@ -328,7 +445,40 @@ export const ClassroomManager = () => {
 
             <div>
               <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
-                Fecha:
+                Asignatura:
+              </label>
+              <select
+                value={selectedSubjectId}
+                onChange={(e) => setSelectedSubjectId(e.target.value)}
+                className="bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-2xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer min-w-[150px]"
+              >
+                {availableSubjects.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+                Período Evaluativo:
+              </label>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="bg-slate-900 text-amber-300 font-black text-xs px-4 py-2.5 rounded-2xl border border-amber-400/40 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              >
+                <option value="P1">Período 1 (P1)</option>
+                <option value="P2">Período 2 (P2)</option>
+                <option value="P3">Período 3 (P3)</option>
+                <option value="P4">Período 4 (P4)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+                Fecha Asistencia:
               </label>
               <input
                 type="date"
@@ -647,76 +797,201 @@ export const ClassroomManager = () => {
         </div>
       )}
 
-      {/* TAB 3: CALIFICACIONES PARCIALES */}
+      {/* TAB 3: CALIFICACIONES PARCIALES POR COMPETENCIAS */}
       {activeTab === 'partials' && (
-        <div className="space-y-4">
-          <div className="bg-surface p-4 rounded-3xl border border-border-main shadow-md flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+        <div className="space-y-6">
+          {/* BARRA DE CREACION DE COLUMNA Y METADATOS */}
+          <div className="bg-surface p-5 rounded-3xl border border-border-main shadow-md flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-black uppercase text-text-muted">Añadir evaluacion a:</span>
+              <select
+                value={selectedCompetencyForNewAct}
+                onChange={(e) => setSelectedCompetencyForNewAct(e.target.value)}
+                className="px-3 py-2 rounded-2xl border border-border-main bg-brand-bg text-xs font-bold text-brand-blue outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
+              >
+                {activeCompetencies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
-                placeholder="Nueva Actividad (Ej. Quiz 2)..."
+                placeholder="Nombre de la actividad (Ej. Quiz 1)..."
                 value={newActivityName}
                 onChange={(e) => setNewActivityName(e.target.value)}
-                className="px-4 py-2 rounded-2xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                className="px-4 py-2 rounded-2xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-2 focus:ring-brand-blue min-w-[220px]"
               />
               <button
                 onClick={handleAddActivity}
-                className="px-4 py-2 bg-brand-blue text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                className="px-4 py-2 bg-brand-blue hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-md shadow-brand-blue/20"
               >
                 <Plus size={14} /> Añadir Columna
               </button>
             </div>
 
-            <p className="text-xs font-bold text-text-muted">
-              Ingresa las calificaciones continuas (0 a 100). El promedio parcial se calcula en tiempo real.
-            </p>
+            <div className="flex items-center gap-3">
+              {savePartialsSuccess && (
+                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-bounce">
+                  <CheckCircle2 size={16} /> ¡Calificaciones del {selectedPeriod} Guardadas!
+                </span>
+              )}
+              <button
+                onClick={handleSavePartials}
+                disabled={isSavingPartials}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Save size={16} /> {isSavingPartials ? 'Guardando...' : `Guardar Parciales (${selectedPeriod})`}
+              </button>
+            </div>
           </div>
 
+          {/* TABLA MULTI-COMPETENCIAS */}
           <div className="bg-surface rounded-3xl border border-border-main shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-900/60 border-b border-border-main text-[10px] font-black text-text-muted uppercase tracking-widest">
-                    <th className="px-6 py-4">Estudiante</th>
-                    {partialActivities.map((act) => (
-                      <th key={act.id} className="px-4 py-4 text-center">
-                        {act.name} (100)
-                      </th>
-                    ))}
-                    <th className="px-6 py-4 text-center text-brand-blue">Promedio Parcial</th>
+                  {/* FILA SUPERIOR: TITULOS DE COMPETENCIA */}
+                  <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider divide-x divide-slate-800">
+                    <th rowSpan={2} className="px-6 py-4 min-w-[200px] sticky left-0 bg-slate-900 z-20">
+                      Estudiante
+                    </th>
+                    {activeCompetencies.map((comp, idx) => {
+                      const acts = competencyActivities[comp.id] || [];
+                      const colSpan = Math.max(1, acts.length) + 1; // columnas de actividades + col de promedio de comp
+                      const colors = [
+                        'from-blue-600 to-indigo-700',
+                        'from-purple-600 to-indigo-800',
+                        'from-emerald-600 to-teal-700',
+                        'from-amber-600 to-orange-700'
+                      ];
+                      return (
+                        <th
+                          key={comp.id}
+                          colSpan={colSpan}
+                          className={`text-center py-3 px-2 bg-gradient-to-r ${colors[idx % colors.length]}`}
+                        >
+                          {comp.label}
+                        </th>
+                      );
+                    })}
+                    <th rowSpan={2} className="px-6 py-4 text-center bg-indigo-950 text-indigo-200 font-black min-w-[120px]">
+                      Nota Final Parcial
+                    </th>
+                  </tr>
+
+                  {/* FILA INFERIOR: COLUMNAS DE ACTIVIDADES */}
+                  <tr className="bg-slate-100 dark:bg-slate-900/80 border-b border-border-main text-[10px] font-black text-text-muted uppercase tracking-widest divide-x divide-border-main">
+                    {activeCompetencies.map((comp) => {
+                      const acts = competencyActivities[comp.id] || [];
+                      return (
+                        <React.Fragment key={`subhead_${comp.id}`}>
+                          {acts.length === 0 ? (
+                            <th className="px-3 py-3 text-center text-slate-400 italic font-normal">
+                              Sin columnas
+                            </th>
+                          ) : (
+                            acts.map((act) => (
+                              <th key={act.id} className="px-3 py-3 text-center min-w-[100px] relative group">
+                                <div className="flex items-center justify-center gap-1">
+                                  <span>{act.name}</span>
+                                  <button
+                                    onClick={() => handleDeleteActivity(comp.id, act.id)}
+                                    className="text-rose-400 hover:text-rose-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Eliminar columna"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </th>
+                            ))
+                          )}
+                          <th className="px-3 py-3 text-center bg-indigo-50 dark:bg-indigo-950/40 text-brand-blue font-black min-w-[70px]">
+                            Prom. {comp.id.toUpperCase()}
+                          </th>
+                        </React.Fragment>
+                      );
+                    })}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-main text-xs">
-                  {courseStudents.map((s: any) => {
-                    const studentScores = partialScores[s.id] || {};
-                    const scoresArr = Object.values(studentScores).filter((v) => typeof v === 'number');
-                    const avg = scoresArr.length > 0 ? Math.round(scoresArr.reduce((a, b) => a + b, 0) / scoresArr.length) : 0;
 
-                    return (
-                      <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
-                        <td className="px-6 py-4 font-bold text-text-main">
-                          {getStudentFullName(s)}
-                        </td>
-                        {partialActivities.map((act) => (
-                          <td key={act.id} className="px-4 py-4 text-center">
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={studentScores[act.id] ?? ''}
-                              onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
-                              className="w-16 text-center py-1 rounded-xl border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-2 focus:ring-brand-blue"
-                            />
+                <tbody className="divide-y divide-border-main text-xs">
+                  {courseStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={20} className="py-12 text-center text-text-muted font-bold">
+                        No hay alumnos inscriptos en este curso.
+                      </td>
+                    </tr>
+                  ) : (
+                    courseStudents.map((s: any) => {
+                      const studentScores = partialScores[s.id] || {};
+                      
+                      // Calcular promedios por competencia
+                      const compAverages: number[] = [];
+
+                      activeCompetencies.forEach((comp) => {
+                        const acts = competencyActivities[comp.id] || [];
+                        const validScores = acts
+                          .map((a) => studentScores[a.id])
+                          .filter((v) => typeof v === 'number' && !isNaN(v));
+
+                        if (validScores.length > 0) {
+                          const avg = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+                          compAverages.push(avg);
+                        } else {
+                          compAverages.push(0);
+                        }
+                      });
+
+                      // Promedio final acumulado de las competencias
+                      const finalAvg = compAverages.length > 0
+                        ? Math.round(compAverages.reduce((a, b) => a + b, 0) / compAverages.length)
+                        : 0;
+
+                      return (
+                        <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors divide-x divide-border-main">
+                          <td className="px-6 py-4 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm">
+                            {getStudentFullName(s)}
                           </td>
-                        ))}
-                        <td className="px-6 py-4 text-center font-black text-sm">
-                          <span className={`px-3 py-1 rounded-xl ${avg >= 70 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                            {avg}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+
+                          {activeCompetencies.map((comp, compIdx) => {
+                            const acts = competencyActivities[comp.id] || [];
+                            const compAvg = compAverages[compIdx];
+
+                            return (
+                              <React.Fragment key={`cell_group_${comp.id}_${s.id}`}>
+                                {acts.length === 0 ? (
+                                  <td className="px-3 py-3 text-center text-slate-400 italic">--</td>
+                                ) : (
+                                  acts.map((act) => (
+                                    <td key={act.id} className="px-3 py-3 text-center">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={studentScores[act.id] ?? ''}
+                                        onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
+                                        className="w-14 text-center py-1 rounded-xl border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                                      />
+                                    </td>
+                                  ))
+                                )}
+                                <td className="px-3 py-3 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue">
+                                  {compAvg}
+                                </td>
+                              </React.Fragment>
+                            );
+                          })}
+
+                          <td className="px-6 py-4 text-center font-black text-sm bg-slate-50 dark:bg-slate-900/40">
+                            <span className={`px-3 py-1 rounded-xl shadow-sm ${finalAvg >= 70 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                              {finalAvg}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

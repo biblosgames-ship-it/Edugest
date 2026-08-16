@@ -278,13 +278,60 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return sum > 0 ? sum / 4 : 0;
   };
 
-  const calculateAreaFinal = (studentId: string) => {
-    const compSum = config.competencies.reduce(
-      (acc, c) => acc + calculateCompAvg(studentId, c.id),
-      0
-    );
-    const avg = compSum > 0 ? compSum / config.competencies.length : 0;
-    return avg > 0 ? Math.round(avg) : '-';
+  // Importar promedios de Mi Aula bajo demanda
+  const handleImportFromMiAula = () => {
+    if (!selectedCourseId || !selectedSubjectId) {
+      alert('Seleccione un curso y asignatura primero.');
+      return;
+    }
+    const centerId = profile?.center_id || 'default_center';
+    const year = selectedYear || '2025-2026';
+    const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
+
+    let importedCount = 0;
+    const newGrades = { ...localGrades };
+
+    // Iterar por cada periodo P1, P2, P3, P4
+    config.periods.forEach((p) => {
+      const scopeKey = `edugens_partials_${centerId}_${year}_${teacherId}_${selectedCourseId}_${selectedSubjectId}_${p}`;
+      const savedData = localStorage.getItem(scopeKey);
+      if (!savedData) return;
+
+      try {
+        const { scores, activities } = JSON.parse(savedData);
+        if (!scores || !activities) return;
+
+        const pL = p.toLowerCase();
+
+        students.forEach((student: any) => {
+          const studentScores = scores[student.id] || {};
+
+          config.competencies.forEach((comp) => {
+            const compActs = activities[comp.id] || [];
+            const validVals = compActs
+              .map((act: any) => studentScores[act.id])
+              .filter((v: any) => typeof v === 'number' && !isNaN(v));
+
+            if (validVals.length > 0) {
+              const compAvg = Math.round(validVals.reduce((a: number, b: number) => a + b, 0) / validVals.length);
+              newGrades[`${student.id}_${comp.id}_${pL}`] = String(compAvg);
+              importedCount++;
+            }
+          });
+        });
+      } catch (e) {
+        console.error('Error importing partials for period', p, e);
+      }
+    });
+
+    if (importedCount > 0) {
+      setLocalGrades(newGrades);
+      setShowSaveStatus('success');
+      setTimeout(() => setShowSaveStatus('idle'), 3000);
+      alert(`¡Se han importado exitosamente ${importedCount} notas desde Mi Aula! Recuerda pulsar "GUARDAR".`);
+    } else {
+      alert('No se encontraron parciales registrados en Mi Aula para este curso, asignatura y docente.');
+    }
   };
 
   const save = async () => {
@@ -1537,6 +1584,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   <AlertCircle size={14} /> Error
                 </div>
               )}
+              <button
+                onClick={handleImportFromMiAula}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all cursor-pointer border border-purple-400/30"
+                title="Importar promedios de parciales registrados en Mi Aula para este curso y asignatura"
+              >
+                <ScrollText size={16} /> JALAR NOTAS DE MI AULA
+              </button>
               <button
                 onClick={printGradesPDF}
                 className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all hover:bg-indigo-700"
