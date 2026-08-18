@@ -22,7 +22,11 @@ import {
   Award,
   Filter,
   Check,
-  Info
+  Info,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 
@@ -43,6 +47,7 @@ export const ClassroomManager = () => {
   const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'folder'>('attendance');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [hideStudentNames, setHideStudentNames] = useState<boolean>(false);
 
   // Estado de Asistencia
   const [attendanceState, setAttendanceState] = useState<Record<string, { status: AttendanceStatus; note: string }>>({});
@@ -831,6 +836,20 @@ export const ClassroomManager = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setHideStudentNames((prev) => !prev)}
+                className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer border shadow-sm ${
+                  hideStudentNames
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-500/20'
+                    : 'bg-brand-bg hover:bg-slate-200 dark:hover:bg-slate-800 text-text-main border-border-main'
+                }`}
+                title={hideStudentNames ? 'Mostrar nombres completos de estudiantes' : 'Ocultar nombres para ver más columnas de notas'}
+              >
+                {hideStudentNames ? <Eye size={15} /> : <EyeOff size={15} />}
+                <span>{hideStudentNames ? 'Mostrar Nombres' : 'Ocultar Nombres'}</span>
+              </button>
+
               {savePartialsSuccess && (
                 <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-bounce">
                   <CheckCircle2 size={16} /> ¡Calificaciones del {selectedPeriod} Guardadas!
@@ -853,8 +872,23 @@ export const ClassroomManager = () => {
                 <thead>
                   {/* FILA SUPERIOR: TITULOS DE COMPETENCIA */}
                   <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider divide-x divide-slate-800">
-                    <th rowSpan={2} className="px-6 py-4 min-w-[200px] sticky left-0 bg-slate-900 z-20">
-                      Estudiante
+                    <th
+                      rowSpan={2}
+                      className={`py-4 sticky left-0 bg-slate-900 z-20 transition-all ${
+                        hideStudentNames ? 'px-3 w-16 text-center' : 'px-6 min-w-[220px]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{hideStudentNames ? 'No.' : 'Estudiante'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setHideStudentNames((prev) => !prev)}
+                          className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                          title={hideStudentNames ? 'Desplegar nombres completos' : 'Ocultar nombres para maximizar columnas'}
+                        >
+                          {hideStudentNames ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+                        </button>
+                      </div>
                     </th>
                     {activeCompetencies.map((comp, idx) => {
                       const acts = competencyActivities[comp.id] || [];
@@ -897,7 +931,7 @@ export const ClassroomManager = () => {
                                   <span>{act.name}</span>
                                   <button
                                     onClick={() => handleDeleteActivity(comp.id, act.id)}
-                                    className="text-rose-400 hover:text-rose-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="text-rose-400 hover:text-rose-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     title="Eliminar columna"
                                   >
                                     ×
@@ -923,7 +957,7 @@ export const ClassroomManager = () => {
                       </td>
                     </tr>
                   ) : (
-                    courseStudents.map((s: any) => {
+                    courseStudents.map((s: any, idx: number) => {
                       const studentScores = partialScores[s.id] || {};
                       
                       // Calcular promedios por competencia
@@ -950,8 +984,26 @@ export const ClassroomManager = () => {
 
                       return (
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors divide-x divide-border-main">
-                          <td className="px-6 py-4 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm">
-                            {getStudentFullName(s)}
+                          <td
+                            className={`py-4 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm transition-all ${
+                              hideStudentNames ? 'px-2 text-center w-16' : 'px-6 min-w-[220px]'
+                            }`}
+                            title={getStudentFullName(s)}
+                          >
+                            {hideStudentNames ? (
+                              <div className="flex items-center justify-center">
+                                <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue font-black font-mono text-xs border border-indigo-100 dark:border-indigo-900">
+                                  #{s.order_number || s.number || idx + 1}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black text-text-muted font-mono w-5 shrink-0">
+                                  #{s.order_number || s.number || idx + 1}
+                                </span>
+                                <span className="truncate">{getStudentFullName(s)}</span>
+                              </div>
+                            )}
                           </td>
 
                           {activeCompetencies.map((comp, compIdx) => {
