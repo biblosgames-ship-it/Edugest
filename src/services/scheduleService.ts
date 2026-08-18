@@ -69,11 +69,6 @@ const doesOverlapCourseBreak = (
     }
   }
 
-  // Regla Estricta: Deporte NO puede tener clases durante el recreo principal (09:30 a 10:30) para Primaria/Secundaria
-  if (shift === 'Matutina' && !isInicialLevel) {
-    if (sStart < 630 && sEnd > 570) return true;
-  }
-
   const isFirstCycleCourse =
     /^[1-3]/.test(cGrade) ||
     cGrade.includes('1') ||
