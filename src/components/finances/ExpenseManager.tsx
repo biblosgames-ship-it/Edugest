@@ -28,10 +28,13 @@ import autoTable from 'jspdf-autotable';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
 
-const translateMethod = (method: string) => {
+const translateMethod = (method: string, account?: string) => {
   const m = String(method || '').toLowerCase().trim();
+  if (account === 'TRANSFERENCIA ENTRE CAJAS' || m === 'internal_transfer') {
+    return 'TRASPASO INTERNO';
+  }
   if (m === 'cash') return 'EFECTIVO';
-  if (m === 'transfer') return 'TRANSFERENCIA';
+  if (m === 'transfer' || m === 'bank_transfer') return 'TRANSFERENCIA BANCARIA';
   if (m === 'card') return 'TARJETA';
   if (m === 'check') return 'CHEQUE';
   return m.toUpperCase() || 'EFECTIVO';
@@ -41,7 +44,9 @@ const groupLedgerEntries = (entriesList: any[]) => {
   const groupedMap = new Map<string, any>();
 
   entriesList.forEach((e) => {
-    const key = `${e.account}_${e.item}_${e.date}_${e.method || 'cash'}`;
+    const isInternal = e.account === 'TRANSFERENCIA ENTRE CAJAS' || e.method === 'internal_transfer';
+    const effectiveMethod = isInternal ? 'internal_transfer' : (e.method || 'cash');
+    const key = `${e.account}_${e.item}_${e.date}_${effectiveMethod}`;
 
     if (groupedMap.has(key)) {
       const existing = groupedMap.get(key);
@@ -54,7 +59,7 @@ const groupLedgerEntries = (entriesList: any[]) => {
         existing.description = `${existing.description} + ${e.description || ''}`;
       }
     } else {
-      const copy = { ...e, amount: Number(e.amount), count: 1 };
+      const copy = { ...e, amount: Number(e.amount), count: 1, method: effectiveMethod };
       if (e.account === 'INGRESOS: COLEGIATURAS') {
         copy.description = `Mensualidad (1 cuota)`;
       } else {
@@ -660,11 +665,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       await onSaveEntry({
         date,
         account: 'TRANSFERENCIA ENTRE CAJAS',
-        item: 'Transferencia Saliente',
+        item: 'Traspaso Saliente',
         description: `Envío a ${getAccountLabel(transferTo)}${descStr}`,
         type: 'expense',
         amount: transferAmount,
-        method: 'transfer',
+        method: 'internal_transfer',
         cash_account: transferFrom
       });
 
@@ -672,15 +677,15 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       await onSaveEntry({
         date,
         account: 'TRANSFERENCIA ENTRE CAJAS',
-        item: 'Transferencia Entrante',
+        item: 'Traspaso Entrante',
         description: `Recibo de ${getAccountLabel(transferFrom)}${descStr}`,
         type: 'income',
         amount: transferAmount,
-        method: 'transfer',
+        method: 'internal_transfer',
         cash_account: transferTo
       });
 
-      toast.success('Transferencia registrada exitosamente');
+      toast.success('Traspaso de fondos registrado exitosamente');
       
       if (date < startDate) setStartDate(date);
       if (date > endDate) setEndDate(date);
@@ -690,7 +695,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       setTransferDesc('');
     } catch (e) {
       console.error('Error in transfer:', e);
-      toast.error('Error al registrar transferencia');
+      toast.error('Error al registrar traspaso de fondos');
     } finally {
       setIsSavingEntry(false);
     }
@@ -717,8 +722,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
     const titleText =
-      entry.account === 'TRANSFERENCIA ENTRE CAJAS'
-        ? 'COMPROBANTE DE TRANSFERENCIA'
+      entry.account === 'TRANSFERENCIA ENTRE CAJAS' || entry.method === 'internal_transfer'
+        ? 'COMPROBANTE DE TRASPASO INTERNO'
         : entry.type === 'income'
           ? 'RECIBO DE INGRESO'
           : 'COMPROBANTE DE EGRESO';
@@ -805,7 +810,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
         e.item,
         getStudentGrade(e.item),
         e.description,
-        translateMethod(e.method),
+        translateMethod(e.method, e.account),
         `RD$ ${e.amount.toLocaleString()}`
       ]),
       theme: 'grid',
@@ -905,11 +910,13 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.text('DESGLOSE POR MÉTODO:', 10, currentY);
     currentY += 6;
 
-    const methodSummary: any = { cash: 0, transfer: 0, card: 0, check: 0 };
+    const methodSummary: any = { cash: 0, transfer: 0, internal_transfer: 0, card: 0, check: 0 };
     filteredEntries.forEach((e) => {
       if (e.type === 'income') {
-        const method = e.method || 'cash';
+        const isInternal = e.account === 'TRANSFERENCIA ENTRE CAJAS' || e.method === 'internal_transfer';
+        const method = isInternal ? 'internal_transfer' : (e.method || 'cash');
         if (methodSummary.hasOwnProperty(method)) methodSummary[method] += e.amount;
+        else if (method === 'bank_transfer') methodSummary['transfer'] += e.amount;
         else methodSummary['cash'] += e.amount;
       }
     });
@@ -917,7 +924,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     const methodNames: any = {
       cash: 'Efectivo',
-      transfer: 'Transferencia',
+      transfer: 'Transferencia Bancaria',
+      internal_transfer: 'Traspaso Interno (Entre Cajas)',
       card: 'Tarjeta',
       check: 'Cheque'
     };
@@ -994,7 +1002,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
           e.item,
           getStudentGrade(e.item),
           e.description,
-          translateMethod(e.method),
+          translateMethod(e.method, e.account),
           `RD$ ${e.amount.toLocaleString()}`
         ]),
         foot: [['', '', '', '', 'TOTAL CUENTA:', `RD$ ${accountTotal.toLocaleString()}`]],
@@ -1026,7 +1034,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       e.item,
       getStudentGrade(e.item),
       e.description,
-      translateMethod(e.method),
+      translateMethod(e.method, e.account),
       e.type === 'income' ? 'INGRESO' : 'EGRESO',
       e.amount
     ]);
