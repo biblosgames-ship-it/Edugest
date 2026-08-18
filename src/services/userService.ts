@@ -174,6 +174,20 @@ export const updateUserRole = async (uid: string, role: string) => {
   }
 };
 
+export const updateUserAllowedPanels = async (uid: string, allowedPanels: string[]) => {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ allowed_panels: allowedPanels })
+      .eq('id', uid);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error updating user allowed panels:', error);
+    throw error;
+  }
+};
+
 
 export const registerMemberWithCode = async (
   code: string,
