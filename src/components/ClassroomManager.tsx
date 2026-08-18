@@ -159,34 +159,61 @@ export const ClassroomManager = () => {
     }
   }, [availableCourses, selectedCourseId]);
 
-  // Helper para obtener el nombre completo del estudiante (soporta names, surnames, full_name, etc.)
+  // Helper para obtener el nombre completo del estudiante (sin duplicar apellidos)
   const getStudentFullName = (s: any) => {
     if (!s) return 'Estudiante';
-    // 1. Campo oficial de la tabla 'students' de Supabase (names + surnames)
+
+    // 1. Si tiene first_surname o second_surname, usar primero esos campos exactos:
+    if (s.first_surname || s.second_surname) {
+      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
+      const names = (s.names || s.first_name || s.nombre || '').trim();
+      if (names && surname) return `${names} ${surname}`.trim();
+      if (names) return names;
+      if (surname) return surname;
+    }
+
+    // 2. Si tiene names y apellidos/last_name (sin first_surname separado)
     if (s.names && String(s.names).trim()) {
-      const surnames = [s.first_surname, s.second_surname, s.apellidos, s.last_name].filter(Boolean).join(' ');
-      return surnames ? `${s.names} ${surnames}`.trim() : String(s.names).trim();
+      const names = String(s.names).trim();
+      const surname = (s.apellidos || s.last_name || s.apellido || '').trim();
+      if (surname && !names.toLowerCase().includes(surname.toLowerCase())) {
+        return `${names} ${surname}`.trim();
+      }
+      return names;
     }
-    // 2. first_name / last_name
+
+    // 3. first_name / last_name
     if (s.first_name || s.last_name) {
-      return `${s.first_name || ''} ${s.last_name || ''}`.trim();
+      const fn = (s.first_name || '').trim();
+      const ln = (s.last_name || '').trim();
+      if (fn && ln && !fn.toLowerCase().includes(ln.toLowerCase())) return `${fn} ${ln}`.trim();
+      return fn || ln;
     }
-    // 3. full_name / name / nombre
+
+    // 4. full_name / name / nombre_completo
     if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
-    if (s.name && String(s.name).trim()) return String(s.name).trim();
     if (s.nombre_completo && String(s.nombre_completo).trim()) return String(s.nombre_completo).trim();
+    if (s.name && String(s.name).trim()) return String(s.name).trim();
     if (s.nombre) {
-      const ap = s.apellido || s.apellidos || '';
-      return `${s.nombre} ${ap}`.trim();
+      const n = String(s.nombre).trim();
+      const ap = (s.apellido || s.apellidos || '').trim();
+      if (ap && !n.toLowerCase().includes(ap.toLowerCase())) return `${n} ${ap}`.trim();
+      return n;
     }
+
     return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
   };
 
   // Helper para clave de ordenamiento por Apellido Primero (Primer Apellido, Segundo Apellido, Nombres)
   const getSortKeyBySurname = (s: any) => {
     if (!s) return 'zzz';
-    if (s.first_surname || s.last_name || s.apellidos) {
-      const surname = [s.first_surname, s.second_surname, s.apellidos, s.last_name].filter(Boolean).join(' ');
+    if (s.first_surname || s.second_surname) {
+      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
+      const names = s.names || s.first_name || s.name || '';
+      return `${surname} ${names}`.trim().toLowerCase();
+    }
+    if (s.last_name || s.apellidos) {
+      const surname = (s.last_name || s.apellidos || '').trim();
       const names = s.names || s.first_name || s.name || '';
       return `${surname} ${names}`.trim().toLowerCase();
     }
@@ -589,17 +616,17 @@ export const ClassroomManager = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-100 dark:bg-slate-900/60 border-b border-border-main text-[10px] font-black text-text-muted uppercase tracking-widest">
-                    <th className="px-6 py-4">#</th>
-                    <th className="px-6 py-4">Estudiante</th>
-                    <th className="px-6 py-4">RNE / Código</th>
-                    <th className="px-6 py-4 text-center">Estado de Asistencia</th>
-                    <th className="px-6 py-4">Nota u Observación</th>
+                    <th className="px-4 py-2.5">#</th>
+                    <th className="px-4 py-2.5">Estudiante</th>
+                    <th className="px-4 py-2.5">RNE / Código</th>
+                    <th className="px-4 py-2.5 text-center">Estado de Asistencia</th>
+                    <th className="px-4 py-2.5">Nota u Observación</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-main text-xs">
                   {filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-text-muted font-bold">
+                      <td colSpan={5} className="py-8 text-center text-text-muted font-bold">
                         {studentsLoading ? 'Cargando estudiantes...' : 'No hay alumnos registrados en este curso.'}
                       </td>
                     </tr>
@@ -608,63 +635,63 @@ export const ClassroomManager = () => {
                       const currentStatus = attendanceState[s.id]?.status || 'presente';
                       return (
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
-                          <td className="px-6 py-4 font-black text-text-muted">
+                          <td className="px-4 py-2 font-black text-text-muted text-xs">
                             {s.order_number != null && s.order_number !== '' ? s.order_number : (idx + 1)}
                           </td>
-                          <td className="px-6 py-4 font-bold text-text-main">
+                          <td className="px-4 py-2 font-bold text-text-main text-xs">
                             {getStudentFullName(s)}
                           </td>
-                          <td className="px-6 py-4 font-mono text-[11px] text-text-muted">
+                          <td className="px-4 py-2 font-mono text-[10px] text-text-muted">
                             {s.rne || s.student_code || '---'}
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-2">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleSetAttendance(s.id, 'presente')}
-                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                                className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'presente'
-                                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700'
+                                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-emerald-100 hover:text-emerald-700'
                                 }`}
                               >
-                                <Check size={12} /> Presente
+                                <Check size={11} /> Presente
                               </button>
 
                               <button
                                 onClick={() => handleSetAttendance(s.id, 'tardanza')}
-                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                                className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'tardanza'
-                                    ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700'
+                                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-amber-100 hover:text-amber-700'
                                 }`}
                               >
-                                <Clock size={12} /> Tardanza
+                                <Clock size={11} /> Tardanza
                               </button>
 
                               <button
                                 onClick={() => handleSetAttendance(s.id, 'excusa')}
-                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                                className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'excusa'
-                                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-indigo-100 hover:text-indigo-700'
+                                    ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-indigo-100 hover:text-indigo-700'
                                 }`}
                               >
-                                <Info size={12} /> Excusa
+                                <Info size={11} /> Excusa
                               </button>
 
                               <button
                                 onClick={() => handleSetAttendance(s.id, 'ausente')}
-                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                                className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'ausente'
-                                    ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-700'
+                                    ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-rose-100 hover:text-rose-700'
                                 }`}
                               >
-                                <XCircle size={12} /> Ausente
+                                <XCircle size={11} /> Ausente
                               </button>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-2">
                             <input
                               type="text"
                               placeholder="Ej. Llegó a 2da hora..."
@@ -678,7 +705,7 @@ export const ClassroomManager = () => {
                                   }
                                 }))
                               }
-                              className="w-full px-3 py-1.5 rounded-xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                              className="w-full px-3 py-1 rounded-xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-1 focus:ring-brand-blue"
                             />
                           </td>
                         </tr>
@@ -874,8 +901,8 @@ export const ClassroomManager = () => {
                   <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider divide-x divide-slate-800">
                     <th
                       rowSpan={2}
-                      className={`py-4 sticky left-0 bg-slate-900 z-20 transition-all ${
-                        hideStudentNames ? 'px-3 w-16 text-center' : 'px-6 min-w-[220px]'
+                      className={`py-2 sticky left-0 bg-slate-900 z-20 transition-all ${
+                        hideStudentNames ? 'px-2 w-16 text-center' : 'px-4 min-w-[200px]'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -903,13 +930,13 @@ export const ClassroomManager = () => {
                         <th
                           key={comp.id}
                           colSpan={colSpan}
-                          className={`text-center py-3 px-2 bg-gradient-to-r ${colors[idx % colors.length]}`}
+                          className={`text-center py-2 px-2 bg-gradient-to-r ${colors[idx % colors.length]}`}
                         >
                           {comp.label}
                         </th>
                       );
                     })}
-                    <th rowSpan={2} className="px-6 py-4 text-center bg-indigo-950 text-indigo-200 font-black min-w-[120px]">
+                    <th rowSpan={2} className="px-4 py-2 text-center bg-indigo-950 text-indigo-200 font-black min-w-[100px]">
                       Nota Final Parcial
                     </th>
                   </tr>
@@ -921,14 +948,14 @@ export const ClassroomManager = () => {
                       return (
                         <React.Fragment key={`subhead_${comp.id}`}>
                           {acts.length === 0 ? (
-                            <th className="px-3 py-3 text-center text-slate-400 italic font-normal">
+                            <th className="px-2 py-1.5 text-center text-slate-400 italic font-normal text-[10px]">
                               Sin columnas
                             </th>
                           ) : (
                             acts.map((act) => (
-                              <th key={act.id} className="px-3 py-3 text-center min-w-[100px] relative group">
+                              <th key={act.id} className="px-2 py-1.5 text-center min-w-[90px] relative group text-[10px]">
                                 <div className="flex items-center justify-center gap-1">
-                                  <span>{act.name}</span>
+                                  <span className="truncate max-w-[80px]">{act.name}</span>
                                   <button
                                     onClick={() => handleDeleteActivity(comp.id, act.id)}
                                     className="text-rose-400 hover:text-rose-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -940,7 +967,7 @@ export const ClassroomManager = () => {
                               </th>
                             ))
                           )}
-                          <th className="px-3 py-3 text-center bg-indigo-50 dark:bg-indigo-950/40 text-brand-blue font-black min-w-[70px]">
+                          <th className="px-2 py-1.5 text-center bg-indigo-50 dark:bg-indigo-950/40 text-brand-blue font-black min-w-[65px] text-[10px]">
                             Prom. {comp.id.toUpperCase()}
                           </th>
                         </React.Fragment>
@@ -952,7 +979,7 @@ export const ClassroomManager = () => {
                 <tbody className="divide-y divide-border-main text-xs">
                   {courseStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={20} className="py-12 text-center text-text-muted font-bold">
+                      <td colSpan={20} className="py-8 text-center text-text-muted font-bold">
                         No hay alumnos inscriptos en este curso.
                       </td>
                     </tr>
@@ -985,14 +1012,14 @@ export const ClassroomManager = () => {
                       return (
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors divide-x divide-border-main">
                           <td
-                            className={`py-4 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm transition-all ${
-                              hideStudentNames ? 'px-2 text-center w-16' : 'px-6 min-w-[220px]'
+                            className={`py-1.5 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm transition-all ${
+                              hideStudentNames ? 'px-2 text-center w-16' : 'px-4 min-w-[200px]'
                             }`}
                             title={getStudentFullName(s)}
                           >
                             {hideStudentNames ? (
                               <div className="flex items-center justify-center">
-                                <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue font-black font-mono text-xs border border-indigo-100 dark:border-indigo-900">
+                                <span className="inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue font-black font-mono text-[11px] border border-indigo-100 dark:border-indigo-900">
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
                               </div>
@@ -1001,7 +1028,7 @@ export const ClassroomManager = () => {
                                 <span className="text-[10px] font-black text-text-muted font-mono w-5 shrink-0">
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
-                                <span className="truncate">{getStudentFullName(s)}</span>
+                                <span className="truncate text-xs">{getStudentFullName(s)}</span>
                               </div>
                             )}
                           </td>
@@ -1013,30 +1040,30 @@ export const ClassroomManager = () => {
                             return (
                               <React.Fragment key={`cell_group_${comp.id}_${s.id}`}>
                                 {acts.length === 0 ? (
-                                  <td className="px-3 py-3 text-center text-slate-400 italic">--</td>
+                                  <td className="px-2 py-1 text-center text-slate-400 italic text-[11px]">--</td>
                                 ) : (
                                   acts.map((act) => (
-                                    <td key={act.id} className="px-3 py-3 text-center">
+                                    <td key={act.id} className="px-2 py-1 text-center">
                                       <input
                                         type="number"
                                         min={0}
                                         max={100}
                                         value={studentScores[act.id] ?? ''}
                                         onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
-                                        className="w-14 text-center py-1 rounded-xl border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-2 focus:ring-brand-blue"
+                                        className="w-12 text-center py-0.5 rounded-lg border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-1 focus:ring-brand-blue"
                                       />
                                     </td>
                                   ))
                                 )}
-                                <td className="px-3 py-3 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue">
+                                <td className="px-2 py-1 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue text-xs">
                                   {compAvg}
                                 </td>
                               </React.Fragment>
                             );
                           })}
 
-                          <td className="px-6 py-4 text-center font-black text-sm bg-slate-50 dark:bg-slate-900/40">
-                            <span className={`px-3 py-1 rounded-xl shadow-sm ${finalAvg >= 70 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                          <td className="px-3 py-1 text-center font-black text-xs bg-slate-50 dark:bg-slate-900/40">
+                            <span className={`px-2.5 py-0.5 rounded-lg shadow-sm font-mono font-bold ${finalAvg >= 70 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
                               {finalAvg}
                             </span>
                           </td>
@@ -1060,12 +1087,12 @@ export const ClassroomManager = () => {
               <Users size={18} className="text-brand-blue" /> Alumnos del Curso
             </h2>
 
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+            <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
               {courseStudents.map((s: any) => (
                 <button
                   key={s.id}
                   onClick={() => setFolderStudentId(s.id)}
-                  className={`w-full p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full py-2 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     folderStudentId === s.id
                       ? 'bg-brand-blue text-white border-brand-blue shadow-md'
                       : 'bg-brand-bg text-text-main border-border-main hover:border-brand-blue'
