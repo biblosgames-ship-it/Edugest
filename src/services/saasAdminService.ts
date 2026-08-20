@@ -241,3 +241,150 @@ export const updatePayment = async (
   const { error } = await supabase.from('saas_payments').update(updates).eq('id', paymentId);
   if (error) throw new Error(error.message);
 };
+
+export const createCenterWithLinkedEmail = async (params: {
+  name: string;
+  email: string;
+  planId?: string | null;
+  months?: number;
+  district?: string;
+  regional?: string;
+  phone?: string;
+}): Promise<{
+  center_id: string;
+  license_id?: string;
+  product_key: string;
+  email: string;
+  end_date: string;
+}> => {
+  const cleanEmail = params.email.trim().toLowerCase();
+  const months = params.months || 12;
+  const endDate = new Date();
+  endDate.setMonth(endDate.getMonth() + months);
+
+  // 1. Intentar llamar a RPC si está disponible en la base de datos
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('create_saas_center_with_email', {
+      p_name: params.name.trim(),
+      p_email: cleanEmail,
+      p_plan_id: params.planId || null,
+      p_months: months,
+      p_district: params.district?.trim() || null,
+      p_regional: params.regional?.trim() || null,
+      p_phone: params.phone?.trim() || null
+    });
+
+    if (!rpcError && rpcData && rpcData.center_id) {
+      return rpcData;
+    }
+  } catch (e) {
+    console.warn('RPC create_saas_center_with_email fallback to direct queries:', e);
+  }
+
+  // 2. Fallback resiliente: Operaciones directas en las tablas de Supabase
+  // Insertar Centro
+  const { data: newCenter, error: centerErr } = await supabase
+    .from('centers')
+    .insert([
+      {
+        name: params.name.trim(),
+        district: params.district?.trim() || null,
+        regional: params.regional?.trim() || null,
+        phone: params.phone?.trim() || null
+      }
+    ])
+    .select()
+    .single();
+
+  if (centerErr) throw new Error('Error al crear centro: ' + centerErr.message);
+
+  // Generar Product Key única
+  const randomPart =
+    Math.random().toString(36).substring(2, 6).toUpperCase() +
+    '-' +
+    Math.random().toString(36).substring(2, 6).toUpperCase();
+  const productKey = `EDUGENS-${randomPart}`;
+
+  // Insertar Licencia vinculada al nuevo centro y al correo
+  const { data: newLicense, error: licErr } = await supabase
+    .from('saas_licenses')
+    .insert([
+      {
+        product_key: productKey,
+        is_used: true,
+        used_by_center: newCenter.id,
+        linked_email: cleanEmail,
+        plan_id: params.planId || null,
+        subscription_start_date: new Date().toISOString(),
+        subscription_end_date: endDate.toISOString()
+      }
+    ])
+    .select()
+    .single();
+
+  if (licErr) {
+    console.warn('Error al insertar licencia:', licErr.message);
+  }
+
+  // Crear Año Escolar Inicial por defecto
+  try {
+    await supabase.from('school_years').insert([
+      {
+        center_id: newCenter.id,
+        name: '2026-2027',
+        is_active: true,
+        status: 'activo'
+      }
+    ]);
+  } catch {}
+
+  // Si el usuario ya está registrado en profiles con ese correo, vincularlo de inmediato
+  try {
+    await supabase
+      .from('profiles')
+      .update({
+        center_id: newCenter.id,
+        role: 'admin',
+        is_active: true
+      })
+      .ilike('email', cleanEmail);
+  } catch {}
+
+  return {
+    center_id: newCenter.id,
+    license_id: newLicense?.id,
+    product_key: productKey,
+    email: cleanEmail,
+    end_date: endDate.toISOString()
+  };
+};
+
+export const updateCenterLinkedEmail = async (
+  licenseId: string,
+  centerId: string,
+  newEmail: string
+): Promise<void> => {
+  const cleanEmail = newEmail.trim().toLowerCase();
+
+  // Actualizar email en saas_licenses
+  const { error: licErr } = await supabase
+    .from('saas_licenses')
+    .update({ linked_email: cleanEmail })
+    .eq('id', licenseId);
+
+  if (licErr) throw new Error('Error al actualizar correo en licencia: ' + licErr.message);
+
+  // Vincular usuario en profiles si ya existe con este correo
+  try {
+    await supabase
+      .from('profiles')
+      .update({
+        center_id: centerId,
+        role: 'admin',
+        is_active: true
+      })
+      .ilike('email', cleanEmail);
+  } catch (err: any) {
+    console.warn('Error vinculando perfil existente:', err.message);
+  }
+};

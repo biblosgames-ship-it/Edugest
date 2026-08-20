@@ -621,6 +621,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
+        // 3. Si aún no tiene centro asignado, verificar si hay un centro SaaS vinculado a este correo
+        if ((!activeProfile || !activeProfile.center_id) && user.email) {
+          const cleanEmail = user.email.trim().toLowerCase();
+          const { data: licData } = await supabase
+            .from('saas_licenses')
+            .select('id, used_by_center, product_key')
+            .ilike('linked_email', cleanEmail)
+            .not('used_by_center', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (licData && licData.used_by_center) {
+            console.log(
+              '[DEBUG auth] Centro SaaS vinculado encontrado para este correo:',
+              licData.used_by_center
+            );
+            try {
+              await supabase.from('profiles').upsert([
+                {
+                  id: user.id,
+                  email: user.email,
+                  center_id: licData.used_by_center,
+                  role: 'admin',
+                  is_active: true
+                }
+              ]);
+            } catch (err) {
+              console.warn('[DEBUG auth] Error actualizando perfil con centro vinculado:', err);
+            }
+
+            activeProfile = {
+              ...(activeProfile || {}),
+              id: user.id,
+              email: user.email,
+              center_id: licData.used_by_center,
+              role: 'admin',
+              is_active: true
+            };
+          }
+        }
+
         const finalProfile = activeProfile || {
           center_id: null,
           role: 'pending',

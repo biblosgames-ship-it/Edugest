@@ -297,6 +297,50 @@ function AppContent() {
                 </p>
               </div>
               <InvitationForm />
+
+              {/* Botón de verificación automática por correo asignado */}
+              {user?.email && (
+                <div className="pt-2 border-t border-white/10">
+                  <button
+                    onClick={async () => {
+                      const loadToast = toast.loading('Buscando centro vinculado a tu correo...');
+                      try {
+                        const cleanEmail = user.email.trim().toLowerCase();
+                        const { data: licData } = await supabase
+                          .from('saas_licenses')
+                          .select('id, used_by_center, product_key')
+                          .ilike('linked_email', cleanEmail)
+                          .not('used_by_center', 'is', null)
+                          .order('created_at', { ascending: false })
+                          .limit(1)
+                          .maybeSingle();
+
+                        if (licData && licData.used_by_center) {
+                          await supabase.from('profiles').upsert([
+                            {
+                              id: user.id,
+                              email: user.email,
+                              center_id: licData.used_by_center,
+                              role: 'admin',
+                              is_active: true
+                            }
+                          ]);
+                          toast.success('¡Centro encontrado y vinculado con éxito! Entrando...', { id: loadToast });
+                          setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                          toast.error('No se encontró ningún centro registrado con el correo ' + user.email, { id: loadToast });
+                        }
+                      } catch (err: any) {
+                        toast.error('Error al comprobar: ' + err.message, { id: loadToast });
+                      }
+                    }}
+                    className="text-xs text-brand-blue hover:text-white font-bold flex items-center justify-center gap-1.5 w-full py-2 transition-colors cursor-pointer bg-transparent border-none"
+                  >
+                    <span>⚡ ¿Te crearon un centro?</span>
+                    <span className="underline">Comprobar mi correo ({user.email})</span>
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <CenterRegistrationForm />

@@ -22,7 +22,10 @@ import {
   Edit2,
   Plus,
   Copy,
-  Printer
+  Printer,
+  Building2,
+  School,
+  UserPlus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -43,6 +46,8 @@ import {
   updatePlan,
   deletePayment,
   updatePayment,
+  createCenterWithLinkedEmail,
+  updateCenterLinkedEmail,
   SaaSProductKey,
   SaaSStats,
   SaaSPlan,
@@ -103,6 +108,23 @@ export const SaaSAdminPanel: React.FC = () => {
   const [editPayDate, setEditPayDate] = useState('');
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
+  // Create Center Modal State
+  const [isCreatingCenter, setIsCreatingCenter] = useState(false);
+  const [newCenterName, setNewCenterName] = useState('');
+  const [newCenterEmail, setNewCenterEmail] = useState('');
+  const [newCenterPlanId, setNewCenterPlanId] = useState('');
+  const [newCenterMonths, setNewCenterMonths] = useState(12);
+  const [newCenterDistrict, setNewCenterDistrict] = useState('');
+  const [newCenterRegional, setNewCenterRegional] = useState('');
+  const [newCenterPhone, setNewCenterPhone] = useState('');
+  const [isSavingCenter, setIsSavingCenter] = useState(false);
+  const [createdCenterResult, setCreatedCenterResult] = useState<any>(null);
+
+  // Edit Linked Email Modal State
+  const [editingLicenseEmail, setEditingLicenseEmail] = useState<SaaSProductKey | null>(null);
+  const [newLinkedEmail, setNewLinkedEmail] = useState('');
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
@@ -121,6 +143,79 @@ export const SaaSAdminPanel: React.FC = () => {
   const [bankInfo, setBankInfo] = useState(
     'Banco BHD\nCuenta Corriente: #1234567890\nTitular: EduGest SRL\nRNC: 1-32-45678-9'
   );
+
+  const copyInvitationText = (centerName: string, email: string, productKey: string) => {
+    const text = `🏫 *EDUGEST CLOUD - ACCESO ADMINISTRATIVO*\n\n¡Hola! Tu centro educativo *${centerName}* ya está registrado y listo en la plataforma Edugest.\n\n📧 *Correo de Acceso:* ${email}\n🔑 *Llave de Licencia:* ${productKey}\n🌐 *Enlace de Acceso:* ${window.location.origin}\n\n👉 *Instrucciones:* Entra a ${window.location.origin}, inicia sesión con tu cuenta (${email}) y accederás automáticamente a tu panel de administración.`;
+    navigator.clipboard.writeText(text);
+    toast.success('¡Invitación y datos de acceso copiados al portapapeles!');
+  };
+
+  const handleCreateCenter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCenterName.trim() || !newCenterEmail.trim()) {
+      toast.error('El nombre del centro y el correo del administrador son obligatorios.');
+      return;
+    }
+
+    setIsSavingCenter(true);
+    const loadToast = toast.loading('Creando centro educativo y vinculando licencia...');
+    try {
+      const result = await createCenterWithLinkedEmail({
+        name: newCenterName,
+        email: newCenterEmail,
+        planId: newCenterPlanId || null,
+        months: Number(newCenterMonths) || 12,
+        district: newCenterDistrict,
+        regional: newCenterRegional,
+        phone: newCenterPhone
+      });
+
+      toast.success('¡Centro creado y vinculado con éxito!', { id: loadToast });
+      setCreatedCenterResult({
+        ...result,
+        name: newCenterName.trim(),
+        planName: plans.find((p) => p.id === newCenterPlanId)?.name || 'Básico'
+      });
+      setIsCreatingCenter(false);
+      // Reset form
+      setNewCenterName('');
+      setNewCenterEmail('');
+      setNewCenterPlanId('');
+      setNewCenterMonths(12);
+      setNewCenterDistrict('');
+      setNewCenterRegional('');
+      setNewCenterPhone('');
+
+      await fetchData();
+    } catch (err: any) {
+      toast.error('Error al crear centro: ' + err.message, { id: loadToast });
+    } finally {
+      setIsSavingCenter(false);
+    }
+  };
+
+  const handleUpdateLinkedEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLicenseEmail || !newLinkedEmail.trim()) return;
+
+    setIsUpdatingEmail(true);
+    const loadToast = toast.loading('Actualizando correo vinculado...');
+    try {
+      await updateCenterLinkedEmail(
+        editingLicenseEmail.id,
+        editingLicenseEmail.used_by_center || '',
+        newLinkedEmail.trim()
+      );
+      toast.success('¡Correo vinculado actualizado con éxito!', { id: loadToast });
+      setEditingLicenseEmail(null);
+      setNewLinkedEmail('');
+      await fetchData();
+    } catch (err: any) {
+      toast.error('Error al actualizar correo: ' + err.message, { id: loadToast });
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -817,36 +912,53 @@ soporte@edugest.net`;
           {/* TAB: CENTROS VINCULADOS */}
           {activeTab === 'centers' && (
             <div className="animate-fade-in space-y-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  Centros Activos ({activeLicenses.length})
-                </h3>
-                <div className="relative">
-                  <Search
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
-                    size={16}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Buscar centro..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:border-brand-blue"
-                  />
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Centros Activos ({activeLicenses.length})
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Gestiona los colegios registrados, planes y correos administrativos vinculados
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    onClick={() => setIsCreatingCenter(true)}
+                    className="px-4 py-2.5 bg-brand-blue text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-600 transition-all shadow-md shadow-brand-blue/20 cursor-pointer shrink-0"
+                  >
+                    <Plus size={16} /> Crear Centro y Vincular
+                  </button>
+                  <div className="relative flex-1 sm:w-64">
+                    <Search
+                      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
+                      size={16}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Buscar centro o correo..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-brand-blue bg-slate-50/50"
+                    />
+                  </div>
                 </div>
               </div>
 
               {activeLicenses.length === 0 ? (
-                <p className="text-slate-500 text-sm py-4">
-                  Aún no hay centros registrados con licencia.
-                </p>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
+                  <Building2 size={36} className="mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm font-bold">Aún no hay centros registrados con licencia.</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Puedes crear un centro y vincularlo a un correo haciendo clic en "Crear Centro y Vincular".
+                  </p>
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
                         <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                          Centro Educativo
+                          Centro Educativo / Correo
                         </th>
                         <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
                           Plan Asignado
@@ -879,9 +991,25 @@ soporte@edugest.net`;
                             className="border-b border-slate-100 hover:bg-slate-50"
                           >
                             <td className="py-4 px-4 font-bold text-slate-800">
-                              {license.center_name || 'Desconocido'}
-                              <div className="text-xs text-slate-500 font-normal mt-1">
-                                {license.linked_email}
+                              <div className="flex items-center gap-2">
+                                <School size={16} className="text-brand-blue shrink-0" />
+                                <span>{license.center_name || 'Desconocido'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-normal mt-1">
+                                <Mail size={12} className="text-slate-400 shrink-0" />
+                                <span className={license.linked_email ? 'font-mono text-slate-600' : 'italic text-slate-400'}>
+                                  {license.linked_email || 'Sin correo vinculado'}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingLicenseEmail(license);
+                                    setNewLinkedEmail(license.linked_email || '');
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-brand-blue hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                  title="Editar correo vinculado a este centro"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
                               </div>
                             </td>
                             <td className="py-4 px-4">
@@ -899,7 +1027,19 @@ soporte@edugest.net`;
                               </select>
                             </td>
                             <td className="py-4 px-4 font-mono text-xs text-slate-500">
-                              {license.product_key}
+                              <div className="flex items-center gap-1.5">
+                                <span>{license.product_key}</span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(license.product_key);
+                                    toast.success('Llave copiada al portapapeles');
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-brand-blue rounded transition-colors cursor-pointer"
+                                  title="Copiar Llave"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                              </div>
                             </td>
                             <td className="py-4 px-4 text-sm text-slate-600">
                               <input
@@ -938,6 +1078,19 @@ soporte@edugest.net`;
                             <td className="py-4 px-4 text-right">
                               {centerId && (
                                 <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() =>
+                                      copyInvitationText(
+                                        license.center_name || 'Centro Educativo',
+                                        license.linked_email || '',
+                                        license.product_key
+                                      )
+                                    }
+                                    className="p-2 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Copiar Invitación / Datos de Acceso para el Director"
+                                  >
+                                    <Copy size={18} />
+                                  </button>
                                   {license.linked_email && (
                                     <button
                                       onClick={() => {
@@ -946,7 +1099,7 @@ soporte@edugest.net`;
                                         setBillingType('reminder');
                                         setIsBillingModalOpen(true);
                                       }}
-                                      className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                      className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                                       title="Emitir Recordatorio o Factura por Correo"
                                     >
                                       <Mail size={18} />
@@ -959,7 +1112,7 @@ soporte@edugest.net`;
                                         license.center_name || 'este centro'
                                       )
                                     }
-                                    className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                                    className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                                     title="Acceder a la Escuela (Impersonar)"
                                   >
                                     <Eye size={18} />
@@ -971,7 +1124,7 @@ soporte@edugest.net`;
                                         license.center_name || 'este centro'
                                       )
                                     }
-                                    className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                                    className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                                     title="Exportar Respaldo (Descargar JSON)"
                                   >
                                     <Download size={18} />
@@ -983,7 +1136,7 @@ soporte@edugest.net`;
                                         license.center_name || 'este centro'
                                       )
                                     }
-                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                     title="Borrar Centro y Liberar Licencia"
                                   >
                                     <Trash2 size={18} />
@@ -1993,6 +2146,329 @@ soporte@edugest.net`;
                   Abrir Cliente de Correo
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: CREAR CENTRO Y VINCULAR CORREO */}
+        {isCreatingCenter && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-fade-in no-print">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 max-w-xl w-full flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-brand-blue/10 text-brand-blue rounded-2xl">
+                    <Building2 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                      Crear Centro y Vincular Administrador
+                    </h3>
+                    <p className="text-xs text-slate-400 font-medium">
+                      El centro se desplegará de inmediato con su licencia y correo asignado
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingCenter(false)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-xl px-2 py-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateCenter} className="space-y-4">
+                {/* Nombre del Centro */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    1. Nombre del Centro Educativo *
+                  </label>
+                  <div className="relative">
+                    <School className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="text"
+                      placeholder="Ej: Colegio San Judas Tadeo"
+                      value={newCenterName}
+                      onChange={(e) => setNewCenterName(e.target.value)}
+                      required
+                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Correo del Administrador */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    2. Correo del Administrador / Director *
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="email"
+                      placeholder="Ej: director@sanjudas.edu.do"
+                      value={newCenterEmail}
+                      onChange={(e) => setNewCenterEmail(e.target.value)}
+                      required
+                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10 outline-none transition-all"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                    ⚡ El usuario que inicie sesión con este correo entrará directamente como Administrador del centro.
+                  </p>
+                </div>
+
+                {/* Plan SaaS y Duración */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                      3. Plan SaaS
+                    </label>
+                    <select
+                      value={newCenterPlanId}
+                      onChange={(e) => setNewCenterPlanId(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white focus:border-brand-blue outline-none transition-all"
+                    >
+                      <option value="">Plan Básico (Default)</option>
+                      {plans.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} (${p.price_monthly}/mes)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                      4. Duración de Suscripción
+                    </label>
+                    <select
+                      value={newCenterMonths}
+                      onChange={(e) => setNewCenterMonths(Number(e.target.value))}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white focus:border-brand-blue outline-none transition-all"
+                    >
+                      <option value={1}>1 Mes</option>
+                      <option value={3}>3 Meses</option>
+                      <option value={6}>6 Meses</option>
+                      <option value={12}>12 Meses (1 Año)</option>
+                      <option value={24}>24 Meses (2 Años)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Distrito y Regional (Opcionales) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Distrito
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 10-01"
+                      value={newCenterDistrict}
+                      onChange={(e) => setNewCenterDistrict(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Regional
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 10"
+                      value={newCenterRegional}
+                      onChange={(e) => setNewCenterRegional(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Teléfono
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 809-555-0101"
+                      value={newCenterPhone}
+                      onChange={(e) => setNewCenterPhone(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </div>
+
+                {/* Botones de acción */}
+                <div className="border-t border-slate-100 pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingCenter(false)}
+                    className="flex-1 py-3 border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-colors text-sm cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingCenter || !newCenterName || !newCenterEmail}
+                    className="flex-1 py-3 bg-brand-blue hover:bg-blue-600 disabled:opacity-50 text-white rounded-2xl font-bold shadow-lg shadow-brand-blue/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSavingCenter ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Building2 size={16} />
+                    )}
+                    Crear y Vincular
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ÉXITO AL CREAR CENTRO */}
+        {createdCenterResult && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-fade-in no-print">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 max-w-lg w-full flex flex-col gap-6 animate-scale-up">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2 shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                  ¡Centro Creado y Vinculado con Éxito!
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  El centro ya está activo y configurado con su licencia dedicada
+                </p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 text-xs">
+                <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Centro</span>
+                  <span className="font-bold text-slate-800">{createdCenterResult.name}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Correo Vinculado</span>
+                  <span className="font-mono font-bold text-indigo-600">{createdCenterResult.email}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Product Key</span>
+                  <span className="font-mono font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {createdCenterResult.product_key}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Plan</span>
+                  <span className="font-bold text-emerald-600">{createdCenterResult.planName || 'Básico'}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyInvitationText(
+                      createdCenterResult.name,
+                      createdCenterResult.email,
+                      createdCenterResult.product_key
+                    )
+                  }
+                  className="w-full py-3.5 bg-brand-blue hover:bg-blue-600 text-white rounded-2xl font-bold transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-blue/20 cursor-pointer"
+                >
+                  <Copy size={16} />
+                  Copiar Invitación para el Director
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSwitchCenter(
+                        createdCenterResult.center_id,
+                        createdCenterResult.name
+                      )
+                    }
+                    className="flex-1 py-3 border border-indigo-200 text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 rounded-2xl font-bold transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Eye size={16} />
+                    Acceder a la Escuela
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreatedCenterResult(null)}
+                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold transition-all text-xs cursor-pointer"
+                  >
+                    Listo / Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: EDITAR CORREO VINCULADO */}
+        {editingLicenseEmail && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-fade-in no-print">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 max-w-md w-full flex flex-col gap-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
+                    <Mail size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 tracking-tight">
+                      Editar Correo Vinculado
+                    </h3>
+                    <p className="text-xs text-slate-400 font-medium">
+                      {editingLicenseEmail.center_name || 'Centro Educativo'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingLicenseEmail(null)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-xl px-2 py-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateLinkedEmail} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Nuevo Correo Electrónico del Administrador
+                  </label>
+                  <input
+                    type="email"
+                    value={newLinkedEmail}
+                    onChange={(e) => setNewLinkedEmail(e.target.value)}
+                    required
+                    placeholder="nuevo.director@colegio.edu.do"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10 outline-none transition-all"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                    Al guardar, el usuario que inicie sesión con este nuevo correo tendrá acceso administrativo inmediato a este centro.
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingLicenseEmail(null)}
+                    className="flex-1 py-3 border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-colors text-sm cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingEmail || !newLinkedEmail}
+                    className="flex-1 py-3 bg-brand-blue hover:bg-blue-600 disabled:opacity-50 text-white rounded-2xl font-bold shadow-lg shadow-brand-blue/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isUpdatingEmail ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    Guardar y Vincular
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
