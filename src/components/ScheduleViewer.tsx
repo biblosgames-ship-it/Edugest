@@ -90,6 +90,21 @@ export const ScheduleViewer = () => {
   const [swapSubjectId, setSwapSubjectId] = useState('');
   const [swapDayFilter, setSwapDayFilter] = useState('Todos');
 
+  // Modal de Asignación Directa desde Casilla Vacía
+  const [directAssignModal, setDirectAssignModal] = useState<{
+    open: boolean;
+    day: string;
+    slot: any;
+    courseId: string;
+    subjectId: string;
+  }>({
+    open: false,
+    day: '',
+    slot: null,
+    courseId: '',
+    subjectId: ''
+  });
+
   // Sincronizar reactivamente el filtro de grado si cambia el perfil del alumno/padre
   useEffect(() => {
     if (isStudentOrParent) {
@@ -1614,9 +1629,29 @@ export const ScheduleViewer = () => {
                                 );
                               })
                             ) : (
-                              <p className="text-[9px] text-slate-300 text-center italic opacity-0 group-hover:opacity-100 transition-opacity">
-                                Vacío
-                              </p>
+                              isAdminOrStaff ? (
+                                <button
+                                  onClick={() => {
+                                    setDirectAssignModal({
+                                      open: true,
+                                      day,
+                                      slot,
+                                      courseId: filterType === 'course' ? filterId : '',
+                                      subjectId: ''
+                                    });
+                                  }}
+                                  className="w-full h-full min-h-[45px] rounded-xl border border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 flex flex-col items-center justify-center gap-1 transition-all group/btn cursor-pointer"
+                                  title={`Asignar materia a esta hora (${day} ${slot.start?.substring(0, 5)})`}
+                                >
+                                  <span className="text-[9px] font-black text-slate-300 group-hover/btn:text-emerald-600 transition-colors uppercase tracking-wider">
+                                    + Asignar
+                                  </span>
+                                </button>
+                              ) : (
+                                <p className="text-[9px] text-slate-300 text-center italic opacity-0 group-hover:opacity-100 transition-opacity">
+                                  Vacío
+                                </p>
+                              )
                             )}
                           </div>
                         )}
@@ -1884,6 +1919,182 @@ export const ScheduleViewer = () => {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASIGNACIÓN DIRECTA DESDE CASILLA VACÍA */}
+      {directAssignModal.open && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[999] flex items-center justify-center p-6 animate-fade-in no-print">
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl p-8 max-w-xl w-full flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl">
+                  <Clock size={22} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">
+                    Asignar Clase a esta Casilla
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    📅 {directAssignModal.day} • ⏰ {directAssignModal.slot?.label || ''} ({directAssignModal.slot?.start?.substring(0, 5)} - {directAssignModal.slot?.end?.substring(0, 5)})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDirectAssignModal({ open: false, day: '', slot: null, courseId: '', subjectId: '' })}
+                className="text-slate-400 hover:text-slate-600 font-bold text-xl px-3 py-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {/* Selección de Curso si no está en vista de curso */}
+              {filterType !== 'course' && (
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                    1. Seleccionar Curso
+                  </label>
+                  <select
+                    value={directAssignModal.courseId}
+                    onChange={(e) =>
+                      setDirectAssignModal({ ...directAssignModal, courseId: e.target.value, subjectId: '' })
+                    }
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">-- Elige un Curso --</option>
+                    {state.courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.grade} {c.section || ''} ({c.level})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Selección de Materia y Docente */}
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                  {filterType !== 'course' ? '2. Seleccionar Materia / Docente' : 'Seleccionar Materia / Docente'}
+                </label>
+                {directAssignModal.courseId ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {state.assignments
+                      .filter(
+                        (a) =>
+                          a.course_id === directAssignModal.courseId ||
+                          a.courseId === directAssignModal.courseId
+                      )
+                      .map((a) => {
+                        const subject = state.subjects.find((s) => s.id === a.subject_id);
+                        const teacher = state.teachers.find((t) => t.id === a.teacher_id);
+                        const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+                        const placed = (state.schedule || []).filter(
+                          (s) =>
+                            s.course_id === directAssignModal.courseId &&
+                            s.subject_id === a.subject_id
+                        ).length;
+                        const missing = assigned - placed;
+
+                        // Verificar si el docente tiene clase en otro curso a esta misma hora
+                        const sStartM = toMins(directAssignModal.slot?.start);
+                        const sEndM = toMins(directAssignModal.slot?.end);
+                        const teacherClash = (state.schedule || []).find((s) => {
+                          if (s.teacher_id !== a.teacher_id) return false;
+                          if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
+                          const eStart = toMins(s.start_time);
+                          const eEnd = toMins(s.end_time);
+                          const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
+                          return overlap > 10;
+                        });
+
+                        const isSelected = directAssignModal.subjectId === a.subject_id;
+
+                        return (
+                          <div
+                            key={a.id}
+                            onClick={() => setDirectAssignModal({ ...directAssignModal, subjectId: a.subject_id })}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/20'
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-black text-slate-800 uppercase">
+                                {subject?.name || 'Materia'}
+                              </p>
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase">
+                                👨‍🏫 {teacher?.name || 'Docente no asignado'}
+                              </p>
+                              {teacherClash && (
+                                <p className="text-[9px] font-bold text-amber-600 uppercase">
+                                  ⚠️ Docente con clase en otro curso a esta hora
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                                  missing > 0
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}
+                              >
+                                {placed}/{assigned}h {missing > 0 ? `(Falta ${missing}h)` : '✓ Completo'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">Selecciona un curso primero.</p>
+                )}
+              </div>
+
+              {/* Botón de Confirmación */}
+              <div className="pt-2">
+                <button
+                  disabled={!directAssignModal.courseId || !directAssignModal.subjectId}
+                  onClick={async () => {
+                    const assign = state.assignments.find(
+                      (a) =>
+                        (a.course_id === directAssignModal.courseId ||
+                          a.courseId === directAssignModal.courseId) &&
+                        a.subject_id === directAssignModal.subjectId
+                    );
+                    if (!assign) return;
+
+                    try {
+                      const { error } = await supabase.from('schedule_entries').insert([
+                        {
+                          center_id: profile.center_id,
+                          course_id: directAssignModal.courseId,
+                          subject_id: directAssignModal.subjectId,
+                          teacher_id: assign.teacher_id,
+                          day: directAssignModal.day,
+                          shift: selectedShift,
+                          start_time: directAssignModal.slot.start,
+                          end_time: directAssignModal.slot.end,
+                          school_year: selectedYear
+                        }
+                      ]);
+                      if (error) throw error;
+                      await refreshData(undefined, true);
+                      alert('✅ ¡Clase asignada exitosamente!');
+                      setDirectAssignModal({ open: false, day: '', slot: null, courseId: '', subjectId: '' });
+                    } catch (err: any) {
+                      alert('Error al asignar clase: ' + err.message);
+                    }
+                  }}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Asignar a esta Hora
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

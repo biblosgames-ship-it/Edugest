@@ -2346,20 +2346,105 @@ export const scheduleService = {
     };
 
     const isMorning = shift === 'Matutina';
-    const slotTimes = isMorning
-      ? [
-          { start: '08:00:00', end: '08:45:00', label: '1ra Hora' },
-          { start: '08:45:00', end: '09:30:00', label: '2da Hora' },
-          { start: '10:00:00', end: '10:40:00', label: '3ra Hora' },
-          { start: '10:40:00', end: '11:20:00', label: '4ta Hora' },
-          { start: '11:20:00', end: '12:00:00', label: '5ta Hora' }
-        ]
-      : [
-          { start: '14:00:00', end: '14:40:00', label: '1ra Hora' },
-          { start: '14:40:00', end: '15:20:00', label: '2da Hora' },
-          { start: '15:40:00', end: '16:20:00', label: '3ra Hora' },
-          { start: '16:20:00', end: '17:00:00', label: '4ta Hora' }
-        ];
+    const courseOfficial = findOfficialSchedule(levelSchedules, course.level, shift);
+    const isFirstCycle = isFirstCycleCourse(course);
+    const isSecondCycle = isSecondCycleCourse(course);
+
+    const startT = toMins(courseOfficial?.start_time || (isMorning ? '08:00' : '14:00'));
+    const endT = toMins(courseOfficial?.end_time || (isMorning ? '12:00' : '18:15'));
+
+    // Recreo del curso
+    const applicableBPs = (breakPreferences || []).filter((bp: any) => {
+      let bpMins = toMins(bp.startTime);
+      if (!isMorning && bpMins < 420) bpMins += 720;
+      const isBpMorning = bpMins < 780;
+      if (isMorning !== isBpMorning) return false;
+
+      const bpLevel = (bp.level || '').toLowerCase();
+      const levelNorm = (course.level || '').toLowerCase();
+      if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
+      return (
+        bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+        levelNorm.includes(bpLevel.substring(0, 3))
+      );
+    });
+
+    let bPref = applicableBPs.find((bp: any) => {
+      const bpCyc = (bp.cycle || '').toLowerCase();
+      if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
+      if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
+      return false;
+    });
+
+    if (!bPref) {
+      bPref = applicableBPs.find(
+        (bp: any) =>
+          !bp.cycle || bp.cycle.toLowerCase() === 'general' || bp.cycle.toLowerCase() === 'gen'
+      );
+    }
+    bPref = bPref || { startTime: isMorning ? '10:00' : '16:00', durationMinutes: 15 };
+
+    let bStart = toMins(bPref.startTime);
+    if (!isMorning && bStart < 420) bStart += 720;
+    const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
+
+    const isSecundaria = (course.level || '').toLowerCase().includes('secun');
+    const targetTotal = isSecundaria ? 6 : 5;
+
+    let classStart = courseOfficial?.start_time ? startT : (isMorning && startT <= 480 ? 480 : startT);
+    const preWindow = Math.max(0, bStart - classStart);
+    let preCount = targetTotal === 5 ? 2 : 3;
+    if (preWindow / preCount < 33) {
+      preCount = Math.max(1, Math.floor(preWindow / 33));
+    }
+
+    const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+      if (totalMins <= 0 || preferredCount <= 0) return [];
+      let count = preferredCount;
+      while (count > 1 && totalMins / count < 33) count--;
+      while (totalMins / count > 45 && count < 6) count++;
+      const base = Math.floor(totalMins / count);
+      let rem = totalMins - base * count;
+      const durs = new Array(count).fill(base);
+      for (let idx = 0; idx < count && rem > 0; idx++) {
+        durs[idx] += 1;
+        rem -= 1;
+      }
+      return durs;
+    };
+
+    const preDurs = calculateSlotDurations(preWindow, preCount);
+    preCount = preDurs.length;
+
+    const slotTimes: any[] = [];
+    let currTimePre = classStart;
+    for (let i = 0; i < preCount; i++) {
+      let dur = preDurs[i];
+      let sTime = currTimePre;
+      let eTime = i === preCount - 1 ? bStart : sTime + dur;
+      currTimePre = eTime;
+      slotTimes.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        label: `${i + 1}ra Hora`
+      });
+    }
+
+    let currTimePost = bEnd;
+    const postWindow = Math.max(0, endT - currTimePost);
+    let postCount = Math.max(1, targetTotal - preCount);
+    const postDurs = calculateSlotDurations(postWindow, postCount);
+    for (let i = 0; i < postDurs.length; i++) {
+      let dur = postDurs[i];
+      let sTime = currTimePost;
+      let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
+      currTimePost = eTime;
+      slotTimes.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        label: `${preCount + i + 1}ra Hora`
+      });
+    }
 
     const suggestions: any[] = [];
 
