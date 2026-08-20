@@ -71,15 +71,54 @@ const isCoursePrimaria = (course: any) => {
   return true;
 };
 
+const isDeporteSubject = (sName: string) => {
+  const n = (sName || '').toLowerCase().trim();
+  return (
+    n.includes('deporte') ||
+    n.includes('educación física') ||
+    n.includes('educacion fisica') ||
+    n.includes('ed. física') ||
+    n.includes('ed. fisica') ||
+    n.includes('ed física') ||
+    n.includes('ed fisica')
+  );
+};
+
 const isFirstCycleCourse = (course: any) => {
   const cGrade = (course?.grade || '').toLowerCase();
+  const cCycle = (course?.cycle || '').toLowerCase();
+  if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
+  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+
+  if (
+    cGrade.includes('segundo ciclo') ||
+    cGrade.includes('2do ciclo') ||
+    cGrade.includes('2do. ciclo') ||
+    cGrade.includes('2do.ciclo')
+  ) {
+    return false;
+  }
+  if (
+    cGrade.includes('primer ciclo') ||
+    cGrade.includes('1er ciclo') ||
+    cGrade.includes('1er. ciclo') ||
+    cGrade.includes('1er.ciclo')
+  ) {
+    return true;
+  }
+
   return (
     /^[1-3]/.test(cGrade) ||
-    cGrade.includes('1') ||
-    cGrade.includes('2') ||
-    cGrade.includes('3') ||
-    cGrade.includes('primer') ||
+    cGrade.includes('1ro') ||
+    cGrade.includes('2do') ||
+    cGrade.includes('3ro') ||
+    cGrade.includes('1°') ||
+    cGrade.includes('2°') ||
+    cGrade.includes('3°') ||
+    cGrade.includes('primero') ||
     (cGrade.includes('segundo') && !cGrade.includes('ciclo')) ||
+    cGrade.includes('tercero') ||
+    cGrade.includes('primer') ||
     cGrade.includes('tercer') ||
     cGrade.includes('7mo') ||
     cGrade.includes('8vo') ||
@@ -93,11 +132,35 @@ const isFirstCycleCourse = (course: any) => {
 
 const isSecondCycleCourse = (course: any) => {
   const cGrade = (course?.grade || '').toLowerCase();
+  const cCycle = (course?.cycle || '').toLowerCase();
+  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
+  if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+  if (
+    cGrade.includes('segundo ciclo') ||
+    cGrade.includes('2do ciclo') ||
+    cGrade.includes('2do. ciclo') ||
+    cGrade.includes('2do.ciclo')
+  ) {
+    return true;
+  }
+  if (
+    cGrade.includes('primer ciclo') ||
+    cGrade.includes('1er ciclo') ||
+    cGrade.includes('1er. ciclo') ||
+    cGrade.includes('1er.ciclo')
+  ) {
+    return false;
+  }
+
   return (
     /^[4-6]/.test(cGrade) ||
-    cGrade.includes('4') ||
-    cGrade.includes('5') ||
-    cGrade.includes('6') ||
+    cGrade.includes('4to') ||
+    cGrade.includes('5to') ||
+    cGrade.includes('6to') ||
+    cGrade.includes('4°') ||
+    cGrade.includes('5°') ||
+    cGrade.includes('6°') ||
     cGrade.includes('cuarto') ||
     cGrade.includes('quinto') ||
     cGrade.includes('sexto') ||
@@ -640,11 +703,8 @@ export const scheduleService = {
           const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
           const sName = subObj?.name?.toLowerCase() || '';
           const distType = subObj?.distributionType || subObj?.distribution_type;
-          const isTogetherSubject =
-            distType === 'together' ||
-            sName.includes('deporte') ||
-            sName.includes('educación física') ||
-            sName.includes('educacion fisica');
+          const isDeporte = isDeporteSubject(sName);
+          const isTogetherSubject = distType === 'together' || isDeporte;
 
           let slotCombinations: any[][] = [];
           if (isDouble) {
@@ -662,8 +722,8 @@ export const scheduleService = {
             }
             strictPairs.sort(() => Math.random() - 0.5);
             recessPairs.sort(() => Math.random() - 0.5);
-            // Si es Deporte / Educación Física, NUNCA partir el bloque doble a través del recreo
-            if (isTogetherSubject) {
+            // Únicamente Deporte / Educación Física tiene prohibido partirse por el recreo
+            if (isDeporte) {
               slotCombinations = [...strictPairs];
             } else {
               slotCombinations = [...strictPairs, ...recessPairs];
@@ -762,8 +822,8 @@ export const scheduleService = {
               );
               if (overlapsBreak) return true;
 
-              // REGLA DE PATIO: Para Educación Física / Deporte en Primaria o Secundaria
-              if (isTogetherSubject) {
+              // REGLA DE PATIO: Exclusivamente para Educación Física / Deporte en Primaria o Secundaria
+              if (isDeporte) {
                 const overlapsPatio = doesOverlapSportsBreak(
                   sStart,
                   sEnd,
@@ -1565,11 +1625,8 @@ export const scheduleService = {
           const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
           const sName = subObj?.name?.toLowerCase() || '';
           const distType = subObj?.distributionType || subObj?.distribution_type;
-          const isTogetherSubject =
-            distType === 'together' ||
-            sName.includes('deporte') ||
-            sName.includes('educación física') ||
-            sName.includes('educacion fisica');
+          const isDeporte = isDeporteSubject(sName);
+          const isTogetherSubject = distType === 'together' || isDeporte;
 
           const combinations: any[][] = [];
           if (isDouble) {
@@ -1587,7 +1644,8 @@ export const scheduleService = {
             }
             strictPairs.sort(() => Math.random() - 0.5);
             recessPairs.sort(() => Math.random() - 0.5);
-            if (isTogetherSubject) {
+            // Únicamente Deporte / Educación Física tiene prohibido partirse por el recreo
+            if (isDeporte) {
               combinations.push(...strictPairs);
             } else {
               combinations.push(...strictPairs, ...recessPairs);
@@ -1663,7 +1721,7 @@ export const scheduleService = {
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
                   doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
-                  (isTogetherSubject && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
+                  (isDeporte && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
                 );
               });
 
@@ -1891,11 +1949,8 @@ export const scheduleService = {
           const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
           const sName = subObj?.name?.toLowerCase() || '';
           const distType = subObj?.distributionType || subObj?.distribution_type;
-          const isTogetherSubject =
-            distType === 'together' ||
-            sName.includes('deporte') ||
-            sName.includes('educación física') ||
-            sName.includes('educacion fisica');
+          const isDeporte = isDeporteSubject(sName);
+          const isTogetherSubject = distType === 'together' || isDeporte;
 
           const combinations: any[][] = [];
           if (isDouble) {
@@ -1919,7 +1974,8 @@ export const scheduleService = {
               return Math.random() - 0.5;
             });
             recessPairs.sort(() => Math.random() - 0.5);
-            if (isTogetherSubject) {
+            // Únicamente Deporte / Educación Física tiene prohibido partirse por el recreo
+            if (isDeporte) {
               combinations.push(...strictPairs);
             } else {
               combinations.push(...strictPairs, ...recessPairs);
@@ -1998,7 +2054,7 @@ export const scheduleService = {
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
                   doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
-                  (isTogetherSubject && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
+                  (isDeporte && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
                 );
               });
 
