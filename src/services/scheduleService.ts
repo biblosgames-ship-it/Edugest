@@ -22,18 +22,10 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
   return match || schedules[0] || null;
 };
 
-const doesOverlapCourseBreak = (
-  sStart: number,
-  sEnd: number,
-  course: any,
-  breakPreferences: any[],
-  shift: string,
-  toMins: (t: string) => number
-) => {
+const isCourseInicial = (course: any) => {
   const cGrade = (course?.grade || '').toLowerCase();
   const cLevel = (course?.level || '').toLowerCase();
-
-  const isInicialLevel =
+  return (
     cLevel.includes('inic') ||
     cLevel.includes('preesc') ||
     cLevel.includes('kinder') ||
@@ -44,47 +36,79 @@ const doesOverlapCourseBreak = (
     cGrade.includes('párvulo') ||
     cGrade.includes('parvulo') ||
     cGrade.includes('pre-primario') ||
-    cGrade.includes('preprimario');
+    cGrade.includes('preprimario') ||
+    cGrade.includes('maternal')
+  );
+};
 
-  // Si el curso actual pertenece a Nivel Inicial, su propia clase de Educación Física no puede ser a la hora de su Recreo
-  if (isInicialLevel && shift === 'Matutina') {
-    const inicialBreak = (breakPreferences || []).find((bp: any) => {
-      const lvl = (bp.level || '').toLowerCase();
-      const cyc = (bp.cycle || '').toLowerCase();
-      return (
-        lvl.includes('ini') ||
-        lvl.includes('pre') ||
-        lvl.includes('parv') ||
-        lvl.includes('kínder') ||
-        lvl.includes('kinder') ||
-        cyc.includes('ini')
-      );
-    });
+const isCourseSecundaria = (course: any) => {
+  if (isCourseInicial(course)) return false;
+  const cGrade = (course?.grade || '').toLowerCase();
+  const cLevel = (course?.level || '').toLowerCase();
+  return (
+    cLevel.includes('secun') ||
+    cGrade.includes('secun') ||
+    cGrade.includes('bachill') ||
+    cGrade.includes('media')
+  );
+};
 
-    if (inicialBreak) {
-      let ibStart = toMins(inicialBreak.startTime);
-      if (ibStart < 420) ibStart += 720;
-      const ibEnd = ibStart + (Number(inicialBreak.durationMinutes) || 30);
-      if (sStart < ibEnd && sEnd > ibStart) return true;
-    }
-  }
+const isCoursePrimaria = (course: any) => {
+  if (isCourseInicial(course) || isCourseSecundaria(course)) return false;
+  return true;
+};
 
-  const isFirstCycleCourse =
+const isFirstCycleCourse = (course: any) => {
+  const cGrade = (course?.grade || '').toLowerCase();
+  return (
     /^[1-3]/.test(cGrade) ||
     cGrade.includes('1') ||
     cGrade.includes('2') ||
     cGrade.includes('3') ||
     cGrade.includes('primer') ||
     (cGrade.includes('segundo') && !cGrade.includes('ciclo')) ||
-    cGrade.includes('tercer');
-  const isSecondCycleCourse =
+    cGrade.includes('tercer') ||
+    cGrade.includes('7mo') ||
+    cGrade.includes('8vo') ||
+    cGrade.includes('9no') ||
+    cGrade.includes('septimo') ||
+    cGrade.includes('séptimo') ||
+    cGrade.includes('octavo') ||
+    cGrade.includes('noveno')
+  );
+};
+
+const isSecondCycleCourse = (course: any) => {
+  const cGrade = (course?.grade || '').toLowerCase();
+  return (
     /^[4-6]/.test(cGrade) ||
     cGrade.includes('4') ||
     cGrade.includes('5') ||
     cGrade.includes('6') ||
     cGrade.includes('cuarto') ||
     cGrade.includes('quinto') ||
-    cGrade.includes('sexto');
+    cGrade.includes('sexto') ||
+    cGrade.includes('10mo') ||
+    cGrade.includes('11mo') ||
+    cGrade.includes('12mo') ||
+    cGrade.includes('decimo') ||
+    cGrade.includes('décimo')
+  );
+};
+
+const doesOverlapCourseBreak = (
+  sStart: number,
+  sEnd: number,
+  course: any,
+  breakPreferences: any[],
+  shift: string,
+  toMins: (t: string) => number
+) => {
+  const isInicial = isCourseInicial(course);
+  const isSec = isCourseSecundaria(course);
+  const isPri = isCoursePrimaria(course);
+  const isCFirstCycle = isFirstCycleCourse(course);
+  const isCSecondCycle = isSecondCycleCourse(course);
 
   return (breakPreferences || []).some((bp: any) => {
     let bpMins = toMins(bp.startTime);
@@ -93,21 +117,90 @@ const doesOverlapCourseBreak = (
     if ((shift === 'Matutina') !== isBpMorning) return false;
 
     const bpLevel = (bp.level || '').toLowerCase();
-    if (bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
-      const matchLvl =
-        bpLevel.substring(0, 3) === cLevel.substring(0, 3) ||
-        cLevel.includes(bpLevel.substring(0, 3));
-      if (!matchLvl) return false;
-    }
-
     const bpCycle = (bp.cycle || '').toLowerCase();
-    if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
-      if (isFirstCycleCourse && (bpCycle.includes('segundo') || bpCycle.includes('2do')))
+
+    // Si el curso es de Nivel Inicial:
+    if (isInicial) {
+      const matchIni =
+        bpLevel.includes('ini') ||
+        bpLevel.includes('pre') ||
+        bpLevel.includes('parv') ||
+        bpLevel.includes('kínder') ||
+        bpLevel.includes('kinder') ||
+        bpCycle.includes('ini');
+      if (!matchIni && bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
         return false;
-      if (isSecondCycleCourse && (bpCycle.includes('primer') || bpCycle.includes('1er')))
-        return false;
+      }
+    } else {
+      // Si el curso NO es inicial pero el recreo es exclusivo de Inicial, ignorarlo
+      const isBpInicial =
+        bpLevel.includes('ini') ||
+        bpLevel.includes('pre') ||
+        bpLevel.includes('parv') ||
+        bpLevel.includes('kínder') ||
+        bpLevel.includes('kinder') ||
+        bpCycle.includes('ini');
+      if (isBpInicial) return false;
+
+      // Verificar nivel
+      if (bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
+        if (isPri && !bpLevel.includes('prim')) return false;
+        if (isSec && !bpLevel.includes('sec')) return false;
+      }
+
+      // Verificar ciclo
+      if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
+        if (isCFirstCycle && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2')))
+          return false;
+        if (isCSecondCycle && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1')))
+          return false;
+      }
     }
 
+    const bpStart = bpMins;
+    const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
+    return sStart < bpEnd && sEnd > bpStart;
+  });
+};
+
+const doesOverlapSportsBreak = (
+  sStart: number,
+  sEnd: number,
+  course: any,
+  breakPreferences: any[],
+  shift: string,
+  toMins: (t: string) => number
+) => {
+  // Nivel Inicial tiene patio propio e independiente:
+  // Solo respeta su propio recreo de Inicial y no interfiere con Primaria/Secundaria
+  if (isCourseInicial(course)) {
+    return doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins);
+  }
+
+  // Para Primaria y Secundaria (Patio Compartido):
+  // Se prohíbe Deporte / Educación Física durante el recreo de CUALQUIER ciclo de Primaria (1er o 2do) o Secundaria.
+  // Los recreos de Nivel Inicial se omiten expresamente porque Inicial tiene otro patio.
+  return (breakPreferences || []).some((bp: any) => {
+    let bpMins = toMins(bp.startTime);
+    if (shift === 'Vespertina' && bpMins < 420) bpMins += 720;
+    const isBpMorning = bpMins < 780;
+    if ((shift === 'Matutina') !== isBpMorning) return false;
+
+    const bpLevel = (bp.level || '').toLowerCase();
+    const bpCycle = (bp.cycle || '').toLowerCase();
+
+    const isBpInicial =
+      bpLevel.includes('ini') ||
+      bpLevel.includes('pre') ||
+      bpLevel.includes('parv') ||
+      bpLevel.includes('kínder') ||
+      bpLevel.includes('kinder') ||
+      bpCycle.includes('ini');
+
+    // Nivel Inicial NO bloquea el patio de Primaria/Secundaria
+    if (isBpInicial) return false;
+
+    // Cualquier recreo de Primaria, Secundaria o General bloquea el patio
     const bpStart = bpMins;
     const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
     return sStart < bpEnd && sEnd > bpStart;
@@ -538,6 +631,15 @@ export const scheduleService = {
           if (!relaxedRules && daySubjectCount >= 2 && !isDouble) continue;
           if (!relaxedRules && daySubjectCount > 0 && isDouble) continue;
 
+          const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isTogetherSubject =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
           let slotCombinations: any[][] = [];
           if (isDouble) {
             const strictPairs: any[][] = [];
@@ -554,7 +656,12 @@ export const scheduleService = {
             }
             strictPairs.sort(() => Math.random() - 0.5);
             recessPairs.sort(() => Math.random() - 0.5);
-            slotCombinations = [...strictPairs, ...recessPairs];
+            // Si es Deporte / Educación Física, NUNCA partir el bloque doble a través del recreo
+            if (isTogetherSubject) {
+              slotCombinations = [...strictPairs];
+            } else {
+              slotCombinations = [...strictPairs, ...recessPairs];
+            }
           } else {
             for (let i = 0; i < classSlots.length; i++) {
               slotCombinations.push([classSlots[i]]);
@@ -570,15 +677,6 @@ export const scheduleService = {
               (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
             );
             if (existingSameSubject.length > 0) {
-              const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
-              const sName = subObj?.name?.toLowerCase() || '';
-              const distType = subObj?.distributionType || subObj?.distribution_type;
-              const isTogetherSubject =
-                distType === 'together' ||
-                sName.includes('deporte') ||
-                sName.includes('educación física') ||
-                sName.includes('educacion fisica');
-
               if (!superRelaxed && isTogetherSubject) {
                 const isAdjacent = slotsToUse.some((slot) => {
                   const pStart = toMins(slot.start);
@@ -647,7 +745,7 @@ export const scheduleService = {
               });
               if (isBusy) return true;
 
-              // NINGUNA materia debe colocarse sobre la hora del recreo del curso
+              // NINGUNA materia debe colocarse sobre la hora del recreo del propio curso
               const overlapsBreak = doesOverlapCourseBreak(
                 sStart,
                 sEnd,
@@ -657,6 +755,19 @@ export const scheduleService = {
                 toMins
               );
               if (overlapsBreak) return true;
+
+              // REGLA DE PATIO: Para Educación Física / Deporte en Primaria o Secundaria
+              if (isTogetherSubject) {
+                const overlapsPatio = doesOverlapSportsBreak(
+                  sStart,
+                  sEnd,
+                  course,
+                  breakPreferences,
+                  shift,
+                  toMins
+                );
+                if (overlapsPatio) return true;
+              }
 
               const isFixed = (fixedEvents || []).some((fe: any) => {
                 if (fe.day !== 'Todos' && fe.day !== day) return false;
@@ -1452,6 +1563,15 @@ export const scheduleService = {
           const dayCount = dailyCount[course.id]?.[day]?.[assign.subject_id] || 0;
           if (!relaxedRules && dayCount >= 2) continue;
 
+          const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isTogetherSubject =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
           const combinations: any[][] = [];
           if (isDouble) {
             const strictPairs: any[][] = [];
@@ -1468,7 +1588,11 @@ export const scheduleService = {
             }
             strictPairs.sort(() => Math.random() - 0.5);
             recessPairs.sort(() => Math.random() - 0.5);
-            combinations.push(...strictPairs, ...recessPairs);
+            if (isTogetherSubject) {
+              combinations.push(...strictPairs);
+            } else {
+              combinations.push(...strictPairs, ...recessPairs);
+            }
           } else {
             for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
             combinations.sort(() => Math.random() - 0.5);
@@ -1481,15 +1605,6 @@ export const scheduleService = {
               (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
             );
             if (existingSameSubject.length > 0) {
-              const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
-              const sName = subObj?.name?.toLowerCase() || '';
-              const distType = subObj?.distributionType || subObj?.distribution_type;
-              const isTogetherSubject =
-                distType === 'together' ||
-                sName.includes('deporte') ||
-                sName.includes('educación física') ||
-                sName.includes('educacion fisica');
-
               if (!superRelaxed && isTogetherSubject) {
                 const isAdjacent = toUse.some((slot) => {
                   const pStart = toMins(slot.start);
@@ -1548,26 +1663,8 @@ export const scheduleService = {
                     );
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
-                  ((() => {
-                    const sName = (
-                      state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
-                    ).toLowerCase();
-                    if (
-                      sName.includes('deporte') ||
-                      sName.includes('educación física') ||
-                      sName.includes('educacion fisica')
-                    ) {
-                      return doesOverlapCourseBreak(
-                        sStart,
-                        sEnd,
-                        course,
-                        breakPreferences,
-                        shift,
-                        toMins
-                      );
-                    }
-                    return false;
-                  })())
+                  doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
+                  (isTogetherSubject && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
                 );
               });
 
@@ -1792,133 +1889,119 @@ export const scheduleService = {
             const dayCount = dailyCount[course.id]?.[day]?.[assign.subject_id] || 0;
             if (!relaxedRules && dayCount >= 2) continue;
 
-            const combinations: any[][] = [];
-            if (isDouble) {
-              const strictPairs: any[][] = [];
-              const recessPairs: any[][] = [];
-              for (let i = 0; i < slots.length - 1; i++) {
-                const endPrev = toMins(slots[i].end);
-                const startNext = toMins(slots[i + 1].start);
-                const gap = startNext - endPrev;
-                if (gap === 0) {
-                  strictPairs.push([slots[i], slots[i + 1]]);
-                } else if (gap > 0 && gap <= 35) {
-                  recessPairs.push([slots[i], slots[i + 1]]);
-                }
+          const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
+          const sName = subObj?.name?.toLowerCase() || '';
+          const distType = subObj?.distributionType || subObj?.distribution_type;
+          const isTogetherSubject =
+            distType === 'together' ||
+            sName.includes('deporte') ||
+            sName.includes('educación física') ||
+            sName.includes('educacion fisica');
+
+          const combinations: any[][] = [];
+          if (isDouble) {
+            const strictPairs: any[][] = [];
+            const recessPairs: any[][] = [];
+            for (let i = 0; i < slots.length - 1; i++) {
+              const endPrev = toMins(slots[i].end);
+              const startNext = toMins(slots[i + 1].start);
+              const gap = startNext - endPrev;
+              if (gap === 0) {
+                strictPairs.push([slots[i], slots[i + 1]]);
+              } else if (gap > 0 && gap <= 35) {
+                recessPairs.push([slots[i], slots[i + 1]]);
               }
-              strictPairs.sort((a, b) => {
-                const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
-                const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
-                if (aHasPref && !bHasPref) return -1;
-                if (!aHasPref && bHasPref) return 1;
-                return Math.random() - 0.5;
-              });
-              recessPairs.sort(() => Math.random() - 0.5);
-              combinations.push(...strictPairs, ...recessPairs);
-            } else {
-              for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
-              combinations.sort((a, b) => {
-                const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
-                const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
-                if (aHasPref && !bHasPref) return -1;
-                if (!aHasPref && bHasPref) return 1;
-                return Math.random() - 0.5;
-              });
             }
+            strictPairs.sort((a, b) => {
+              const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
+              const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
+              if (aHasPref && !bHasPref) return -1;
+              if (!aHasPref && bHasPref) return 1;
+              return Math.random() - 0.5;
+            });
+            recessPairs.sort(() => Math.random() - 0.5);
+            if (isTogetherSubject) {
+              combinations.push(...strictPairs);
+            } else {
+              combinations.push(...strictPairs, ...recessPairs);
+            }
+          } else {
+            for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
+            combinations.sort((a, b) => {
+              const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
+              const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
+              if (aHasPref && !bHasPref) return -1;
+              if (!aHasPref && bHasPref) return 1;
+              return Math.random() - 0.5;
+            });
+          }
 
-            for (const toUse of combinations) {
-              const existingSameSubject = finalEntries.filter(
-                (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
-              );
-              if (existingSameSubject.length > 0) {
-                const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
-                const sName = subObj?.name?.toLowerCase() || '';
-                const distType = subObj?.distributionType || subObj?.distribution_type;
-                const isTogetherSubject =
-                  distType === 'together' ||
-                  sName.includes('deporte') ||
-                  sName.includes('educación física') ||
-                  sName.includes('educacion fisica');
-
-                if (!superRelaxed && isTogetherSubject) {
-                  const isAdjacent = toUse.some((slot) => {
-                    const pStart = toMins(slot.start);
-                    const pEnd = toMins(slot.end);
-                    return existingSameSubject.some((exist) => {
-                      const eStart = toMins(exist.start_time);
-                      const eEnd = toMins(exist.end_time);
-                      return pStart === eEnd || pEnd === eStart;
-                    });
+          for (const toUse of combinations) {
+            const existingSameSubject = finalEntries.filter(
+              (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
+            );
+            if (existingSameSubject.length > 0) {
+              if (!superRelaxed && isTogetherSubject) {
+                const isAdjacent = toUse.some((slot) => {
+                  const pStart = toMins(slot.start);
+                  const pEnd = toMins(slot.end);
+                  return existingSameSubject.some((exist) => {
+                    const eStart = toMins(exist.start_time);
+                    const eEnd = toMins(exist.end_time);
+                    return pStart === eEnd || pEnd === eStart;
                   });
-                  if (!isAdjacent) continue;
-                }
-              }
-              const hasConflict = toUse.some((s) => {
-                const sStart = toMins(s.start);
-                const sEnd = toMins(s.end);
-
-                if (!superRelaxed && teacherPref) {
-                  const levelNorm = (course.level || '').toLowerCase();
-                  const official = (state.levelSchedules || []).find(
-                    (ls: any) =>
-                      (ls.level || '').toLowerCase().startsWith(levelNorm.substring(0, 5)) &&
-                      ls.shift === shift
-                  );
-                  const config = teacherPref.dailyConfig?.[day] || {};
-                  const rawStartStr =
-                    shift === 'Matutina'
-                      ? config.mStart || teacherPref.morningStart || official?.start_time || '08:00'
-                      : config.aStart ||
-                        teacherPref.afternoonStart ||
-                        official?.start_time ||
-                        '14:00';
-                  const rawEndStr =
-                    shift === 'Matutina'
-                      ? config.mEnd || teacherPref.morningEnd || official?.end_time || '12:00'
-                      : config.aEnd || teacherPref.afternoonEnd || official?.end_time || '18:15';
-                  const tStart = toMins(
-                    rawStartStr.length >= 3 ? rawStartStr : shift === 'Matutina' ? '08:00' : '14:00'
-                  );
-                  const tEnd = toMins(
-                    rawEndStr.length >= 3 ? rawEndStr : shift === 'Matutina' ? '12:00' : '18:15'
-                  );
-                  if (sStart < tStart - 5 || sEnd > tEnd + 5) return true;
-                }
-
-                return (
-                  finalEntries.some((e) => {
-                      if (e.day !== day) return false;
-                      const eStart = toMins(e.start_time);
-                      const eEnd = toMins(e.end_time);
-                      return (
-                        sStart < eEnd &&
-                        sEnd > eStart &&
-                        (e.teacher_id === assign.teacher_id || e.course_id === course.id)
-                      );
-                    }) ||
-                    isFixedEventConflict(sStart, sEnd, day, course) ||
-                    ((() => {
-                      const sName = (
-                        state.subjects?.find((sub: any) => sub.id === assign.subject_id)?.name || ''
-                      ).toLowerCase();
-                      if (
-                        sName.includes('deporte') ||
-                        sName.includes('educación física') ||
-                        sName.includes('educacion fisica')
-                      ) {
-                        return doesOverlapCourseBreak(
-                          sStart,
-                          sEnd,
-                          course,
-                          breakPreferences,
-                          shift,
-                          toMins
-                        );
-                      }
-                      return false;
-                    })())
-                  );
                 });
+                if (!isAdjacent) continue;
+              }
+            }
+            const hasConflict = toUse.some((s) => {
+              const sStart = toMins(s.start);
+              const sEnd = toMins(s.end);
+
+              if (!superRelaxed && teacherPref) {
+                const levelNorm = (course.level || '').toLowerCase();
+                const official = (state.levelSchedules || []).find(
+                  (ls: any) =>
+                    (ls.level || '').toLowerCase().startsWith(levelNorm.substring(0, 5)) &&
+                    ls.shift === shift
+                );
+                const config = teacherPref.dailyConfig?.[day] || {};
+                const rawStartStr =
+                  shift === 'Matutina'
+                    ? config.mStart || teacherPref.morningStart || official?.start_time || '08:00'
+                    : config.aStart ||
+                      teacherPref.afternoonStart ||
+                      official?.start_time ||
+                      '14:00';
+                const rawEndStr =
+                  shift === 'Matutina'
+                    ? config.mEnd || teacherPref.morningEnd || official?.end_time || '12:00'
+                    : config.aEnd || teacherPref.afternoonEnd || official?.end_time || '18:15';
+                const tStart = toMins(
+                  rawStartStr.length >= 3 ? rawStartStr : shift === 'Matutina' ? '08:00' : '14:00'
+                );
+                const tEnd = toMins(
+                  rawEndStr.length >= 3 ? rawEndStr : shift === 'Matutina' ? '12:00' : '18:15'
+                );
+                if (sStart < tStart - 5 || sEnd > tEnd + 5) return true;
+              }
+
+              return (
+                finalEntries.some((e) => {
+                    if (e.day !== day) return false;
+                    const eStart = toMins(e.start_time);
+                    const eEnd = toMins(e.end_time);
+                    return (
+                      sStart < eEnd &&
+                      sEnd > eStart &&
+                      (e.teacher_id === assign.teacher_id || e.course_id === course.id)
+                    );
+                  }) ||
+                  isFixedEventConflict(sStart, sEnd, day, course) ||
+                  doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
+                  (isTogetherSubject && doesOverlapSportsBreak(sStart, sEnd, course, breakPreferences, shift, toMins))
+                );
+              });
 
               if (!hasConflict) {
                 toUse.forEach((s) => {
@@ -2239,6 +2322,24 @@ export const scheduleService = {
           toMins
         );
         if (overlapsBreak) return;
+
+        const subName = (subject?.name || '').toLowerCase();
+        const isDeporte =
+          subName.includes('deporte') ||
+          subName.includes('educación física') ||
+          subName.includes('educacion fisica');
+
+        if (isDeporte) {
+          const overlapsPatio = doesOverlapSportsBreak(
+            slotStartMins,
+            slotEndMins,
+            course,
+            breakPreferences,
+            shift,
+            toMins
+          );
+          if (overlapsPatio) return;
+        }
 
         // ¿Docente ocupado en otro curso a esta hora?
         const isTeacherBusyElsewhere = teacherOtherCourseEntries.some((e: any) => {
