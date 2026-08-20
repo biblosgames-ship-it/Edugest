@@ -5,6 +5,7 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
   const lNorm = (levelName || '').toLowerCase().substring(0, 3);
   const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
 
+  // 1. Coincidencia exacta de Nivel y Tanda
   let match = schedules.find((ls: any) => {
     const lsLvl = (ls.level || '').toLowerCase();
     const lsShift = (ls.shift || '').toLowerCase();
@@ -15,6 +16,18 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
     return lvlMatch && shiftMatch;
   });
 
+  // 2. Si no hay match exacto, priorizar un horario de la misma tanda (Matutina vs Vespertina)
+  if (!match) {
+    match = schedules.find((ls: any) => {
+      const lsShift = (ls.shift || '').toLowerCase();
+      return (
+        lsShift.substring(0, 3) === sNorm ||
+        (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')))
+      );
+    });
+  }
+
+  // 3. Fallback a nivel
   if (!match) {
     match = schedules.find((ls: any) => (ls.level || '').toLowerCase().substring(0, 3) === lNorm);
   }
@@ -314,28 +327,21 @@ export const scheduleService = {
     // 1. Filtrar cursos y asignaciones con lógica flexible (Matutin/Vesperti)
     const shiftBaseVal = shift.toLowerCase().substring(0, 3);
     const courses = allCourses.filter((c: any) => {
-      const tStr = (c.tanda || '').toLowerCase();
-      const lvlStr = (c.level || '').toLowerCase();
+      const tStr = (c.tanda || '').toLowerCase().trim();
+      const lvlStr = (c.level || '').toLowerCase().trim();
       if (shiftBaseVal === 'mat') {
-        return (
-          tStr.includes('mat') ||
-          tStr.includes('mañ') ||
-          tStr.includes('ext') ||
-          tStr.includes('com') ||
-          tStr === '' ||
-          ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
-            !tStr.includes('ves') &&
-            !tStr.includes('tar'))
-        );
+        if (tStr.includes('mat') || tStr.includes('mañ') || tStr.includes('ext') || tStr.includes('com')) return true;
+        if (tStr === '') return true;
+        return !tStr.includes('ves') && !tStr.includes('tar');
       } else {
         return (
           tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'))
         );
       }
     });
-    const courseIds = courses.map((c: any) => c.id);
+    const courseIdSet = new Set(courses.map((c: any) => String(c.id)));
     const assignments = allAssignments.filter((a: any) =>
-      courseIds.includes(a.course_id || a.courseId)
+      courseIdSet.has(String(a.course_id || a.courseId))
     );
 
     const normalizeTime = (t: string) =>
@@ -1101,19 +1107,12 @@ export const scheduleService = {
     // 1. Identificar cursos (Lógica ultra-permisiva)
     const shiftBase = shift.toLowerCase().substring(0, 3); // 'mat' o 'ves'
     const courses = allCourses.filter((c: any) => {
-      const tStr = (c.tanda || '').toLowerCase();
-      const lvlStr = (c.level || '').toLowerCase();
+      const tStr = (c.tanda || '').toLowerCase().trim();
+      const lvlStr = (c.level || '').toLowerCase().trim();
       if (shiftBase === 'mat') {
-        return (
-          tStr.includes('mat') ||
-          tStr.includes('mañ') ||
-          tStr.includes('ext') ||
-          tStr.includes('com') ||
-          tStr === '' ||
-          ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
-            !tStr.includes('ves') &&
-            !tStr.includes('tar'))
-        );
+        if (tStr.includes('mat') || tStr.includes('mañ') || tStr.includes('ext') || tStr.includes('com')) return true;
+        if (tStr === '') return true;
+        return !tStr.includes('ves') && !tStr.includes('tar');
       } else {
         return (
           tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'))
@@ -1121,9 +1120,9 @@ export const scheduleService = {
       }
     });
 
-    const courseIds = courses.map((c: any) => c.id);
+    const courseIdSet = new Set(courses.map((c: any) => String(c.id)));
     const assignments = allAssignments.filter((a: any) =>
-      courseIds.includes(a.course_id || a.courseId)
+      courseIdSet.has(String(a.course_id || a.courseId))
     );
 
     const levelCounts: Record<string, number> = {};
@@ -1381,7 +1380,7 @@ export const scheduleService = {
 
     // --- MOTOR DE REPARACIÓN FIEL Y PROGRESIVA (LOYAL REPAIR ENGINE) ---
     const filteredAssignments = allAssignments.filter((a: any) =>
-      courses.map((c: any) => c.id).includes(a.course_id || a.courseId)
+      courseIdSet.has(String(a.course_id || a.courseId))
     );
 
     // FASE 1: PRESERVACIÓN FIEL E INTELIGENTE (PINNING SELECTIVO)
@@ -2225,23 +2224,39 @@ export const scheduleService = {
     }
 
     const finalAudit: string[] = [];
-    courses.forEach((c) => {
-      const required = assignments
-        .filter((a) => a.course_id === c.id || a.courseId === c.id)
-        .reduce((acc, a) => acc + (Number(a.hours_per_week) || 0), 0);
-      const placed = bestResult.entries.filter((e) => e.course_id === c.id).length;
+    let totalAssignedHours = 0;
+    let totalPlacedHours = 0;
+
+    filteredAssignments.forEach((a) => {
+      const aCourseId = String(a.course_id || a.courseId);
+      const aSubjectId = String(a.subject_id);
+      const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+      totalAssignedHours += required;
+
+      const placed = (bestResult?.entries || []).filter(
+        (e) => String(e.course_id) === aCourseId && String(e.subject_id) === aSubjectId
+      ).length;
+
+      totalPlacedHours += placed;
+
       if (placed < required) {
-        finalAudit.push(`❌ ${c.grade}: ${placed}/${required}h.`);
+        const cName = courses.find((c) => String(c.id) === aCourseId)?.grade || 'Curso';
+        const sName =
+          state.subjects?.find((s: any) => String(s.id) === aSubjectId)?.name || 'Materia';
+        finalAudit.push(`❌ ${cName}: Faltan ${required - placed}h de ${sName}`);
       }
     });
 
-    if (finalAudit.length === 0) {
-      finalAudit.push(
-        `✅ Reparación Exitosa al 100%. Se han guardado ${bestResult.entries.length} periodos preservando posiciones.`
+    const realPercent =
+      totalAssignedHours > 0 ? Math.round((totalPlacedHours / totalAssignedHours) * 100) : 0;
+
+    if (finalAudit.length > 0) {
+      finalAudit.unshift(
+        `⚠️ Logrado: ${realPercent}% (${totalPlacedHours}/${totalAssignedHours}h). Quedaron horas pendientes.`
       );
     } else {
-      finalAudit.unshift(
-        `⚠️ Reparación Parcial: Quedaron horas sin ubicar por choques de docentes o falta de disponibilidad.`
+      finalAudit.push(
+        `✅ Reparación Exitosa al 100%. Se han guardado ${bestResult.entries.length} periodos preservando posiciones.`
       );
     }
 
