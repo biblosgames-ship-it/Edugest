@@ -391,9 +391,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           // Unificación de referencias a docentes en las distintas relaciones y filtrado por año escolar
-          const courseIds = new Set((cRes.data || []).map((c: any) => c.id));
+          const courseIdSet = new Set((cRes.data || []).map((c: any) => String(c.id)));
           const assignmentsUnified = (aRes.data || [])
-            .filter((a: any) => courseIds.has(a.course_id))
+            .filter((a: any) => courseIdSet.has(String(a.course_id || a.courseId)))
             .map((a: any) => ({
               ...a,
               teacher_id: idMap[a.teacher_id] || a.teacher_id

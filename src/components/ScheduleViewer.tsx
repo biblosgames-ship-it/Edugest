@@ -172,23 +172,27 @@ export const ScheduleViewer = () => {
   const filteredSchedule = useMemo(() => {
     let list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
-    // FILTRO ROBUSUTO POR AÑO Y TANDA
+    // FILTRO ROBUSTO POR AÑO Y TANDA
     list = list.filter((s: any) => {
       const sShift = (s.shift || '').toLowerCase();
       const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      const yearMatch = !s.school_year || !selectedYear || s.school_year === selectedYear;
+      const yearMatch = !selectedYear || s.school_year === selectedYear;
       return shiftMatch && yearMatch;
     });
 
     if (filterType === 'teacher' && filterId) {
-      const teacherAssigns = (state.assignments || []).filter((a: any) => a.teacher_id === filterId);
-      const teacherSubjIds = teacherAssigns.map((a: any) => a.subject_id);
-      const teacherCourseIds = teacherAssigns.map((a: any) => a.course_id || a.courseId);
-
-      list = list.filter((s: any) => 
-        s.teacher_id === filterId || 
-        (teacherSubjIds.includes(s.subject_id) && teacherCourseIds.includes(s.course_id))
-      );
+      list = list.filter((s: any) => {
+        if (s.teacher_id === filterId) return true;
+        if (!s.teacher_id) {
+          return (state.assignments || []).some(
+            (a: any) =>
+              a.teacher_id === filterId &&
+              (a.course_id === s.course_id || a.courseId === s.course_id) &&
+              a.subject_id === s.subject_id
+          );
+        }
+        return false;
+      });
     }
 
     if (filterType === 'course' && filterId) {
@@ -199,7 +203,7 @@ export const ScheduleViewer = () => {
     }
 
     return list;
-  }, [state.schedule, filterType, filterId, selectedShift, selectedYear]);
+  }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear]);
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
