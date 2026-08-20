@@ -256,19 +256,33 @@ export const ScheduleViewer = () => {
       const courseEndT = courseOfficial?.end_time ? toMins(courseOfficial.end_time) : endT;
 
       const grade = course.grade?.toLowerCase() || '';
+      const cycleStr = (course.cycle || '').toLowerCase();
+
       const isFirstCycle =
-        /^[1-3]/.test(grade) ||
-        grade.includes('1') ||
-        grade.includes('2') ||
-        grade.includes('3') ||
-        grade.includes('primer') ||
-        (grade.includes('segundo') && !grade.includes('ciclo')) ||
-        grade.includes('tercer');
+        cycleStr.includes('primer') ||
+        cycleStr.includes('1er') ||
+        cycleStr.includes('1') ||
+        (!cycleStr.includes('segundo') &&
+          !cycleStr.includes('2do') &&
+          !grade.includes('segundo ciclo') &&
+          !grade.includes('2do ciclo') &&
+          (/^[1-3]/.test(grade) ||
+            grade.includes('1ro') ||
+            grade.includes('2do') ||
+            grade.includes('3ro') ||
+            grade.includes('primer') ||
+            grade.includes('tercer')));
+
       const isSecondCycle =
+        cycleStr.includes('segundo') ||
+        cycleStr.includes('2do') ||
+        cycleStr.includes('2') ||
+        grade.includes('segundo ciclo') ||
+        grade.includes('2do ciclo') ||
         /^[4-6]/.test(grade) ||
-        grade.includes('4') ||
-        grade.includes('5') ||
-        grade.includes('6') ||
+        grade.includes('4to') ||
+        grade.includes('5to') ||
+        grade.includes('6to') ||
         grade.includes('cuarto') ||
         grade.includes('quinto') ||
         grade.includes('sexto');
@@ -382,13 +396,24 @@ export const ScheduleViewer = () => {
       // EL RECREO
       slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
 
-      // Eventos Fijos Post-Recreo
+      // Eventos Fijos Post-Recreo (filtrados por nivel y ciclo)
       let currTimePost = bEnd;
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
         const feStartMins = toMins(fe.start_time);
-        return !isActo && feStartMins >= bStart - 5 && feStartMins < courseEndT;
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= courseEndT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNormCourse.substring(0, 3);
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
       });
 
       postFixedEvents.forEach((fe: any) => {

@@ -430,22 +430,8 @@ export const scheduleService = {
       const official = findOfficialSchedule(levelSchedules, course.level, shift);
       const grade = (course.grade || '').toLowerCase();
 
-      const isFirstCycle =
-        /^[1-3]/.test(grade) ||
-        grade.includes('1') ||
-        grade.includes('2') ||
-        grade.includes('3') ||
-        grade.includes('primer') ||
-        (grade.includes('segundo') && !grade.includes('ciclo')) ||
-        grade.includes('tercer');
-      const isSecondCycle =
-        /^[4-6]/.test(grade) ||
-        grade.includes('4') ||
-        grade.includes('5') ||
-        grade.includes('6') ||
-        grade.includes('cuarto') ||
-        grade.includes('quinto') ||
-        grade.includes('sexto');
+      const isFirstCycle = isFirstCycleCourse(course);
+      const isSecondCycle = isSecondCycleCourse(course);
 
       const startT = toMins(official?.start_time || (isMorning ? '08:00' : '14:00'));
       const endT = toMins(official?.end_time || (isMorning ? '12:00' : '18:15'));
@@ -465,8 +451,9 @@ export const scheduleService = {
       });
 
       let bPref = applicableBPs.find((bp: any) => {
-        if (isFirstCycle && (bp.cycle || '').toLowerCase().includes('primer')) return true;
-        if (isSecondCycle && (bp.cycle || '').toLowerCase().includes('segundo')) return true;
+        const bpCyc = (bp.cycle || '').toLowerCase();
+        if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
+        if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
         return false;
       });
 
@@ -560,13 +547,24 @@ export const scheduleService = {
       // RECREO
       slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
-      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo)
+      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo filtrados por ciclo y nivel)
       let currTimePost = bEnd;
       const postFixedEvents = (fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
         const feStartMins = toMins(fe.start_time);
-        return !isActo && feStartMins >= bStart - 5 && feStartMins < endT;
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNorm.substring(0, 3);
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
       });
 
       postFixedEvents.forEach((fe: any) => {
@@ -798,14 +796,14 @@ export const scheduleService = {
 
                 const eStart = toMins(e.start_time);
                 const eEnd = toMins(e.end_time);
-                const timeOverlap = sStart < eEnd && sEnd > eStart;
-                if (!timeOverlap) return false;
+                const overlapMins = Math.min(sEnd, eEnd) - Math.max(sStart, eStart);
+                if (overlapMins <= 0) return false;
 
-                // Un profesor no puede estar en dos sitios
-                if (e.teacher_id === assign.teacher_id) return true;
-
-                // Un curso no puede tener dos materias
+                // Un curso no puede tener dos materias a la vez
                 if (e.course_id === course.id) return true;
+
+                // Un profesor no puede estar en dos cursos a la vez (tolerancia de 10 min por recreos escalonados entre ciclos)
+                if (e.teacher_id === assign.teacher_id && overlapMins > 10) return true;
 
                 return false;
               });
@@ -1224,22 +1222,8 @@ export const scheduleService = {
       const official = findOfficialSchedule(levelSchedules, course.level, shift);
       const grade = (course.grade || '').toLowerCase();
 
-      const isFirstCycle =
-        /^[1-3]/.test(grade) ||
-        grade.includes('1') ||
-        grade.includes('2') ||
-        grade.includes('3') ||
-        grade.includes('primer') ||
-        (grade.includes('segundo') && !grade.includes('ciclo')) ||
-        grade.includes('tercer');
-      const isSecondCycle =
-        /^[4-6]/.test(grade) ||
-        grade.includes('4') ||
-        grade.includes('5') ||
-        grade.includes('6') ||
-        grade.includes('cuarto') ||
-        grade.includes('quinto') ||
-        grade.includes('sexto');
+      const isFirstCycle = isFirstCycleCourse(course);
+      const isSecondCycle = isSecondCycleCourse(course);
 
       const startT = toMins(official?.start_time || (isMorning ? '08:00:00' : '14:00:00'));
       const endT = toMins(official?.end_time || (isMorning ? '12:00:00' : '18:15:00'));
@@ -1259,8 +1243,9 @@ export const scheduleService = {
       });
 
       let bPref = applicableBPs.find((bp: any) => {
-        if (isFirstCycle && (bp.cycle || '').toLowerCase().includes('primer')) return true;
-        if (isSecondCycle && (bp.cycle || '').toLowerCase().includes('segundo')) return true;
+        const bpCyc = (bp.cycle || '').toLowerCase();
+        if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
+        if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
         return false;
       });
 
@@ -1351,7 +1336,18 @@ export const scheduleService = {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
         const feStartMins = toMins(fe.start_time);
-        return !isActo && feStartMins >= bStart - 5 && feStartMins < endT;
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNorm.substring(0, 3);
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
       });
 
       postFixedEvents.forEach((fe: any) => {
@@ -1713,11 +1709,13 @@ export const scheduleService = {
                     if (e.day !== day) return false;
                     const eStart = toMins(e.start_time);
                     const eEnd = toMins(e.end_time);
-                    return (
-                      sStart < eEnd &&
-                      sEnd > eStart &&
-                      (e.teacher_id === assign.teacher_id || e.course_id === course.id)
-                    );
+                    const overlapMins = Math.min(sEnd, eEnd) - Math.max(sStart, eStart);
+                    if (overlapMins <= 0) return false;
+
+                    if (e.course_id === course.id) return true;
+                    if (e.teacher_id === assign.teacher_id && overlapMins > 10) return true;
+
+                    return false;
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
                   doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
@@ -2046,11 +2044,13 @@ export const scheduleService = {
                     if (e.day !== day) return false;
                     const eStart = toMins(e.start_time);
                     const eEnd = toMins(e.end_time);
-                    return (
-                      sStart < eEnd &&
-                      sEnd > eStart &&
-                      (e.teacher_id === assign.teacher_id || e.course_id === course.id)
-                    );
+                    const overlapMins = Math.min(sEnd, eEnd) - Math.max(sStart, eStart);
+                    if (overlapMins <= 0) return false;
+
+                    if (e.course_id === course.id) return true;
+                    if (e.teacher_id === assign.teacher_id && overlapMins > 10) return true;
+
+                    return false;
                   }) ||
                   isFixedEventConflict(sStart, sEnd, day, course) ||
                   doesOverlapCourseBreak(sStart, sEnd, course, breakPreferences, shift, toMins) ||
