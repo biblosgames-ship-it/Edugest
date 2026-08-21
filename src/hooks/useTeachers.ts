@@ -40,6 +40,23 @@ export const useTeachers = () => {
         rawRole.includes('deport') ||
         rawRole.includes('teacher');
 
+      const isSupport =
+        rawRole.includes('apoy') ||
+        rawRole.includes('cons') ||
+        rawRole.includes('support') ||
+        rawRole.includes('limpieza') ||
+        rawRole.includes('mantenimiento');
+
+      const isManagerOrAdmin =
+        isManagement ||
+        rawRole.includes('admin') ||
+        rawRole.includes('secret') ||
+        rawRole.includes('administrative') ||
+        rawRole.includes('caja') ||
+        rawRole.includes('cashier') ||
+        rawRole.includes('finan') ||
+        rawRole.includes('contab');
+
       let category: 'teacher' | 'manager' | 'support' = 'teacher';
       let limit: number | null | undefined = maxTeachers;
       let categoryLabel = 'docentes';
@@ -48,20 +65,11 @@ export const useTeachers = () => {
         category = 'teacher';
         limit = maxTeachers;
         categoryLabel = 'docentes';
-      } else if (
-        isManagement ||
-        rawRole.includes('admin') ||
-        rawRole.includes('secret') ||
-        rawRole.includes('administrative')
-      ) {
+      } else if (isManagerOrAdmin) {
         category = 'manager';
         limit = maxManagers;
-        categoryLabel = 'personal directivo/gestión';
-      } else if (
-        rawRole.includes('apoy') ||
-        rawRole.includes('cons') ||
-        rawRole.includes('support')
-      ) {
+        categoryLabel = 'personal directivo/administrativo';
+      } else if (isSupport) {
         category = 'support';
         limit = maxSupport;
         categoryLabel = 'personal de apoyo';
@@ -112,22 +120,28 @@ export const useTeachers = () => {
             mRole.includes('fisic') ||
             mRole.includes('deport') ||
             mRole.includes('teacher');
+          const mIsSupport =
+            mRole.includes('apoy') ||
+            mRole.includes('cons') ||
+            mRole.includes('support') ||
+            mRole.includes('limpieza') ||
+            mRole.includes('mantenimiento');
+          const mIsManagerOrAdmin =
+            mIsManagement ||
+            mRole.includes('admin') ||
+            mRole.includes('secret') ||
+            mRole.includes('administrative') ||
+            mRole.includes('caja') ||
+            mRole.includes('cashier') ||
+            mRole.includes('finan') ||
+            mRole.includes('contab');
 
           let mCategory = 'teacher';
           if (mRole.includes('management_teacher') || (mIsManagement && mIsTeacher)) {
             mCategory = 'teacher';
-          } else if (
-            mIsManagement ||
-            mRole.includes('admin') ||
-            mRole.includes('secret') ||
-            mRole.includes('administrative')
-          ) {
+          } else if (mIsManagerOrAdmin) {
             mCategory = 'manager';
-          } else if (
-            mRole.includes('apoy') ||
-            mRole.includes('cons') ||
-            mRole.includes('support')
-          ) {
+          } else if (mIsSupport) {
             mCategory = 'support';
           } else if (mIsTeacher) {
             mCategory = 'teacher';

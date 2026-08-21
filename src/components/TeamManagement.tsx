@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+import { toast } from 'react-hot-toast';
+
 export const TeamManagement = () => {
   const {
     teachers: allPersonnel,
@@ -51,14 +53,17 @@ export const TeamManagement = () => {
 
       if (isCreating) {
         await addTeacher(dataToSave);
+        toast.success('¡Colaborador añadido correctamente!');
       } else {
         await updateTeacher({ id: editingUser.id, updates: dataToSave });
+        toast.success('¡Colaborador actualizado correctamente!');
       }
 
       setEditingUser(null);
       setIsCreating(false);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Error al guardar personal:', err);
+      toast.error(err.message || 'Error al guardar el colaborador');
     }
   };
 
