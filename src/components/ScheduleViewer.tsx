@@ -81,13 +81,17 @@ export const ScheduleViewer = () => {
   }, [lockStorageKey]);
 
   const toggleLock = (entry: any) => {
-    const key = entry.id || `${entry.course_id}_${entry.day}_${entry.start_time}`;
+    const locKey = `${entry.course_id}_${entry.day}_${entry.start_time}`;
+    const idKey = entry.id;
     setLockedEntries((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
+      const isCurrentlyLocked = (idKey && next.has(idKey)) || next.has(locKey);
+      if (isCurrentlyLocked) {
+        if (idKey) next.delete(idKey);
+        next.delete(locKey);
       } else {
-        next.add(key);
+        if (idKey) next.add(idKey);
+        next.add(locKey);
       }
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
