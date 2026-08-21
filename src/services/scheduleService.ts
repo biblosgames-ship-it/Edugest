@@ -2276,7 +2276,17 @@ export const scheduleService = {
       for (let i = 0; i < entries.length; i += chunkSize) {
         const chunk = entries.slice(i, i + chunkSize).map((e: any) => {
           const { id, created_at, ...rest } = e;
-          return rest;
+          const entryKey1 = e.id;
+          const entryKey2 = `${e.course_id}_${e.day}_${e.start_time}`;
+          const isLocked = Boolean(
+            e.is_locked ||
+              (lockedKeys || []).includes(entryKey1) ||
+              (lockedKeys || []).includes(entryKey2)
+          );
+          return {
+            ...rest,
+            is_locked: isLocked
+          };
         });
         const { error: insError } = await supabase.from('schedule_entries').insert(chunk);
         if (insError) throw new Error('Error al guardar reparación: ' + insError.message);

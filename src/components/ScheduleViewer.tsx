@@ -62,30 +62,48 @@ export const ScheduleViewer = () => {
   // Candados de Seguridad 🔒 (Blindaje de casillas y bloqueo maestro del horario)
   const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}_${selectedYear || 'default'}`;
   const [lockedEntries, setLockedEntries] = useState<Set<string>>(() => {
+    const initialSet = new Set<string>();
     try {
       const saved = localStorage.getItem(lockStorageKey);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
+      if (saved) JSON.parse(saved).forEach((k: string) => initialSet.add(k));
+    } catch {}
+    return initialSet;
   });
 
-  // Sincronizar candados al cambiar de tanda o año
+  // Sincronizar candados al cambiar de tanda, año o al cargar el horario de la DB
   useEffect(() => {
+    const combinedSet = new Set<string>();
+
+    // 1. Cargar desde la base de datos (e.is_locked = true)
+    (state.schedule || []).forEach((e: any) => {
+      const isShiftMatch = !selectedShift || e.shift === selectedShift;
+      const isYearMatch = !selectedYear || !e.school_year || e.school_year === selectedYear;
+      if (isShiftMatch && isYearMatch && e.is_locked) {
+        if (e.id) combinedSet.add(e.id);
+        combinedSet.add(`${e.course_id}_${e.day}_${e.start_time}`);
+      }
+    });
+
+    // 2. Cargar desde almacenamiento local
     try {
       const saved = localStorage.getItem(lockStorageKey);
-      setLockedEntries(saved ? new Set(JSON.parse(saved)) : new Set());
-    } catch {
-      setLockedEntries(new Set());
-    }
-  }, [lockStorageKey]);
+      if (saved) {
+        JSON.parse(saved).forEach((k: string) => combinedSet.add(k));
+      }
+    } catch {}
 
-  const toggleLock = (entry: any) => {
+    setLockedEntries(combinedSet);
+  }, [lockStorageKey, state.schedule, selectedShift, selectedYear]);
+
+  const toggleLock = async (entry: any) => {
     const locKey = `${entry.course_id}_${entry.day}_${entry.start_time}`;
     const idKey = entry.id;
+    const isCurrentlyLocked = (idKey && lockedEntries.has(idKey)) || lockedEntries.has(locKey);
+    const newLockState = !isCurrentlyLocked;
+
+    // Actualizar estado local inmediatamente
     setLockedEntries((prev) => {
       const next = new Set(prev);
-      const isCurrentlyLocked = (idKey && next.has(idKey)) || next.has(locKey);
       if (isCurrentlyLocked) {
         if (idKey) next.delete(idKey);
         next.delete(locKey);
@@ -96,6 +114,25 @@ export const ScheduleViewer = () => {
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
     });
+
+    // Persistir directamente en Supabase (Base de Datos)
+    try {
+      if (entry.id) {
+        await supabase
+          .from('schedule_entries')
+          .update({ is_locked: newLockState })
+          .eq('id', entry.id);
+      } else if (entry.course_id && entry.day && entry.start_time) {
+        await supabase
+          .from('schedule_entries')
+          .update({ is_locked: newLockState })
+          .eq('course_id', entry.course_id)
+          .eq('day', entry.day)
+          .eq('start_time', entry.start_time);
+      }
+    } catch (err) {
+      console.warn('Nota de guardado en DB de is_locked:', err);
+    }
   };
 
   // Verificar si todas las materias programadas de este turno están blindadas
@@ -111,7 +148,7 @@ export const ScheduleViewer = () => {
   }, [state.schedule, selectedShift, selectedYear, lockedEntries]);
 
   // Blindar / Desblindar todas las materias del turno actual juntas con un solo clic
-  const toggleLockAllSchedule = () => {
+  const toggleLockAllSchedule = async () => {
     const shiftEntries = (state.schedule || []).filter(
       (s: any) => s.shift === selectedShift && (!selectedYear || s.school_year === selectedYear)
     );
@@ -119,6 +156,8 @@ export const ScheduleViewer = () => {
       alert('No hay materias programadas en este horario para blindar.');
       return;
     }
+
+    const newLockState = !isAllLocked;
 
     setLockedEntries((prev) => {
       const next = new Set(prev);
@@ -138,6 +177,23 @@ export const ScheduleViewer = () => {
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
     });
+
+    // Persistir blindaje completo en Supabase DB
+    try {
+      if (profile?.center_id) {
+        let query = supabase
+          .from('schedule_entries')
+          .update({ is_locked: newLockState })
+          .eq('center_id', profile.center_id)
+          .eq('shift', selectedShift);
+        if (selectedYear) {
+          query = query.eq('school_year', selectedYear);
+        }
+        await query;
+      }
+    } catch (err) {
+      console.warn('Nota de guardado en DB de blindaje:', err);
+    }
   };
 
   // Asistente de Intercambio Directo Modal State
