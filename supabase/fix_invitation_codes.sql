@@ -5,6 +5,7 @@
 -- "Código inválido o ya utilizado" al invitar nuevos usuarios o personal.
 
 -- 1. Actualizar la función de validación de códigos (Evita el bug de IS NOT NULL en records)
+-- 1. Actualizar la función de validación de códigos
 CREATE OR REPLACE FUNCTION public.validate_invitation_code(
   p_code text
 )
@@ -16,28 +17,14 @@ DECLARE
   v_course_grade text;
   v_course_section text;
   v_course_level text;
+  v_course_tanda text;
 BEGIN
-  -- 1. Buscar en códigos de invitación
-  SELECT * INTO v_code_record 
-  FROM public.invitation_codes 
-  WHERE upper(code) = upper(trim(p_code)) AND is_used = false;
-
-  IF FOUND THEN
-    RETURN jsonb_build_object(
-      'valid', true,
-      'type', 'invitation',
-      'role', v_code_record.role,
-      'center_id', v_code_record.center_id,
-      'allowed_panels', v_code_record.allowed_panels,
-      'course_id', v_code_record.course_id
-    );
-  END IF;
-
-  -- 2. Buscar en cursos activos
-  SELECT id, center_id, grade, section, level 
-  INTO v_course_id, v_course_center_id, v_course_grade, v_course_section, v_course_level
+  -- 1. Buscar primero en cursos activos (código de curso para padres y alumnos)
+  -- Los códigos de curso son PERMANENTES y reutilizables por todos los padres y alumnos del curso.
+  SELECT id, center_id, grade, section, level, tanda 
+  INTO v_course_id, v_course_center_id, v_course_grade, v_course_section, v_course_level, v_course_tanda
   FROM public.courses
-  WHERE upper(code) = upper(trim(p_code))
+  WHERE upper(trim(code)) = upper(trim(p_code))
   LIMIT 1;
 
   IF FOUND THEN
@@ -49,8 +36,48 @@ BEGIN
       'course_id', v_course_id,
       'grade', v_course_grade,
       'section', v_course_section,
-      'level', v_course_level
+      'level', v_course_level,
+      'tanda', v_course_tanda
     );
+  END IF;
+
+  -- 2. Buscar en códigos de invitación
+  SELECT * INTO v_code_record 
+  FROM public.invitation_codes 
+  WHERE upper(trim(code)) = upper(trim(p_code))
+  LIMIT 1;
+
+  IF FOUND THEN
+    -- Si es para padres, alumnos o está vinculado a un curso, es SIEMPRE reutilizable
+    IF v_code_record.role IN ('parent', 'student') OR v_code_record.course_id IS NOT NULL THEN
+      IF v_code_record.course_id IS NOT NULL THEN
+        SELECT grade, section, level, tanda INTO v_course_grade, v_course_section, v_course_level, v_course_tanda
+        FROM public.courses WHERE id = v_code_record.course_id;
+      END IF;
+
+      RETURN jsonb_build_object(
+        'valid', true,
+        'type', CASE WHEN v_code_record.course_id IS NOT NULL THEN 'course' ELSE 'invitation' END,
+        'role', COALESCE(v_code_record.role, 'parent'),
+        'center_id', v_code_record.center_id,
+        'allowed_panels', v_code_record.allowed_panels,
+        'course_id', v_code_record.course_id,
+        'grade', v_course_grade,
+        'section', v_course_section,
+        'level', v_course_level,
+        'tanda', v_course_tanda
+      );
+    ELSIF v_code_record.is_used = false THEN
+      -- Invitación administrativa/docente no utilizada
+      RETURN jsonb_build_object(
+        'valid', true,
+        'type', 'invitation',
+        'role', v_code_record.role,
+        'center_id', v_code_record.center_id,
+        'allowed_panels', v_code_record.allowed_panels,
+        'course_id', v_code_record.course_id
+      );
+    END IF;
   END IF;
 
   RETURN jsonb_build_object(
@@ -92,24 +119,26 @@ BEGIN
   -- 1. Intentar buscar en códigos de invitación administrativa
   SELECT * INTO v_code_record 
   FROM public.invitation_codes 
-  WHERE upper(code) = upper(trim(p_code)) AND is_used = false
-  FOR UPDATE;
+  WHERE upper(trim(code)) = upper(trim(p_code))
+  LIMIT 1;
 
   IF FOUND THEN
-    -- Marcar el código de invitación como utilizado
-    UPDATE public.invitation_codes 
-    SET is_used = true 
-    WHERE code = v_code_record.code;
+    -- Solo marcar como utilizado si NO es para padres/alumnos/cursos (los códigos de padres/cursos son reutilizables)
+    IF v_code_record.role NOT IN ('parent', 'student') AND v_code_record.course_id IS NULL THEN
+      UPDATE public.invitation_codes 
+      SET is_used = true 
+      WHERE code = v_code_record.code;
+    END IF;
 
-    v_role := v_code_record.role;
+    v_role := COALESCE(p_role, v_code_record.role);
     v_center_id := v_code_record.center_id;
     v_allowed_panels := v_code_record.allowed_panels;
     v_course_id := v_code_record.course_id;
   ELSE
-    -- 2. Si no es código administrativo, buscar en cursos activos
+    -- 2. Si no es código en invitation_codes, buscar en cursos activos
     SELECT id, center_id INTO v_course_id, v_center_id
     FROM public.courses
-    WHERE upper(code) = upper(trim(p_code))
+    WHERE upper(trim(code)) = upper(trim(p_code))
     LIMIT 1;
 
     IF NOT FOUND THEN

@@ -17,9 +17,11 @@ import { supabase } from '../lib/supabase';
 
 import { toast } from 'react-hot-toast';
 
-import { Search } from 'lucide-react';
+import { Search, Download, FileSpreadsheet } from 'lucide-react';
+import { exportStaffToExcel } from '../utils/listPdfGenerator';
 
 export const TeamManagement = () => {
+  const { center, selectedYear } = useApp();
   const {
     teachers: allPersonnel,
     isLoading: loading,
@@ -61,6 +63,21 @@ export const TeamManagement = () => {
     teacher: (allPersonnel || []).filter(
       (u) => u.role === 'teacher' || u.role === 'management_teacher'
     ).length
+  };
+
+  const handleExportExcel = () => {
+    if (!filteredUsers || filteredUsers.length === 0) {
+      toast.error('No hay colaboradores para exportar en esta lista');
+      return;
+    }
+    const filterLabel = activeTab === 'all' ? undefined : activeTab;
+    exportStaffToExcel({
+      staff: filteredUsers,
+      centerName: center?.name || 'Centro Educativo',
+      schoolYear: selectedYear,
+      filterRole: filterLabel
+    });
+    toast.success('¡Listado de personal exportado a Excel!');
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -134,6 +151,13 @@ export const TeamManagement = () => {
               className="pl-8 pr-3 py-1.5 rounded-xl border border-border-main bg-brand-bg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 w-40 sm:w-48"
             />
           </div>
+          <button
+            onClick={handleExportExcel}
+            className="bg-emerald-600 text-white px-3 py-1.5 rounded-xl font-black uppercase text-[9px] shadow-sm hover:bg-emerald-700 flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+            title="Exportar listado a Excel"
+          >
+            <FileSpreadsheet size={12} /> Excel
+          </button>
           <button
             onClick={openCreateModal}
             className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-black uppercase text-[9px] shadow-sm hover:bg-indigo-700 flex items-center gap-1 active:scale-95 transition-all"

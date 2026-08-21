@@ -110,15 +110,104 @@ export const createInvitationCode = async (
 export const validateInvitationCode = async (code: string) => {
   try {
     const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
-    const { data, error } = await supabase.rpc('validate_invitation_code', {
-      p_code: sanitizedCode
-    });
-
-    if (error) throw error;
-    if (!data || !data.valid) {
-      throw new Error(data?.message || 'Código inválido o ya utilizado');
+    if (!sanitizedCode) {
+      throw new Error('Por favor ingresa un código.');
     }
-    return data;
+
+    // 1. Buscar directamente en la tabla 'courses' (código amigable de curso para Alumnos y Padres)
+    // Los códigos de curso son PERMANENTES y reutilizables por TODOS los padres y alumnos del curso.
+    const { data: courseMatch } = await supabase
+      .from('courses')
+      .select('id, center_id, grade, section, level, tanda, code')
+      .ilike('code', sanitizedCode)
+      .maybeSingle();
+
+    if (courseMatch) {
+      return {
+        valid: true,
+        type: 'course',
+        role: 'student',
+        center_id: courseMatch.center_id,
+        course_id: courseMatch.id,
+        grade: courseMatch.grade,
+        section: courseMatch.section,
+        level: courseMatch.level,
+        tanda: courseMatch.tanda
+      };
+    }
+
+    // 2. Buscar en la tabla 'invitation_codes'
+    const { data: invMatch } = await supabase
+      .from('invitation_codes')
+      .select('*')
+      .ilike('code', sanitizedCode)
+      .maybeSingle();
+
+    if (invMatch) {
+      // Si el código fue creado para padres, alumnos o está vinculado a un curso, es SIEMPRE reutilizable
+      const isMultiUse =
+        invMatch.role === 'parent' ||
+        invMatch.role === 'student' ||
+        !!invMatch.course_id;
+
+      if (isMultiUse) {
+        let courseInfo = null;
+        if (invMatch.course_id) {
+          const { data: cData } = await supabase
+            .from('courses')
+            .select('id, center_id, grade, section, level, tanda, code')
+            .eq('id', invMatch.course_id)
+            .maybeSingle();
+          courseInfo = cData;
+        }
+
+        return {
+          valid: true,
+          type: invMatch.course_id ? 'course' : 'invitation',
+          role: invMatch.role || 'parent',
+          center_id: invMatch.center_id,
+          course_id: invMatch.course_id,
+          allowed_panels:
+            invMatch.allowed_panels && invMatch.allowed_panels.length > 0
+              ? invMatch.allowed_panels
+              : ['dashboard', 'schedule', 'agenda'],
+          grade: courseInfo?.grade,
+          section: courseInfo?.section,
+          level: courseInfo?.level,
+          tanda: courseInfo?.tanda
+        };
+      }
+
+      // Si es invitación de personal administrativo/docente y está disponible
+      if (!invMatch.is_used) {
+        return {
+          valid: true,
+          type: 'invitation',
+          role: invMatch.role || 'teacher',
+          center_id: invMatch.center_id,
+          allowed_panels: invMatch.allowed_panels || [],
+          course_id: invMatch.course_id
+        };
+      }
+    }
+
+    // 3. Fallback: RPC validate_invitation_code en Supabase
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'validate_invitation_code',
+        {
+          p_code: sanitizedCode
+        }
+      );
+
+      if (!rpcError && rpcData && rpcData.valid) {
+        return rpcData;
+      }
+    } catch (rpcCatch) {
+      console.warn('RPC validation error fallback:', rpcCatch);
+    }
+
+    throw new Error('Código inválido o no encontrado. Verifique el código e intente nuevamente.');
   } catch (error) {
     console.error('Error validating invitation code:', error);
     throw error;

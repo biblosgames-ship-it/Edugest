@@ -8,10 +8,12 @@ import {
   Briefcase,
   UserCheck,
   ShieldCheck,
-  HeartHandshake
+  HeartHandshake,
+  FileSpreadsheet
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { exportStaffToExcel } from '../utils/listPdfGenerator';
 
 interface ReportProps {
   onClose: () => void;
@@ -42,6 +44,14 @@ export const StaffConsolidatedReport: React.FC<ReportProps> = ({ onClose }) => {
 
     return { groups, total: personnel.length, sexCount };
   }, [state.teachers]);
+
+  const exportExcel = () => {
+    exportStaffToExcel({
+      staff: state.teachers || [],
+      centerName: center?.name || 'Centro Educativo',
+      schoolYear: selectedYear
+    });
+  };
 
   const downloadPDF = () => {
     const doc = new jsPDF();
@@ -102,21 +112,20 @@ export const StaffConsolidatedReport: React.FC<ReportProps> = ({ onClose }) => {
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Género', 'Cantidad de Colaboradores']],
+      head: [['Género', 'Cantidad']],
       body: sexBody,
-      foot: [['TOTAL GENERAL', staffData.total]],
       theme: 'grid',
-      headStyles: { fillColor: [13, 148, 136] }, // Teal 600
-      footStyles: { fillColor: [248, 250, 252], textColor: [30, 41, 59], fontStyle: 'bold' },
+      headStyles: { fillColor: [30, 41, 59] },
       margin: { left: 14, right: 14 }
     });
 
-    currentY = (doc as any).lastAutoTable.finalY + 15;
+    currentY = (doc as any).lastAutoTable.finalY + 10;
 
+    // DETALLE POR DEPARTAMENTOS
     Object.entries(staffData.groups).forEach(([groupName, members]) => {
       if (members.length === 0) return;
 
-      if (currentY > 250) {
+      if (currentY > 230) {
         doc.addPage();
         currentY = 20;
       }
@@ -124,37 +133,36 @@ export const StaffConsolidatedReport: React.FC<ReportProps> = ({ onClose }) => {
       doc.setFontSize(12);
       doc.setTextColor(30, 41, 59);
       doc.text(groupName.toUpperCase(), 14, currentY);
-      currentY += 5;
+      currentY += 4;
 
       autoTable(doc, {
         startY: currentY,
-        head: [['Nombre Completo', 'Cargo / Función', 'Género']],
-        body: members.map((m) => [
-          m.full_name || m.name,
-          m.position ||
-            m.cargo ||
-            (m.role === 'management_teacher'
-              ? 'Docente y Gestión'
-              : m.role === 'teacher'
-                ? 'Docente'
-                : m.role === 'management'
-                  ? 'Gestión'
-                  : m.role === 'administrative'
-                    ? 'Administrativo'
-                    : m.role === 'support'
-                      ? 'Apoyo'
-                      : m.role),
-          m.sex === 'F' ? 'Femenino' : 'Masculino'
+        head: [['Nº', 'Nombre Completo', 'Rol', 'Sexo', 'Teléfono']],
+        body: members.map((m, idx) => [
+          idx + 1,
+          (m.full_name || m.name || '').toUpperCase(),
+          m.role === 'management_teacher'
+            ? 'Docente / Gestión'
+            : m.role === 'management'
+              ? 'Gestión'
+              : m.role === 'administrative'
+                ? 'Administrativo'
+                : m.role === 'support'
+                  ? 'Apoyo'
+                  : 'Docente',
+          m.sex || 'M',
+          m.phone || '---'
         ]),
         theme: 'striped',
         headStyles: { fillColor: [13, 148, 136] },
+        styles: { fontSize: 8, cellPadding: 2 },
         margin: { left: 14, right: 14 }
       });
 
-      currentY = (doc as any).lastAutoTable.finalY + 15;
+      currentY = (doc as any).lastAutoTable.finalY + 10;
     });
 
-    doc.save(`Reporte_Personal_${selectedYear}.pdf`);
+    doc.save(`Consolidado_Personal_${selectedYear}.pdf`);
   };
 
   const getRoleIcon = (role: string) => {
@@ -192,13 +200,22 @@ export const StaffConsolidatedReport: React.FC<ReportProps> = ({ onClose }) => {
           </div>
         </div>
 
-        <button
-          onClick={downloadPDF}
-          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-        >
-          <Download size={18} />
-          Exportar Nómina
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet size={18} />
+            Exportar Excel
+          </button>
+          <button
+            onClick={downloadPDF}
+            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
+          >
+            <Download size={18} />
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto p-8 space-y-12">

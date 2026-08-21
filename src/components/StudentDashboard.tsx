@@ -664,19 +664,34 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
 
                 setIsLinking(true);
                 try {
-                  const { data: course, error: fetchErr } = await supabase
+                  // 1. Buscar en courses
+                  const { data: course } = await supabase
                     .from('courses')
                     .select('id')
-                    .eq('code', sanitized)
+                    .ilike('code', sanitized)
                     .maybeSingle();
 
-                  if (fetchErr || !course) {
-                    alert('Código de curso inválido.');
+                  let targetCourseId = course?.id;
+
+                  // 2. Si no está en courses, buscar en invitation_codes
+                  if (!targetCourseId) {
+                    const { data: invMatch } = await supabase
+                      .from('invitation_codes')
+                      .select('course_id')
+                      .ilike('code', sanitized)
+                      .maybeSingle();
+                    if (invMatch?.course_id) {
+                      targetCourseId = invMatch.course_id;
+                    }
+                  }
+
+                  if (!targetCourseId) {
+                    alert('Código de curso inválido o no encontrado.');
                     setIsLinking(false);
                     return;
                   }
 
-                  await handleLinkParentCourse(course.id);
+                  await handleLinkParentCourse(targetCourseId);
                   (e.currentTarget.elements.namedItem('newCourseCode') as HTMLInputElement).value =
                     '';
                 } catch (err) {

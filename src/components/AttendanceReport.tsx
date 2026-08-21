@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
+import { FileSpreadsheet } from 'lucide-react';
+import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 
 export const AttendanceReport = () => {
-  const { state, center } = useApp();
+  const { state, center, selectedYear } = useApp();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
@@ -41,9 +43,41 @@ export const AttendanceReport = () => {
     {} as Record<string, number>
   );
 
+  const exportExcel = () => {
+    if (filteredRecords.length === 0) return;
+    exportGenericTableToExcel({
+      title: 'Reporte de Inasistencias y Tardanzas',
+      subtitle: `Rango: ${startDate} al ${endDate} | Año Escolar: ${selectedYear}`,
+      headers: ['Nº', 'Docente / Colaborador', 'Fecha', 'Tipo / Estado', 'Notas / Justificación'],
+      data: filteredRecords.map((r, idx) => {
+        const teacher = state.teachers.find((t) => t.id === r.teacher_id || t.id === r.teacherId);
+        return [
+          idx + 1,
+          (teacher?.name || teacher?.full_name || 'Desconocido').toUpperCase(),
+          r.date,
+          (r.status || '').toUpperCase(),
+          r.notes || '---'
+        ];
+      }),
+      sheetName: 'Asistencia',
+      fileName: `Inasistencias_Tardanzas_${startDate}_${endDate}.xlsx`,
+      centerName: center?.name || 'Centro Educativo'
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold">Reporte de Inasistencias y Tardanzas</h3>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h3 className="text-lg font-semibold">Reporte de Inasistencias y Tardanzas</h3>
+        {filteredRecords.length > 0 && (
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md cursor-pointer"
+          >
+            <FileSpreadsheet size={16} /> Exportar Excel
+          </button>
+        )}
+      </div>
       <div className="flex gap-4">
         <input
           type="date"

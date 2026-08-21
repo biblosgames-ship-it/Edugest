@@ -437,7 +437,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     doc.setFontSize(9);
     doc.text(
-      `AÑO ESCOLAR: ${config.year}   |   CURSO: ${selectedCourse.level} ${selectedCourse.grade} ${selectedCourse.section}   |   ASIGNATURA: ${selectedSubject.name}`,
+      `AÑO ESCOLAR: ${config.year}   |   CURSO: ${selectedCourse.level} ${selectedCourse.grade} ${selectedCourse.section} (${selectedCourse.tanda || 'Matutina'})   |   ASIGNATURA: ${selectedSubject.name}`,
       pageWidth / 2,
       18,
       { align: 'center' }
@@ -720,7 +720,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     const isStudentSecundario = studentCourse?.level?.toLowerCase().includes('secund');
 
     const courseDisplay = studentCourse
-      ? `${studentCourse.grade} - ${studentCourse.section}`
+      ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${studentCourse.tanda || 'Matutina'})`
       : '---';
     const levelDisplay = studentCourse?.level || '---';
     const studentCode =
@@ -1530,7 +1530,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             <option value="">-- SELECCIONE EL GRADO --</option>
             {filteredCourses.map((c: any) => (
               <option key={c.id} value={c.id}>
-                {c.grade} - {c.section}
+                {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {c.tanda || 'Matutina'}
               </option>
             ))}
           </select>
@@ -1942,7 +1942,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   (c: any) => c.id === selectedSummaryStudent.course_id
                 );
                 const courseDisplay = studentCourse
-                  ? `${studentCourse.grade} - ${studentCourse.section}`
+                  ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${studentCourse.tanda || 'Matutina'})`
                   : '';
                 const levelDisplay = studentCourse?.level || '---';
                 const studentCode =

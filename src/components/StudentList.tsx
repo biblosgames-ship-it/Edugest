@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { Student } from '../types/student';
-import { Pencil, Trash2, Printer } from 'lucide-react';
+import { Pencil, Trash2, Printer, FileSpreadsheet } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useApp } from '../context/AppContext';
+import { exportStudentsToExcel } from '../utils/listPdfGenerator';
 
 export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
-  const { state } = useApp();
+  const { state, center, selectedYear } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -15,10 +16,10 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
     if (!gradeId) return;
     setIsLoading(true);
     try {
-      const year = '2025-2026'; // Forzamos el año actual para que no se bloquee
+      const year = selectedYear || '2026-2027';
       const data = await dataService.getStudents(
         gradeId,
-        centerId || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1',
+        centerId || center?.id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1',
         year
       );
       setStudents(data || []);
@@ -33,6 +34,16 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
     fetchStudents();
   }, [gradeId]);
 
+  const exportExcel = () => {
+    const course = state.courses?.find((c: any) => c.id === gradeId);
+    exportStudentsToExcel({
+      students,
+      courseInfo: course || null,
+      centerName: center?.name || 'Centro Educativo',
+      schoolYear: selectedYear
+    });
+  };
+
   const printList = () => {
     const course = state.courses?.find((c: any) => c.id === gradeId);
     if (!course) return;
@@ -46,7 +57,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
 
     doc.setFontSize(10);
     doc.text(
-      `AÑO ESCOLAR: 2025-2026   |   CURSO: ${course.level} ${course.grade} ${course.section}`,
+      `AÑO ESCOLAR: ${selectedYear || '2026-2027'}   |   CURSO: ${course.level} ${course.grade} ${course.section}   |   TANDA: ${(course.tanda || 'Matutina').toUpperCase()}`,
       pageWidth / 2,
       21,
       { align: 'center' }
@@ -76,7 +87,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
       }
     });
 
-    doc.save(`Listado_${course.grade}_${course.section}.pdf`);
+    doc.save(`Listado_${course.grade}_${course.section}_${course.tanda || 'Matutina'}.pdf`);
   };
 
   return (
@@ -86,12 +97,22 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
           Alumnos inscritos ({students.length})
         </span>
         {students.length > 0 && (
-          <button
-            onClick={printList}
-            className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase transition-all shadow-sm"
-          >
-            <Printer size={12} /> IMPRIMIR PDF
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={exportExcel}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase transition-all shadow-sm"
+              title="Descargar en formato Excel"
+            >
+              <FileSpreadsheet size={12} /> EXCEL
+            </button>
+            <button
+              onClick={printList}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase transition-all shadow-sm"
+              title="Imprimir o guardar como PDF"
+            >
+              <Printer size={12} /> PDF
+            </button>
+          </div>
         )}
       </div>
       <table className="w-full text-left border-collapse">

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Download, FileText, Search, X } from 'lucide-react';
+import { Users, Download, FileText, Search, X, FileSpreadsheet } from 'lucide-react';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { exportMasterDirectoryToExcel } from '../utils/listPdfGenerator';
 
 interface MasterDirectoryReportProps {
   onClose?: () => void;
@@ -45,7 +46,7 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
     return {
       id: student.id,
       name: `${student.first_surname || student.lastName || ''} ${student.second_surname || ''}, ${student.names || student.firstName || ''}`.trim(),
-      courseName: course ? `${course.level} - ${course.grade} ${course.section}` : 'N/A',
+      courseName: course ? `${course.level} - ${course.grade} "${course.section}" (${course.tanda || 'Matutina'})` : 'N/A',
       courseLevel: course?.level || 'N/A',
       address:
         [student.address_street, student.address_number, student.address_sector]
@@ -63,6 +64,14 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.tutorName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const exportExcel = () => {
+    exportMasterDirectoryToExcel({
+      directoryData: filteredDirectory,
+      centerName: center?.name || 'Centro Educativo',
+      schoolYear: selectedYear
+    });
+  };
 
   const exportPDF = () => {
     const doc = new jsPDF({ orientation: 'landscape', format: 'letter' });
@@ -131,6 +140,13 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={exportExcel}
+            disabled={loading}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
+          >
+            <FileSpreadsheet size={18} /> Exportar Excel
+          </button>
           <button
             onClick={exportPDF}
             disabled={loading}

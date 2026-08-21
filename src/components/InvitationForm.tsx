@@ -51,15 +51,75 @@ export const InvitationForm = () => {
       try {
         codeData = await validateInvitationCode(sanitizedCode);
       } catch (valErr: any) {
-        // AUTORREPARACIÓN E INGRESO DIRECTO:
-        // Si el sistema dice que el código ya fue utilizado, verificar si pertenece al usuario o a su centro/docente
+        // 1. Verificar si el código pertenece directamente a un curso (para Alumnos y Padres)
+        const { data: directCourse } = await supabase
+          .from('courses')
+          .select('id, center_id, grade, section, level, tanda, code')
+          .ilike('code', sanitizedCode)
+          .maybeSingle();
+
+        if (directCourse) {
+          const { data: stData } = await supabase
+            .from('students')
+            .select('*')
+            .eq('course_id', directCourse.id);
+
+          setCourseStudents(stData || []);
+          setIsCourseCode(true);
+          setDetectedCourse({
+            valid: true,
+            type: 'course',
+            role: 'student',
+            center_id: directCourse.center_id,
+            course_id: directCourse.id,
+            grade: directCourse.grade,
+            section: directCourse.section,
+            level: directCourse.level,
+            tanda: directCourse.tanda
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // 2. AUTORREPARACIÓN DE INVITACIÓN ADMINISTRATIVA/DOCENTE
         const { data: directCode } = await supabase
           .from('invitation_codes')
           .select('*')
-          .eq('code', sanitizedCode)
+          .ilike('code', sanitizedCode)
           .maybeSingle();
 
         if (directCode) {
+          // Si el código de invitación era para padres o alumnos o tenía course_id
+          if (directCode.role === 'parent' || directCode.role === 'student' || directCode.course_id) {
+            let targetCourseId = directCode.course_id;
+            let courseObj = null;
+            if (targetCourseId) {
+              const { data: cObj } = await supabase.from('courses').select('*').eq('id', targetCourseId).maybeSingle();
+              courseObj = cObj;
+            }
+
+            const { data: stData } = await supabase
+              .from('students')
+              .select('*')
+              .eq('course_id', targetCourseId || '');
+
+            setCourseStudents(stData || []);
+            setIsCourseCode(true);
+            setDetectedCourse({
+              valid: true,
+              type: 'course',
+              role: directCode.role || 'parent',
+              center_id: directCode.center_id,
+              course_id: targetCourseId,
+              grade: courseObj?.grade,
+              section: courseObj?.section,
+              level: courseObj?.level,
+              tanda: courseObj?.tanda
+            });
+            setIsLoading(false);
+            return;
+          }
+
           const { data: staffMatch } = await supabase
             .from('teachers')
             .select('*')
@@ -310,6 +370,16 @@ export const InvitationForm = () => {
           .eq('id', user.id);
       } catch (e) {
         console.warn('Profile direct update fallback error:', e);
+      }
+
+      // Asegurar que el código de invitación para el curso se mantenga reutilizable para todos los demás padres
+      try {
+        await supabase
+          .from('invitation_codes')
+          .update({ is_used: false })
+          .ilike('code', sanitizedCode);
+      } catch (invErr) {
+        console.warn('Error resetting is_used for reusable code:', invErr);
       }
 
       window.location.reload();

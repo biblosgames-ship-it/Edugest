@@ -321,7 +321,7 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
               </span>
               <h4 className="text-sm font-black text-slate-800 uppercase mt-0.5">
                 {sourceCourse
-                  ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}"`
+                  ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}" - ${sourceCourse.tanda || 'Matutina'}`
                   : 'Sin Curso'}
               </h4>
               <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
@@ -451,7 +451,7 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
                           <option value="">-- No promover / Repetir --</option>
                           {targetCourses.map((tc: any) => (
                             <option key={tc.id} value={tc.id}>
-                              {tc.grade} "{tc.section}" ({tc.level})
+                              {tc.level} {tc.grade} "{tc.section}" ({tc.shift || tc.tanda || 'Matutina'})
                             </option>
                           ))}
                         </select>

@@ -469,7 +469,7 @@ export const ClassroomManager = () => {
               >
                 {availableCourses.map((c: any) => (
                   <option key={c.id} value={c.id}>
-                    {c.grade} {c.section} ({c.level})
+                    {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                   </option>
                 ))}
               </select>

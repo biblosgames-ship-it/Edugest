@@ -1045,7 +1045,7 @@ export const ScheduleViewer = () => {
                   <option value="">Seleccionar Curso...</option>
                   {state.courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.grade} {c.section}
+                      {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                     </option>
                   ))}
                 </select>
@@ -1056,7 +1056,7 @@ export const ScheduleViewer = () => {
               const activeCourse = state.courses.find((c) => c.id === filterId);
               return activeCourse ? (
                 <div className="px-6 py-2.5 rounded-2xl bg-indigo-50 border border-indigo-150 text-indigo-700 text-[10px] font-black uppercase tracking-widest">
-                  Curso: {activeCourse.grade} "{activeCourse.section}"
+                  Curso: {activeCourse.grade} "{activeCourse.section}" - {activeCourse.tanda || 'Matutina'}
                 </div>
               ) : null;
             })()
@@ -1782,7 +1782,7 @@ export const ScheduleViewer = () => {
                   <option value="">-- Elige un Curso --</option>
                   {state.courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.grade} {c.section || ''} ({c.level})
+                      {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
                     </option>
                   ))}
                 </select>
@@ -1970,7 +1970,7 @@ export const ScheduleViewer = () => {
                     <option value="">-- Elige un Curso --</option>
                     {state.courses.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.grade} {c.section || ''} ({c.level})
+                        {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
                       </option>
                     ))}
                   </select>

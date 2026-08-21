@@ -249,7 +249,7 @@ export const CloneYearWizard = ({ onClose }: CloneYearWizardProps) => {
                           <Square className="text-slate-300 shrink-0" size={16} />
                         )}
                         <span className="text-[10px] font-black uppercase truncate">
-                          {c.level} {c.grade} "{c.section}"
+                          {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                         </span>
                       </button>
                     );

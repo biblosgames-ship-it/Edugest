@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Download, Trophy, Medal, Star, User, GraduationCap } from 'lucide-react';
+import { ArrowLeft, Download, Trophy, Medal, Star, User, GraduationCap, FileSpreadsheet } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import autoTable from 'jspdf-autotable';
+import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 
 interface ReportProps {
   onClose: () => void;
@@ -54,7 +55,7 @@ export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initia
           id: s.id,
           name: `${s.last_name || ''} ${s.first_name || ''}`.trim(),
           avg,
-          courseName: course ? `${course.grade} ${course.section}` : 'N/A',
+          courseName: course ? `${course.grade} "${course.section}" (${course.tanda || 'Matutina'})` : 'N/A',
           level: course?.level || 'Otros'
         };
       })
@@ -81,9 +82,28 @@ export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initia
       topGlobal: studentAverages.slice(0, 5),
       levels,
       coursesGroup,
-      totalHonor: studentAverages.length
+      totalHonor: studentAverages.length,
+      allHonorStudents: studentAverages
     };
   }, [state.students, state.courses, state.subjects, state.grades, selectedPeriod]);
+
+  const exportExcel = () => {
+    exportGenericTableToExcel({
+      title: 'Cuadro de Honor Institucional',
+      subtitle: `Periodo: ${selectedPeriod} | Año Escolar: ${selectedYear}`,
+      headers: ['Nº', 'Nivel', 'Curso / Sección', 'Estudiante', 'Promedio'],
+      data: (honorData.allHonorStudents || []).map((s, idx) => [
+        idx + 1,
+        s.level,
+        s.courseName,
+        s.name.toUpperCase(),
+        s.avg
+      ]),
+      sheetName: 'Cuadro_Honor',
+      fileName: `Cuadro_Honor_${selectedPeriod}_${selectedYear}.xlsx`,
+      centerName: center?.name || 'Centro Educativo'
+    });
+  };
 
   const downloadPDF = async () => {
     const input = document.getElementById('honor-roll-container');
@@ -139,31 +159,28 @@ export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initia
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[99999] bg-slate-50 block overflow-y-auto">
-      {/* Header Premium */}
-      <div className="bg-white px-6 py-6 border-b border-amber-100 flex items-center justify-between sticky top-0 z-10 shadow-md">
-        <div className="flex items-center gap-6">
+    <div className="fixed inset-0 z-[99999] bg-slate-50 block overflow-y-auto pb-20">
+      <div className="bg-white px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between sticky top-0 z-10 shadow-sm gap-4">
+        <div className="flex items-center gap-4">
           <button
             onClick={onClose}
-            className="p-3 hover:bg-amber-50 rounded-full transition-colors text-amber-600"
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500"
           >
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} />
           </button>
           <div>
-            <div className="flex items-center gap-2">
-              <Trophy className="text-amber-500" size={24} />
-              <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
-                Cuadro de Honor Institucional
-              </h1>
-            </div>
-            <p className="text-xs font-bold text-amber-600 uppercase tracking-[0.2em] mt-1">
-              Máximo Mérito Académico • {selectedYear}
+            <h1 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+              Cuadro de Honor Institucional
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Excelencia Académica y Máximos Promedios
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-amber-50 p-1.5 rounded-2xl border border-amber-100">
+        {/* SELECTOR DE PERIODO */}
+        <div className="flex items-center gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
             {['P1', 'P2', 'P3', 'P4', 'FINAL'].map((p) => (
               <button
                 key={p}
@@ -175,6 +192,13 @@ export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initia
             ))}
           </div>
 
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet size={18} />
+            Exportar Excel
+          </button>
           <button
             onClick={downloadPDF}
             className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl transition-all active:scale-95"

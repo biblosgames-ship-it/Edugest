@@ -25,6 +25,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { dataService } from '../services/dataService';
 import { generateStudentPDF } from '../utils/pdfGenerator';
+import { exportStudentsToExcel } from '../utils/listPdfGenerator';
 import { PromoteStudentModal } from './PromoteStudentModal';
 import { BulkPromoteModal } from './BulkPromoteModal';
 
@@ -212,7 +213,7 @@ export const StudentManagement = () => {
 
       doc.setFontSize(9);
       doc.text(
-        `AÑO ESCOLAR: ${selectedYear}   |   CURSO: ${course.level} ${course.grade} ${course.section}`,
+        `AÑO ESCOLAR: ${selectedYear}   |   CURSO: ${course.level} ${course.grade} ${course.section}   |   TANDA: ${(course.tanda || 'Matutina').toUpperCase()}`,
         pageWidth / 2,
         38,
         { align: 'center' }
@@ -278,13 +279,28 @@ export const StudentManagement = () => {
         }
       });
 
-      doc.save(`Listado_${course.grade}_${course.section}.pdf`);
+      doc.save(`Listado_${course.grade}_${course.section}_${course.tanda || 'Matutina'}.pdf`);
     } catch (e) {
       console.error(e);
       alert('Error al generar el listado.');
     } finally {
       setLocalLoading(false);
     }
+  };
+
+  const exportCourseListExcel = () => {
+    const targetStudents = filteredStudents || [];
+    if (targetStudents.length === 0) {
+      alert('No hay alumnos para exportar.');
+      return;
+    }
+    const course = state.courses?.find((c: any) => c.id === selectedCourseId);
+    exportStudentsToExcel({
+      students: targetStudents,
+      courseInfo: course || null,
+      centerName: state.center?.name || profile?.school_name || 'Centro Educativo',
+      schoolYear: selectedYear
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -348,11 +364,11 @@ export const StudentManagement = () => {
             ))}
           </select>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {selectedCourseId && (
             <button
               onClick={() => setShowBulkImport(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
             >
               <FileSpreadsheet size={16} /> Importar Excel
             </button>
@@ -360,7 +376,7 @@ export const StudentManagement = () => {
           {selectedCourseId && (
             <button
               onClick={() => setShowBulkPromote(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl"
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl"
             >
               <Sparkles size={16} /> Promoción Masiva
             </button>
@@ -368,7 +384,7 @@ export const StudentManagement = () => {
           {selectedCourseId && (
             <button
               onClick={autoAssignOrder}
-              className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-700 transition-all shadow-xl"
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-700 transition-all shadow-xl"
             >
               <Sparkles size={16} /> Auto-Orden
             </button>
@@ -376,18 +392,24 @@ export const StudentManagement = () => {
           {selectedCourseId && (
             <button
               onClick={printCourseList}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-xl"
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-xl"
             >
-              <Printer size={16} /> Imprimir Listado
+              <Printer size={16} /> Imprimir PDF
             </button>
           )}
+          <button
+            onClick={exportCourseListExcel}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
+          >
+            <Download size={16} /> {selectedCourseId ? 'Listado Excel' : 'Exportar Todos en Excel'}
+          </button>
 
           <button
             onClick={() => {
               setEditingStudent(null);
               setShowForm(true);
             }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl"
           >
             <UserPlus size={16} /> Inscribir
           </button>

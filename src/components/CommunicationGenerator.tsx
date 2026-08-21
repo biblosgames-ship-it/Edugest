@@ -116,7 +116,7 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
 
   const getCourseName = (id: string) => {
     const course = state.courses.find((c) => c.id === id);
-    return course ? `${course.level} ${course.grade} ${course.section}` : id;
+    return course ? `${course.level} ${course.grade} "${course.section}" (${course.tanda || 'Matutina'})` : id;
   };
 
   const renderTargets = (comm: any) => {
@@ -289,7 +289,7 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                       }}
                     />
                     <span className="text-sm font-medium text-slate-700">
-                      {c.level} {c.grade} {c.section}
+                      {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                     </span>
                   </label>
                 ))}

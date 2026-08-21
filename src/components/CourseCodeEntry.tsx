@@ -17,29 +17,55 @@ export const CourseCodeEntry = ({ onCodeEntered }: { onCodeEntered: () => void }
 
     try {
       const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
-      // 1. Verificar si el curso existe por su códigoamigable
-      const { data: course, error: fetchError } = await supabase
+      // 1. Verificar si el curso existe por su código amigable
+      const { data: course } = await supabase
         .from('courses')
-        .select('id, code')
-        .eq('code', sanitizedCode)
-        .single();
+        .select('id, code, center_id')
+        .ilike('code', sanitizedCode)
+        .maybeSingle();
 
-      if (fetchError || !course) {
-        setError('Código de curso inválido.');
+      let targetCourseId = course?.id;
+      let targetCenterId = course?.center_id;
+
+      if (!targetCourseId) {
+        const { data: invMatch } = await supabase
+          .from('invitation_codes')
+          .select('course_id, center_id')
+          .ilike('code', sanitizedCode)
+          .maybeSingle();
+        if (invMatch) {
+          targetCourseId = invMatch.course_id;
+          targetCenterId = invMatch.center_id;
+        }
+      }
+
+      if (!targetCourseId) {
+        setError('Código de curso inválido o no encontrado.');
         setIsLoading(false);
         return;
       }
 
       // 2. Actualizar el perfil del usuario con el curso y el rol
       if (user) {
+        const updates: any = {
+          course_code: sanitizedCode,
+          course_id: targetCourseId,
+          role: role,
+          full_name: role === 'parent' ? `${studentName} (Padre/Madre)` : undefined,
+          is_active: true
+        };
+
+        if (targetCenterId) updates.center_id = targetCenterId;
+        if (role === 'parent') {
+          updates.parent_course_ids = [targetCourseId];
+          localStorage.setItem('parent_course_ids', JSON.stringify([targetCourseId]));
+        }
+        localStorage.setItem('selected_course_id', targetCourseId);
+        localStorage.setItem('course_code', sanitizedCode);
+
         const { error: updateError } = await supabase
           .from('profiles')
-          .update({
-            course_code: sanitizedCode,
-            role: role,
-            full_name: role === 'parent' ? `${studentName} (Padre/Madre)` : undefined,
-            is_active: true
-          })
+          .update(updates)
           .eq('id', user.id);
 
         if (updateError) throw updateError;

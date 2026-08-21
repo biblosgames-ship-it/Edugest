@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Download, AlertTriangle, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { ArrowLeft, Download, AlertTriangle, Calendar as CalendarIcon, Clock, FileSpreadsheet } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 
 interface ReportProps {
   onClose: () => void;
@@ -19,6 +20,24 @@ export const IncidentsReport: React.FC<ReportProps> = ({ onClose }) => {
       .filter((a) => a.type === 'incident')
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [state.activities]);
+
+  const exportExcel = () => {
+    exportGenericTableToExcel({
+      title: 'Registro de Incidencias Institucionales',
+      subtitle: `Año Escolar: ${selectedYear}`,
+      headers: ['Nº', 'Fecha', 'Horario', 'Título / Incidencia', 'Descripción'],
+      data: incidents.map((i, idx) => [
+        idx + 1,
+        format(new Date(`${i.date}T12:00:00`), 'dd/MM/yyyy'),
+        `${i.startTime} - ${i.endTime}`,
+        i.title,
+        i.description || '---'
+      ]),
+      sheetName: 'Incidencias',
+      fileName: `Registro_Incidencias_${selectedYear}.xlsx`,
+      centerName: center?.name || 'Centro Educativo'
+    });
+  };
 
   const downloadPDF = () => {
     const doc = new jsPDF();
@@ -83,13 +102,22 @@ export const IncidentsReport: React.FC<ReportProps> = ({ onClose }) => {
           </div>
         </div>
 
-        <button
-          onClick={downloadPDF}
-          className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-        >
-          <Download size={18} />
-          Exportar Registro
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet size={18} />
+            Exportar Excel
+          </button>
+          <button
+            onClick={downloadPDF}
+            className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
+          >
+            <Download size={18} />
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-8 space-y-6">

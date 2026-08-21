@@ -149,8 +149,7 @@ export const AssignmentForm = () => {
               <option value="">Elegir curso...</option>
               {filteredCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.level} {c.grade}
-                  {c.section} ({c.tanda || 'Sin Tanda'})
+                  {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
                 </option>
               ))}
             </select>

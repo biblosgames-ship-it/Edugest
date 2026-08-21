@@ -1592,10 +1592,10 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                       >
                         <div>
                           <p className="text-sm font-black uppercase tracking-tight text-white">
-                            {c.grade} {c.section}
+                            {c.grade} "{c.section}"
                           </p>
-                          <p className="text-[8px] font-bold opacity-60 uppercase mt-0.5">
-                            {c.level}
+                          <p className="text-[8px] font-bold opacity-75 uppercase mt-0.5 text-indigo-200">
+                            {c.level} • {c.tanda || 'Matutina'}
                           </p>
                         </div>
                         <button
