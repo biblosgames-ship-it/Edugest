@@ -562,28 +562,31 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       const isMorning =
         (course.tanda || '').toLowerCase().includes('mat') ||
         (course.tanda || '').toLowerCase().includes('mañ') ||
-        !(course.tanda || '').toLowerCase().includes('ves');
+        ((course.tanda || '') === '' && !(course.level || '').toLowerCase().includes('secun'));
       const official = (state.levelSchedules || []).find(
         (ls: any) =>
           ls.level === course.level &&
           (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
       );
-      const startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
-      const endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
+      let startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
+      if (!isMorning && startT < 720 && startT > 0) startT += 720;
+      let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
+      if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
       const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
         let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 420) bpMins += 720;
+        if (!isMorning && bpMins < 720) bpMins += 720;
         const isBpMorning = bpMins < 780;
         return isMorning === isBpMorning;
       });
 
       const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
       let masterStartMins = toMins(rawMasterStart);
-      if (!isMorning && masterStartMins < 420) masterStartMins += 720;
+      if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
       const masterBPref = {
         startTime: fromMins(masterStartMins),
-        durationMinutes: firstRelevantBreak?.durationMinutes || 30
+        durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
       };
 
       const grade = course.grade?.toLowerCase() || '';
@@ -606,7 +609,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
       const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 420) bpMins += 720;
+        if (!isMorning && bpMins < 720) bpMins += 720;
         const isBpMorning = bpMins < 780;
         if (isMorning !== isBpMorning) return false;
 
@@ -636,7 +639,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       bPref = bPref || masterBPref;
 
       let bStart = toMins(bPref.startTime);
-      if (!isMorning && bStart < 420) bStart += 720;
+      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
+      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)

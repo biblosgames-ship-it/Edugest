@@ -59,8 +59,8 @@ export const ScheduleViewer = () => {
   const [deepRepairAttempt, setDeepRepairAttempt] = useState(0);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // Candados de Seguridad 🔒 (Pinning de casillas aprobadas por el usuario)
-  const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}`;
+  // Candados de Seguridad 🔒 (Blindaje de casillas y bloqueo maestro del horario)
+  const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}_${selectedYear || 'default'}`;
   const [lockedEntries, setLockedEntries] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(lockStorageKey);
@@ -70,6 +70,16 @@ export const ScheduleViewer = () => {
     }
   });
 
+  // Sincronizar candados al cambiar de tanda o año
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(lockStorageKey);
+      setLockedEntries(saved ? new Set(JSON.parse(saved)) : new Set());
+    } catch {
+      setLockedEntries(new Set());
+    }
+  }, [lockStorageKey]);
+
   const toggleLock = (entry: any) => {
     const key = entry.id || `${entry.course_id}_${entry.day}_${entry.start_time}`;
     setLockedEntries((prev) => {
@@ -78,6 +88,48 @@ export const ScheduleViewer = () => {
         next.delete(key);
       } else {
         next.add(key);
+      }
+      localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
+
+  // Verificar si todas las materias programadas de este turno están blindadas
+  const isAllLocked = useMemo(() => {
+    const shiftEntries = (state.schedule || []).filter(
+      (s: any) => s.shift === selectedShift && (!selectedYear || s.school_year === selectedYear)
+    );
+    if (shiftEntries.length === 0) return false;
+    return shiftEntries.every(
+      (e: any) =>
+        lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+    );
+  }, [state.schedule, selectedShift, selectedYear, lockedEntries]);
+
+  // Blindar / Desblindar todas las materias del turno actual juntas con un solo clic
+  const toggleLockAllSchedule = () => {
+    const shiftEntries = (state.schedule || []).filter(
+      (s: any) => s.shift === selectedShift && (!selectedYear || s.school_year === selectedYear)
+    );
+    if (shiftEntries.length === 0) {
+      alert('No hay materias programadas en este horario para blindar.');
+      return;
+    }
+
+    setLockedEntries((prev) => {
+      const next = new Set(prev);
+      if (isAllLocked) {
+        // Desbloquear todas las materias del turno actual
+        shiftEntries.forEach((e: any) => {
+          next.delete(e.id);
+          next.delete(`${e.course_id}_${e.day}_${e.start_time}`);
+        });
+      } else {
+        // Bloquear todas las materias del turno actual
+        shiftEntries.forEach((e: any) => {
+          next.add(e.id);
+          next.add(`${e.course_id}_${e.day}_${e.start_time}`);
+        });
       }
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
@@ -207,7 +259,7 @@ export const ScheduleViewer = () => {
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
-    let endT = isMorning ? 720 : 1095; // 18:15 default
+    let endT = isMorning ? 720 : 1095; // 12:00 o 18:15 default
 
     const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
       if (!schedules || schedules.length === 0) return null;
@@ -217,17 +269,22 @@ export const ScheduleViewer = () => {
       let match = schedules.find((ls: any) => {
         const lsLvl = (ls.level || '').toLowerCase();
         const lsShift = (ls.shift || '').toLowerCase();
-        const lvlMatch = lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+        const lvlMatch = !lNorm || lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
         const shiftMatch =
           lsShift.substring(0, 3) === sNorm ||
-          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com')));
+          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+          (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')));
         return lvlMatch && shiftMatch;
       });
 
       if (!match) {
         match = schedules.find((ls: any) => {
-          const lsLvl = (ls.level || '').toLowerCase();
-          return lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+          const lsShift = (ls.shift || '').toLowerCase();
+          return (
+            lsShift.substring(0, 3) === sNorm ||
+            (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+            (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')))
+          );
         });
       }
       return match || null;
@@ -239,40 +296,58 @@ export const ScheduleViewer = () => {
       if (course) {
         const official = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
         if (official) {
-          startT = toMins(official.start_time);
-          endT = toMins(official.end_time);
+          let s = toMins(official.start_time);
+          if (!isMorning && s < 720 && s > 0) s += 720;
+          let e = toMins(official.end_time);
+          if (!isMorning && e < 720 && e > 0) e += 720;
+          startT = s;
+          endT = e;
         }
       }
     } else if (filterType === 'all') {
-      // En vista general, buscamos el horario más común o el de Primaria por defecto
-      const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', selectedShift) || (state.levelSchedules || [])[0];
+      // En vista general, buscamos el horario más común de la tanda seleccionada
+      const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', selectedShift);
       if (primaryOfficial) {
-        startT = toMins(primaryOfficial.start_time);
-        endT = toMins(primaryOfficial.end_time);
+        let s = toMins(primaryOfficial.start_time);
+        if (!isMorning && s < 720 && s > 0) s += 720;
+        let e = toMins(primaryOfficial.end_time);
+        if (!isMorning && e < 720 && e > 0) e += 720;
+        startT = s;
+        endT = e;
       }
     }
 
     // Bloque maestro de recreo (priorizando el nivel del contexto actual)
-    // Encontrar el recreo maestro de forma ultra-permisiva (por hora)
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
       let bpMins = toMins(bp.startTime);
-      if (!isMorning && bpMins < 420) bpMins += 720;
+      if (!isMorning && bpMins < 720) bpMins += 720;
       const isBpMorning = bpMins < 780; // Antes de la 1 PM es mañana
       return isMorning === isBpMorning;
     });
 
     const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
     let masterStartMins = toMins(rawMasterStart);
-    if (!isMorning && masterStartMins < 420) masterStartMins += 720;
+    if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+    if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
     const masterBPref = {
       startTime: fromMins(masterStartMins),
-      durationMinutes: firstRelevantBreak?.durationMinutes || 30
+      durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
     };
 
     const getSlotsForCourse = (course: any) => {
       const courseOfficial = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
-      const courseStartT = courseOfficial?.start_time ? toMins(courseOfficial.start_time) : startT;
-      const courseEndT = courseOfficial?.end_time ? toMins(courseOfficial.end_time) : endT;
+      let courseStartT = startT;
+      let courseEndT = endT;
+      if (courseOfficial?.start_time) {
+        let s = toMins(courseOfficial.start_time);
+        if (!isMorning && s < 720 && s > 0) s += 720;
+        courseStartT = s;
+      }
+      if (courseOfficial?.end_time) {
+        let e = toMins(courseOfficial.end_time);
+        if (!isMorning && e < 720 && e > 0) e += 720;
+        courseEndT = e;
+      }
 
       const grade = course.grade?.toLowerCase() || '';
       const cycleStr = (course.cycle || '').toLowerCase();
@@ -340,7 +415,8 @@ export const ScheduleViewer = () => {
       bPref = bPref || masterBPref;
 
       let bStart = toMins(bPref.startTime);
-      if (!isMorning && bStart < 420) bStart += 720;
+      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
+      if (!isMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
       const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
 
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
@@ -570,32 +646,33 @@ export const ScheduleViewer = () => {
     // VISTA GENERAL: Generar periodos estándar alineados al Recreo Maestro
     const slots = [];
     let bStartMaster = toMins(masterBPref.startTime);
-    if (!isMorning && bStartMaster < 420) bStartMaster += 720;
-    const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || 20);
+    if (!isMorning && bStartMaster < 720 && bStartMaster > 0) bStartMaster += 720;
+    if (!isMorning && (bStartMaster <= startT || bStartMaster >= endT)) bStartMaster = 960;
+    const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || (isMorning ? 20 : 15));
 
-    // Inicio de clases según Hora Oficial (si existe) o a las 08:00 (por defecto)
-    const hasOfficial = (state.levelSchedules || []).find(
-      (ls: any) => ls.shift === selectedShift && ls.start_time
-    );
-    let classStart = hasOfficial ? startT : isMorning && startT <= 480 ? 480 : startT;
+    let classStart = startT;
 
-    // Evitar duplicar si la DB ya tiene un Evento Fijo para Acto de Bandera/Apertura
-    const hasDbActo = (state.fixedEvents || []).some((fe: any) => {
+    // Solo mostrar Acto de Bandera/Apertura si está configurado explícitamente en la base de datos
+    const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
       const feName = (fe.name || '').toLowerCase();
       return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
     });
 
-    if (!hasDbActo) {
-      if (isMorning && classStart > 450 && classStart <= 480) {
-        slots.push({ start: '07:30:00', end: fromMins(classStart) + ':00', isBreak: true, label: 'ACTO APERTURA' });
-      } else if (isMorning && startT <= 450) {
-        slots.push({ start: '07:30:00', end: '08:00:00', isBreak: true, label: 'ACTO APERTURA' });
-      }
+    if (isMorning && dbActoEvent) {
+      const feEndMins = toMins(dbActoEvent.end_time);
+      if (feEndMins > 0) classStart = feEndMins;
+      slots.push({
+        start: dbActoEvent.start_time,
+        end: dbActoEvent.end_time,
+        isBreak: true,
+        label: dbActoEvent.name
+      });
     }
+
     const targetTotalGen = isMorning ? 5 : 6;
-    let preCountGen = 2;
+    let preCountGen = isMorning ? 2 : 3;
     if (isMorning) {
-      // Para la tanda matutina (8:00 a 9:30 AM = 90 min), son estrictamente 2 bloques de 45 min
+      // Para la tanda matutina (8:00 a 9:30 AM = 90 min), son 2 bloques de 45 min
       if (bStartMaster - classStart <= 100) {
         preCountGen = 2;
       } else {
@@ -722,7 +799,24 @@ export const ScheduleViewer = () => {
   }, [schedule, selectedShift]);
 
   const handleRegenerate = async () => {
-    if (!confirm(`¿Generar nuevo horario para Tanda ${selectedShift}?`)) return;
+    if (isAllLocked) {
+      alert(
+        '🔒 HORARIO BLINDADO Y PROTEGIDO\n\nEste horario está 100% blindado contra modificaciones accidentales.\n\nSi realmente deseas regenerarlo y recalcular las clases, primero debes hacer clic en el botón "Desblindar Horario" (🔓) en la barra superior.'
+      );
+      return;
+    }
+
+    if (lockedEntries.size > 0) {
+      if (
+        !confirm(
+          `🔒 Atención: Hay ${lockedEntries.size} materias bloqueadas con candado individual.\n\n¿Generar nuevo horario para Tanda ${selectedShift}?`
+        )
+      )
+        return;
+    } else {
+      if (!confirm(`¿Generar nuevo horario para Tanda ${selectedShift}?`)) return;
+    }
+
     setIsGenerating(true);
     await new Promise((r) => setTimeout(r, 100));
     try {
@@ -750,6 +844,12 @@ export const ScheduleViewer = () => {
   };
 
   const handleRepair = async () => {
+    if (isAllLocked) {
+      alert(
+        '🔒 HORARIO BLINDADO\n\nTodas las materias están protegidas. Desbloquea el blindaje general si deseas ejecutar la reparación de choques.'
+      );
+      return;
+    }
     if (!confirm(`¿Intentar reparar los choques actuales del horario ${selectedShift}?`)) return;
     setIsRepairing(true);
     await new Promise((r) => setTimeout(r, 100));
@@ -778,6 +878,12 @@ export const ScheduleViewer = () => {
   };
 
   const handleDeepRepair = async () => {
+    if (isAllLocked) {
+      alert(
+        '🔒 HORARIO BLINDADO\n\nTodas las materias están protegidas. Desbloquea el blindaje general si deseas ajustar las horas faltantes.'
+      );
+      return;
+    }
     if (
       !confirm(
         `¿Ajustar horas faltantes del horario ${selectedShift} moviendo lo necesario?\n\nEl sistema ejecutará hasta 5 intentos sucesivos de reparación para intentar colocar todas las horas pendientes.`
@@ -1089,6 +1195,33 @@ export const ScheduleViewer = () => {
 
           {isAdminOrStaff && (
             <>
+              {/* Botón Maestro de Blindaje de Horario */}
+              <button
+                onClick={toggleLockAllSchedule}
+                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md transition-all no-print cursor-pointer ${
+                  isAllLocked
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white ring-4 ring-amber-200'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+                title={
+                  isAllLocked
+                    ? 'Desbloquear todas las materias del horario'
+                    : 'Bloquear y blindar todas las materias del horario contra cambios accidentales'
+                }
+              >
+                {isAllLocked ? (
+                  <>
+                    <Lock size={15} className="text-white" />
+                    <span>Horario Blindado 🔒</span>
+                  </>
+                ) : (
+                  <>
+                    <Unlock size={15} className="text-slate-500" />
+                    <span>Blindar Horario</span>
+                  </>
+                )}
+              </button>
+
               <label className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-200 rounded-2xl text-[10px] font-black uppercase text-indigo-900 cursor-pointer transition-all no-print select-none">
                 <input
                   type="checkbox"
@@ -1101,7 +1234,7 @@ export const ScheduleViewer = () => {
 
               <button
                 onClick={handleRegenerate}
-                disabled={isGenerating || isRepairing || isDeepRepairing}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isAllLocked}
                 className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all disabled:opacity-50"
               >
                 {isGenerating ? (
@@ -1113,7 +1246,7 @@ export const ScheduleViewer = () => {
               </button>
               <button
                 onClick={handleRepair}
-                disabled={isGenerating || isRepairing || isDeepRepairing}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isAllLocked}
                 className="flex items-center gap-2 px-8 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-rose-700 transition-all disabled:opacity-50"
               >
                 {isRepairing ? (
@@ -1125,7 +1258,7 @@ export const ScheduleViewer = () => {
               </button>
               <button
                 onClick={handleDeepRepair}
-                disabled={isGenerating || isRepairing || isDeepRepairing}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isAllLocked}
                 className="flex items-center gap-2 px-8 py-3 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-amber-600 transition-all disabled:opacity-50"
               >
                 {isDeepRepairing ? (
@@ -1149,6 +1282,29 @@ export const ScheduleViewer = () => {
           )}
         </div>
       </div>
+
+      {/* Banner de Horario Blindado */}
+      {isAdminOrStaff && isAllLocked && (
+        <div className="bg-amber-500 text-white px-6 py-4 rounded-[2rem] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/20 no-print mb-6 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+              <Lock size={18} />
+            </div>
+            <div>
+              <p className="leading-tight text-sm font-black">Horario Terminado y Blindado contra Cambios</p>
+              <p className="text-[10px] text-amber-100 font-bold tracking-normal normal-case mt-0.5">
+                Todas las materias están protegidas. No se permiten regeneraciones ni alteraciones accidentales sin antes desbloquear el candado general.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleLockAllSchedule}
+            className="bg-white text-amber-900 hover:bg-amber-50 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm shrink-0 cursor-pointer"
+          >
+            Desbloquear para Editar
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 shadow-sm mb-8 no-print">
         <div className="flex flex-col">
@@ -1593,6 +1749,15 @@ export const ScheduleViewer = () => {
                                           <button
                                             onClick={async (evt) => {
                                               evt.stopPropagation();
+                                              const isItemLocked =
+                                                lockedEntries.has(e.id) ||
+                                                lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`);
+                                              if (isItemLocked) {
+                                                alert(
+                                                  '🔒 CLASE BLOQUEADA\n\nEsta materia está protegida con candado. Haz clic en el candado 🔒 de la casilla para desbloquearla antes de eliminarla.'
+                                                );
+                                                return;
+                                              }
                                               if (confirm(`¿Eliminar la clase de "${subject?.name || 'esta materia'}" de esta casilla?`)) {
                                                 try {
                                                   const { error } = await supabase.from('schedule_entries').delete().eq('id', e.id);
