@@ -8,7 +8,9 @@ import { useAssignments } from '../hooks/useAssignments';
 import { supabase } from '../lib/supabase';
 
 export const TeacherForm = () => {
-  const { state } = useApp();
+  const { state, center } = useApp();
+  const { profile } = useSupabase();
+  const centerId = center?.id || profile?.center_id;
   const {
     teachers: allPersonnel,
     isLoading: teachersLoading,
@@ -19,7 +21,6 @@ export const TeacherForm = () => {
   const { courses } = useCourses();
   const { subjects } = useSubjects();
   const { assignments: allAssignments, saveAssignments } = useAssignments();
-  const { profile } = useSupabase();
   const [loading, setLoading] = useState(false);
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
 
@@ -154,7 +155,7 @@ export const TeacherForm = () => {
         team: existingUser?.team || 'teacher',
         sex: existingUser?.sex || 'M',
         phone: existingUser?.phone || '',
-        center_id: profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1'
+        center_id: centerId
       };
 
       if (editingTeacherId) {
@@ -168,7 +169,7 @@ export const TeacherForm = () => {
         // 2. Guardar en TEACHERS (Datos Académicos y de Asignación)
         const { error: teacherTableError } = await supabase.from('teachers').upsert({
           id: teacherId,
-          center_id: profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1',
+          center_id: centerId,
           area: formData.area,
           hours_available: formData.hoursAvailable || 40,
           name: formData.name

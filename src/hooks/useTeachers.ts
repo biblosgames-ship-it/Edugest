@@ -4,8 +4,8 @@ import { useSupabase, useApp, normalizeNameString } from '../context/AppContext'
 
 export const useTeachers = () => {
   const { profile } = useSupabase();
-  const { state, refreshData, license } = useApp();
-  const centerId = profile?.center_id;
+  const { state, refreshData, license, center } = useApp();
+  const centerId = center?.id || profile?.center_id;
 
   console.log(
     '[DEBUG useTeachers] Hook run using context state. profile:',

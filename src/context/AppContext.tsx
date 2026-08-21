@@ -327,6 +327,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else if (isManagement) {
               finalRole = 'management';
             } else if (
+              rawRole.includes('caja') ||
+              rawRole.includes('cashier') ||
+              rawRole.includes('finan') ||
+              rawRole.includes('contab')
+            ) {
+              finalRole = 'cashier';
+            } else if (
               rawRole.includes('admin') ||
               rawRole.includes('secret') ||
               rawRole.includes('administrative')
@@ -335,7 +342,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else if (
               rawRole.includes('apoy') ||
               rawRole.includes('cons') ||
-              rawRole.includes('support')
+              rawRole.includes('support') ||
+              rawRole.includes('limpieza') ||
+              rawRole.includes('mantenimiento')
             ) {
               finalRole = 'support';
             } else if (isTeacher) {

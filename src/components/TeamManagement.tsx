@@ -17,6 +17,8 @@ import { supabase } from '../lib/supabase';
 
 import { toast } from 'react-hot-toast';
 
+import { Search } from 'lucide-react';
+
 export const TeamManagement = () => {
   const {
     teachers: allPersonnel,
@@ -28,35 +30,68 @@ export const TeamManagement = () => {
   const [activeTab, setActiveTab] = useState<
     'all' | 'management' | 'administrative' | 'cashier' | 'support' | 'teacher'
   >('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  const filteredUsers = (allPersonnel || []).filter(
-    (u) =>
+  const filteredUsers = (allPersonnel || []).filter((u) => {
+    const matchesTab =
       activeTab === 'all' ||
       u.role === activeTab ||
-      (u.role === 'management_teacher' && (activeTab === 'teacher' || activeTab === 'management'))
-  );
+      (u.role === 'management_teacher' && (activeTab === 'teacher' || activeTab === 'management'));
+
+    if (!matchesTab) return false;
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase().trim();
+    const name = (u.full_name || u.name || '').toLowerCase();
+    const phone = (u.phone || '').toLowerCase();
+    const role = (u.role || '').toLowerCase();
+    return name.includes(query) || phone.includes(query) || role.includes(query);
+  });
+
+  const tabCounts = {
+    all: (allPersonnel || []).length,
+    management: (allPersonnel || []).filter(
+      (u) => u.role === 'management' || u.role === 'management_teacher'
+    ).length,
+    administrative: (allPersonnel || []).filter((u) => u.role === 'administrative').length,
+    cashier: (allPersonnel || []).filter((u) => u.role === 'cashier').length,
+    support: (allPersonnel || []).filter((u) => u.role === 'support').length,
+    teacher: (allPersonnel || []).filter(
+      (u) => u.role === 'teacher' || u.role === 'management_teacher'
+    ).length
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const roleSaved = editingUser.role || 'teacher';
       const dataToSave = {
         name: editingUser.full_name,
         full_name: editingUser.full_name,
-        team: editingUser.role,
-        role: editingUser.role,
-        sex: editingUser.sex,
-        phone: editingUser.phone,
+        team: roleSaved,
+        role: roleSaved,
+        sex: editingUser.sex || 'M',
+        phone: editingUser.phone || '',
         grades_editable: editingUser.grades_editable !== false
       };
 
       if (isCreating) {
         await addTeacher(dataToSave);
-        toast.success('¡Colaborador añadido correctamente!');
+        toast.success(`¡Colaborador "${editingUser.full_name}" añadido correctamente!`);
       } else {
         await updateTeacher({ id: editingUser.id, updates: dataToSave });
-        toast.success('¡Colaborador actualizado correctamente!');
+        toast.success(`¡Colaborador "${editingUser.full_name}" actualizado correctamente!`);
+      }
+
+      // Si el rol guardado no coincide con la pestaña actual, cambiar la pestaña para que sea visible de inmediato
+      if (activeTab !== 'all' && activeTab !== roleSaved) {
+        if (roleSaved === 'management_teacher' && (activeTab === 'management' || activeTab === 'teacher')) {
+          // Permanece visible
+        } else {
+          setActiveTab(roleSaved as any);
+        }
       }
 
       setEditingUser(null);
@@ -67,42 +102,73 @@ export const TeamManagement = () => {
     }
   };
 
+  const openCreateModal = () => {
+    const defaultRole = activeTab !== 'all' ? activeTab : 'teacher';
+    setEditingUser({
+      full_name: '',
+      role: defaultRole,
+      sex: 'M',
+      phone: '',
+      grades_editable: true
+    });
+    setIsCreating(true);
+  };
+
   return (
     <div className="space-y-3 animate-fade-in text-text-main">
-      <div className="flex items-center justify-between px-2">
-        <h2 className="text-lg font-black uppercase text-text-main tracking-tighter">Personal</h2>
-        <button
-          onClick={() => {
-            setEditingUser({
-              full_name: '',
-              role: 'teacher',
-              sex: 'M',
-              phone: '',
-              grades_editable: true
-            });
-            setIsCreating(true);
-          }}
-          className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-black uppercase text-[9px] shadow-sm hover:bg-indigo-700"
-        >
-          <UserPlus size={12} className="inline mr-1" /> Nuevo
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-2">
+        <h2 className="text-lg font-black uppercase text-text-main tracking-tighter flex items-center gap-2">
+          <span>Personal del Centro</span>
+          <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">
+            {(allPersonnel || []).length} miembros
+          </span>
+        </h2>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar colaborador..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-3 py-1.5 rounded-xl border border-border-main bg-brand-bg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 w-40 sm:w-48"
+            />
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-black uppercase text-[9px] shadow-sm hover:bg-indigo-700 flex items-center gap-1 active:scale-95 transition-all"
+          >
+            <UserPlus size={12} /> Nuevo
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-1 bg-brand-bg p-1 rounded-xl w-fit ml-2 shadow-inner border border-border-main">
+      <div className="flex flex-wrap gap-1 bg-brand-bg p-1 rounded-xl w-fit ml-2 shadow-inner border border-border-main">
         {[
-          { id: 'all', label: 'Todos' },
-          { id: 'management', label: 'Gestión' },
-          { id: 'administrative', label: 'Admin' },
-          { id: 'cashier', label: 'Caja' },
-          { id: 'support', label: 'Apoyo' },
-          { id: 'teacher', label: 'Docentes' }
+          { id: 'all', label: 'Todos', count: tabCounts.all },
+          { id: 'management', label: 'Gestión', count: tabCounts.management },
+          { id: 'administrative', label: 'Admin', count: tabCounts.administrative },
+          { id: 'cashier', label: 'Caja', count: tabCounts.cashier },
+          { id: 'support', label: 'Apoyo', count: tabCounts.support },
+          { id: 'teacher', label: 'Docentes', count: tabCounts.teacher }
         ].map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id as any)}
-            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${activeTab === t.id ? 'bg-surface text-indigo-600 shadow-sm' : 'text-text-muted hover:text-text-main'}`}
+            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all flex items-center gap-1.5 ${
+              activeTab === t.id
+                ? 'bg-surface text-indigo-600 shadow-sm'
+                : 'text-text-muted hover:text-text-main'
+            }`}
           >
-            {t.label}
+            <span>{t.label}</span>
+            <span
+              className={`text-[8px] px-1.5 py-0.2 rounded-full ${
+                activeTab === t.id ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {t.count}
+            </span>
           </button>
         ))}
       </div>
