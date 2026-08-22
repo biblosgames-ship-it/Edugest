@@ -132,27 +132,29 @@ export const SchoolYearForm = () => {
   const handleMigrateData = async (yearName: string) => {
     if (
       !window.confirm(
-        `¿Vincular todos los datos actuales (horarios, alumnos) al ciclo ${yearName}? Use esto solo si tiene datos sin año asignado.`
+        `¿Vincular todos los datos del centro (cursos, materias, horarios y candados) al ciclo ${yearName}?`
       )
     )
       return;
     try {
-      // Intentamos actualizar alumnos y entradas de horario que no tengan año
-      const { error: err1 } = await supabase
-        .from('students')
-        .update({ school_year: yearName })
-        .or('school_year.is.null,school_year.eq.""');
-      const { error: err2 } = await supabase
-        .from('schedule_entries')
-        .update({ school_year: yearName })
-        .or('school_year.is.null,school_year.eq.""');
+      const centerId = profile?.center_id;
 
-      if (err1 || err2) throw new Error('Error parcial en migración');
+      let qStudents = supabase.from('students').update({ school_year: yearName });
+      if (centerId) qStudents = qStudents.eq('center_id', centerId);
+      await qStudents.or('school_year.is.null,school_year.eq.""');
 
-      alert('¡Datos vinculados exitosamente!');
+      let qCourses = supabase.from('courses').update({ school_year: yearName });
+      if (centerId) qCourses = qCourses.eq('center_id', centerId);
+      await qCourses.or('school_year.is.null,school_year.eq.""');
+
+      let qSchedule = supabase.from('schedule_entries').update({ school_year: yearName });
+      if (centerId) qSchedule = qSchedule.eq('center_id', centerId);
+      await qSchedule.or('school_year.is.null,school_year.eq.""');
+
+      alert(`✅ ¡Todos los datos y horarios quedaron vinculados con éxito al ciclo ${yearName}!`);
       await refreshData(undefined, true);
-    } catch (error) {
-      alert('Error al vincular datos. Es posible que algunos ya tengan año asignado.');
+    } catch (error: any) {
+      alert('Error al vincular datos: ' + error.message);
     }
   };
 
