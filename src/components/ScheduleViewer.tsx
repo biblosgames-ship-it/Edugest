@@ -84,16 +84,51 @@ export const ScheduleViewer = () => {
       }
     });
 
-    // 2. Cargar desde almacenamiento local
+    // 2. Cargar y migrar automáticamente desde TODAS las claves anteriores de localStorage
     try {
+      // Clave exacta actual
       const saved = localStorage.getItem(lockStorageKey);
       if (saved) {
         JSON.parse(saved).forEach((k: string) => combinedSet.add(k));
       }
+
+      // Claves de versiones anteriores para no perder ningún candado previo
+      const oldKeys = [
+        `edugens_locked_entries_${profile?.center_id || 'default'}`,
+        `edugens_locked_entries_${profile?.center_id || ''}`,
+        `edugens_locked_entries_default`,
+        `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}`
+      ];
+      oldKeys.forEach((oldKey) => {
+        const oldSaved = localStorage.getItem(oldKey);
+        if (oldSaved) {
+          try {
+            JSON.parse(oldSaved).forEach((k: string) => combinedSet.add(k));
+          } catch {}
+        }
+      });
+
+      // Escanear cualquier clave que empiece con edugens_locked_entries en el navegador
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('edugens_locked_entries')) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              JSON.parse(raw).forEach((entryKey: string) => combinedSet.add(entryKey));
+            }
+          } catch {}
+        }
+      }
+
+      // Guardar la combinación en la clave actual para que quede permanentemente fijada
+      if (combinedSet.size > 0) {
+        localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(combinedSet)));
+      }
     } catch {}
 
     setLockedEntries(combinedSet);
-  }, [lockStorageKey, state.schedule, selectedShift, selectedYear]);
+  }, [lockStorageKey, state.schedule, selectedShift, selectedYear, profile?.center_id]);
 
   const toggleLock = async (entry: any) => {
     const locKey = `${entry.course_id}_${entry.day}_${entry.start_time}`;
