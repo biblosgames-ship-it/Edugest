@@ -837,13 +837,19 @@ export const ScheduleViewer = () => {
 
       const normDay = (entry.day || '').trim();
       const matchedDay = days.find((d) => d.toLowerCase() === normDay.toLowerCase()) || days[0];
-      const eMins = toMins(entry.start_time);
+      let eMins = toMins(entry.start_time);
+      if (!isMorning && eMins < 720 && eMins > 0) {
+        eMins += 720;
+      }
 
       let closestSlot: any = null;
       let minDiff = Infinity;
 
       slots.forEach((slot) => {
-        const slotMins = toMins(slot.start);
+        let slotMins = toMins(slot.start);
+        if (!isMorning && slotMins < 720 && slotMins > 0) {
+          slotMins += 720;
+        }
         const diff = Math.abs(eMins - slotMins);
         if (diff < minDiff) {
           minDiff = diff;
@@ -851,8 +857,8 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // Solo asociar si la entrada está a 25 min o menos del slot
-      if (closestSlot && minDiff <= 25) {
+      // Asociar si la entrada corresponde al slot más cercano
+      if (closestSlot && minDiff <= 35) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
@@ -868,6 +874,7 @@ export const ScheduleViewer = () => {
             (existing: any) =>
               existing.course_id === entry.course_id &&
               existing.subject_id === entry.subject_id &&
+              existing.day === entry.day &&
               existing.start_time === entry.start_time
           );
           if (!isDup) listInSlot.push(entry);
@@ -1953,8 +1960,13 @@ export const ScheduleViewer = () => {
                 // CONTAR SOLO LAS QUE SON VISIBLES EN LA MATRIZ
                 const visibleEntries = filteredSchedule.filter((e) => {
                   if (e.subject_id !== a.subject_id) return false;
-                  const eMins = toMins(e.start_time);
-                  return slots.some((slot) => Math.abs(toMins(slot.start) - eMins) <= 25);
+                  let eMins = toMins(e.start_time);
+                  if (!isMorning && eMins < 720 && eMins > 0) eMins += 720;
+                  return slots.some((slot) => {
+                    let slotMins = toMins(slot.start);
+                    if (!isMorning && slotMins < 720 && slotMins > 0) slotMins += 720;
+                    return Math.abs(slotMins - eMins) <= 35;
+                  });
                 });
 
                 const placedHours = visibleEntries.length;
