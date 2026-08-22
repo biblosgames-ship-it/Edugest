@@ -869,7 +869,7 @@ export const ScheduleViewer = () => {
     if (lockedEntries.size > 0) {
       if (
         !confirm(
-          `🔒 Atención: Hay ${lockedEntries.size} materias bloqueadas con candado individual.\n\n¿Generar nuevo horario para Tanda ${selectedShift}?`
+          `⚠️ ATENCIÓN: El botón "Regenerar" recalcula y crea un horario nuevo desde cero.\n\n👉 Si lo que deseas es mantener tus materias con candado y únicamente rellenar las horas pendientes, presiona "Cancelar" y usa el botón "Ajustar Horas Faltantes".\n\n¿Estás completamente seguro de que deseas regenerar todo el horario desde cero?`
         )
       )
         return;
