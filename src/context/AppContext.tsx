@@ -446,6 +446,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
+          // Auto-vincular en la base de datos Supabase cualquier registro heredado sin año asignado
+          if (targetCid && currentFetchYear) {
+            const hasUnassignedSchedule = (schedRes.data || []).some(
+              (s: any) => !s.school_year || s.school_year === ''
+            );
+            if (hasUnassignedSchedule) {
+              supabase
+                .from('schedule_entries')
+                .update({ school_year: currentFetchYear })
+                .eq('center_id', targetCid)
+                .or('school_year.is.null,school_year.eq.""')
+                .then();
+            }
+            const hasUnassignedCourses = (cRes.data || []).some(
+              (c: any) => !c.school_year || c.school_year === ''
+            );
+            if (hasUnassignedCourses) {
+              supabase
+                .from('courses')
+                .update({ school_year: currentFetchYear })
+                .eq('center_id', targetCid)
+                .or('school_year.is.null,school_year.eq.""')
+                .then();
+            }
+          }
+
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
               return {
@@ -458,7 +484,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const scheduleUnified = (schedRes.data || []).map((s: any) => ({
             ...s,
+            school_year: s.school_year || currentFetchYear,
             teacher_id: idMap[s.teacher_id] || s.teacher_id
+          }));
+
+          const coursesUnified = (cRes.data || []).map((c: any) => ({
+            ...c,
+            school_year: c.school_year || currentFetchYear
           }));
 
           const performanceAlertsUnified = (perfRes.data || []).map((p: any) => ({
@@ -468,7 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           setState((prev) => ({
             ...prev,
-            courses: cRes.data || [],
+            courses: coursesUnified,
             subjects: sRes.data || [],
             teachers: uniquePersonnel,
             assignments: assignmentsUnified,
