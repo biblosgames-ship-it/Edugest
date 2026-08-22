@@ -5,8 +5,21 @@ import App from './App.tsx';
 import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
-// Registro automático de la PWA
-registerSW({ immediate: true });
+// Registro y actualización forzada automática de la PWA
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateSW(true);
+  },
+  onRegistered(r) {
+    if (r) {
+      r.update();
+      setInterval(() => {
+        r.update();
+      }, 30 * 1000);
+    }
+  }
+});
 
 // Crear el cliente de React Query
 const queryClient = new QueryClient({
