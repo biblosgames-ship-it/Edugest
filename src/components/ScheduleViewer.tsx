@@ -946,43 +946,42 @@ export const ScheduleViewer = () => {
     }
     if (
       !confirm(
-        `¿Ajustar horas faltantes del horario ${selectedShift} moviendo lo necesario?\n\nEl sistema ejecutará hasta 5 intentos sucesivos de reparación para intentar colocar todas las horas pendientes.`
+        `¿Ajustar horas faltantes del horario ${selectedShift} respetando las materias con candado?`
       )
     )
       return;
     setIsDeepRepairing(true);
-    setDeepRepairAttempt(0);
-    await new Promise((r) => setTimeout(r, 100));
-    let lastDiagnostics: string[] = [];
-    let allDone = false;
+    setDeepRepairAttempt(1);
+    await new Promise((r) => setTimeout(r, 50));
     try {
-      for (let attempt = 1; attempt <= 5; attempt++) {
-        setDeepRepairAttempt(attempt);
-        const { diagnostics } = await scheduleService.repairSchedule(
-          state,
-          profile,
-          selectedShift,
-          selectedYear,
-          Array.from(lockedEntries)
+      const { diagnostics } = await scheduleService.repairSchedule(
+        state,
+        profile,
+        selectedShift,
+        selectedYear,
+        Array.from(lockedEntries)
+      );
+      await refreshData(undefined, true);
+      const isPerfect = (diagnostics || []).some(
+        (d: string) => d.includes('100%') || d.includes('Exitosa al 100')
+      );
+      if (isPerfect) {
+        alert(
+          '✅ ¡Horario ajustado al 100%! Todas las horas faltantes fueron colocadas exitosamente.'
         );
-        lastDiagnostics = diagnostics || [];
-        await refreshData(undefined, true);
-        allDone = lastDiagnostics.some((d) => d.includes('100%') || d.includes('Exitosa al 100'));
-        if (allDone) break;
+      } else if (diagnostics && diagnostics.length > 0) {
+        alert(
+          '⚠️ Ajuste Realizado\n\nEl sistema colocó las horas posibles respetando tus candados. Quedan los siguientes avisos:\n\n' +
+            diagnostics.join('\n\n')
+        );
+      } else {
+        alert('✅ ¡Horario ajustado exitosamente!');
       }
     } catch (e: any) {
       alert('Error durante el ajuste: ' + e.message);
     } finally {
       setIsDeepRepairing(false);
       setDeepRepairAttempt(0);
-    }
-    if (allDone) {
-      alert('✅ ¡Horario ajustado al 100%! Todas las horas fueron colocadas exitosamente.');
-    } else {
-      alert(
-        `⚠️ Se realizaron 5 intentos de ajuste. El horario mejoró lo máximo posible pero aún quedan horas sin ubicar (posiblemente por falta de disponibilidad de docentes):\n\n` +
-          lastDiagnostics.join('\n')
-      );
     }
   };
 

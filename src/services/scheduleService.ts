@@ -1810,7 +1810,7 @@ export const scheduleService = {
     };
     let bestScore = Infinity;
 
-    for (let i = 0; i < 2000; i++) {
+    for (let i = 0; i < 500; i++) {
       const res = runRepairAttempt(remainingTasksStrategy1);
       const score =
         res.pendingTasks.length * 100000 + res.superRelaxedCount * 1000 + res.relaxedCount * 1;
@@ -1851,7 +1851,7 @@ export const scheduleService = {
       };
       let bestFallbackScore = Infinity;
 
-      for (let i = 0; i < 2000; i++) {
+      for (let i = 0; i < 500; i++) {
         const res = runRepairAttempt(remainingTasksStrategy2);
         const score =
           res.pendingTasks.length * 100000 + res.superRelaxedCount * 1000 + res.relaxedCount * 1;
@@ -2195,7 +2195,7 @@ export const scheduleService = {
         };
         let bestFlexibleSplitScore = Infinity;
 
-        for (let i = 0; i < 2000; i++) {
+        for (let i = 0; i < 500; i++) {
           const res = runFlexibleAttemptCustom(allTasksFlexibleSplit);
           const score =
             res.pendingTasks.length * 100000 + res.superRelaxedCount * 1000 + res.relaxedCount * 1;
