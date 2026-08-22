@@ -323,35 +323,38 @@ export const SchoolYearForm = () => {
                       </span>
                     </td>
                     <td className="py-6 px-8 text-right">
-                      <div className="flex justify-end gap-3">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleMigrateData(year.name)}
-                          className="p-2 text-amber-500 hover:bg-amber-50 rounded-xl transition-all"
-                          title="Vincular datos sueltos a este año"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm"
+                          title="Vincular cursos, materias, horarios y candados a este ciclo escolar"
                         >
-                          <Calendar size={18} className="animate-pulse" />
+                          <Calendar size={14} className="text-amber-600" />
+                          <span>Vincular Datos</span>
                         </button>
                         {selectedYear !== year.name && (
                           <button
                             onClick={() => handleActivate(year)}
-                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm"
                             title="Activar este año"
                           >
-                            <CheckCircle2 size={18} />
+                            <CheckCircle2 size={14} />
+                            <span>Activar</span>
                           </button>
                         )}
                         <button
                           onClick={() => handleEdit(year)}
                           className="p-2 text-slate-400 hover:text-brand-blue hover:bg-brand-blue/10 rounded-xl transition-all"
+                          title="Editar ciclo"
                         >
-                          <Pencil size={18} />
+                          <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => handleDelete(year.id, year.name)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                           title="Eliminar ciclo"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
