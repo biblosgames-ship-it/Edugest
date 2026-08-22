@@ -488,10 +488,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          const coursesUnified = (cRes.data || []).map((c: any) => ({
-            ...c,
-            school_year: c.school_year || currentFetchYear
-          }));
+          let localTitularMap: Record<string, any> = {};
+          try {
+            localTitularMap = JSON.parse(
+              localStorage.getItem('edugens_course_titular_map') || '{}'
+            );
+          } catch {}
+
+          const coursesUnified = (cRes.data || []).map((c: any) => {
+            const localTitular = localTitularMap[c.id] || {};
+            return {
+              ...c,
+              school_year: c.school_year || currentFetchYear,
+              titular_teacher_id: c.titular_teacher_id || localTitular.titular_teacher_id || null,
+              titular_subject_id: c.titular_subject_id || localTitular.titular_subject_id || null,
+              titular_monday_first_hour:
+                c.titular_monday_first_hour !== undefined
+                  ? c.titular_monday_first_hour
+                  : localTitular.titular_monday_first_hour !== undefined
+                    ? localTitular.titular_monday_first_hour
+                    : true
+            };
+          });
 
           const performanceAlertsUnified = (perfRes.data || []).map((p: any) => ({
             ...p,

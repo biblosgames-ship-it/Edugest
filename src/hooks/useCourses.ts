@@ -17,15 +17,61 @@ export const useCourses = () => {
   const addCourseMutation = useMutation({
     mutationFn: async (newCourse: any) => {
       const { studentCount, ...rest } = newCourse;
-      const { error } = await supabase.from('courses').insert([
-        {
-          ...rest,
-          student_count: studentCount, // Mapeo de camelCase a snake_case
-          center_id: centerId,
-          school_year: selectedYear
+      const finalCourse: any = {
+        ...rest,
+        student_count: studentCount,
+        center_id: centerId,
+        school_year: selectedYear
+      };
+      if (finalCourse.titular_teacher_id === '') finalCourse.titular_teacher_id = null;
+      if (finalCourse.titular_subject_id === '') finalCourse.titular_subject_id = null;
+
+      const { data, error } = await supabase.from('courses').insert([finalCourse]).select();
+      if (error) {
+        if (
+          error.message?.includes('column') ||
+          error.code === '42703' ||
+          error.message?.includes('schema') ||
+          error.message?.includes('titular')
+        ) {
+          const {
+            titular_teacher_id,
+            titular_subject_id,
+            titular_monday_first_hour,
+            ...baseFields
+          } = finalCourse;
+          const { data: fbData, error: fallbackErr } = await supabase
+            .from('courses')
+            .insert([baseFields])
+            .select();
+          if (fallbackErr) throw fallbackErr;
+          if (fbData?.[0]?.id) {
+            try {
+              const localMap = JSON.parse(
+                localStorage.getItem('edugens_course_titular_map') || '{}'
+              );
+              localMap[fbData[0].id] = {
+                titular_teacher_id: finalCourse.titular_teacher_id,
+                titular_subject_id: finalCourse.titular_subject_id,
+                titular_monday_first_hour: finalCourse.titular_monday_first_hour
+              };
+              localStorage.setItem('edugens_course_titular_map', JSON.stringify(localMap));
+            } catch {}
+          }
+        } else {
+          throw error;
         }
-      ]);
-      if (error) throw error;
+      } else if (data?.[0]?.id) {
+        try {
+          const localMap = JSON.parse(localStorage.getItem('edugens_course_titular_map') || '{}');
+          localMap[data[0].id] = {
+            titular_teacher_id: finalCourse.titular_teacher_id,
+            titular_subject_id: finalCourse.titular_subject_id,
+            titular_monday_first_hour: finalCourse.titular_monday_first_hour
+          };
+          localStorage.setItem('edugens_course_titular_map', JSON.stringify(localMap));
+        } catch {}
+      }
     },
     onSuccess: () => {
       refreshData(centerId, true);
@@ -35,13 +81,47 @@ export const useCourses = () => {
   const updateCourseMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
       const { studentCount, ...rest } = updates;
-      const finalUpdates = { ...rest };
+      const finalUpdates: any = { ...rest };
       if (studentCount !== undefined) {
         finalUpdates.student_count = studentCount;
       }
 
+      if (finalUpdates.titular_teacher_id === '') finalUpdates.titular_teacher_id = null;
+      if (finalUpdates.titular_subject_id === '') finalUpdates.titular_subject_id = null;
+
+      try {
+        const localMap = JSON.parse(localStorage.getItem('edugens_course_titular_map') || '{}');
+        localMap[id] = {
+          titular_teacher_id: finalUpdates.titular_teacher_id,
+          titular_subject_id: finalUpdates.titular_subject_id,
+          titular_monday_first_hour: finalUpdates.titular_monday_first_hour
+        };
+        localStorage.setItem('edugens_course_titular_map', JSON.stringify(localMap));
+      } catch {}
+
       const { error } = await supabase.from('courses').update(finalUpdates).eq('id', id);
-      if (error) throw error;
+      if (error) {
+        if (
+          error.message?.includes('column') ||
+          error.code === '42703' ||
+          error.message?.includes('schema') ||
+          error.message?.includes('titular')
+        ) {
+          const {
+            titular_teacher_id,
+            titular_subject_id,
+            titular_monday_first_hour,
+            ...baseFields
+          } = finalUpdates;
+          const { error: fallbackErr } = await supabase
+            .from('courses')
+            .update(baseFields)
+            .eq('id', id);
+          if (fallbackErr) throw fallbackErr;
+        } else {
+          throw error;
+        }
+      }
     },
     onSuccess: () => {
       refreshData(centerId, true);
