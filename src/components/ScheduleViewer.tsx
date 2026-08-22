@@ -914,7 +914,13 @@ export const ScheduleViewer = () => {
       return;
     }
 
-    if (lockedEntries.size > 0) {
+    const currentShiftEntries = (state.schedule || []).filter(
+      (s: any) =>
+        s.shift === selectedShift &&
+        (!selectedYear || !s.school_year || s.school_year === selectedYear)
+    );
+
+    if (currentShiftEntries.length > 0 && lockedEntries.size > 0) {
       if (
         !confirm(
           `⚠️ ATENCIÓN: El botón "Regenerar" recalcula y crea un horario nuevo desde cero.\n\n👉 Si lo que deseas es mantener tus materias con candado y únicamente rellenar las horas pendientes, presiona "Cancelar" y usa el botón "Ajustar Horas Faltantes".\n\n¿Estás completamente seguro de que deseas regenerar todo el horario desde cero?`
@@ -922,7 +928,15 @@ export const ScheduleViewer = () => {
       )
         return;
     } else {
-      if (!confirm(`¿Generar nuevo horario para Tanda ${selectedShift}?`)) return;
+      if (!confirm(`¿Generar horario completo para Tanda ${selectedShift}?`)) return;
+    }
+
+    // Limpiar candados antiguos si el horario estaba vacío
+    if (currentShiftEntries.length === 0) {
+      setLockedEntries(new Set());
+      try {
+        localStorage.removeItem(lockStorageKey);
+      } catch {}
     }
 
     setIsGenerating(true);
@@ -938,11 +952,11 @@ export const ScheduleViewer = () => {
 
       if (diagnostics && diagnostics.length > 0) {
         alert(
-          '⚠️ Horario generado (Casi Completo)\n\nEl sistema intentó 1000 combinaciones diferentes pero no logró llegar al 100% por los siguientes motivos:\n\n' +
+          '⚠️ Horario generado (Casi Completo)\n\nEl sistema evaluó las combinaciones posibles:\n\n' +
             diagnostics.join('\n\n')
         );
       } else {
-        alert('✅ Horario generado al 100% con éxito.');
+        alert('✅ ¡Horario generado al 100% con éxito!');
       }
     } catch (e: any) {
       alert('Error: ' + e.message);
@@ -992,6 +1006,19 @@ export const ScheduleViewer = () => {
       );
       return;
     }
+
+    const currentShiftEntries = (state.schedule || []).filter(
+      (s: any) =>
+        s.shift === selectedShift &&
+        (!selectedYear || !s.school_year || s.school_year === selectedYear)
+    );
+
+    // Si no hay horario base, redirigir a generar
+    if (currentShiftEntries.length === 0) {
+      handleRegenerate();
+      return;
+    }
+
     if (
       !confirm(
         `¿Ajustar horas faltantes del horario ${selectedShift} respetando las materias con candado?`
