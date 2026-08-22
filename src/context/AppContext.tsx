@@ -229,8 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('courses')
               .select('*')
-              .eq('center_id', targetCid)
-              .eq('school_year', currentFetchYear),
+              .eq('center_id', targetCid),
             supabase.from('subjects').select('*').eq('center_id', targetCid),
             supabase.from('profiles').select('*').eq('center_id', targetCid),
             supabase.from('assignments').select('*').eq('center_id', targetCid),
@@ -249,8 +248,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('schedule_entries')
               .select('*')
-              .eq('center_id', targetCid)
-              .eq('school_year', currentFetchYear),
+              .eq('center_id', targetCid),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -269,8 +267,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('students')
               .select('*')
-              .eq('center_id', targetCid)
-              .eq('school_year', currentFetchYear),
+              .eq('center_id', targetCid),
             supabase
               .from('activities')
               .select('*')

@@ -323,7 +323,7 @@ export const ScheduleViewer = () => {
     list = list.filter((s: any) => {
       const sShift = (s.shift || '').toLowerCase();
       const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      const yearMatch = !selectedYear || s.school_year === selectedYear;
+      const yearMatch = !selectedYear || !s.school_year || s.school_year === selectedYear;
       return shiftMatch && yearMatch;
     });
 
@@ -1199,20 +1199,63 @@ export const ScheduleViewer = () => {
       {/* Header Panel */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-            <button
-              onClick={() => setSelectedShift('Matutina')}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedShift === 'Matutina' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}
-            >
-              Matutina
-            </button>
-            <button
-              onClick={() => setSelectedShift('Vespertina')}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedShift === 'Vespertina' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}
-            >
-              Vespertina
-            </button>
-          </div>
+          {(() => {
+            const matCount = (state.schedule || []).filter((s: any) => {
+              const sh = (s.shift || '').toLowerCase();
+              return sh.includes('mat') || sh.includes('mañ') || sh === '';
+            }).length;
+            const vesCount = (state.schedule || []).filter((s: any) => {
+              const sh = (s.shift || '').toLowerCase();
+              return sh.includes('ves') || sh.includes('tar');
+            }).length;
+
+            return (
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+                <button
+                  onClick={() => setSelectedShift('Matutina')}
+                  className={`flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${
+                    selectedShift === 'Matutina'
+                      ? 'bg-indigo-600 text-white shadow-lg'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>Matutina</span>
+                  {matCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                        selectedShift === 'Matutina'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-indigo-100 text-indigo-700'
+                      }`}
+                    >
+                      {matCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSelectedShift('Vespertina')}
+                  className={`flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${
+                    selectedShift === 'Vespertina'
+                      ? 'bg-indigo-600 text-white shadow-lg'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>Vespertina</span>
+                  {vesCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                        selectedShift === 'Vespertina'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-indigo-100 text-indigo-700'
+                      }`}
+                    >
+                      {vesCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            );
+          })()}
           {!isStudentOrParent ? (
             <>
               <select
