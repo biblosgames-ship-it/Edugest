@@ -22,6 +22,9 @@ export interface Course {
   cycle: Cycle;
   modality: Modality;
   output: Output;
+  titular_teacher_id?: string;
+  titular_subject_id?: string;
+  titular_monday_first_hour?: boolean;
 }
 
 export interface AcademicRequirement {

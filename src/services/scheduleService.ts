@@ -284,6 +284,10 @@ const doesOverlapSportsBreak = (
 export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Record<string, number> = {}) => {
   let score = task.priorityBoost || 0;
 
+  if (task.isTitularMondayFirst) {
+    score += 25000000; // Prioridad VIP Suprema (25 millones): colocar la clase del Docente Titular los Lunes a 1ra hora antes de cualquier otra materia
+  }
+
   const grade = task.course?.grade?.toLowerCase() || '';
   const cLevel =
     task.course?.level || (grade.includes('secundaria') ? 'Secundario' : 'Primario');
@@ -324,7 +328,7 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
     taskSubjectName.includes('educacion fisica');
 
   if (isStrictTogether) {
-    score += 10000000; // Prioridad suprema global (10 millones): ubicar PE de TODOS los cursos antes que cualquier otra materia
+    score += 10000000; // Prioridad global (10 millones): ubicar PE de TODOS los cursos antes que materias regulares
   }
 
   if (manualPriority) {
@@ -636,15 +640,32 @@ export const scheduleService = {
           sName.includes('artística') ||
           sName.includes('artistica');
 
+        // Detectar si el docente es titular del curso y desea abrir semana los lunes
+        const isTitular =
+          (course.titular_teacher_id && course.titular_teacher_id === assign.teacher_id) ||
+          (course.titularTeacherId && course.titularTeacherId === assign.teacher_id);
+        const isTitularSubject =
+          isTitular &&
+          (!course.titular_subject_id || course.titular_subject_id === assign.subject_id);
+        const wantsMondayFirst =
+          isTitularSubject && course.titular_monday_first_hour !== false;
+
         let createdDouble = false;
+        let titularMondayAssigned = false;
         while (remaining > 0) {
-          if (remaining >= 2 && (requiresDouble || (!createdDouble && remaining >= 4 && distType !== 'separate'))) {
-            allTasks.push({ course, assign, isDouble: true });
+          const isTitularTask = wantsMondayFirst && !titularMondayAssigned;
+          if (
+            remaining >= 2 &&
+            (requiresDouble || (!createdDouble && remaining >= 4 && distType !== 'separate'))
+          ) {
+            allTasks.push({ course, assign, isDouble: true, isTitularMondayFirst: isTitularTask });
             remaining -= 2;
             createdDouble = true;
+            if (isTitularTask) titularMondayAssigned = true;
           } else {
-            allTasks.push({ course, assign, isDouble: false });
+            allTasks.push({ course, assign, isDouble: false, isTitularMondayFirst: isTitularTask });
             remaining -= 1;
+            if (isTitularTask) titularMondayAssigned = true;
           }
         }
       });
@@ -691,7 +712,12 @@ export const scheduleService = {
           teacherPref?.workingDays && teacherPref.workingDays.length > 0
             ? teacherPref.workingDays
             : days;
-        const shuffledDays = [...workingDays].sort(() => Math.random() - 0.5);
+        let shuffledDays = [...workingDays].sort(() => Math.random() - 0.5);
+
+        // Si es la tarea del Docente Titular para Lunes 1ra hora, evaluar Lunes prioritariamente
+        if (task.isTitularMondayFirst && workingDays.includes('Lunes')) {
+          shuffledDays = ['Lunes', ...shuffledDays.filter((d) => d !== 'Lunes')];
+        }
 
         for (const day of shuffledDays) {
           const daySubjectCount = dailyCount[course.id]?.[day]?.[assign.subject_id] || 0;
@@ -732,6 +758,28 @@ export const scheduleService = {
               slotCombinations.push([classSlots[i]]);
             }
             slotCombinations.sort(() => Math.random() - 0.5);
+          }
+
+          // Priorizar la primera hora lectiva disponible de los lunes para el docente titular
+          if (task.isTitularMondayFirst && day === 'Lunes') {
+            if (isDouble && slotCombinations.length > 0 && classSlots.length > 0) {
+              const firstPair = slotCombinations.find(
+                (pair) => pair[0]?.start === classSlots[0]?.start
+              );
+              if (firstPair) {
+                slotCombinations = [firstPair, ...slotCombinations.filter((p) => p !== firstPair)];
+              }
+            } else if (!isDouble && slotCombinations.length > 0 && classSlots.length > 0) {
+              const firstSingle = slotCombinations.find(
+                (s) => s[0]?.start === classSlots[0]?.start
+              );
+              if (firstSingle) {
+                slotCombinations = [
+                  firstSingle,
+                  ...slotCombinations.filter((s) => s !== firstSingle)
+                ];
+              }
+            }
           }
 
           for (const slotsToUse of slotCombinations) {
@@ -1561,13 +1609,36 @@ export const scheduleService = {
         sName.includes('artística') ||
         sName.includes('artistica');
 
+      const isTitular =
+        (course.titular_teacher_id && course.titular_teacher_id === a.teacher_id) ||
+        (course.titularTeacherId && course.titularTeacherId === a.teacher_id);
+      const isTitularSubject =
+        isTitular &&
+        (!course.titular_subject_id || course.titular_subject_id === a.subject_id);
+      const wantsMondayFirst =
+        isTitularSubject && course.titular_monday_first_hour !== false;
+
+      let titularMondayAssigned = false;
       while (remaining > 0) {
+        const isTitularTask = wantsMondayFirst && !titularMondayAssigned;
         if (remaining >= 2 && requiresDouble) {
-          remainingTasksStrategy1.push({ course, assign: a, isDouble: true });
+          remainingTasksStrategy1.push({
+            course,
+            assign: a,
+            isDouble: true,
+            isTitularMondayFirst: isTitularTask
+          });
           remaining -= 2;
+          if (isTitularTask) titularMondayAssigned = true;
         } else {
-          remainingTasksStrategy1.push({ course, assign: a, isDouble: false });
+          remainingTasksStrategy1.push({
+            course,
+            assign: a,
+            isDouble: false,
+            isTitularMondayFirst: isTitularTask
+          });
           remaining -= 1;
+          if (isTitularTask) titularMondayAssigned = true;
         }
       }
     });
@@ -1616,7 +1687,11 @@ export const scheduleService = {
           teacherPref?.workingDays && teacherPref.workingDays.length > 0
             ? teacherPref.workingDays
             : days;
-        const searchDays = [...workingDays].sort(() => Math.random() - 0.5);
+        let searchDays = [...workingDays].sort(() => Math.random() - 0.5);
+
+        if (task.isTitularMondayFirst && workingDays.includes('Lunes')) {
+          searchDays = ['Lunes', ...searchDays.filter((d) => d !== 'Lunes')];
+        }
 
         for (const day of searchDays) {
           const dayCount = dailyCount[course.id]?.[day]?.[assign.subject_id] || 0;
@@ -1628,7 +1703,7 @@ export const scheduleService = {
           const isDeporte = isDeporteSubject(sName);
           const isTogetherSubject = distType === 'together' || isDeporte;
 
-          const combinations: any[][] = [];
+          let combinations: any[][] = [];
           if (isDouble) {
             const strictPairs: any[][] = [];
             const recessPairs: any[][] = [];
@@ -1653,6 +1728,20 @@ export const scheduleService = {
           } else {
             for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
             combinations.sort(() => Math.random() - 0.5);
+          }
+
+          if (task.isTitularMondayFirst && day === 'Lunes') {
+            if (isDouble && combinations.length > 0 && slots.length > 0) {
+              const firstPair = combinations.find((pair) => pair[0]?.start === slots[0]?.start);
+              if (firstPair) {
+                combinations = [firstPair, ...combinations.filter((p) => p !== firstPair)];
+              }
+            } else if (!isDouble && combinations.length > 0 && slots.length > 0) {
+              const firstSingle = combinations.find((s) => s[0]?.start === slots[0]?.start);
+              if (firstSingle) {
+                combinations = [firstSingle, ...combinations.filter((s) => s !== firstSingle)];
+              }
+            }
           }
 
           for (const toUse of combinations) {
@@ -1907,13 +1996,37 @@ export const scheduleService = {
           sName.includes('fisica') ||
           sName.includes('artística') ||
           sName.includes('artistica');
+
+        const isTitular =
+          (course.titular_teacher_id && course.titular_teacher_id === a.teacher_id) ||
+          (course.titularTeacherId && course.titularTeacherId === a.teacher_id);
+        const isTitularSubject =
+          isTitular &&
+          (!course.titular_subject_id || course.titular_subject_id === a.subject_id);
+        const wantsMondayFirst =
+          isTitularSubject && course.titular_monday_first_hour !== false;
+
+        let titularMondayAssigned = false;
         while (remaining > 0) {
+          const isTitularTask = wantsMondayFirst && !titularMondayAssigned;
           if (remaining >= 2 && requiresDouble) {
-            allTasksFlexible.push({ course, assign: a, isDouble: true });
+            allTasksFlexible.push({
+              course,
+              assign: a,
+              isDouble: true,
+              isTitularMondayFirst: isTitularTask
+            });
             remaining -= 2;
+            if (isTitularTask) titularMondayAssigned = true;
           } else {
-            allTasksFlexible.push({ course, assign: a, isDouble: false });
+            allTasksFlexible.push({
+              course,
+              assign: a,
+              isDouble: false,
+              isTitularMondayFirst: isTitularTask
+            });
             remaining -= 1;
+            if (isTitularTask) titularMondayAssigned = true;
           }
         }
       });
@@ -1937,12 +2050,16 @@ export const scheduleService = {
               : days;
 
           const validPrefDay = pref && workingDays.includes(pref.day) ? pref.day : null;
-          const searchDays = validPrefDay
+          let searchDays = validPrefDay
             ? [
                 validPrefDay,
                 ...workingDays.filter((d) => d !== validPrefDay).sort(() => Math.random() - 0.5)
               ]
             : [...workingDays].sort(() => Math.random() - 0.5);
+
+          if (task.isTitularMondayFirst && workingDays.includes('Lunes')) {
+            searchDays = ['Lunes', ...searchDays.filter((d) => d !== 'Lunes')];
+          }
 
           for (const day of searchDays) {
             const dayCount = dailyCount[course.id]?.[day]?.[assign.subject_id] || 0;
@@ -1954,7 +2071,7 @@ export const scheduleService = {
           const isDeporte = isDeporteSubject(sName);
           const isTogetherSubject = distType === 'together' || isDeporte;
 
-          const combinations: any[][] = [];
+          let combinations: any[][] = [];
           if (isDouble) {
             const strictPairs: any[][] = [];
             const recessPairs: any[][] = [];
@@ -1985,12 +2102,26 @@ export const scheduleService = {
           } else {
             for (let i = 0; i < slots.length; i++) combinations.push([slots[i]]);
             combinations.sort((a, b) => {
-              const aHasPref = pref && day === pref.day && a.some((s) => s.start === pref.start);
-              const bHasPref = pref && day === pref.day && b.some((s) => s.start === pref.start);
+              const aHasPref = pref && day === pref.day && a[0].start === pref.start;
+              const bHasPref = pref && day === pref.day && b[0].start === pref.start;
               if (aHasPref && !bHasPref) return -1;
               if (!aHasPref && bHasPref) return 1;
               return Math.random() - 0.5;
             });
+          }
+
+          if (task.isTitularMondayFirst && day === 'Lunes') {
+            if (isDouble && combinations.length > 0 && slots.length > 0) {
+              const firstPair = combinations.find((pair) => pair[0]?.start === slots[0]?.start);
+              if (firstPair) {
+                combinations = [firstPair, ...combinations.filter((p) => p !== firstPair)];
+              }
+            } else if (!isDouble && combinations.length > 0 && slots.length > 0) {
+              const firstSingle = combinations.find((s) => s[0]?.start === slots[0]?.start);
+              if (firstSingle) {
+                combinations = [firstSingle, ...combinations.filter((s) => s !== firstSingle)];
+              }
+            }
           }
 
           for (const toUse of combinations) {

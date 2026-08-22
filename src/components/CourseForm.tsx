@@ -24,7 +24,10 @@ export const CourseForm = () => {
     tanda: 'Matutina' as Tanda,
     cycle: 'Primer Ciclo' as Cycle,
     modality: 'Académica' as Modality,
-    output: 'N/A' as Output
+    output: 'N/A' as Output,
+    titular_teacher_id: '',
+    titular_subject_id: '',
+    titular_monday_first_hour: true
   });
 
   const handleGradeChange = (val: string) => {
@@ -69,7 +72,10 @@ export const CourseForm = () => {
         tanda: 'Matutina',
         cycle: 'Primer Ciclo',
         modality: 'Académica',
-        output: 'N/A'
+        output: 'N/A',
+        titular_teacher_id: '',
+        titular_subject_id: '',
+        titular_monday_first_hour: true
       });
       setIsCodeManuallyEdited(false);
     } catch (error) {
@@ -95,7 +101,11 @@ export const CourseForm = () => {
       tanda: course.tanda,
       cycle: course.cycle,
       modality: course.modality,
-      output: course.output
+      output: course.output,
+      titular_teacher_id: course.titular_teacher_id || course.titularTeacherId || '',
+      titular_subject_id: course.titular_subject_id || course.titularSubjectId || '',
+      titular_monday_first_hour:
+        course.titular_monday_first_hour !== undefined ? course.titular_monday_first_hour : true
     });
     scrollToTop();
   };
@@ -219,6 +229,74 @@ export const CourseForm = () => {
           required
         />
       </div>
+
+      {/* Docente Titular / Maestro Guía */}
+      <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-black text-indigo-900 uppercase tracking-widest flex items-center gap-1.5">
+            <span>Docente Titular / Maestro Guía</span>
+            <span className="text-[9px] bg-indigo-200/60 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+              Lunes 1ra Hora
+            </span>
+          </label>
+        </div>
+        <select
+          value={formData.titular_teacher_id}
+          onChange={(e) => setFormData({ ...formData, titular_teacher_id: e.target.value })}
+          className={inputClass}
+        >
+          <option value="">-- Sin Docente Titular Asignado --</option>
+          {state.teachers
+            .filter((t: any) => t.role === 'teacher' || t.role === 'management_teacher')
+            .map((t: any) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+        </select>
+
+        {formData.titular_teacher_id && (
+          <div className="pt-2 border-t border-indigo-100/70 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-indigo-950">
+              <input
+                type="checkbox"
+                checked={formData.titular_monday_first_hour}
+                onChange={(e) =>
+                  setFormData({ ...formData, titular_monday_first_hour: e.target.checked })
+                }
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Abrir la semana los Lunes a 1ra hora disponible (después de actos cívicos / bandera)</span>
+            </label>
+
+            <div>
+              <label className={labelClass}>Materia de Titularidad (Opcional)</label>
+              <select
+                value={formData.titular_subject_id}
+                onChange={(e) => setFormData({ ...formData, titular_subject_id: e.target.value })}
+                className={inputClass}
+              >
+                <option value="">-- Materia Principal del Docente --</option>
+                {state.assignments
+                  .filter(
+                    (a: any) =>
+                      a.teacher_id === formData.titular_teacher_id &&
+                      (!editingCourseId || a.course_id === editingCourseId || a.courseId === editingCourseId)
+                  )
+                  .map((a: any) => {
+                    const sub = state.subjects.find((s: any) => s.id === a.subject_id);
+                    return (
+                      <option key={a.subject_id} value={a.subject_id}>
+                        {sub?.name || 'Materia Asignada'}
+                      </option>
+                    );
+                  })}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex gap-4">
         <button
           type="submit"
@@ -307,8 +385,19 @@ export const CourseForm = () => {
                               <span className="text-xs font-black text-text-main uppercase leading-tight">
                                 {course.grade}
                               </span>
-                              <div className="text-[9px] text-text-muted font-bold uppercase tracking-wider">
-                                Tanda: {course.tanda}
+                              <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                <span className="text-[9px] text-text-muted font-bold uppercase tracking-wider">
+                                  Tanda: {course.tanda}
+                                </span>
+                                {course.titular_teacher_id && (() => {
+                                  const t = state.teachers.find((x: any) => x.id === course.titular_teacher_id);
+                                  return (
+                                    <span className="text-[8px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-0.5 rounded-md uppercase flex items-center gap-1">
+                                      <span>🎓 Guía: {t?.name || 'Docente'}</span>
+                                      {course.titular_monday_first_hour !== false && <span>• Lun 1ra H</span>}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
