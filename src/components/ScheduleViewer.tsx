@@ -173,7 +173,9 @@ export const ScheduleViewer = () => {
   // Verificar si todas las materias programadas de este turno están blindadas
   const isAllLocked = useMemo(() => {
     const shiftEntries = (state.schedule || []).filter(
-      (s: any) => s.shift === selectedShift && (!selectedYear || s.school_year === selectedYear)
+      (s: any) =>
+        s.shift === selectedShift &&
+        (!selectedYear || !s.school_year || s.school_year === selectedYear)
     );
     if (shiftEntries.length === 0) return false;
     return shiftEntries.every(
@@ -185,7 +187,9 @@ export const ScheduleViewer = () => {
   // Blindar / Desblindar todas las materias del turno actual juntas con un solo clic
   const toggleLockAllSchedule = async () => {
     const shiftEntries = (state.schedule || []).filter(
-      (s: any) => s.shift === selectedShift && (!selectedYear || s.school_year === selectedYear)
+      (s: any) =>
+        s.shift === selectedShift &&
+        (!selectedYear || !s.school_year || s.school_year === selectedYear)
     );
     if (shiftEntries.length === 0) {
       alert('No hay materias programadas en este horario para blindar.');
@@ -713,7 +717,9 @@ export const ScheduleViewer = () => {
         // Vista Compacta para Docentes: solo conservar slots con clases programadas o recreos
         const teacherSchedule = (state.schedule || []).filter(
           (s: any) =>
-            s.teacher_id === filterId && s.shift === selectedShift && s.school_year === selectedYear
+            s.teacher_id === filterId &&
+            s.shift === selectedShift &&
+            (!selectedYear || !s.school_year || s.school_year === selectedYear)
         );
         if (teacherSchedule.length > 0) {
           mergedSlots = mergedSlots.filter((slot) => {
@@ -1544,7 +1550,7 @@ export const ScheduleViewer = () => {
                         s.course_id === course.id &&
                         s.subject_id === assign.subject_id &&
                         s.shift === selectedShift &&
-                        s.school_year === selectedYear
+                        (!selectedYear || !s.school_year || s.school_year === selectedYear)
                     ).length;
                     totalPlaced += placedHours;
                     if (placedHours < weeklyHours) {
@@ -1562,7 +1568,9 @@ export const ScheduleViewer = () => {
 
               // Detectar conflictos de docentes (mismo docente, mismo bloque horario)
               const courseSchedules = state.schedule.filter(
-                (s: any) => s.shift === selectedShift && s.school_year === selectedYear
+                (s: any) =>
+                  s.shift === selectedShift &&
+                  (!selectedYear || !s.school_year || s.school_year === selectedYear)
               );
               const teacherSlotMap: Record<string, string[]> = {};
               courseSchedules.forEach((cell: any) => {
