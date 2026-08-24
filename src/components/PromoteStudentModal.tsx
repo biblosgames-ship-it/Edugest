@@ -100,7 +100,8 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
   // Cargar cursos del año destino
   useEffect(() => {
     const fetchTargetCourses = async () => {
-      if (!targetYear || !student.center_id) {
+      const targetCid = student.center_id || profile?.center_id;
+      if (!targetYear || !targetCid) {
         setTargetCourses([]);
         setTargetCourseId('');
         return;
@@ -111,7 +112,7 @@ export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStud
         const { data, error: cErr } = await supabase
           .from('courses')
           .select('*')
-          .eq('center_id', student.center_id)
+          .eq('center_id', targetCid)
           .eq('school_year', targetYear);
 
         if (cErr) throw cErr;

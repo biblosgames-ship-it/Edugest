@@ -338,7 +338,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     if (!selectedCourseId || !selectedSubjectId || isSaving) return;
     try {
       const updates = [];
-      const cid = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const cid = profile?.center_id || center?.id;
+      if (!cid) {
+        alert('Error: No se encontró el centro escolar asociado a su perfil.');
+        return;
+      }
       for (const student of students) {
         for (const p of config.periods) {
           const pL = p.toLowerCase();
@@ -583,7 +587,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     setIsLoadingSummary(true);
     setIsSummaryModalOpen(true);
     try {
-      const forceYear = '2025-2026';
+      const activeYear = selectedYear || '2026-2027';
 
       // Cargar familiares del estudiante para obtener nombres de padre/madre
       const { data: fData } = await supabase
@@ -597,7 +601,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         .from('student_grades')
         .select('*')
         .eq('student_id', student.id)
-        .eq('school_year', forceYear);
+        .eq('school_year', activeYear);
 
       if (gError) throw gError;
 
@@ -631,7 +635,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
   const downloadSingleBoletinPDF = async (student: any) => {
     if (!student) return;
-    const forceYear = '2025-2026';
+    const activeYear = selectedYear || '2026-2027';
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
     const pageWidth = doc.internal.pageSize.width;

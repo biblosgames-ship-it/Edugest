@@ -763,8 +763,12 @@ export const GeneralReports = () => {
       if (activeCategory !== 'academic-general') return;
       setIsAuditing(true);
       try {
-        const currentYear = selectedYear || '2025-2026';
-        const centerId = center?.id || profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+        const currentYear = selectedYear || '2026-2027';
+        const centerId = center?.id || profile?.center_id;
+        if (!centerId) {
+          setIsAuditing(false);
+          return;
+        }
 
         // 1. Cargar datos maestros en paralelo (traemos todas las notas del año para filtrar en JS)
         const [{ data: courses }, { data: students }, { data: grades }] = await Promise.all([

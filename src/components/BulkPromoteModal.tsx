@@ -108,7 +108,8 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
   // Cargar cursos del año destino
   useEffect(() => {
     const fetchTargetCourses = async () => {
-      if (!targetYear || !sourceCourse?.center_id) {
+      const targetCid = sourceCourse?.center_id || profile?.center_id;
+      if (!targetYear || !targetCid) {
         setTargetCourses([]);
         setTargetCourseId('');
         return;
@@ -119,7 +120,7 @@ export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPro
         const { data, error: cErr } = await supabase
           .from('courses')
           .select('*')
-          .eq('center_id', sourceCourse.center_id)
+          .eq('center_id', targetCid)
           .eq('school_year', targetYear);
 
         if (cErr) throw cErr;

@@ -55,33 +55,42 @@ export const dataService = {
   },
 
   // CURSOS
-  async getCourses(centerId: string, schoolYear: string) {
+  async getCourses(centerId: string, schoolYear?: string) {
     if (!centerId) return [];
     let query = supabase.from('courses').select('*').eq('center_id', centerId);
     if (schoolYear) {
-      query = query.eq('school_year', schoolYear);
+      query = query.or(`school_year.eq.${schoolYear},school_year.is.null,school_year.eq.""`);
     }
     const { data, error } = await query;
-    if (error || !data || data.length === 0) {
-      const { data: fallbackData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('center_id', centerId);
-      return fallbackData || [];
+    if (error || !data) return [];
+    if (schoolYear) {
+      const yearSpecific = data.filter((c: any) => c.school_year === schoolYear);
+      if (yearSpecific.length > 0) return yearSpecific;
+      if (data.every((c: any) => !c.school_year)) return data;
+      return [];
     }
     return data;
   },
 
   // ESTUDIANTES
-  async getStudents(courseId: string, centerId: string, schoolYear: string) {
-    const { data, error } = await supabase
+  async getStudents(courseId: string, centerId: string, schoolYear?: string) {
+    if (!centerId) return [];
+    let query = supabase
       .from('students')
       .select('*')
       .eq('course_id', courseId)
-      .eq('center_id', centerId)
-      .eq('school_year', schoolYear)
-      .order('first_surname', { ascending: true });
-    if (error) return [];
+      .eq('center_id', centerId);
+    if (schoolYear) {
+      query = query.or(`school_year.eq.${schoolYear},school_year.is.null,school_year.eq.""`);
+    }
+    const { data, error } = await query.order('first_surname', { ascending: true });
+    if (error || !data) return [];
+    if (schoolYear) {
+      const yearSpecific = data.filter((s: any) => s.school_year === schoolYear);
+      if (yearSpecific.length > 0) return yearSpecific;
+      if (data.every((s: any) => !s.school_year)) return data;
+      return [];
+    }
     return data;
   },
 

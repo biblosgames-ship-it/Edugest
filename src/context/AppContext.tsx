@@ -229,7 +229,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('courses')
               .select('*')
-              .eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .or(`school_year.eq.${currentFetchYear},school_year.is.null,school_year.eq.""`),
             supabase.from('subjects').select('*').eq('center_id', targetCid),
             supabase.from('profiles').select('*').eq('center_id', targetCid),
             supabase.from('assignments').select('*').eq('center_id', targetCid),
@@ -248,7 +249,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('schedule_entries')
               .select('*')
-              .eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .or(`school_year.eq.${currentFetchYear},school_year.is.null,school_year.eq.""`),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -267,7 +269,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('students')
               .select('*')
-              .eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .or(`school_year.eq.${currentFetchYear},school_year.is.null,school_year.eq.""`),
             supabase
               .from('activities')
               .select('*')
@@ -446,47 +449,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // Auto-vincular en la base de datos Supabase cualquier registro heredado sin año asignado
-          if (targetCid && currentFetchYear) {
-            const hasUnassignedSchedule = (schedRes.data || []).some(
-              (s: any) => !s.school_year || s.school_year === ''
-            );
-            if (hasUnassignedSchedule) {
-              supabase
-                .from('schedule_entries')
-                .update({ school_year: currentFetchYear })
-                .eq('center_id', targetCid)
-                .or('school_year.is.null,school_year.eq.""')
-                .then();
-            }
-            const hasUnassignedCourses = (cRes.data || []).some(
-              (c: any) => !c.school_year || c.school_year === ''
-            );
-            if (hasUnassignedCourses) {
-              supabase
-                .from('courses')
-                .update({ school_year: currentFetchYear })
-                .eq('center_id', targetCid)
-                .or('school_year.is.null,school_year.eq.""')
-                .then();
-            }
-          }
-
-          const priorityPrefsUnified = priorityPrefs.map((p: any) => {
-            if (p.targetType === 'teacher') {
-              return {
-                ...p,
-                targetId: idMap[p.targetId] || p.targetId
-              };
-            }
-            return p;
-          });
-
-          const scheduleUnified = (schedRes.data || []).map((s: any) => ({
-            ...s,
-            school_year: s.school_year || currentFetchYear,
-            teacher_id: idMap[s.teacher_id] || s.teacher_id
-          }));
+          // 1. Filtrar cursos para el año activo (evitar mezclas de otros años)
+          const rawCourses = cRes.data || [];
+          const yearSpecificCourses = rawCourses.filter((c: any) => c.school_year === currentFetchYear);
+          const unassignedCourses = rawCourses.filter((c: any) => !c.school_year || c.school_year === '');
+          const filteredCourses = yearSpecificCourses.length > 0
+            ? yearSpecificCourses
+            : (rawCourses.every((c: any) => !c.school_year) ? unassignedCourses : []);
 
           let localTitularMap: Record<string, any> = {};
           try {
@@ -495,7 +464,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } catch {}
 
-          const coursesUnified = (cRes.data || []).map((c: any) => {
+          const coursesUnified = filteredCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
             return {
               ...c,
@@ -509,6 +478,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     ? localTitular.titular_monday_first_hour
                     : true
             };
+          });
+
+          // 2. Filtrar horarios para el año activo
+          const rawSchedule = schedRes.data || [];
+          const yearSpecificSchedule = rawSchedule.filter((s: any) => s.school_year === currentFetchYear);
+          const unassignedSchedule = rawSchedule.filter((s: any) => !s.school_year || s.school_year === '');
+          const filteredSchedule = yearSpecificSchedule.length > 0
+            ? yearSpecificSchedule
+            : (rawSchedule.every((s: any) => !s.school_year) ? unassignedSchedule : []);
+
+          const scheduleUnified = filteredSchedule.map((s: any) => ({
+            ...s,
+            school_year: s.school_year || currentFetchYear,
+            teacher_id: idMap[s.teacher_id] || s.teacher_id
+          }));
+
+          // 3. Filtrar estudiantes para el año activo (evitar sumar los 1000 estudiantes de años anteriores)
+          const rawStudents = studRes.data || [];
+          const yearSpecificStudents = rawStudents.filter((s: any) => s.school_year === currentFetchYear);
+          const unassignedStudents = rawStudents.filter((s: any) => !s.school_year || s.school_year === '');
+          const filteredStudents = yearSpecificStudents.length > 0
+            ? yearSpecificStudents
+            : (rawStudents.every((s: any) => !s.school_year) ? unassignedStudents : []);
+
+          const priorityPrefsUnified = priorityPrefs.map((p: any) => {
+            if (p.targetType === 'teacher') {
+              return {
+                ...p,
+                targetId: idMap[p.targetId] || p.targetId
+              };
+            }
+            return p;
           });
 
           const performanceAlertsUnified = (perfRes.data || []).map((p: any) => ({
@@ -535,7 +536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             schedule: scheduleUnified,
             attendanceRecords: [],
             performanceAlerts: performanceAlertsUnified,
-            students: studRes.data || [],
+            students: filteredStudents,
             grades: [], // Vacío por defecto
             activities: (actRes.data || []).map((a: any) => ({
               ...a,

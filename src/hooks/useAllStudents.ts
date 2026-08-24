@@ -11,19 +11,18 @@ export const useAllStudents = () => {
   return useQuery({
     queryKey: ['all-students', centerId, selectedYear, state.courses?.length],
     queryFn: async () => {
-      // 1. Obtener los IDs de los cursos del año actual
-      const yearCourseIds = (state.courses || []).map((c: any) => c.id);
+      if (!centerId) return [];
 
-      // Si no hay cursos cargados aún, no podemos buscar alumnos de forma segura por curso
-      // pero podemos intentar traer los del centro y año directamente.
-      let query = supabase.from('students').select('*');
+      let query = supabase
+        .from('students')
+        .select('*')
+        .eq('center_id', centerId);
 
-      if (centerId) {
-        query = query.eq('center_id', centerId);
+      const targetYear = selectedYear || '2026-2027';
+      if (targetYear) {
+        query = query.or(`school_year.eq.${targetYear},school_year.is.null,school_year.eq.""`);
       }
 
-      // Intentamos filtrar por año si está disponible en la tabla
-      // Si no, confiamos en el filtrado posterior por IDs de curso
       const { data, error } = await query.order('first_surname', { ascending: true });
 
       if (error) {
@@ -31,7 +30,9 @@ export const useAllStudents = () => {
         return [];
       }
 
-      return data || [];
+      const raw = data || [];
+      const yearSpecific = raw.filter((s: any) => s.school_year === targetYear);
+      return yearSpecific.length > 0 ? yearSpecific : (raw.every((s: any) => !s.school_year) ? raw : []);
     },
     staleTime: 1000 * 60 * 10 // 10 minutos de cache
   });

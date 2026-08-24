@@ -14,12 +14,14 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
 
   const fetchStudents = async () => {
     if (!gradeId) return;
+    const targetCid = centerId || center?.id;
+    if (!targetCid) return;
     setIsLoading(true);
     try {
       const year = selectedYear || '2026-2027';
       const data = await dataService.getStudents(
         gradeId,
-        centerId || center?.id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1',
+        targetCid,
         year
       );
       setStudents(data || []);

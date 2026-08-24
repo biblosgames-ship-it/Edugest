@@ -7,21 +7,24 @@ export const useStudents = () => {
   const { selectedYear } = useApp();
   const queryClient = useQueryClient();
   const centerId = profile?.center_id;
-  const schoolYear = selectedYear || '2025-2026';
+  const schoolYear = selectedYear || '2026-2027';
 
   const query = useQuery({
     queryKey: ['students', centerId, schoolYear],
     queryFn: async () => {
+      if (!centerId) return [];
       const { data, error } = await supabase
         .from('students')
         .select('*')
         .eq('center_id', centerId)
-        .eq('school_year', schoolYear)
+        .or(`school_year.eq.${schoolYear},school_year.is.null,school_year.eq.""`)
         .order('order_number', { ascending: true })
         .order('last_name', { ascending: true });
 
       if (error) throw error;
-      return data || [];
+      const raw = data || [];
+      const yearSpecific = raw.filter((s: any) => s.school_year === schoolYear);
+      return yearSpecific.length > 0 ? yearSpecific : (raw.every((s: any) => !s.school_year) ? raw : []);
     },
     staleTime: 1000 * 5 // 5 segundos de caché para reflejar cambios de inmediato
   });

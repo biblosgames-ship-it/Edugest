@@ -94,7 +94,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     const fetchCourses = async () => {
       if (!profile?.center_id) return;
       try {
-        const data = await dataService.getCourses(profile.center_id, selectedYear || '2025-2026');
+        const data = await dataService.getCourses(profile.center_id, selectedYear || '2026-2027');
         setAllCourses(data || []);
       } catch (error) {
         console.error('Error loading center courses:', error);
@@ -127,7 +127,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
           .from('students')
           .select('id, names, first_surname, second_surname, family_id, course_id')
           .eq('center_id', profile.center_id)
-          .eq('school_year', selectedYear || '2025-2026');
+          .eq('school_year', selectedYear || '2026-2027');
 
         if (sErr || !students) return;
 

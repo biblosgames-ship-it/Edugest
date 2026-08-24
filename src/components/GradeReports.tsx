@@ -119,8 +119,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     const fetchAnalytics = async () => {
       setIsLoadingAnalytics(true);
       try {
-        const forceYear = '2025-2026';
-        const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+        const forceYear = selectedYear || '2026-2027';
+        const centerId = contextCenter?.id || profile?.center_id;
+        if (!centerId) {
+          setIsLoadingAnalytics(false);
+          return;
+        }
 
         const [stdData, { data: gData }] = await Promise.all([
           dataService.getStudents(selectedCourseId, centerId, forceYear),
@@ -511,8 +515,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
     try {
       // 1. Obtener Estudiantes del Curso
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
-      const forceYear = '2025-2026';
+      const centerId = contextCenter?.id || profile?.center_id;
+      const forceYear = selectedYear || '2026-2027';
+      if (!centerId) {
+        setIsGenerating(false);
+        return;
+      }
 
       const [students, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
@@ -794,8 +802,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     setIsGeneratingRegistro(true);
 
     try {
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
-      const forceYear = '2025-2026';
+      const centerId = contextCenter?.id || profile?.center_id;
+      const forceYear = selectedYear || '2026-2027';
+      if (!centerId) {
+        setIsGeneratingRegistro(false);
+        return;
+      }
 
       const [students, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
@@ -1182,8 +1194,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     setIsFetchingBoletinData(true);
 
     try {
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
-      const forceYear = '2025-2026';
+      const centerId = contextCenter?.id || profile?.center_id;
+      const forceYear = selectedYear || '2026-2027';
+      if (!centerId) {
+        setIsFetchingBoletinData(false);
+        return;
+      }
 
       const [students, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
@@ -1242,8 +1258,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
@@ -1516,8 +1536,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const assignments = state.assignments?.filter((a) => a.course_id === selectedCourseId) || [];
       const courseSubjects = getCourseSubjects();
@@ -1727,8 +1751,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
@@ -1922,8 +1950,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
@@ -2159,8 +2191,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const [stdData, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
         dataService.getCenter(centerId)
@@ -2310,8 +2346,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
     if (!selectedCourseId) return alert('Seleccione un curso');
     setIsLoading(true);
     try {
-      const forceYear = '2025-2026';
-      const centerId = profile?.center_id || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+      const forceYear = selectedYear || '2026-2027';
+      const centerId = contextCenter?.id || profile?.center_id;
+      if (!centerId) {
+        setIsLoading(false);
+        return;
+      }
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const assignments = state.assignments?.filter((a) => a.course_id === selectedCourseId) || [];
       const courseSubjects = getCourseSubjects();
@@ -2589,7 +2629,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
   const generateBoletinPDF = async () => {
     if (!boletinData) return;
-    const forceYear = '2025-2026';
+    const forceYear = selectedYear || '2026-2027';
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
     const pageWidth = doc.internal.pageSize.width;
