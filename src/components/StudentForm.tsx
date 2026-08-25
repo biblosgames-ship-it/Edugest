@@ -186,23 +186,24 @@ export const StudentForm = ({
         const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
         const dbPadre = familyList.find((f: any) => getRole(f) === 'padre');
         const dbMadre = familyList.find((f: any) => getRole(f) === 'madre');
-        const dbTutor = familyList.find((f: any) => getRole(f) === 'tutor');
+        const dbTutor = familyList.find((f: any) => {
+          const r = getRole(f);
+          return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
+        });
 
         setFamily({
           padre: {
-            name: '',
-            phone: '',
-            occupation: '',
-            address: '',
-            ...dbPadre,
+            name: dbPadre?.name || '',
+            phone: dbPadre?.phone || '',
+            occupation: dbPadre?.occupation || '',
+            address: dbPadre?.address || '',
             id_card: dbPadre?.secondary_phone || dbPadre?.id_card || ''
           },
           madre: {
-            name: '',
-            phone: '',
-            occupation: '',
-            address: '',
-            ...dbMadre,
+            name: dbMadre?.name || '',
+            phone: dbMadre?.phone || '',
+            occupation: dbMadre?.occupation || '',
+            address: dbMadre?.address || '',
             id_card: dbMadre?.secondary_phone || dbMadre?.id_card || ''
           },
           tutor: {
@@ -542,15 +543,30 @@ export const StudentForm = ({
       const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
       const dbPadre = familyList.find((f: any) => getRole(f) === 'padre');
       const dbMadre = familyList.find((f: any) => getRole(f) === 'madre');
-      const dbTutor = familyList.find((f: any) => getRole(f) === 'tutor');
+      const dbTutor = familyList.find((f: any) => {
+        const r = getRole(f);
+        return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
+      });
 
       setFamily({
-        padre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbPadre },
-        madre: { name: '', id_card: '', phone: '', occupation: '', address: '', ...dbMadre },
+        padre: {
+          name: dbPadre?.name || '',
+          id_card: dbPadre?.secondary_phone || dbPadre?.id_card || '',
+          phone: dbPadre?.phone || '',
+          occupation: dbPadre?.occupation || '',
+          address: dbPadre?.address || ''
+        },
+        madre: {
+          name: dbMadre?.name || '',
+          id_card: dbMadre?.secondary_phone || dbMadre?.id_card || '',
+          phone: dbMadre?.phone || '',
+          occupation: dbMadre?.occupation || '',
+          address: dbMadre?.address || ''
+        },
         tutor: {
           name: dbTutor?.name || '',
-          relation: dbTutor?.relation || '',
-          id_card: dbTutor?.id_card || '',
+          relation: dbTutor?.occupation || dbTutor?.relation || dbTutor?.role || '',
+          id_card: dbTutor?.secondary_phone || dbTutor?.id_card || '',
           phone: dbTutor?.phone || '',
           address: dbTutor?.address || ''
         }

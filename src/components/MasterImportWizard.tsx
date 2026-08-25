@@ -85,10 +85,14 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
       if (!centerId) return;
 
       // Cargar tutores desde Supabase (no están en AppContext)
-      const { data: parents } = await supabase
-        .from('parents')
-        .select('*')
-        .eq('center_id', centerId);
+      const studentIds = (state.students || []).map((s: any) => s.id);
+      let pQuery = supabase.from('parents').select('*');
+      if (studentIds.length > 0) {
+        pQuery = pQuery.or(`center_id.eq.${centerId},student_id.in.(${studentIds.join(',')})`);
+      } else {
+        pQuery = pQuery.eq('center_id', centerId);
+      }
+      const { data: parents } = await pQuery;
 
       // Pestaña 1: Centro
       const sheetCentro = [
@@ -161,7 +165,16 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
       // Pestaña 5: Alumnos
       const sheetAlumnos = (state.students || []).map((s: any) => {
         const course = (state.courses || []).find((c: any) => c.id === s.course_id);
-        const parent = (parents || []).find((p: any) => p.student_id === s.id);
+        const studentParents = (parents || []).filter((p: any) => p.student_id === s.id);
+        const parent =
+          studentParents.find((p: any) => {
+            const r = (p.relation || p.role || '').toLowerCase().trim();
+            return r !== 'padre' && r !== 'madre' && r !== '';
+          }) ||
+          studentParents.find((p: any) => (p.relation || p.role || '').toLowerCase().trim() === 'madre') ||
+          studentParents.find((p: any) => (p.relation || p.role || '').toLowerCase().trim() === 'padre') ||
+          studentParents[0];
+
         return {
           Nombres: s.names || s.first_name || '',
           Primer_Apellido: s.first_surname || s.last_name || '',
@@ -173,7 +186,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Seccion_Curso: course?.section || '',
           Tanda_Curso: course?.tanda || 'Matutina',
           Tutor_Nombre: parent?.name || '',
-          Tutor_Parentesco: parent?.relation || '',
+          Tutor_Parentesco: parent?.occupation || parent?.relation || '',
           Tutor_Telefono: parent?.phone || '',
           Direccion_Calle: s.address_street || '',
           Direccion_Sector: s.address_sector || '',

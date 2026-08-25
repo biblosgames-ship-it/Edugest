@@ -191,11 +191,12 @@ export const dataService = {
       const { error: fErr } = await supabase.from('parents').insert(
         extra.family.map((f: any) => ({
           name: f.name,
-          relation: f.role,
+          relation: f.role || f.relation || 'Tutor',
           phone: f.phone,
           secondary_phone: f.id_card, // Mapped to avoid DB crash
           occupation: f.occupation,
-          student_id: student.id
+          student_id: student.id,
+          center_id: data.center_id || centerId
         }))
       );
       if (fErr) console.error('Error saving parents:', fErr);
@@ -227,20 +228,29 @@ export const dataService = {
       .eq('id', id);
     if (error) throw error;
 
+    let centerId = data.center_id;
+    if (!centerId) {
+      const { data: sRec } = await supabase.from('students').select('center_id').eq('id', id).single();
+      centerId = sRec?.center_id;
+    }
+
     // Actualizar extras
-    if (extra?.family?.length > 0) {
+    if (extra?.family !== undefined) {
       await supabase.from('parents').delete().eq('student_id', id);
-      const { error: fErr } = await supabase.from('parents').insert(
-        extra.family.map((f: any) => ({
-          name: f.name,
-          relation: f.role,
-          phone: f.phone,
-          secondary_phone: f.id_card, // Mapped to avoid DB crash
-          occupation: f.occupation,
-          student_id: id
-        }))
-      );
-      if (fErr) console.error('Error updating parents:', fErr);
+      if (extra.family.length > 0) {
+        const { error: fErr } = await supabase.from('parents').insert(
+          extra.family.map((f: any) => ({
+            name: f.name,
+            relation: f.role || f.relation || 'Tutor',
+            phone: f.phone,
+            secondary_phone: f.id_card, // Mapped to avoid DB crash
+            occupation: f.occupation,
+            student_id: id,
+            center_id: centerId
+          }))
+        );
+        if (fErr) console.error('Error updating parents:', fErr);
+      }
     }
 
     try {
@@ -1010,7 +1020,8 @@ export const dataService = {
         const { id: _, created_at: __, ...pData } = p;
         return {
           ...pData,
-          student_id: newStudentId
+          student_id: newStudentId,
+          center_id: pData.center_id || sourceStudent.center_id
         };
       });
       const { error: pInsErr } = await supabase.from('parents').insert(parentsInsert);

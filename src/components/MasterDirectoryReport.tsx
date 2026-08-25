@@ -22,10 +22,14 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
       const centerId = profile?.center_id;
       if (!centerId) return;
       try {
-        const { data, error } = await supabase
-          .from('parents')
-          .select('*')
-          .eq('center_id', centerId);
+        const studentIds = (state.students || []).map((s: any) => s.id);
+        let pQuery = supabase.from('parents').select('*');
+        if (studentIds.length > 0) {
+          pQuery = pQuery.or(`center_id.eq.${centerId},student_id.in.(${studentIds.join(',')})`);
+        } else {
+          pQuery = pQuery.eq('center_id', centerId);
+        }
+        const { data, error } = await pQuery;
         if (error) throw error;
         setParents(data || []);
       } catch (err) {
@@ -35,14 +39,23 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
       }
     };
     fetchParents();
-  }, [profile]);
+  }, [profile, state.students]);
 
   const students = state.students || [];
   const courses = state.courses || [];
 
   const studentDirectory = students.map((student) => {
     const course = courses.find((c) => c.id === student.course_id);
-    const tutorRecord = parents.find((p) => p.student_id === student.id);
+    const studentParents = parents.filter((p) => p.student_id === student.id);
+    const tutorRecord =
+      studentParents.find((p) => {
+        const r = (p.relation || p.role || '').toLowerCase().trim();
+        return r !== 'padre' && r !== 'madre' && r !== '';
+      }) ||
+      studentParents.find((p) => (p.relation || p.role || '').toLowerCase().trim() === 'madre') ||
+      studentParents.find((p) => (p.relation || p.role || '').toLowerCase().trim() === 'padre') ||
+      studentParents[0];
+
     return {
       id: student.id,
       name: `${student.first_surname || student.lastName || ''} ${student.second_surname || ''}, ${student.names || student.firstName || ''}`.trim(),
@@ -53,7 +66,7 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
           .filter(Boolean)
           .join(', ') || 'No especificada',
       tutorName: tutorRecord?.name || 'No asignado',
-      tutorRelation: tutorRecord?.relation || 'N/A',
+      tutorRelation: tutorRecord?.occupation || tutorRecord?.relation || 'N/A',
       tutorPhone: tutorRecord?.phone || 'N/A',
       tutorSecondaryPhone: tutorRecord?.secondary_phone || 'N/A'
     };

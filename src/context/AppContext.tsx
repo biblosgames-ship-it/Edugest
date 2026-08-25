@@ -466,10 +466,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const coursesUnified = filteredCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
+            const rawTeacherId = c.titular_teacher_id || localTitular.titular_teacher_id || null;
+            const mappedTeacherId = rawTeacherId ? (idMap[rawTeacherId] || rawTeacherId) : null;
             return {
               ...c,
               school_year: c.school_year || currentFetchYear,
-              titular_teacher_id: c.titular_teacher_id || localTitular.titular_teacher_id || null,
+              titular_teacher_id: mappedTeacherId,
               titular_subject_id: c.titular_subject_id || localTitular.titular_subject_id || null,
               titular_monday_first_hour:
                 c.titular_monday_first_hour !== undefined

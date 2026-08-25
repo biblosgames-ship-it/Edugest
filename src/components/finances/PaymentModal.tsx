@@ -133,9 +133,12 @@ export const PaymentModal = ({
         const allData = [...(parents || []), ...(family || [])];
 
         if (allData.length > 0) {
-          // Priorizar Tutor, luego Madre, luego Padre
+          // Priorizar Tutor/Encargado, luego Madre, luego Padre
           const relative =
-            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('tutor')) ||
+            allData.find((f) => {
+              const r = (f.role || f.relation || '').toLowerCase().trim();
+              return r !== 'padre' && r !== 'madre' && r !== '';
+            }) ||
             allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('madre')) ||
             allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('padre')) ||
             allData[0];

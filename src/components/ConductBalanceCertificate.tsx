@@ -119,12 +119,19 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
 
         let parentsName = '';
         if (student.family && student.family.length > 0) {
+          const tutor = student.family.find(
+            (f: any) =>
+              !['madre', 'padre'].includes((f.relation || f.role || '').toLowerCase().trim()) &&
+              (f.name || '').trim() !== ''
+          );
           const parents = student.family.filter(
             (f: any) =>
-              f.relation?.toLowerCase().includes('madre') ||
-              f.relation?.toLowerCase().includes('padre')
+              (f.relation || f.role)?.toLowerCase().includes('madre') ||
+              (f.relation || f.role)?.toLowerCase().includes('padre')
           );
-          if (parents.length > 0) {
+          if (tutor) {
+            parentsName = tutor.name;
+          } else if (parents.length > 0) {
             parentsName = parents.map((p: any) => p.name).join(' y ');
           } else {
             parentsName = student.family[0].name;

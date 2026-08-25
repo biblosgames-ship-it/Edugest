@@ -82,24 +82,31 @@ export const StudentManagement = () => {
       const fullData = await dataService.getFullStudent(s.id);
       const centerData = await dataService.getCenter(centerId);
       const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
+      const dbPadre = (fullData.family || []).find((f: any) => getRole(f) === 'padre');
+      const dbMadre = (fullData.family || []).find((f: any) => getRole(f) === 'madre');
+      const dbTutor = (fullData.family || []).find((f: any) => {
+        const r = getRole(f);
+        return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
+      });
+
       const familyInfo = {
-        padre: (fullData.family || []).find((f: any) => getRole(f) === 'padre') || {
-          name: '',
-          id_card: '',
-          phone: '',
-          occupation: ''
+        padre: {
+          name: dbPadre?.name || '',
+          id_card: dbPadre?.secondary_phone || dbPadre?.id_card || '',
+          phone: dbPadre?.phone || '',
+          occupation: dbPadre?.occupation || ''
         },
-        madre: (fullData.family || []).find((f: any) => getRole(f) === 'madre') || {
-          name: '',
-          id_card: '',
-          phone: '',
-          occupation: ''
+        madre: {
+          name: dbMadre?.name || '',
+          id_card: dbMadre?.secondary_phone || dbMadre?.id_card || '',
+          phone: dbMadre?.phone || '',
+          occupation: dbMadre?.occupation || ''
         },
-        tutor: (fullData.family || []).find((f: any) => getRole(f) === 'tutor') || {
-          name: '',
-          relation: '',
-          id_card: '',
-          phone: ''
+        tutor: {
+          name: dbTutor?.name || '',
+          relation: dbTutor?.occupation || dbTutor?.relation || dbTutor?.role || '',
+          id_card: dbTutor?.secondary_phone || dbTutor?.id_card || '',
+          phone: dbTutor?.phone || ''
         }
       };
       const courseInfo = state.courses.find((c: any) => c.id === s.course_id);

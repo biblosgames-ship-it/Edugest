@@ -125,209 +125,257 @@ export const CourseForm = () => {
   };
 
   const inputClass =
-    'w-full px-4 py-2.5 rounded-xl border border-border-main bg-brand-bg focus:ring-2 focus:ring-brand-blue outline-none text-sm text-text-main transition-all';
+    'w-full px-3 py-1.5 rounded-xl border border-border-main bg-brand-bg focus:ring-2 focus:ring-brand-blue outline-none text-xs text-text-main transition-all font-medium';
   const labelClass =
-    'block text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5 ml-1';
+    'block text-[9px] font-black text-text-muted uppercase tracking-wider mb-1 ml-0.5';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-lg">
-      <div>
-        <label className={labelClass}>Nivel</label>
-        <select
-          value={formData.level}
-          onChange={(e) => setFormData({ ...formData, level: e.target.value as Level })}
-          className={inputClass}
-        >
-          <option value="Inicial">Inicial</option>
-          <option value="Primario">Primario</option>
-          <option value="Secundario">Secundario</option>
-        </select>
-      </div>
-      <div>
-        <label className={labelClass}>Ciclo</label>
-        <select
-          value={formData.cycle}
-          onChange={(e) => setFormData({ ...formData, cycle: e.target.value as Cycle })}
-          className={inputClass}
-        >
-          <option value="Primer Ciclo">Primer Ciclo</option>
-          <option value="Segundo Ciclo">Segundo Ciclo</option>
-        </select>
-      </div>
-      <div>
-        <label className={labelClass}>Modalidad</label>
-        <select
-          value={formData.modality}
-          onChange={(e) => setFormData({ ...formData, modality: e.target.value as Modality })}
-          className={inputClass}
-        >
-          <option value="Académica">Académica</option>
-          <option value="Técnico-Profesional">Técnico-Profesional</option>
-          <option value="Artes">Artes</option>
-        </select>
-      </div>
-      <div>
-        <label className={labelClass}>Salida</label>
-        <select
-          value={formData.output}
-          onChange={(e) => setFormData({ ...formData, output: e.target.value as Output })}
-          className={inputClass}
-        >
-          <option value="N/A">N/A (Inicial/Primario)</option>
-          <option value="General">General (1ro-3ro Sec)</option>
-          <option value="Ciencias y Tecnología">Ciencias y Tecnología</option>
-          <option value="Humanidades y Lenguas Modernas">Humanidades y Lenguas Modernas</option>
-          <option value="Ciencias Sociales y Humanidades">Ciencias Sociales y Humanidades</option>
-          <option value="Ciencias Económicas y Financieras">
-            Ciencias Económicas y Financieras
-          </option>
-          <option value="Artes">Artes</option>
-        </select>
-      </div>
-      <div>
-        <label className={labelClass}>Tanda</label>
-        <select
-          value={formData.tanda}
-          onChange={(e) => setFormData({ ...formData, tanda: e.target.value as Tanda })}
-          className={inputClass}
-        >
-          <option value="Matutina">Matutina</option>
-          <option value="Vespertina">Vespertina</option>
-          <option value="Nocturna">Nocturna</option>
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Grado</label>
-        <input
-          type="text"
-          value={formData.grade}
-          onChange={(e) => handleGradeChange(e.target.value)}
-          className={inputClass}
-          required
-        />
-      </div>
-      <div>
-        <label className={labelClass}>Sección</label>
-        <input
-          type="text"
-          value={formData.section}
-          onChange={(e) => handleSectionChange(e.target.value)}
-          className={inputClass}
-          required
-        />
-      </div>
-      <div>
-        <label className={labelClass}>Cantidad de Estudiantes</label>
-        <input
-          type="number"
-          value={formData.studentCount}
-          onChange={(e) =>
-            setFormData({ ...formData, studentCount: parseInt(e.target.value) || 0 })
-          }
-          className={inputClass}
-          required
-        />
-      </div>
-
-      {/* Docente Titular / Maestro Guía */}
-      <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-[10px] font-black text-indigo-900 uppercase tracking-widest flex items-center gap-1.5">
-            <span>Docente Titular / Maestro Guía</span>
-            <span className="text-[9px] bg-indigo-200/60 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
-              Lunes 1ra Hora
+    <div className="space-y-8 max-w-4xl">
+      {/* Formulario Compacto de Configuración de Curso */}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-surface rounded-3xl p-5 border border-border-main shadow-sm space-y-4 text-left"
+      >
+        <div className="flex items-center justify-between pb-3 border-b border-border-main">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-brand-blue animate-pulse" />
+            <h3 className="text-xs font-black text-text-main uppercase tracking-widest">
+              {editingCourseId ? 'Editar Curso / Grado' : 'Crear Nuevo Curso / Grado'}
+            </h3>
+          </div>
+          {editingCourseId && (
+            <span className="text-[9px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2.5 py-0.5 rounded-full uppercase">
+              Modo Edición
             </span>
-          </label>
+          )}
         </div>
-        <select
-          value={formData.titular_teacher_id}
-          onChange={(e) => setFormData({ ...formData, titular_teacher_id: e.target.value })}
-          className={inputClass}
-        >
-          <option value="">-- Sin Docente Titular Asignado --</option>
-          {state.teachers
-            .filter((t: any) => t.role === 'teacher' || t.role === 'management_teacher')
-            .map((t: any) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-        </select>
 
-        {formData.titular_teacher_id && (
-          <div className="pt-2 border-t border-indigo-100/70 space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-indigo-950">
+        {/* Fila 1: Datos Académicos Principales */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className={labelClass}>Nivel</label>
+            <select
+              value={formData.level}
+              onChange={(e) => setFormData({ ...formData, level: e.target.value as Level })}
+              className={inputClass}
+            >
+              <option value="Inicial">Inicial</option>
+              <option value="Primario">Primario</option>
+              <option value="Secundario">Secundario</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Ciclo</label>
+            <select
+              value={formData.cycle}
+              onChange={(e) => setFormData({ ...formData, cycle: e.target.value as Cycle })}
+              className={inputClass}
+            >
+              <option value="Primer Ciclo">Primer Ciclo</option>
+              <option value="Segundo Ciclo">Segundo Ciclo</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Grado</label>
+            <input
+              type="text"
+              placeholder="Ej. 1ero, Kínder, 4to"
+              value={formData.grade}
+              onChange={(e) => handleGradeChange(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Sección</label>
+            <input
+              type="text"
+              placeholder="Ej. A, B, C"
+              value={formData.section}
+              onChange={(e) => handleSectionChange(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </div>
+        </div>
+
+        {/* Fila 2: Configuración Operativa y Modalidad */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className={labelClass}>Tanda</label>
+            <select
+              value={formData.tanda}
+              onChange={(e) => setFormData({ ...formData, tanda: e.target.value as Tanda })}
+              className={inputClass}
+            >
+              <option value="Matutina">Matutina</option>
+              <option value="Vespertina">Vespertina</option>
+              <option value="Nocturna">Nocturna</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Cant. Alumnos</label>
+            <input
+              type="number"
+              min="0"
+              value={formData.studentCount}
+              onChange={(e) =>
+                setFormData({ ...formData, studentCount: parseInt(e.target.value) || 0 })
+              }
+              className={inputClass}
+              required
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Modalidad</label>
+            <select
+              value={formData.modality}
+              onChange={(e) => setFormData({ ...formData, modality: e.target.value as Modality })}
+              className={inputClass}
+            >
+              <option value="Académica">Académica</option>
+              <option value="Técnico-Profesional">Técnico-Profesional</option>
+              <option value="Artes">Artes</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Salida</label>
+            <select
+              value={formData.output}
+              onChange={(e) => setFormData({ ...formData, output: e.target.value as Output })}
+              className={inputClass}
+            >
+              <option value="N/A">N/A (Inicial/Primario)</option>
+              <option value="General">General (1ro-3ro Sec)</option>
+              <option value="Ciencias y Tecnología">Ciencias y Tecnología</option>
+              <option value="Humanidades y Lenguas Modernas">Humanidades y Lenguas</option>
+              <option value="Ciencias Sociales y Humanidades">Ciencias Sociales</option>
+              <option value="Ciencias Económicas y Financieras">Ciencias Económicas</option>
+              <option value="Artes">Artes</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Fila 3: Docente Titular / Maestro Guía (Panel Compacto) */}
+        <div className="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[9px] font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider mb-1">
+                Docente Titular / Maestro Guía
+              </label>
+              <select
+                value={formData.titular_teacher_id}
+                onChange={(e) => setFormData({ ...formData, titular_teacher_id: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-xl border border-indigo-200/80 dark:border-indigo-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-xs text-text-main transition-all font-medium"
+              >
+                <option value="">-- Sin Docente Titular Asignado --</option>
+                {state.teachers
+                  .filter(
+                    (t: any) =>
+                      t.role === 'teacher' ||
+                      t.role === 'management_teacher' ||
+                      t.role === 'management' ||
+                      t.id === formData.titular_teacher_id ||
+                      !t.role
+                  )
+                  .map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.role === 'management' ? '(Gestión)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider mb-1">
+                Materia de Titularidad (Opcional)
+              </label>
+              <select
+                disabled={!formData.titular_teacher_id}
+                value={formData.titular_subject_id}
+                onChange={(e) => setFormData({ ...formData, titular_subject_id: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-xl border border-indigo-200/80 dark:border-indigo-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-xs text-text-main transition-all font-medium disabled:opacity-50"
+              >
+                <option value="">-- Materia Principal del Docente --</option>
+                {(() => {
+                  const teacherAssignments = state.assignments.filter(
+                    (a: any) =>
+                      a.teacher_id === formData.titular_teacher_id &&
+                      (!editingCourseId || a.course_id === editingCourseId || a.courseId === editingCourseId)
+                  );
+                  if (teacherAssignments.length > 0) {
+                    return teacherAssignments.map((a: any) => {
+                      const sub = state.subjects.find((s: any) => s.id === a.subject_id);
+                      return (
+                        <option key={a.subject_id} value={a.subject_id}>
+                          {sub?.name || 'Materia Asignada'}
+                        </option>
+                      );
+                    });
+                  }
+                  return (state.subjects || [])
+                    .filter((s: any) => !formData.level || s.level === formData.level)
+                    .map((s: any) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.level})
+                      </option>
+                    ));
+                })()}
+              </select>
+            </div>
+          </div>
+
+          {formData.titular_teacher_id && (
+            <label className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-indigo-950 dark:text-indigo-200 pt-1">
               <input
                 type="checkbox"
                 checked={formData.titular_monday_first_hour}
                 onChange={(e) =>
                   setFormData({ ...formData, titular_monday_first_hour: e.target.checked })
                 }
-                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500"
               />
-              <span>Abrir la semana los Lunes a 1ra hora disponible (después de actos cívicos / bandera)</span>
+              <span>Abrir la semana los Lunes a 1ra hora disponible (después del acto cívico)</span>
             </label>
+          )}
+        </div>
 
-            <div>
-              <label className={labelClass}>Materia de Titularidad (Opcional)</label>
-              <select
-                value={formData.titular_subject_id}
-                onChange={(e) => setFormData({ ...formData, titular_subject_id: e.target.value })}
-                className={inputClass}
-              >
-                <option value="">-- Materia Principal del Docente --</option>
-                {state.assignments
-                  .filter(
-                    (a: any) =>
-                      a.teacher_id === formData.titular_teacher_id &&
-                      (!editingCourseId || a.course_id === editingCourseId || a.courseId === editingCourseId)
-                  )
-                  .map((a: any) => {
-                    const sub = state.subjects.find((s: any) => s.id === a.subject_id);
-                    return (
-                      <option key={a.subject_id} value={a.subject_id}>
-                        {sub?.name || 'Materia Asignada'}
-                      </option>
-                    );
-                  })}
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          type="submit"
-          className="flex-1 bg-brand-blue text-white py-3 px-4 rounded-xl hover:opacity-90 transition-all font-black uppercase text-[10px] tracking-widest shadow-lg shadow-brand-blue/10"
-        >
-          {editingCourseId ? 'Actualizar Curso' : 'Guardar Curso'}
-        </button>
-        {editingCourseId && (
+        {/* Acciones */}
+        <div className="flex items-center gap-2.5 pt-1">
           <button
-            type="button"
-            onClick={() => {
-              setEditingCourseId(null);
-              setIsCodeManuallyEdited(false);
-              setFormData({
-                code: '',
-                level: 'Inicial',
-                grade: '',
-                section: '',
-                studentCount: 0,
-                tanda: 'Matutina',
-                cycle: 'Primer Ciclo',
-                modality: 'Académica',
-                output: 'N/A'
-              });
-            }}
-            className="flex-1 bg-brand-bg text-text-muted py-3 px-4 rounded-xl border border-border-main hover:bg-surface transition-all font-black uppercase text-[10px] tracking-widest"
+            type="submit"
+            className="flex-1 bg-brand-blue text-white py-2 px-4 rounded-xl hover:opacity-90 transition-all font-black uppercase text-[10px] tracking-widest shadow-md shadow-brand-blue/10"
           >
-            Cancelar
+            {editingCourseId ? 'Actualizar Curso' : 'Guardar Curso'}
           </button>
-        )}
-      </div>
+          {editingCourseId && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingCourseId(null);
+                setIsCodeManuallyEdited(false);
+                setFormData({
+                  code: '',
+                  level: 'Inicial',
+                  grade: '',
+                  section: '',
+                  studentCount: 0,
+                  tanda: 'Matutina',
+                  cycle: 'Primer Ciclo',
+                  modality: 'Académica',
+                  output: 'N/A',
+                  titular_teacher_id: '',
+                  titular_subject_id: '',
+                  titular_monday_first_hour: true
+                });
+              }}
+              className="px-4 py-2 bg-brand-bg text-text-muted rounded-xl border border-border-main hover:bg-surface transition-all font-black uppercase text-[10px] tracking-widest"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
+      </form>
 
       <div className="mt-12 space-y-8">
         <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
@@ -447,6 +495,6 @@ export const CourseForm = () => {
           )}
         </div>
       </div>
-    </form>
+    </div>
   );
 };
