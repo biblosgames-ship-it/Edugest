@@ -1154,7 +1154,12 @@ export const scheduleService = {
             const { id, created_at, ...rest } = e;
             return rest;
           });
-          const { error: insError } = await supabase.from('schedule_entries').insert(chunk);
+          let { error: insError } = await supabase.from('schedule_entries').insert(chunk);
+          if (insError && (insError.message?.includes('is_locked') || insError.code === 'PGRST204')) {
+            const fallbackChunk = chunk.map(({ is_locked, ...noLock }: any) => noLock);
+            const { error: retryErr } = await supabase.from('schedule_entries').insert(fallbackChunk);
+            insError = retryErr;
+          }
           if (insError) throw new Error('Error guardando nuevo horario: ' + insError.message);
         }
       }
@@ -2419,7 +2424,12 @@ export const scheduleService = {
             is_locked: isLocked
           };
         });
-        const { error: insError } = await supabase.from('schedule_entries').insert(chunk);
+        let { error: insError } = await supabase.from('schedule_entries').insert(chunk);
+        if (insError && (insError.message?.includes('is_locked') || insError.code === 'PGRST204')) {
+          const fallbackChunk = chunk.map(({ is_locked, ...noLock }: any) => noLock);
+          const { error: retryErr } = await supabase.from('schedule_entries').insert(fallbackChunk);
+          insError = retryErr;
+        }
         if (insError) throw new Error('Error al guardar reparación: ' + insError.message);
       }
     }
