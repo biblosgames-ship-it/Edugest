@@ -1650,17 +1650,24 @@ export const ScheduleViewer = () => {
                       0;
                     if (weeklyHours === 0) return; // ignorar asignaciones sin horas definidas
                     totalAssigned += weeklyHours;
-                    const placedHours = state.schedule.filter(
+
+                    const placedEntries = state.schedule.filter(
                       (s: any) =>
                         s.course_id === course.id &&
                         s.subject_id === assign.subject_id &&
                         s.shift === selectedShift &&
                         (!selectedYear || !s.school_year || s.school_year === selectedYear)
-                    ).length;
-                    totalPlaced += placedHours;
-                    if (placedHours < weeklyHours) {
+                    );
+                    const uniqueSlotKeys = new Set(
+                      placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
+                    );
+                    const uniquePlaced = uniqueSlotKeys.size;
+                    const effectivePlaced = Math.min(uniquePlaced, weeklyHours);
+                    totalPlaced += effectivePlaced;
+
+                    if (uniquePlaced < weeklyHours) {
                       courseHasMissing = true;
-                      courseMissingCount += weeklyHours - placedHours;
+                      courseMissingCount += weeklyHours - uniquePlaced;
                     }
                   });
                   if (courseHasMissing) {
