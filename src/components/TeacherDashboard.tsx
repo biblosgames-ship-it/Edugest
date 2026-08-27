@@ -29,7 +29,7 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 
 export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
-  const { state } = useApp();
+  const { state, selectedYear } = useApp();
 
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
@@ -195,10 +195,34 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     if (!selectedTeacherId) return [];
     const normCurrentDay = normalize(currentDay);
 
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+
+    const seenSlotKeys = new Set<string>();
+
     const normTodayClasses = state.schedule
-      .filter((entry) => {
-        if (entry.teacherId !== selectedTeacherId && entry.teacher_id !== selectedTeacherId)
-          return false;
+      .filter((entry: any) => {
+        // Filtro estricto por año escolar
+        if (selectedYear) {
+          if (hasExplicitYearEntries) {
+            if (entry.school_year !== selectedYear) return false;
+          } else {
+            if (entry.school_year && entry.school_year !== selectedYear) return false;
+          }
+        }
+
+        // Validación de pertenencia al docente (por ID directo o por asignación académica)
+        const matchesTeacher =
+          entry.teacherId === selectedTeacherId ||
+          entry.teacher_id === selectedTeacherId ||
+          (!entry.teacher_id &&
+            (state.assignments || []).some(
+              (a: any) =>
+                (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
+                (a.course_id === entry.course_id || a.courseId === entry.course_id) &&
+                a.subject_id === entry.subject_id
+            ));
+
+        if (!matchesTeacher) return false;
 
         const entryDay = entry.day || '';
         if (entryDay && normalize(entryDay) === normCurrentDay) return true;
@@ -206,6 +230,13 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         const tbId = entry.time_block_id || entry.timeBlockId;
         const tb = state.timeBlocks.find((b) => b.id === tbId);
         return tb && normalize(tb.day) === normCurrentDay;
+      })
+      .filter((entry: any) => {
+        // Deduplicación en tiempo real
+        const key = `${entry.course_id || entry.courseId}_${entry.subject_id}_${(entry.day || '').trim().toLowerCase()}_${entry.start_time}`;
+        if (seenSlotKeys.has(key)) return false;
+        seenSlotKeys.add(key);
+        return true;
       })
       .map((entry) => {
         const tbId = entry.time_block_id || entry.timeBlockId;
@@ -349,12 +380,39 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     if (!selectedTeacherId) return { slots: [], matrix: {} };
 
     const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+    const seenSlotKeys = new Set<string>();
 
-    // 1. Obtener todas las clases asignadas al docente a lo largo de la semana
+    // 1. Obtener todas las clases asignadas al docente a lo largo de la semana con filtro estricto por año
     const teacherEntries = state.schedule
-      .filter((s) => {
-        const tId = s.teacherId || s.teacher_id;
-        return tId === selectedTeacherId;
+      .filter((s: any) => {
+        if (selectedYear) {
+          if (hasExplicitYearEntries) {
+            if (s.school_year !== selectedYear) return false;
+          } else {
+            if (s.school_year && s.school_year !== selectedYear) return false;
+          }
+        }
+
+        const matchesTeacher =
+          s.teacherId === selectedTeacherId ||
+          s.teacher_id === selectedTeacherId ||
+          (!s.teacher_id &&
+            (state.assignments || []).some(
+              (a: any) =>
+                (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
+                (a.course_id === s.course_id || a.courseId === s.course_id) &&
+                a.subject_id === s.subject_id
+            ));
+
+        return matchesTeacher;
+      })
+      .filter((s: any) => {
+        // Deduplicación en tiempo real para evitar mostrar 2 veces la misma hora
+        const key = `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.start_time}`;
+        if (seenSlotKeys.has(key)) return false;
+        seenSlotKeys.add(key);
+        return true;
       })
       .map((s) => {
         const tb = state.timeBlocks.find((b) => b.id === (s.timeBlockId || s.time_block_id));
@@ -389,7 +447,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
 
     teacherEntries.forEach((entry) => {
       if (entry.sTime && entry.eTime) {
-        const key = `${entry.sTime}-${entry.eTime}`;
+        const key = `${entry.sTime.substring(0, 5)}-${entry.eTime.substring(0, 5)}`;
         if (!timeKeys.has(key)) {
           timeKeys.add(key);
           timeBlocksList.push({
@@ -503,10 +561,12 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     return { slots: sortedSlots, matrix };
   }, [
     selectedTeacherId,
+    selectedYear,
     state.schedule,
     state.timeBlocks,
     state.subjects,
     state.courses,
+    state.assignments,
     state.rooms,
     state.breakPreferences
   ]);
@@ -515,18 +575,27 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const myCourses = useMemo(() => {
     if (!selectedTeacherId) return [];
 
-    // Obtener cursos únicos de sus schedule entries o de sus assignments
     const courseIds = new Set<string>();
 
-    state.schedule.forEach((s) => {
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+
+    state.schedule.forEach((s: any) => {
+      if (selectedYear) {
+        if (hasExplicitYearEntries) {
+          if (s.school_year !== selectedYear) return;
+        } else {
+          if (s.school_year && s.school_year !== selectedYear) return;
+        }
+      }
+
       const tId = s.teacherId || s.teacher_id;
       const cId = s.courseId || s.course_id;
-      if (tId === selectedTeacherId && cId) {
+      if ((tId === selectedTeacherId || (!tId && (state.assignments || []).some((a: any) => (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) && (a.course_id === cId || a.courseId === cId) && a.subject_id === s.subject_id))) && cId) {
         courseIds.add(cId);
       }
     });
 
-    state.assignments.forEach((a) => {
+    state.assignments.forEach((a: any) => {
       const tId = a.teacherId || a.teacher_id;
       const cId = a.courseId || a.course_id;
       if (tId === selectedTeacherId && cId) {
@@ -535,7 +604,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     });
 
     return state.courses.filter((c) => courseIds.has(c.id));
-  }, [selectedTeacherId, state.schedule, state.assignments, state.courses]);
+  }, [selectedTeacherId, selectedYear, state.schedule, state.assignments, state.courses]);
 
   // Horario del curso que está inspeccionando el docente con recreos completos y horas libres
   const selectedCourseSchedule = useMemo(() => {
@@ -750,10 +819,19 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     };
 
     const courseSlots = getSlotsForCourse(selectedCourse);
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
 
     return weekDays.map((day) => {
-      // Filtrar materias registradas para este día
-      const dayEntries = state.schedule.filter((s) => {
+      // Filtrar materias registradas para este día con filtro estricto por año
+      const dayEntries = state.schedule.filter((s: any) => {
+        if (selectedYear) {
+          if (hasExplicitYearEntries) {
+            if (s.school_year !== selectedYear) return false;
+          } else {
+            if (s.school_year && s.school_year !== selectedYear) return false;
+          }
+        }
+
         const cId = s.courseId || s.course_id;
         if (cId !== selectedCourse.id) return false;
 
