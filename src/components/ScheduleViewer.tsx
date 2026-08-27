@@ -2108,21 +2108,18 @@ export const ScheduleViewer = () => {
               .map((a) => {
                 const subject = state.subjects.find((s) => s.id === a.subject_id);
 
-                // CONTAR SOLO LAS QUE SON VISIBLES EN LA MATRIZ
-                const visibleEntries = filteredSchedule.filter((e) => {
-                  if (e.subject_id !== a.subject_id) return false;
-                  let eMins = toMins(e.start_time);
-                  if (!isMorning && eMins < 720 && eMins > 0) eMins += 720;
-                  return slots.some((slot) => {
-                    let slotMins = toMins(slot.start);
-                    if (!isMorning && slotMins < 720 && slotMins > 0) slotMins += 720;
-                    return Math.abs(slotMins - eMins) <= 35;
-                  });
-                });
-
-                const placedHours = visibleEntries.length;
+                const placedEntries = (state.schedule || []).filter(
+                  (s: any) =>
+                    String(s.course_id) === String(filterId) &&
+                    String(s.subject_id) === String(a.subject_id) &&
+                    (!selectedYear || !s.school_year || s.school_year === selectedYear)
+                );
+                const uniqueSlotKeys = new Set(
+                  placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
+                );
+                const placedHours = uniqueSlotKeys.size;
                 const assignedHours = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                const isComplete = placedHours === assignedHours;
+                const isComplete = placedHours >= assignedHours && assignedHours > 0;
 
                 return (
                   <div

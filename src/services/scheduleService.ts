@@ -2574,6 +2574,53 @@ export const scheduleService = {
       return durs;
     };
 
+    const getCourseSlots = (cObj: any) => {
+      const isMorningCourse = shift === 'Matutina' || (cObj.tanda || '').toLowerCase().includes('mat');
+      const official = findOfficialSchedule(levelSchedules, cObj.level, isMorningCourse ? 'Matutina' : 'Vespertina');
+      let sT = toMins(official?.start_time || (isMorningCourse ? '08:00' : '14:00'));
+      let eT = toMins(official?.end_time || (isMorningCourse ? '12:00' : '18:15'));
+
+      const firstBp = (breakPreferences || []).find((bp: any) => {
+        let bpM = toMins(bp.startTime);
+        if (!isMorningCourse && bpM < 420) bpM += 720;
+        return isMorningCourse === (bpM < 780);
+      });
+
+      let bStartM = firstBp?.startTime ? toMins(firstBp.startTime) : isMorningCourse ? 600 : 960;
+      if (!isMorningCourse && bStartM < 420) bStartM += 720;
+      const bDur = firstBp ? Number(firstBp.durationMinutes) : 15;
+      const bEndM = bStartM + bDur;
+
+      const isSec = (cObj.level || '').toLowerCase().includes('secun');
+      const totalT = isSec ? 6 : 5;
+      let cStart = official?.start_time ? sT : (isMorningCourse && sT <= 480 ? 480 : sT);
+      const preW = Math.max(0, bStartM - cStart);
+      let preC = totalT === 5 ? 2 : 3;
+      if (preW / preC < 33) preC = Math.max(1, Math.floor(preW / 33));
+      const preDurs = calculateSlotDurations(preW, preC);
+      preC = preDurs.length;
+
+      const sList: any[] = [];
+      let cur = cStart;
+      for (let i = 0; i < preC; i++) {
+        let dur = preDurs[i];
+        let e = i === preC - 1 ? bStartM : cur + dur;
+        sList.push({ start: fromMins(cur), end: fromMins(e), isBreak: false, label: `${i + 1}ra Hora` });
+        cur = e;
+      }
+      cur = bEndM;
+      const postW = Math.max(0, eT - cur);
+      let postC = Math.max(1, totalT - preC);
+      const postDurs = calculateSlotDurations(postW, postC);
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
+        let e = i === postDurs.length - 1 ? eT : cur + dur;
+        sList.push({ start: fromMins(cur), end: fromMins(e), isBreak: false, label: `${preC + i + 1}ra Hora` });
+        cur = e;
+      }
+      return sList;
+    };
+
     const preDurs = calculateSlotDurations(preWindow, preCount);
     preCount = preDurs.length;
 
