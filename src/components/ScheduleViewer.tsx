@@ -240,6 +240,8 @@ export const ScheduleViewer = () => {
   const [swapCourseId, setSwapCourseId] = useState('');
   const [swapSubjectId, setSwapSubjectId] = useState('');
   const [swapDayFilter, setSwapDayFilter] = useState('Todos');
+  const [isFastFilling, setIsFastFilling] = useState(false);
+  const [showBottleneckModal, setShowBottleneckModal] = useState(false);
 
   // Modal de Asignación Directa desde Casilla Vacía
   const [directAssignModal, setDirectAssignModal] = useState<{
@@ -1060,6 +1062,31 @@ export const ScheduleViewer = () => {
     }
   };
 
+  const handleFastFill = async () => {
+    if (isAllLocked) {
+      alert(
+        '🔒 HORARIO BLINDADO\n\nTodas las materias están protegidas. Desbloquea el blindaje general si deseas rellenar horas faltantes.'
+      );
+      return;
+    }
+    setIsFastFilling(true);
+    try {
+      const res = await scheduleService.fastTargetedFill(
+        state,
+        profile,
+        selectedShift,
+        selectedYear,
+        Array.from(lockedEntries)
+      );
+      await refreshData(undefined, true);
+      alert(res.message);
+    } catch (e: any) {
+      alert('Error en relleno asistido: ' + e.message);
+    } finally {
+      setIsFastFilling(false);
+    }
+  };
+
   const handleExportImage = async () => {
     if (!tableRef.current) return;
     try {
@@ -1434,8 +1461,21 @@ export const ScheduleViewer = () => {
                 {isRepairing ? 'Reparando...' : 'Reparar Choques'}
               </button>
               <button
+                onClick={handleFastFill}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isFastFilling || isAllLocked}
+                className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-blue-700 transition-all disabled:opacity-50 cursor-pointer"
+                title="Rellena horas faltantes en 1 segundo sin tocar ni borrar ninguna hora ya colocada"
+              >
+                {isFastFilling ? (
+                  <RefreshCw size={16} className="animate-spin" />
+                ) : (
+                  <Zap size={16} className="text-amber-300 fill-amber-300" />
+                )}
+                {isFastFilling ? 'Rellenando...' : '⚡ Relleno Rápido de Huecos'}
+              </button>
+              <button
                 onClick={handleDeepRepair}
-                disabled={isGenerating || isRepairing || isDeepRepairing || isAllLocked}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isFastFilling || isAllLocked}
                 className="flex items-center gap-2 px-8 py-3 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-amber-600 transition-all disabled:opacity-50"
               >
                 {isDeepRepairing ? (
@@ -1449,7 +1489,7 @@ export const ScheduleViewer = () => {
               </button>
               <button
                 onClick={() => setShowSwapModal(true)}
-                disabled={isGenerating || isRepairing || isDeepRepairing}
+                disabled={isGenerating || isRepairing || isDeepRepairing || isFastFilling}
                 className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-700 transition-all cursor-pointer"
               >
                 <Zap size={16} className="text-amber-300 fill-amber-300" />
@@ -2195,7 +2235,7 @@ export const ScheduleViewer = () => {
                 </div>
 
                 {(() => {
-                  const allSuggestions = scheduleService.findSmartSwaps(
+                  const swapData = scheduleService.findSmartSwaps(
                     state,
                     swapCourseId,
                     swapSubjectId,
@@ -2203,65 +2243,192 @@ export const ScheduleViewer = () => {
                     Array.from(lockedEntries)
                   );
 
+                  const {
+                    suggestions: allSuggestions = [],
+                    teacherGrid = {},
+                    teacherName = 'Docente',
+                    teacherTotalAssigned = 0,
+                    teacherTotalPlaced = 0,
+                    slotTimes = []
+                  } = swapData || {};
+
                   const suggestions = allSuggestions.filter(
-                    (s) => swapDayFilter === 'Todos' || s.day === swapDayFilter
+                    (s: any) => swapDayFilter === 'Todos' || s.day === swapDayFilter
                   );
 
-                  if (suggestions.length === 0) {
-                    return (
-                      <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl text-center text-amber-800 space-y-2">
-                        <AlertCircle size={28} className="mx-auto text-amber-500" />
-                        <p className="text-xs font-black uppercase tracking-tight">
-                          No hay casillas libres para el {swapDayFilter === 'Todos' ? 'resto de la semana' : swapDayFilter}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          Intenta seleccionar otro día arriba o verifica en Preferencias de Docentes que el profesor no tenga bloqueo de agenda.
-                        </p>
-                      </div>
-                    );
-                  }
+                  return (
+                    <div className="flex flex-col gap-4">
+                      {/* BANNER DE DISPONIBILIDAD EN TIEMPO REAL DEL DOCENTE */}
+                      <div className="bg-slate-900 text-white p-4 rounded-2xl flex flex-col gap-3 shadow-lg">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">
+                              Disponibilidad Semanal del Docente
+                            </span>
+                            <h4 className="text-sm font-black uppercase text-white tracking-tight">
+                              👨‍🏫 {teacherName}
+                            </h4>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-800 text-slate-300">
+                              Carga: {teacherTotalPlaced}/{teacherTotalAssigned}h ({Math.round((teacherTotalPlaced / (teacherTotalAssigned || 1)) * 100)}%)
+                            </span>
+                          </div>
+                        </div>
 
-                  return suggestions.map((sugg, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-300 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
-                    >
-                      <div className="space-y-1">
-                        <span className="inline-block px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-wider">
-                          {sugg.type === 'empty' ? 'Casilla Libre' : 'Reemplazo Limpio'}
-                        </span>
-                        <p className="text-xs font-black text-slate-800 uppercase tracking-tight">
-                          {sugg.title}
-                        </p>
-                        <p className="text-[10px] font-medium text-slate-500">
-                          {sugg.description}
-                        </p>
+                        {/* CUADRÍCULA INTERACTIVA DE DISPONIBILIDAD SEMANAL */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-center border-collapse">
+                            <thead>
+                              <tr>
+                                <th className="p-1 text-[8px] font-black uppercase text-slate-400">Hora</th>
+                                {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((d) => (
+                                  <th key={d} className="p-1 text-[9px] font-black uppercase text-slate-300">
+                                    {d.substring(0, 3)}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {slotTimes.map((slot: any, sIdx: number) => (
+                                <tr key={sIdx} className="border-t border-slate-800/60">
+                                  <td className="p-1 text-[8px] font-black text-slate-400 whitespace-nowrap">
+                                    {slot.label || slot.start.substring(0, 5)}
+                                  </td>
+                                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => {
+                                    const cell = teacherGrid[day]?.[slot.start] || { status: 'free', label: 'Libre' };
+                                    let bg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 cursor-pointer';
+                                    let text = 'LIBRE';
+
+                                    if (cell.status === 'break') {
+                                      bg = 'bg-slate-800/50 text-slate-500 border-slate-800';
+                                      text = 'Recreo';
+                                    } else if (cell.status === 'busy_other') {
+                                      bg = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+                                      text = cell.label;
+                                    } else if (cell.status === 'busy_this') {
+                                      bg = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+                                      text = 'En este curso';
+                                    }
+
+                                    return (
+                                      <td key={day} className="p-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (cell.status === 'free') {
+                                              setSwapDayFilter(day);
+                                            }
+                                          }}
+                                          disabled={cell.status !== 'free'}
+                                          className={`w-full py-1 px-1 rounded-lg border text-[8px] font-black uppercase transition-all truncate block ${bg}`}
+                                          title={`Docente el ${day} (${slot.start.substring(0, 5)}): ${cell.label}`}
+                                        >
+                                          {text}
+                                        </button>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await scheduleService.applySmartSwap(
-                              state,
-                              profile,
-                              swapCourseId,
-                              swapSubjectId,
-                              sugg,
-                              selectedShift,
-                              selectedYear
-                            );
-                            await refreshData(undefined, true);
-                            alert('✅ ¡Clase ubicada exitosamente!');
-                            setShowSwapModal(false);
-                          } catch (err: any) {
-                            alert('Error al aplicar ubicación: ' + err.message);
-                          }
-                        }}
-                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md transition-all shrink-0 cursor-pointer"
-                      >
-                        Colocar Clase Aquí
-                      </button>
+
+                      {/* LISTADO DE SUGERENCIAS */}
+                      {suggestions.length === 0 ? (
+                        <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl text-center text-amber-800 space-y-2">
+                          <AlertCircle size={28} className="mx-auto text-amber-500" />
+                          <p className="text-xs font-black uppercase tracking-tight">
+                            No hay casillas libres para el {swapDayFilter === 'Todos' ? 'resto de la semana' : swapDayFilter}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            Intenta seleccionar otro día arriba o haz clic en una de las casillas verdes de la cuadrícula de disponibilidad.
+                          </p>
+                        </div>
+                      ) : (
+                        suggestions.map((sugg: any, idx: number) => {
+                          const isRipple = sugg.type === 'ripple';
+                          const isEmpty = sugg.type === 'empty';
+                          const isSwap = sugg.type === 'swap';
+                          const isWarning = sugg.type === 'warning';
+
+                          return (
+                            <div
+                              key={idx}
+                              className={`border p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+                                isRipple
+                                  ? 'bg-purple-50 hover:bg-purple-100/60 border-purple-200 hover:border-purple-400'
+                                  : isEmpty
+                                  ? 'bg-emerald-50/60 hover:bg-emerald-100/60 border-emerald-200 hover:border-emerald-400'
+                                  : isSwap
+                                  ? 'bg-amber-50/60 hover:bg-amber-100/60 border-amber-200 hover:border-amber-400'
+                                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <span
+                                  className={`inline-block px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                    isRipple
+                                      ? 'bg-purple-600 text-white'
+                                      : isEmpty
+                                      ? 'bg-emerald-600 text-white'
+                                      : isSwap
+                                      ? 'bg-amber-500 text-white'
+                                      : 'bg-slate-400 text-white'
+                                  }`}
+                                >
+                                  {isRipple
+                                    ? '⚡ Intercambio en Cadena (Sin Choques)'
+                                    : isEmpty
+                                    ? '🟢 Casilla Libre Directa'
+                                    : isSwap
+                                    ? '🔄 Reemplazo Local'
+                                    : '⚠️ Advertencia'}
+                                </span>
+                                <p className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                                  {sugg.title}
+                                </p>
+                                <p className="text-[10px] font-medium text-slate-600">
+                                  {sugg.description}
+                                </p>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await scheduleService.applySmartSwap(
+                                      state,
+                                      profile,
+                                      swapCourseId,
+                                      swapSubjectId,
+                                      sugg,
+                                      selectedShift,
+                                      selectedYear
+                                    );
+                                    await refreshData(undefined, true);
+                                    alert('✅ ¡Clase ubicada exitosamente!');
+                                    setShowSwapModal(false);
+                                  } catch (err: any) {
+                                    alert('Error al aplicar ubicación: ' + err.message);
+                                  }
+                                }}
+                                className={`px-5 py-2.5 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md transition-all shrink-0 cursor-pointer text-white ${
+                                  isRipple
+                                    ? 'bg-purple-600 hover:bg-purple-700'
+                                    : isEmpty
+                                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                                    : 'bg-amber-600 hover:bg-amber-700'
+                                }`}
+                              >
+                                {isRipple ? 'Aplicar en Cadena' : 'Colocar Clase Aquí'}
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
-                  ));
+                  );
                 })()}
               </div>
             ) : (

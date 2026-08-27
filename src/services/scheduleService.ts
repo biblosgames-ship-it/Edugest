@@ -2653,11 +2653,12 @@ export const scheduleService = {
         }
 
         // ¿Docente ocupado en otro curso a esta hora?
-        const isTeacherBusyElsewhere = teacherOtherCourseEntries.some((e: any) => {
+        const busyElsewhereEntries = teacherOtherCourseEntries.filter((e: any) => {
           const eStart = toMins(e.start_time);
           const eEnd = toMins(e.end_time);
           return slotStartMins < eEnd && slotEndMins > eStart;
         });
+        const isTeacherBusyElsewhere = busyElsewhereEntries.length > 0;
 
         // Buscar entrada en este curso comparando minutos
         const currentEntry = dayEntries.find((e: any) => {
@@ -2671,16 +2672,80 @@ export const scheduleService = {
         if (!currentEntry) {
           // CASILLA VACÍA
           if (isTeacherBusyElsewhere) {
-            suggestions.push({
-              type: 'warning',
-              priority: 3,
-              day,
-              slot,
-              title: `⚠️ Colocar el ${day} (${slot.label} ${slot.start.substring(0, 5)}) - Ojo: Docente con clase en otro grado`,
-              description: `Casilla libre en este curso. El docente tiene clase en otro grado pero puedes colocarla si es necesario.`,
-              targetSlot: slot,
-              swapWithEntry: null
-            });
+            // Intentar detectar si esa clase en el otro curso se puede mover a otro hueco libre del otro curso (Ripple Swap)
+            let rippleFound = false;
+            const obstructingEntry = busyElsewhereEntries[0];
+            const otherCourse = courses.find((c: any) => c.id === obstructingEntry?.course_id);
+            const otherCourseSlots = otherCourse ? getCourseSlots(otherCourse) : [];
+
+            if (otherCourse && !lockedKeys.includes(obstructingEntry.id)) {
+              for (const altDay of days) {
+                const otherDayEntries = currentSchedule.filter(
+                  (e: any) => e.course_id === otherCourse.id && (e.day || '').trim().toLowerCase() === altDay.toLowerCase()
+                );
+                for (const altSlot of otherCourseSlots) {
+                  if (altSlot.isBreak) continue;
+                  const altStartMins = toMins(altSlot.start);
+                  const altEndMins = toMins(altSlot.end);
+                  const altOverlapsBreak = doesOverlapCourseBreak(altStartMins, altEndMins, otherCourse, breakPreferences, shift, toMins);
+                  if (altOverlapsBreak) continue;
+
+                  const isAltSlotOccupied = otherDayEntries.some((e: any) => Math.abs(toMins(e.start_time) - altStartMins) < 20);
+                  if (!isAltSlotOccupied) {
+                    // Verificar si el docente está libre en ese altDay y altSlot en todos los demás cursos
+                    const isDocenteFreeAtAlt = !currentSchedule.some((e: any) => {
+                      if (e.id === obstructingEntry.id) return false;
+                      if (e.teacher_id !== teacherId) return false;
+                      if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
+                      const eS = toMins(e.start_time);
+                      const eE = toMins(e.end_time);
+                      return altStartMins < eE && altEndMins > eS;
+                    });
+
+                    if (isDocenteFreeAtAlt) {
+                      const otherSub = (subjects || []).find((s: any) => s.id === obstructingEntry.subject_id);
+                      const otherSubName = otherSub?.name || 'Materia';
+                      const otherCourseLabel = `${otherCourse.grade || ''} "${otherCourse.section || ''}"`;
+
+                      suggestions.push({
+                        type: 'ripple',
+                        priority: 2,
+                        day,
+                        slot,
+                        title: `⚡ En Cadena: Mover ${otherSubName} (${otherCourseLabel}) al ${altDay} (${altSlot.label || altSlot.start.substring(0, 5)})`,
+                        description: `Despeja el choque del profesor en ${otherCourseLabel} moviendo esa hora a un espacio vacío de ese mismo grado y coloca la materia aquí automáticamente.`,
+                        targetSlot: slot,
+                        swapWithEntry: null,
+                        rippleMove: {
+                          entryId: obstructingEntry.id,
+                          newDay: altDay,
+                          newStart: altSlot.start,
+                          newEnd: altSlot.end
+                        }
+                      });
+                      rippleFound = true;
+                      break;
+                    }
+                  }
+                }
+                if (rippleFound) break;
+              }
+            }
+
+            if (!rippleFound) {
+              const obsCourse = courses.find((c: any) => c.id === obstructingEntry?.course_id);
+              const obsLabel = obsCourse ? `${obsCourse.grade} "${obsCourse.section || ''}"` : 'otro grado';
+              suggestions.push({
+                type: 'warning',
+                priority: 4,
+                day,
+                slot,
+                title: `⚠️ Colocar el ${day} (${slot.label} ${slot.start.substring(0, 5)}) - Ocupado en ${obsLabel}`,
+                description: `Casilla libre en este curso, pero el docente ya imparte clase en ${obsLabel} a esta misma hora.`,
+                targetSlot: slot,
+                swapWithEntry: null
+              });
+            }
           } else {
             suggestions.push({
               type: 'empty',
@@ -2688,20 +2753,20 @@ export const scheduleService = {
               day,
               slot,
               title: `🟢 Casilla VACÍA el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
-              description: `El espacio está totalmente libre en el curso y el docente tiene disponibilidad.`,
+              description: `El espacio está totalmente libre en el curso y el docente está 100% disponible.`,
               targetSlot: slot,
               swapWithEntry: null
             });
           }
         } else {
-          // CASILLA OCUPADA POR OTRA MATERIA
+          // CASILLA OCUPADA POR OTRA MATERIA EN EL MISMO CURSO
           if (currentEntry.subject_id === targetSubjectId) return; // Ya es esta misma materia
           const existingSub = (subjects || []).find((s: any) => s.id === currentEntry.subject_id);
           const existingSubName = existingSub?.name || 'otra materia';
 
           suggestions.push({
             type: 'swap',
-            priority: 2,
+            priority: 3,
             day,
             slot,
             title: `🔄 Reemplazar a ${existingSubName} el ${day} (${slot.label} ${slot.start.substring(0, 5)})`,
@@ -2713,8 +2778,60 @@ export const scheduleService = {
       });
     });
 
-    // Ordenar sugerencias: Primero casillas verdes totalmente libres, luego reemplazos, luego advertencias de choque
-    return suggestions.sort((a, b) => a.priority - b.priority);
+    // 2. Construir la cuadrícula semanal completa del docente (Teacher Availability Heatmap)
+    const teacherScheduleGrid: Record<string, Record<string, { status: 'free' | 'busy_other' | 'busy_this' | 'break'; label: string }>> = {};
+    days.forEach((day) => {
+      teacherScheduleGrid[day] = {};
+      slotTimes.forEach((slot) => {
+        const slotStartMins = toMins(slot.start);
+        const slotEndMins = toMins(slot.end);
+
+        const overlapsBreak = doesOverlapCourseBreak(slotStartMins, slotEndMins, course, breakPreferences, shift, toMins);
+        if (overlapsBreak) {
+          teacherScheduleGrid[day][slot.start] = { status: 'break', label: 'Recreo' };
+          return;
+        }
+
+        const entriesThisSlot = currentSchedule.filter((e: any) => {
+          if (e.teacher_id !== teacherId) return false;
+          if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+          const eS = toMins(e.start_time);
+          const eE = toMins(e.end_time);
+          return slotStartMins < eE && slotEndMins > eS;
+        });
+
+        if (entriesThisSlot.length === 0) {
+          teacherScheduleGrid[day][slot.start] = { status: 'free', label: 'Libre' };
+        } else {
+          const entry = entriesThisSlot[0];
+          if (entry.course_id === targetCourseId) {
+            const sub = (subjects || []).find((s: any) => s.id === entry.subject_id);
+            teacherScheduleGrid[day][slot.start] = { status: 'busy_this', label: sub?.name || 'En este curso' };
+          } else {
+            const cObj = (courses || []).find((c: any) => c.id === entry.course_id);
+            const cLabel = cObj ? `${cObj.grade || ''} ${cObj.section || ''}` : 'Otro grado';
+            teacherScheduleGrid[day][slot.start] = { status: 'busy_other', label: cLabel };
+          }
+        }
+      });
+    });
+
+    const teacherName = teacherObj?.name || teacherObj?.full_name || 'Docente';
+    const teacherAssignments = (allAssignments || []).filter((a: any) => (a.teacher_id || a.teacherId) === teacherId);
+    const teacherTotalAssigned = teacherAssignments.reduce((acc: number, a: any) => acc + (Number(a.hours_per_week || a.hoursPerWeek) || 0), 0);
+    const teacherTotalPlaced = currentSchedule.filter((e: any) => e.teacher_id === teacherId).length;
+
+    // Ordenar sugerencias: 1: Vacías -> 2: En Cadena (Ripple) -> 3: Reemplazo local -> 4: Advertencias
+    const sortedSuggestions = suggestions.sort((a, b) => a.priority - b.priority);
+
+    return {
+      suggestions: sortedSuggestions,
+      teacherGrid: teacherScheduleGrid,
+      teacherName,
+      teacherTotalAssigned,
+      teacherTotalPlaced,
+      slotTimes
+    };
   },
 
   applySmartSwap: async (
@@ -2738,12 +2855,23 @@ export const scheduleService = {
 
     const targetStartMins = toMins(suggestion.targetSlot.start);
 
-    // 1. Si existe una entrada previa explícita a eliminar en la casilla
+    // 1. Si es un Intercambio en Cadena (Ripple Swap), mover la materia del otro curso
+    if (suggestion.rippleMove) {
+      const { entryId, newDay, newStart, newEnd } = suggestion.rippleMove;
+      const sStart = newStart.length === 5 ? newStart + ':00' : newStart;
+      const sEnd = newEnd.length === 5 ? newEnd + ':00' : newEnd;
+      await supabase
+        .from('schedule_entries')
+        .update({ day: newDay, start_time: sStart, end_time: sEnd })
+        .eq('id', entryId);
+    }
+
+    // 2. Si existe una entrada previa explícita a eliminar en la casilla de este curso
     if (suggestion.swapWithEntry?.id) {
       await supabase.from('schedule_entries').delete().eq('id', suggestion.swapWithEntry.id);
     }
 
-    // 2. Limpieza de aproximación: Eliminar cualquier entrada del curso en ese día que coincida en horario (+-20 min)
+    // 3. Limpieza de aproximación: Eliminar cualquier entrada del curso en ese día que coincida en horario (+-20 min)
     const { data: existingSlots } = await supabase
       .from('schedule_entries')
       .select('id, start_time')
@@ -2762,16 +2890,16 @@ export const scheduleService = {
       }
     }
 
-    // 3. Si se estaba moviendo una clase que ya estaba en otra hora, eliminar su posición vieja
+    // 4. Si se estaba moviendo una clase que ya estaba en otra hora, eliminar su posición vieja
     if (suggestion.fromEntryId) {
       await supabase.from('schedule_entries').delete().eq('id', suggestion.fromEntryId);
     }
 
-    // 4. Formatear hora de inicio y fin en formato HH:MM:SS
+    // 5. Formatear hora de inicio y fin en formato HH:MM:SS
     const sStart = suggestion.targetSlot.start.length === 5 ? suggestion.targetSlot.start + ':00' : suggestion.targetSlot.start;
     const sEnd = suggestion.targetSlot.end.length === 5 ? suggestion.targetSlot.end + ':00' : suggestion.targetSlot.end;
 
-    // 5. Insertar la nueva clase de forma limpia
+    // 6. Insertar la nueva clase de forma limpia
     const { error: insErr } = await supabase.from('schedule_entries').insert([
       {
         center_id: profile.center_id,
@@ -2788,5 +2916,194 @@ export const scheduleService = {
 
     if (insErr) throw new Error('Error al guardar la nueva clase: ' + insErr.message);
     return true;
+  },
+
+  // MOTOR DE RELLENO ASISTIDO ULTRARRÁPIDO (Non-destructive Targeted Gap Filler)
+  fastTargetedFill: async (
+    state: any,
+    profile: any,
+    shift: string,
+    year: string,
+    lockedKeys: string[] = []
+  ) => {
+    const centerId = profile.center_id;
+    const schoolYear = year;
+    const { courses: allCourses, assignments: allAssignments, subjects: allSubjects, levelSchedules, breakPreferences } = state;
+
+    const shiftBase = shift.toLowerCase().substring(0, 3);
+    const courses = allCourses.filter((c: any) => {
+      const tStr = (c.tanda || '').toLowerCase().trim();
+      const lvlStr = (c.level || '').toLowerCase().trim();
+      if (shiftBase === 'mat') {
+        if (tStr.includes('mat') || tStr.includes('mañ') || tStr.includes('ext') || tStr.includes('com')) return true;
+        if (tStr === '') return true;
+        return !tStr.includes('ves') && !tStr.includes('tar');
+      } else {
+        return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+      }
+    });
+
+    const courseIdSet = new Set(courses.map((c: any) => String(c.id)));
+    const assignments = allAssignments.filter((a: any) => courseIdSet.has(String(a.course_id || a.courseId)));
+
+    const { data: currentSchedule } = await supabase
+      .from('schedule_entries')
+      .select('*')
+      .eq('center_id', centerId)
+      .eq('shift', shift)
+      .eq('school_year', schoolYear);
+
+    if (!currentSchedule) {
+      throw new Error('No se pudo cargar el horario actual.');
+    }
+
+    const toMins = (val: string) => {
+      const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const fromMins = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    };
+
+    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+    // 1. Identificar materias faltantes
+    const missingTasks: any[] = [];
+    assignments.forEach((a: any) => {
+      const cId = String(a.course_id || a.courseId);
+      const sId = String(a.subject_id);
+      const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+      const placed = currentSchedule.filter((e: any) => String(e.course_id) === cId && String(e.subject_id) === sId).length;
+      const missing = required - placed;
+      for (let k = 0; k < missing; k++) {
+        missingTasks.push({
+          courseId: cId,
+          subjectId: sId,
+          teacherId: a.teacher_id || a.teacherId,
+          assign: a
+        });
+      }
+    });
+
+    if (missingTasks.length === 0) {
+      return { addedCount: 0, message: '¡El horario ya está al 100% completo! No hay horas pendientes.' };
+    }
+
+    const workingSchedule = [...currentSchedule];
+    const newEntriesToInsert: any[] = [];
+    const entriesToUpdate: any[] = [];
+
+    // Helper para verificar choques
+    const isSlotValidForTeacherAndCourse = (cId: string, tId: string, sId: string, day: string, sStartMins: number, sEndMins: number, courseObj: any) => {
+      // Recreo
+      if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) return false;
+
+      // Deporte en recreo
+      const sub = allSubjects.find((s: any) => s.id === sId);
+      const sName = (sub?.name || '').toLowerCase();
+      if (sName.includes('deporte') || sName.includes('educación física') || sName.includes('educacion fisica')) {
+        if (doesOverlapSportsBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) return false;
+      }
+
+      // Máximo 2 horas al día de la misma materia
+      const sameSubjectInDay = workingSchedule.filter(
+        (e: any) => e.course_id === cId && (e.day || '').trim().toLowerCase() === day.toLowerCase() && e.subject_id === sId
+      ).length;
+      if (sameSubjectInDay >= 2) return false;
+
+      // Curso ocupado a esa hora
+      const courseBusy = workingSchedule.some((e: any) => {
+        if (e.course_id !== cId) return false;
+        if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+        const eS = toMins(e.start_time);
+        const eE = toMins(e.end_time);
+        return sStartMins < eE && sEndMins > eS;
+      });
+      if (courseBusy) return false;
+
+      // Docente ocupado en cualquier otro curso a esa hora
+      const teacherBusy = workingSchedule.some((e: any) => {
+        if (e.teacher_id !== tId) return false;
+        if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+        const eS = toMins(e.start_time);
+        const eE = toMins(e.end_time);
+        return sStartMins < eE && sEndMins > eS;
+      });
+      if (teacherBusy) return false;
+
+      return true;
+    };
+
+    let placedCount = 0;
+
+    // FASE 1: Colocación Directa en Huecos Libres
+    for (const task of missingTasks) {
+      const courseObj = courses.find((c: any) => c.id === task.courseId);
+      if (!courseObj) continue;
+
+      const courseSlots = (levelSchedules && levelSchedules.length > 0)
+        ? [
+            { start: '08:00:00', end: '08:45:00', isBreak: false },
+            { start: '08:45:00', end: '09:30:00', isBreak: false },
+            { start: '09:30:00', end: '10:15:00', isBreak: false },
+            { start: '10:30:00', end: '11:15:00', isBreak: false },
+            { start: '11:15:00', end: '12:00:00', isBreak: false },
+            { start: '12:00:00', end: '12:45:00', isBreak: false },
+            { start: '14:00:00', end: '14:45:00', isBreak: false },
+            { start: '14:45:00', end: '15:30:00', isBreak: false },
+            { start: '15:30:00', end: '16:15:00', isBreak: false },
+            { start: '16:30:00', end: '17:15:00', isBreak: false },
+            { start: '17:15:00', end: '18:00:00', isBreak: false }
+          ]
+        : [];
+
+      let taskPlaced = false;
+
+      for (const day of days) {
+        for (const slot of courseSlots) {
+          if (slot.isBreak) continue;
+          const sStartMins = toMins(slot.start);
+          const sEndMins = toMins(slot.end);
+
+          if (isSlotValidForTeacherAndCourse(task.courseId, task.teacherId, task.subjectId, day, sStartMins, sEndMins, courseObj)) {
+            const newEntry = {
+              center_id: centerId,
+              course_id: task.courseId,
+              subject_id: task.subjectId,
+              teacher_id: task.teacherId,
+              day,
+              shift,
+              start_time: slot.start,
+              end_time: slot.end,
+              school_year: schoolYear
+            };
+            workingSchedule.push(newEntry);
+            newEntriesToInsert.push(newEntry);
+            placedCount++;
+            taskPlaced = true;
+            break;
+          }
+        }
+        if (taskPlaced) break;
+      }
+    }
+
+    // Guardar inserciones nuevas en Supabase
+    if (newEntriesToInsert.length > 0) {
+      const { error: insErr } = await supabase.from('schedule_entries').insert(newEntriesToInsert);
+      if (insErr) throw new Error('Error al guardar relleno asistido: ' + insErr.message);
+    }
+
+    return {
+      addedCount: placedCount,
+      remainingMissing: missingTasks.length - placedCount,
+      message: placedCount > 0
+        ? `✅ ¡Se colocaron ${placedCount} hora(s) faltante(s) exitosamente sin alterar ninguna hora previa!`
+        : '⚠️ No se encontraron huecos libres directos. Usa el Asistente de Intercambio para ver las sugerencias en cadena (Ripple Swaps).'
+    };
   }
 };
+
