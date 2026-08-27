@@ -16,10 +16,32 @@ export const useTeachers = () => {
 
   const addTeacherMutation = useMutation({
     mutationFn: async (newTeacher: any) => {
-      // 1. Obtener límites del plan
-      const maxTeachers = license?.plan?.max_teachers;
-      const maxManagers = license?.plan?.max_managers;
-      const maxSupport = license?.plan?.max_support;
+      if (!centerId) {
+        throw new Error('No se ha detectado el centro educativo activo. Por favor, selecciona un centro antes de agregar personal.');
+      }
+
+      // 1. Obtener límites del plan actualizados en tiempo real para ESTE centro específico
+      let currentLicense: any = null;
+      if (license && license.used_by_center === centerId) {
+        currentLicense = license;
+      }
+
+      try {
+        const { data: freshLic } = await supabase
+          .from('saas_licenses')
+          .select('*, plan:saas_plans(*)')
+          .eq('used_by_center', centerId)
+          .maybeSingle();
+        if (freshLic) {
+          currentLicense = freshLic;
+        }
+      } catch (e) {
+        console.warn('Error fetching fresh license:', e);
+      }
+
+      const maxTeachers = currentLicense?.plan?.max_teachers;
+      const maxManagers = currentLicense?.plan?.max_managers;
+      const maxSupport = currentLicense?.plan?.max_support;
 
       // 2. Determinar la categoría y límite del nuevo colaborador
       const rawRole = (newTeacher.role || newTeacher.team || '').toLowerCase();
@@ -153,8 +175,9 @@ export const useTeachers = () => {
         });
 
         if (currentCount >= limit) {
+          const planName = currentLicense?.plan?.name || 'actual';
           throw new Error(
-            `Límite de ${categoryLabel} alcanzado (${limit}). Por favor, actualiza tu plan SaaS.`
+            `Límite de ${categoryLabel} alcanzado (${currentCount} de ${limit} permitidos en el plan "${planName}"). Por favor, asigna un plan superior o ajusta las cuotas en el panel SaaS.`
           );
         }
       }

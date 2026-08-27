@@ -383,7 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             })
             .forEach((p) => {
               const n = normalizeNameString(p.full_name);
-              if (n && n !== 'SIN NOMBRE' && !n.includes('GENESIS') && !seenNames.has(n)) {
+              if (n && n !== 'SIN NOMBRE' && !seenNames.has(n)) {
                 seenNames.add(n);
                 uniquePersonnel.push(p);
               }

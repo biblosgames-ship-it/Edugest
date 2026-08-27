@@ -89,6 +89,7 @@ export const TeamManagement = () => {
         full_name: editingUser.full_name,
         team: roleSaved,
         role: roleSaved,
+        position: editingUser.position || roleSaved,
         sex: editingUser.sex || 'M',
         phone: editingUser.phone || '',
         grades_editable: editingUser.grades_editable !== false
