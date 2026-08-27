@@ -380,10 +380,25 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     if (!selectedTeacherId) return { slots: [], matrix: {} };
 
     const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+    const hasExplicitYearEntries =
+      selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
     const seenSlotKeys = new Set<string>();
 
-    // 1. Obtener todas las clases asignadas al docente a lo largo de la semana con filtro estricto por año
+    const toMins = (val: string) => {
+      const [h, m] = (val || '')
+        .replace(/[^0-9:]/g, '')
+        .split(':')
+        .map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const fromMins = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    // 1. Obtener todas las clases asignadas al docente a lo largo de la semana con filtro estricto por año y deduplicación exacta
     const teacherEntries = state.schedule
       .filter((s: any) => {
         if (selectedYear) {
@@ -408,7 +423,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         return matchesTeacher;
       })
       .filter((s: any) => {
-        // Deduplicación en tiempo real para evitar mostrar 2 veces la misma hora
+        // Deduplicación en tiempo real para evitar registros huérfanos repetidos en DB
         const key = `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.start_time}`;
         if (seenSlotKeys.has(key)) return false;
         seenSlotKeys.add(key);
@@ -435,25 +450,119 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         };
       });
 
-    // 2. Extraer horas y bloques únicos
-    const timeKeys = new Set<string>();
-    const timeBlocksList: {
-      start: string;
-      end: string;
-      startMinutes: number;
-      isBreak: boolean;
-      label: string;
-    }[] = [];
+    // 2. Construir slots horarios de referencia basados en los cursos que dicta el docente
+    const teacherCourseIds = new Set<string>();
+    teacherEntries.forEach((e) => {
+      const cId = e.courseId || e.course_id;
+      if (cId) teacherCourseIds.add(cId);
+    });
+    (state.assignments || []).forEach((a: any) => {
+      const tId = a.teacherId || a.teacher_id;
+      const cId = a.courseId || a.course_id;
+      if (tId === selectedTeacherId && cId) teacherCourseIds.add(cId);
+    });
 
+    const teacherCourses = state.courses.filter((c) => teacherCourseIds.has(c.id));
+
+    // Generar slots oficiales para los cursos
+    const mergedSlotsMap = new Map<string, any>();
+
+    const getSlotsForCourse = (course: any) => {
+      const isMorning =
+        (course.tanda || '').toLowerCase().includes('mat') ||
+        (course.tanda || '').toLowerCase().includes('mañ') ||
+        ((course.tanda || '') === '' && !(course.level || '').toLowerCase().includes('secun'));
+      const official = (state.levelSchedules || []).find(
+        (ls: any) =>
+          ls.level === course.level &&
+          (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
+      );
+      let startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
+      if (!isMorning && startT < 720 && startT > 0) startT += 720;
+      let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
+      if (!isMorning && endT < 720 && endT > 0) endT += 720;
+
+      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
+        let bpMins = toMins(bp.startTime);
+        if (!isMorning && bpMins < 720) bpMins += 720;
+        const isBpMorning = bpMins < 780;
+        return isMorning === isBpMorning;
+      });
+
+      const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
+      let masterStartMins = toMins(rawMasterStart);
+      if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
+
+      const bStart = masterStartMins;
+      const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : isMorning ? 30 : 15;
+      const bEnd = bStart + bDuration;
+
+      const slots: any[] = [];
+      const preWindow = Math.max(0, bStart - startT);
+      let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      const preDur = Math.floor(preWindow / preCount);
+
+      let currPre = startT;
+      for (let i = 0; i < preCount; i++) {
+        let e = i === preCount - 1 ? bStart : currPre + preDur;
+        slots.push({
+          start: fromMins(currPre) + ':00',
+          end: fromMins(e) + ':00',
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
+        currPre = e;
+      }
+
+      slots.push({
+        start: fromMins(bStart) + ':00',
+        end: fromMins(bEnd) + ':00',
+        isBreak: true,
+        label: 'RECREO'
+      });
+
+      const postWindow = Math.max(0, endT - bEnd);
+      let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      const postDur = Math.floor(postWindow / postCount);
+
+      let currPost = bEnd;
+      for (let i = 0; i < postCount; i++) {
+        let e = i === postCount - 1 ? endT : currPost + postDur;
+        slots.push({
+          start: fromMins(currPost) + ':00',
+          end: fromMins(e) + ':00',
+          isBreak: false,
+          label: `${preCount + i + 1}ra Hora`
+        });
+        currPost = e;
+      }
+
+      return slots;
+    };
+
+    if (teacherCourses.length > 0) {
+      teacherCourses.forEach((course) => {
+        const cSlots = getSlotsForCourse(course);
+        cSlots.forEach((slot) => {
+          const key = slot.start.substring(0, 5);
+          if (!mergedSlotsMap.has(key)) {
+            mergedSlotsMap.set(key, { ...slot });
+          } else if (!slot.isBreak) {
+            mergedSlotsMap.get(key).isBreak = false;
+          }
+        });
+      });
+    }
+
+    // Si aún faltan slots o no tiene cursos asignados, añadir a partir de teacherEntries
     teacherEntries.forEach((entry) => {
       if (entry.sTime && entry.eTime) {
-        const key = `${entry.sTime.substring(0, 5)}-${entry.eTime.substring(0, 5)}`;
-        if (!timeKeys.has(key)) {
-          timeKeys.add(key);
-          timeBlocksList.push({
+        const key = entry.sTime.substring(0, 5);
+        if (!mergedSlotsMap.has(key)) {
+          mergedSlotsMap.set(key, {
             start: entry.sTime,
             end: entry.eTime,
-            startMinutes: entry.startMinutes,
             isBreak: false,
             label: 'Clase'
           });
@@ -461,104 +570,64 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       }
     });
 
-    const toMins = (val: string) => {
-      const [h, m] = (val || '')
-        .replace(/[^0-9:]/g, '')
-        .split(':')
-        .map(Number);
-      return (h || 0) * 60 + (m || 0);
-    };
+    let sortedSlots = [...mergedSlotsMap.values()].sort(
+      (a, b) => toMins(a.start) - toMins(b.start)
+    );
 
-    const fromMins = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-
-    // Agregar recreos generales si corresponden a los turnos del docente
-    const hasMorning = teacherEntries.some((e) => e.startMinutes < 780);
-    const hasAfternoon = teacherEntries.some((e) => e.startMinutes >= 780);
-
-    const addBreakForShift = (morning: boolean) => {
-      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!morning && bpMins < 420) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return morning === isBpMorning;
-      });
-
-      const bStart = firstRelevantBreak
-        ? toMins(firstRelevantBreak.startTime)
-        : morning
-          ? 600
-          : 960;
-      const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : 30;
-      const bEnd = bStart + bDuration;
-
-      const sTime = fromMins(bStart);
-      const eTime = fromMins(bEnd);
-      const key = `${sTime}-${eTime}`;
-
-      if (!timeKeys.has(key)) {
-        timeKeys.add(key);
-        timeBlocksList.push({
-          start: sTime,
-          end: eTime,
-          startMinutes: bStart,
-          isBreak: true,
-          label: morning ? 'RECREO MAÑANA' : 'RECREO TARDE'
-        });
-      }
-    };
-
-    if (hasMorning || (!hasMorning && !hasAfternoon)) {
-      addBreakForShift(true);
-    }
-    if (hasAfternoon) {
-      addBreakForShift(false);
-    }
-
-    // Ordenar bloques por hora de inicio
-    const sortedSlots = timeBlocksList.sort((a, b) => a.startMinutes - b.startMinutes);
-
-    // 3. Rellenar matriz de datos por día y hora
+    // 3. Inicializar matriz semanal
     const matrix: Record<string, Record<string, any>> = {};
 
     sortedSlots.forEach((slot) => {
       matrix[slot.start] = {};
       weekDays.forEach((day) => {
-        // Buscar si hay clase este día a esta hora primero (prevalece la clase sobre el recreo)
-        const match = teacherEntries.find((e) => {
-          const entryDay = e.day || '';
-          const dayMatches = normalize(entryDay) === normalize(day);
-          return dayMatches && Math.abs(e.startMinutes - slot.startMinutes) <= 25;
-        });
-
-        if (match) {
-          matrix[slot.start][day] = {
-            isBreak: false,
-            isFree: false,
-            ...match
-          };
-        } else if (slot.isBreak) {
-          matrix[slot.start][day] = {
-            isBreak: true,
-            label: slot.label,
-            sTime: slot.start,
-            eTime: slot.end
-          };
-        } else {
-          matrix[slot.start][day] = {
-            isBreak: false,
-            isFree: true,
-            sTime: slot.start,
-            eTime: slot.end
-          };
-        }
+        matrix[slot.start][day] = {
+          isBreak: !!slot.isBreak,
+          isFree: !slot.isBreak,
+          label: slot.label,
+          sTime: slot.start,
+          eTime: slot.end
+        };
       });
     });
 
-    return { slots: sortedSlots, matrix };
+    // 4. Mapear cada clase del docente A UNA SOLA casilla (la más cercana única)
+    teacherEntries.forEach((entry) => {
+      if (!entry.day) return;
+      const normDay = normalize(entry.day);
+      const matchedDay = weekDays.find((d) => normalize(d) === normDay);
+      if (!matchedDay) return;
+
+      const eStartMins = entry.startMinutes;
+      let closestSlot: any = null;
+      let minDiff = Infinity;
+
+      sortedSlots.forEach((slot) => {
+        const slotMins = toMins(slot.start);
+        const diff = Math.abs(eStartMins - slotMins);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestSlot = slot;
+        }
+      });
+
+      if (closestSlot && minDiff <= 35) {
+        matrix[closestSlot.start][matchedDay] = {
+          isBreak: false,
+          isFree: false,
+          ...entry
+        };
+      }
+    });
+
+    // 5. Filtrar slots para mostrar solo aquellos que tienen clases programadas o recreos entre clases
+    const activeSlots = sortedSlots.filter((slot) => {
+      const hasClass = weekDays.some((d) => !matrix[slot.start]?.[d]?.isFree && !matrix[slot.start]?.[d]?.isBreak);
+      return hasClass || slot.isBreak;
+    });
+
+    const finalSlots = activeSlots.length > 0 ? activeSlots : sortedSlots;
+
+    return { slots: finalSlots, matrix };
   }, [
     selectedTeacherId,
     selectedYear,
@@ -568,7 +637,8 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     state.courses,
     state.assignments,
     state.rooms,
-    state.breakPreferences
+    state.breakPreferences,
+    state.levelSchedules
   ]);
 
   // Obtener los cursos que dicta el docente
