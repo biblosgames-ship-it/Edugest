@@ -139,6 +139,19 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     return hours * 60 + minutes;
   };
 
+  const format12h = (timeStr: string): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim();
+    const parts = clean.split(':');
+    if (parts.length < 2) return clean;
+    let h = parseInt(parts[0], 10);
+    const m = parts[1].substring(0, 2);
+    if (isNaN(h)) return clean;
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${h}:${m}`;
+  };
+
   const normalize = (text: string) =>
     text
       .toLowerCase()
@@ -1337,7 +1350,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                                     </p>
                                   </div>
                                   <span className="text-[8px] font-black text-amber-700 mt-2 block bg-amber-100/50 w-fit px-1.5 py-0.5 rounded">
-                                    {c.sTime} - {c.eTime}
+                                    {format12h(c.sTime)} - {format12h(c.eTime)}
                                   </span>
                                 </div>
                               );
@@ -1358,7 +1371,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                                     </p>
                                   </div>
                                   <span className="text-[8px] font-semibold text-slate-400 mt-2 block bg-slate-100/50 w-fit px-1.5 py-0.5 rounded">
-                                    {c.sTime} - {c.eTime}
+                                    {format12h(c.sTime)} - {format12h(c.eTime)}
                                   </span>
                                 </div>
                               );
@@ -1378,7 +1391,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                                   </p>
                                 </div>
                                 <span className="text-[8px] font-black text-indigo-600 mt-2 block bg-indigo-50/50 w-fit px-1.5 py-0.5 rounded">
-                                  {c.sTime} - {c.eTime}
+                                  {format12h(c.sTime)} - {format12h(c.eTime)}
                                 </span>
                               </div>
                             );
@@ -1665,7 +1678,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                               <div
                                 className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-600 text-white'}`}
                               >
-                                {c.sTime}
+                                {format12h(c.sTime)}
                               </div>
                               <div>
                                 <p className="text-sm font-black tracking-tight text-amber-900">
@@ -1696,7 +1709,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                             <div
                               className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
                             >
-                              {c.sTime}
+                              {format12h(c.sTime)}
                             </div>
                             <div>
                               <p
@@ -1955,7 +1968,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                             <td className="p-4 align-middle">
                               <span className="flex flex-col">
                                 <span className="text-xs font-black text-slate-900 tracking-tight">
-                                  {slot.start.substring(0, 5)} - {slot.end.substring(0, 5)}
+                                  {format12h(slot.start)} - {format12h(slot.end)}
                                 </span>
                                 <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
                                   {slot.label}

@@ -326,6 +326,19 @@ export const ScheduleViewer = () => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
   };
 
+  const format12h = (timeStr: string): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim();
+    const parts = clean.split(':');
+    if (parts.length < 2) return clean;
+    let h = parseInt(parts[0], 10);
+    const m = parts[1].substring(0, 2);
+    if (isNaN(h)) return clean;
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${h}:${m}`;
+  };
+
   const filteredSchedule = useMemo(() => {
     let list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
@@ -1154,7 +1167,7 @@ export const ScheduleViewer = () => {
   const handleExportExcel = () => {
     const header = ['Hora/Bloque', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
     const rows = slots.map((slot) => {
-      const rowData: string[] = [`${slot.start} - ${slot.end}`];
+      const rowData: string[] = [`${format12h(slot.start)} - ${format12h(slot.end)}`];
       days.forEach((day) => {
         const cellEntries = entriesBySlotAndDay.get(`${day}-${slot.start}`) || [];
         if (slot.isBreak) {
@@ -1553,13 +1566,13 @@ export const ScheduleViewer = () => {
           <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
             Inicio Centro
           </span>
-          <span className="text-xl font-black text-indigo-900">{fromMins(startT)}</span>
+          <span className="text-xl font-black text-indigo-900">{format12h(fromMins(startT))}</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
             Inicio Recreo
           </span>
-          <span className="text-xl font-black text-indigo-900">{masterBPref.startTime}</span>
+          <span className="text-xl font-black text-indigo-900">{format12h(masterBPref.startTime)}</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
@@ -1855,9 +1868,9 @@ export const ScheduleViewer = () => {
               {slots.map((slot, sIdx) => (
                 <div key={sIdx} className="grid grid-cols-6 items-center min-h-[90px]">
                   <div className="text-[10px] font-black text-indigo-600 pr-4">
-                    <span className="text-slate-900">{slot.start}</span>
+                    <span className="text-slate-900">{format12h(slot.start)}</span>
                     <br />
-                    <span className="text-slate-300 font-medium">{slot.end}</span>
+                    <span className="text-slate-400 font-medium">{format12h(slot.end)}</span>
                   </div>
 
                   {days.map((day) => {
@@ -2054,7 +2067,7 @@ export const ScheduleViewer = () => {
                                     });
                                   }}
                                   className="w-full h-full min-h-[45px] rounded-xl border border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 flex flex-col items-center justify-center gap-1 transition-all group/btn cursor-pointer"
-                                  title={`Asignar materia a esta hora (${day} ${slot.start?.substring(0, 5)})`}
+                                  title={`Asignar materia a esta hora (${day} ${format12h(slot.start)})`}
                                 >
                                   <span className="text-[9px] font-black text-slate-300 group-hover/btn:text-emerald-600 transition-colors uppercase tracking-wider">
                                     + Asignar
@@ -2318,7 +2331,7 @@ export const ScheduleViewer = () => {
                               {slotTimes.map((slot: any, sIdx: number) => (
                                 <tr key={sIdx} className="border-t border-slate-800/60">
                                   <td className="p-1 text-[8px] font-black text-slate-400 whitespace-nowrap">
-                                    {slot.label || slot.start.substring(0, 5)}
+                                    {slot.label || format12h(slot.start)}
                                   </td>
                                   {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => {
                                     const cell = teacherGrid[day]?.[slot.start] || { status: 'free', label: 'Libre' };
@@ -2347,7 +2360,7 @@ export const ScheduleViewer = () => {
                                           }}
                                           disabled={cell.status !== 'free'}
                                           className={`w-full py-1 px-1 rounded-lg border text-[8px] font-black uppercase transition-all truncate block ${bg}`}
-                                          title={`Docente el ${day} (${slot.start.substring(0, 5)}): ${cell.label}`}
+                                          title={`Docente el ${day} (${format12h(slot.start)}): ${cell.label}`}
                                         >
                                           {text}
                                         </button>
@@ -2482,7 +2495,7 @@ export const ScheduleViewer = () => {
                     Asignar Clase a esta Casilla
                   </h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                    📅 {directAssignModal.day} • ⏰ {directAssignModal.slot?.label || ''} ({directAssignModal.slot?.start?.substring(0, 5)} - {directAssignModal.slot?.end?.substring(0, 5)})
+                    📅 {directAssignModal.day} • ⏰ {directAssignModal.slot?.label || ''} ({format12h(directAssignModal.slot?.start)} - {format12h(directAssignModal.slot?.end)})
                   </p>
                 </div>
               </div>
