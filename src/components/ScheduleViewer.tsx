@@ -1615,73 +1615,61 @@ export const ScheduleViewer = () => {
               const teachersWithConflicts: Set<string> = new Set();
 
               const shiftBaseVal = selectedShift.toLowerCase().substring(0, 3);
-              state.courses
-                .filter((c: any) => {
-                  const tStr = (c.tanda || '').toLowerCase();
-                  const lvlStr = (c.level || '').toLowerCase();
-                  if (shiftBaseVal === 'mat') {
-                    return (
-                      tStr.includes('mat') ||
-                      tStr.includes('mañ') ||
-                      tStr.includes('ext') ||
-                      tStr.includes('com') ||
-                      tStr === '' ||
-                      ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
-                        !tStr.includes('ves') &&
-                        !tStr.includes('tar'))
-                    );
-                  } else {
-                    return (
-                      tStr.includes('ves') ||
-                      tStr.includes('tar') ||
-                      (tStr === '' && lvlStr.includes('secun'))
-                    );
-                  }
-                })
-                .forEach((course) => {
-                  const courseAssignments = state.assignments.filter(
-                    (a) => a.course_id === course.id || a.courseId === course.id
+              const coursesToAudit =
+                filterType === 'course' && filterId
+                  ? state.courses.filter((c: any) => c.id === filterId)
+                  : state.courses.filter((c: any) => {
+                      const tStr = (c.tanda || '').toLowerCase().trim();
+                      if (shiftBaseVal === 'mat') {
+                        return !tStr.includes('ves') && !tStr.includes('tar');
+                      } else {
+                        return tStr.includes('ves') || tStr.includes('tar');
+                      }
+                    });
+
+              coursesToAudit.forEach((course: any) => {
+                const courseAssignments = state.assignments.filter(
+                  (a: any) => a.course_id === course.id || a.courseId === course.id
+                );
+                let courseHasMissing = false;
+                let courseMissingCount = 0;
+                courseAssignments.forEach((assign: any) => {
+                  const weeklyHours =
+                    Number(assign.hours_per_week || assign.hoursPerWeek || assign.weekly_hours) || 0;
+                  if (weeklyHours === 0) return;
+                  totalAssigned += weeklyHours;
+
+                  const placedEntries = state.schedule.filter(
+                    (s: any) =>
+                      s.course_id === course.id &&
+                      s.subject_id === assign.subject_id &&
+                      (!selectedYear || !s.school_year || s.school_year === selectedYear)
                   );
-                  let courseHasMissing = false;
-                  let courseMissingCount = 0;
-                  courseAssignments.forEach((assign) => {
-                    const weeklyHours =
-                      Number(assign.hours_per_week || assign.hoursPerWeek || assign.weekly_hours) ||
-                      0;
-                    if (weeklyHours === 0) return; // ignorar asignaciones sin horas definidas
-                    totalAssigned += weeklyHours;
+                  const uniqueSlotKeys = new Set(
+                    placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
+                  );
+                  const uniquePlaced = uniqueSlotKeys.size;
+                  const effectivePlaced = Math.min(uniquePlaced, weeklyHours);
+                  totalPlaced += effectivePlaced;
 
-                    const placedEntries = state.schedule.filter(
-                      (s: any) =>
-                        s.course_id === course.id &&
-                        s.subject_id === assign.subject_id &&
-                        s.shift === selectedShift &&
-                        (!selectedYear || !s.school_year || s.school_year === selectedYear)
-                    );
-                    const uniqueSlotKeys = new Set(
-                      placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
-                    );
-                    const uniquePlaced = uniqueSlotKeys.size;
-                    const effectivePlaced = Math.min(uniquePlaced, weeklyHours);
-                    totalPlaced += effectivePlaced;
-
-                    if (uniquePlaced < weeklyHours) {
-                      courseHasMissing = true;
-                      courseMissingCount += weeklyHours - uniquePlaced;
-                    }
-                  });
-                  if (courseHasMissing) {
-                    const cKey = `${course.grade} ${course.section || ''}`.trim();
-                    if (!coursesWithMissingHours.find((x) => x.name === cKey)) {
-                      coursesWithMissingHours.push({ name: cKey, missing: courseMissingCount });
-                    }
+                  if (uniquePlaced < weeklyHours) {
+                    courseHasMissing = true;
+                    courseMissingCount += weeklyHours - uniquePlaced;
                   }
                 });
+                if (courseHasMissing) {
+                  const cKey = `${course.grade} ${course.section || ''}`.trim();
+                  if (!coursesWithMissingHours.find((x) => x.name === cKey)) {
+                    coursesWithMissingHours.push({ name: cKey, missing: courseMissingCount });
+                  }
+                }
+              });
 
               // Detectar conflictos de docentes (mismo docente, mismo bloque horario)
+              const courseIdSet = new Set(coursesToAudit.map((c: any) => c.id));
               const courseSchedules = state.schedule.filter(
                 (s: any) =>
-                  s.shift === selectedShift &&
+                  courseIdSet.has(s.course_id) &&
                   (!selectedYear || !s.school_year || s.school_year === selectedYear)
               );
               const teacherSlotMap: Record<string, string[]> = {};
@@ -1699,11 +1687,11 @@ export const ScheduleViewer = () => {
                 }
               });
 
-              const missingCount = coursesWithMissingHours.length;
+              const totalMissingHours = Math.max(0, totalAssigned - totalPlaced);
+              const missingCount = coursesWithMissingHours.length > 0 ? coursesWithMissingHours.length : (totalMissingHours > 0 ? 1 : 0);
               const conflictCount = teachersWithConflicts.size;
-              const totalMissingHours = totalAssigned - totalPlaced;
               const coveragePct =
-                totalAssigned > 0 ? Math.round((totalPlaced / totalAssigned) * 100) : null;
+                totalAssigned > 0 ? Math.round((totalPlaced / totalAssigned) * 100) : 0;
 
               // CASO 1: Sin carga académica registrada
               if (totalAssigned === 0) {

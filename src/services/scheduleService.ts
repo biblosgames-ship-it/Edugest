@@ -2500,6 +2500,12 @@ export const scheduleService = {
       return (h || 0) * 60 + (m || 0);
     };
 
+    const fromMins = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    };
+
     const isMorning = shift === 'Matutina';
     const courseOfficial = findOfficialSchedule(levelSchedules, course.level, shift);
     const isFirstCycle = isFirstCycleCourse(course);
