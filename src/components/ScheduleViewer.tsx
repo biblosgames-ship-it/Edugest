@@ -258,7 +258,7 @@ export const ScheduleViewer = () => {
     subjectId: ''
   });
 
-  // Sincronizar reactivamente el filtro de grado si cambia el perfil del alumno/padre
+  // Sincronizar reactivamente el filtro de grado si cambia el perfil del alumno/padre o docente
   useEffect(() => {
     if (isStudentOrParent) {
       setFilterType('course');
@@ -267,6 +267,10 @@ export const ScheduleViewer = () => {
           ? profile.course_id || profile.course_code || ''
           : localStorage.getItem('selected_course_id') || profile?.parent_course_ids?.[0] || '';
       setFilterId(activeId);
+    } else if (profile?.role === 'teacher') {
+      setFilterType('teacher');
+      const tId = profile.teacher_id || profile.id || '';
+      if (tId) setFilterId(tId);
     }
   }, [profile, isStudentOrParent]);
 
@@ -325,12 +329,33 @@ export const ScheduleViewer = () => {
   const filteredSchedule = useMemo(() => {
     let list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
-    // FILTRO ROBUSTO POR AÑO Y TANDA
+
+    // 1. FILTRO ROBUSTO POR AÑO Y TANDA
+    // Si existen entradas con el año seleccionado explícito, priorizar solo esas para evitar duplicación con registros antiguos sin año
+    const hasExplicitYearEntries = selectedYear && list.some((s: any) => s.school_year === selectedYear);
+
     list = list.filter((s: any) => {
       const sShift = (s.shift || '').toLowerCase();
       const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      const yearMatch = !selectedYear || !s.school_year || s.school_year === selectedYear;
+      
+      let yearMatch = true;
+      if (selectedYear) {
+        if (hasExplicitYearEntries) {
+          yearMatch = s.school_year === selectedYear;
+        } else {
+          yearMatch = !s.school_year || s.school_year === selectedYear;
+        }
+      }
       return shiftMatch && yearMatch;
+    });
+
+    // 2. DEDUPLICACIÓN ESTRICTA (Evita mostrar 2 veces la misma hora por duplicados en DB)
+    const seenSlotKeys = new Set<string>();
+    list = list.filter((s: any) => {
+      const key = `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.start_time}`;
+      if (seenSlotKeys.has(key)) return false;
+      seenSlotKeys.add(key);
+      return true;
     });
 
     if (filterType === 'teacher' && filterId) {
