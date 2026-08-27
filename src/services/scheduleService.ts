@@ -2977,7 +2977,8 @@ export const scheduleService = {
     profile: any,
     shift: string,
     year: string,
-    lockedKeys: string[] = []
+    lockedKeys: string[] = [],
+    targetCourseId?: string
   ) => {
     const centerId = profile.center_id;
     const schoolYear = year;
@@ -3142,14 +3143,18 @@ export const scheduleService = {
 
     // 4. IDENTIFICAR MATERIAS FALTANTES REALES
     const missingTasks: any[] = [];
-    assignments.forEach((a: any) => {
+    const targetAssignments = targetCourseId
+      ? assignments.filter((a: any) => String(a.course_id || a.courseId) === String(targetCourseId))
+      : assignments;
+
+    targetAssignments.forEach((a: any) => {
       const cId = String(a.course_id || a.courseId);
       const sId = String(a.subject_id);
       const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
       const placed = workingSchedule.filter(
         (e: any) => String(e.course_id) === cId && String(e.subject_id) === sId
       ).length;
-      const missing = required - placed;
+      const missing = Math.max(0, required - placed);
       for (let k = 0; k < missing; k++) {
         missingTasks.push({
           courseId: cId,

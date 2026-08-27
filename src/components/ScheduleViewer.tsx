@@ -1109,12 +1109,14 @@ export const ScheduleViewer = () => {
     }
     setIsFastFilling(true);
     try {
+      const targetCourseId = filterType === 'course' && filterId ? filterId : undefined;
       const res = await scheduleService.fastTargetedFill(
         state,
         profile,
         selectedShift,
         selectedYear,
-        Array.from(lockedEntries)
+        Array.from(lockedEntries),
+        targetCourseId
       );
       await refreshData(undefined, true);
       alert(res.message);
@@ -1509,7 +1511,13 @@ export const ScheduleViewer = () => {
                 ) : (
                   <Zap size={16} className="text-amber-300 fill-amber-300" />
                 )}
-                {isFastFilling ? 'Rellenando...' : '⚡ Relleno Rápido de Huecos'}
+                {isFastFilling
+                  ? filterType === 'course' && filterId
+                    ? 'Rellenando Curso...'
+                    : 'Rellenando...'
+                  : filterType === 'course' && filterId
+                  ? `⚡ Rellenar ${state.courses.find((c) => c.id === filterId)?.grade || 'Curso'} ${state.courses.find((c) => c.id === filterId)?.section || ''}`
+                  : '⚡ Relleno Rápido de Huecos'}
               </button>
               <button
                 onClick={handleDeepRepair}
