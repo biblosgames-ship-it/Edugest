@@ -1639,16 +1639,30 @@ export const ScheduleViewer = () => {
                   if (weeklyHours === 0) return;
                   totalAssigned += weeklyHours;
 
-                  const placedEntries = state.schedule.filter(
-                    (s: any) =>
-                      s.course_id === course.id &&
-                      s.subject_id === assign.subject_id &&
-                      (!selectedYear || !s.school_year || s.school_year === selectedYear)
-                  );
-                  const uniqueSlotKeys = new Set(
-                    placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
-                  );
-                  const uniquePlaced = uniqueSlotKeys.size;
+                  let uniquePlaced = 0;
+                  if (filterType === 'course' && filterId) {
+                    days.forEach((d) => {
+                      slots.forEach((slot) => {
+                        if (slot.isBreak) return;
+                        const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                        if (entriesInSlot.some((e: any) => e.subject_id === assign.subject_id)) {
+                          uniquePlaced++;
+                        }
+                      });
+                    });
+                  } else {
+                    const placedEntries = state.schedule.filter(
+                      (s: any) =>
+                        s.course_id === course.id &&
+                        s.subject_id === assign.subject_id &&
+                        (!selectedYear || !s.school_year || s.school_year === selectedYear)
+                    );
+                    const uniqueSlotKeys = new Set(
+                      placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
+                    );
+                    uniquePlaced = uniqueSlotKeys.size;
+                  }
+
                   const effectivePlaced = Math.min(uniquePlaced, weeklyHours);
                   totalPlaced += effectivePlaced;
 
@@ -2108,16 +2122,16 @@ export const ScheduleViewer = () => {
               .map((a) => {
                 const subject = state.subjects.find((s) => s.id === a.subject_id);
 
-                const placedEntries = (state.schedule || []).filter(
-                  (s: any) =>
-                    String(s.course_id) === String(filterId) &&
-                    String(s.subject_id) === String(a.subject_id) &&
-                    (!selectedYear || !s.school_year || s.school_year === selectedYear)
-                );
-                const uniqueSlotKeys = new Set(
-                  placedEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
-                );
-                const placedHours = uniqueSlotKeys.size;
+                let placedHours = 0;
+                days.forEach((d) => {
+                  slots.forEach((slot) => {
+                    if (slot.isBreak) return;
+                    const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                    if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
+                      placedHours++;
+                    }
+                  });
+                });
                 const assignedHours = Number(a.hours_per_week || a.hoursPerWeek) || 0;
                 const isComplete = placedHours >= assignedHours && assignedHours > 0;
 
@@ -2224,13 +2238,20 @@ export const ScheduleViewer = () => {
                       .map((a) => {
                         const sub = state.subjects.find((s) => s.id === a.subject_id);
                         const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                        const placed = state.schedule.filter(
-                          (s) => s.course_id === swapCourseId && s.subject_id === a.subject_id
-                        ).length;
-                        const missing = assigned - placed;
+                        const courseEntries = (state.schedule || []).filter(
+                          (s: any) =>
+                            (String(s.course_id) === String(swapCourseId) || String(s.courseId) === String(swapCourseId)) &&
+                            String(s.subject_id) === String(a.subject_id) &&
+                            (!selectedYear || !s.school_year || s.school_year === selectedYear)
+                        );
+                        const uniqueSlots = new Set(
+                          courseEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
+                        );
+                        const placed = uniqueSlots.size;
+                        const missing = Math.max(0, assigned - placed);
                         return (
                           <option key={a.subject_id} value={a.subject_id}>
-                            {sub?.name || 'Materia'} ({placed}/{assigned}h {missing > 0 ? `- FALTAN ${missing}h` : '✓ COMPLETO'})
+                            {sub?.name || 'Materia'} ({placed}/{assigned}h {missing > 0 ? `❌ FALTAN ${missing}h` : '✓ COMPLETO'})
                           </option>
                         );
                       })}
