@@ -2961,6 +2961,11 @@ export const ScheduleViewer = () => {
                         (state.teachers[0]?.id || '');
                     }
 
+                    const targetCourse = state.courses.find((c) => String(c.id) === String(directAssignModal.courseId));
+                    const cTandaStr = (targetCourse?.tanda || '').toLowerCase();
+                    const isCourseVespertina = cTandaStr.includes('ves') || cTandaStr.includes('tar');
+                    const targetShift = isCourseVespertina ? 'Vespertina' : (effectiveShift || selectedShift);
+
                     const finalYear = selectedYear || state.currentYear || '2026-2027';
                     const sStart = directAssignModal.slot.start.length === 5 ? directAssignModal.slot.start + ':00' : directAssignModal.slot.start;
                     const sEnd = directAssignModal.slot.end.length === 5 ? directAssignModal.slot.end + ':00' : directAssignModal.slot.end;
@@ -2972,7 +2977,7 @@ export const ScheduleViewer = () => {
                         subject_id: directAssignModal.subjectId,
                         teacher_id: finalTeacherId,
                         day: directAssignModal.day,
-                        shift: effectiveShift || selectedShift,
+                        shift: targetShift,
                         start_time: sStart,
                         end_time: sEnd,
                         school_year: finalYear
@@ -2990,6 +2995,10 @@ export const ScheduleViewer = () => {
                           ...prev,
                           schedule: [...(prev.schedule || []), ...insertedData]
                         }));
+                      }
+
+                      if (isCourseVespertina && selectedShift !== 'Vespertina') {
+                        setSelectedShift('Vespertina');
                       }
 
                       await refreshData(undefined, true);

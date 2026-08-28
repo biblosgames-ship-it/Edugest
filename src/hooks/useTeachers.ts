@@ -197,14 +197,71 @@ export const useTeachers = () => {
 
   const updateTeacherMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
-      const updatedData = { ...updates };
+      if (!centerId) throw new Error('No center ID found');
+
+      // 1. Obtener el docente actual desde el estado
+      const targetTeacher = (state.teachers || []).find((t: any) => t.id === id);
+      const oldName = targetTeacher
+        ? normalizeNameString(targetTeacher.full_name || targetTeacher.name || '')
+        : '';
+      const newName = (updates.name || updates.full_name || '').trim();
+
+      const updatedData = { ...updates, name: newName, full_name: newName };
       if (updates.sex) {
         updatedData.gender = updates.sex === 'F' ? 'Femenino' : 'Masculino';
       }
-      const { error } = await supabase
-        .from('staff')
-        .upsert({ id, center_id: centerId, ...updatedData });
-      if (error) throw error;
+
+      // 2. Buscar registros vinculados por ID o por nombre antiguo en staff y teachers del centro
+      const [staffRes, teachersRes] = await Promise.all([
+        supabase.from('staff').select('id, full_name, name').eq('center_id', centerId),
+        supabase.from('teachers').select('id, name, full_name').eq('center_id', centerId)
+      ]);
+
+      const matchedStaffIds = new Set<string>();
+      const matchedTeacherIds = new Set<string>();
+
+      matchedStaffIds.add(id);
+      matchedTeacherIds.add(id);
+
+      if (oldName) {
+        (staffRes.data || []).forEach((s: any) => {
+          if (normalizeNameString(s.full_name || s.name || '') === oldName) {
+            matchedStaffIds.add(s.id);
+          }
+        });
+        (teachersRes.data || []).forEach((t: any) => {
+          if (normalizeNameString(t.name || t.full_name || '') === oldName) {
+            matchedTeacherIds.add(t.id);
+          }
+        });
+      }
+
+      // 3. Actualizar todas las filas en staff
+      const staffPromises = Array.from(matchedStaffIds).map((sId) =>
+        supabase.from('staff').upsert({ id: sId, center_id: centerId, ...updatedData })
+      );
+
+      // 4. Actualizar todas las filas en teachers
+      const teacherPromises = Array.from(matchedTeacherIds).map((tId) =>
+        supabase.from('teachers').upsert({
+          id: tId,
+          center_id: centerId,
+          name: newName,
+          ...(updates.area ? { area: updates.area } : {}),
+          ...(updates.hoursAvailable || updates.hours_available
+            ? { hours_available: updates.hoursAvailable || updates.hours_available }
+            : {})
+        })
+      );
+
+      // 5. Actualizar en profiles si existe
+      const profilePromise = supabase
+        .from('profiles')
+        .update({ full_name: newName })
+        .eq('id', id)
+        .eq('center_id', centerId);
+
+      await Promise.all([...staffPromises, ...teacherPromises, profilePromise]);
     },
     onSuccess: () => {
       refreshData(centerId, true);

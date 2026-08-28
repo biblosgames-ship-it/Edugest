@@ -2496,25 +2496,56 @@ export const scheduleService = {
     const subject = (subjects || []).find((s: any) => String(s.id) === String(targetSubjectId));
     if (!course || !subject) return emptyResult;
 
+    // Buscar asignación explícita o resolver dinámicamente docente y horas
     const assign = (assignments || []).find(
       (a: any) =>
         (String(a.course_id) === String(targetCourseId) || String(a.courseId) === String(targetCourseId)) &&
         String(a.subject_id) === String(targetSubjectId)
     );
-    if (!assign) return emptyResult;
 
-    const teacherId = assign.teacher_id || assign.teacherId;
+    let teacherId = assign?.teacher_id || assign?.teacherId;
+    if (!teacherId) {
+      const generalTch = (assignments || []).find(
+        (a: any) => String(a.subject_id) === String(targetSubjectId) && (a.teacher_id || a.teacherId)
+      );
+      teacherId = generalTch?.teacher_id || generalTch?.teacherId || (teachers && teachers[0]?.id) || '';
+    }
+
     const teacherObj = (teachers || []).find((t: any) => String(t.id) === String(teacherId));
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-    const currentSchedule = (schedule || []).filter(
-      (s: any) =>
-        !s.shift ||
-        (s.shift || '').toLowerCase().includes(shift.toLowerCase().substring(0, 3))
-    );
+
+    // Sincronización robusta de tanda efectiva del curso
+    let effectiveTargetShift = shift;
+    if (course?.tanda) {
+      const t = course.tanda.toLowerCase();
+      if (t.includes('ves') || t.includes('tar')) effectiveTargetShift = 'Vespertina';
+      else if (t.includes('mat') || t.includes('mañ') || t.includes('ext') || t.includes('com')) effectiveTargetShift = 'Matutina';
+    }
+    const isMorning = effectiveTargetShift === 'Matutina';
+    const shiftBase = effectiveTargetShift.toLowerCase().substring(0, 3);
+
+    const currentSchedule = (schedule || []).filter((s: any) => {
+      if (String(s.course_id || s.courseId) === String(targetCourseId)) return true;
+      const sShift = (s.shift || '').toLowerCase();
+      return !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
+    });
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
       return (h || 0) * 60 + (m || 0);
+    };
+
+    const normalizeEntryMinutes = (timeStr: string, isMorn: boolean) => {
+      let mins = toMins(timeStr);
+      if (mins <= 0) return 0;
+      if (!isMorn) {
+        if (mins < 420) {
+          mins += 720;
+        } else if (mins >= 420 && mins < 780) {
+          mins += 360;
+        }
+      }
+      return mins;
     };
 
     const fromMins = (mins: number) => {
@@ -2523,8 +2554,7 @@ export const scheduleService = {
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
     };
 
-    const isMorning = shift === 'Matutina';
-    const courseOfficial = findOfficialSchedule(levelSchedules, course.level, shift);
+    const courseOfficial = findOfficialSchedule(levelSchedules, course.level, effectiveTargetShift);
     const isFirstCycle = isFirstCycleCourse(course);
     const isSecondCycle = isSecondCycleCourse(course);
 
@@ -2734,15 +2764,16 @@ export const scheduleService = {
 
         // ¿Docente ocupado en otro curso a esta hora?
         const busyElsewhereEntries = teacherOtherCourseEntries.filter((e: any) => {
-          const eStart = toMins(e.start_time);
-          const eEnd = toMins(e.end_time);
+          const eStart = normalizeEntryMinutes(e.start_time, isMorning);
+          let eEnd = normalizeEntryMinutes(e.end_time, isMorning);
+          if (eEnd <= eStart) eEnd = eStart + 45;
           return slotStartMins < eEnd && slotEndMins > eStart;
         });
         const isTeacherBusyElsewhere = busyElsewhereEntries.length > 0;
 
-        // Buscar entrada en este curso comparando minutos
+        // Buscar entrada en este curso comparando minutos normalizados
         const currentEntry = dayEntries.find((e: any) => {
-          const eStart = toMins(e.start_time);
+          const eStart = normalizeEntryMinutes(e.start_time, isMorning);
           return Math.abs(eStart - slotStartMins) < 20;
         });
 
@@ -2770,15 +2801,16 @@ export const scheduleService = {
                   const altOverlapsBreak = doesOverlapCourseBreak(altStartMins, altEndMins, otherCourse, breakPreferences, shift, toMins);
                   if (altOverlapsBreak) continue;
 
-                  const isAltSlotOccupied = otherDayEntries.some((e: any) => Math.abs(toMins(e.start_time) - altStartMins) < 20);
+                  const isAltSlotOccupied = otherDayEntries.some((e: any) => Math.abs(normalizeEntryMinutes(e.start_time, isMorning) - altStartMins) < 20);
                   if (!isAltSlotOccupied) {
                     // Verificar si el docente está libre en ese altDay y altSlot en todos los demás cursos
                     const isDocenteFreeAtAlt = !currentSchedule.some((e: any) => {
                       if (e.id === obstructingEntry.id) return false;
                       if (e.teacher_id !== teacherId) return false;
                       if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
-                      const eS = toMins(e.start_time);
-                      const eE = toMins(e.end_time);
+                      const eS = normalizeEntryMinutes(e.start_time, isMorning);
+                      let eE = normalizeEntryMinutes(e.end_time, isMorning);
+                      if (eE <= eS) eE = eS + 45;
                       return altStartMins < eE && altEndMins > eS;
                     });
 
@@ -2866,7 +2898,7 @@ export const scheduleService = {
         const slotStartMins = toMins(slot.start);
         const slotEndMins = toMins(slot.end);
 
-        const overlapsBreak = doesOverlapCourseBreak(slotStartMins, slotEndMins, course, breakPreferences, shift, toMins);
+        const overlapsBreak = doesOverlapCourseBreak(slotStartMins, slotEndMins, course, breakPreferences, effectiveTargetShift, toMins);
         if (overlapsBreak) {
           teacherScheduleGrid[day][slot.start] = { status: 'break', label: 'Recreo' };
           return;
@@ -2875,8 +2907,9 @@ export const scheduleService = {
         const entriesThisSlot = currentSchedule.filter((e: any) => {
           if (e.teacher_id !== teacherId) return false;
           if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-          const eS = toMins(e.start_time);
-          const eE = toMins(e.end_time);
+          const eS = normalizeEntryMinutes(e.start_time, isMorning);
+          let eE = normalizeEntryMinutes(e.end_time, isMorning);
+          if (eE <= eS) eE = eS + 45;
           return slotStartMins < eE && slotEndMins > eS;
         });
 
@@ -2923,19 +2956,44 @@ export const scheduleService = {
     shift: string,
     schoolYear: string
   ) => {
+    const courseObj = (state.courses || []).find((c: any) => String(c.id) === String(targetCourseId));
+    let effectiveTargetShift = shift;
+    if (courseObj?.tanda) {
+      const t = courseObj.tanda.toLowerCase();
+      if (t.includes('ves') || t.includes('tar')) effectiveTargetShift = 'Vespertina';
+      else if (t.includes('mat') || t.includes('mañ') || t.includes('ext') || t.includes('com')) effectiveTargetShift = 'Matutina';
+    }
+    const isMorning = effectiveTargetShift === 'Matutina';
+
     const assign = (state.assignments || []).find(
       (a: any) =>
         (String(a.course_id) === String(targetCourseId) || String(a.courseId) === String(targetCourseId)) &&
         String(a.subject_id) === String(targetSubjectId)
     );
-    if (!assign) throw new Error('No se encontró la asignación académica.');
 
-    const teacherId = assign.teacher_id || assign.teacherId;
+    let teacherId = assign?.teacher_id || assign?.teacherId;
+    if (!teacherId) {
+      const otherAssign = (state.assignments || []).find(
+        (a: any) => String(a.subject_id) === String(targetSubjectId) && (a.teacher_id || a.teacherId)
+      );
+      teacherId = otherAssign?.teacher_id || otherAssign?.teacherId || (state.teachers && state.teachers[0]?.id) || '';
+    }
+
     const finalSchoolYear = schoolYear || state.currentYear || '2026-2027';
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
       return (h || 0) * 60 + (m || 0);
+    };
+
+    const normalizeEntryMinutes = (timeStr: string, isMorn: boolean) => {
+      let mins = toMins(timeStr);
+      if (mins <= 0) return 0;
+      if (!isMorn) {
+        if (mins < 420) mins += 720;
+        else if (mins >= 420 && mins < 780) mins += 360;
+      }
+      return mins;
     };
 
     const targetStartMins = toMins(suggestion.targetSlot.start);
@@ -2962,12 +3020,11 @@ export const scheduleService = {
       .select('id, start_time')
       .eq('center_id', profile.center_id)
       .eq('course_id', targetCourseId)
-      .eq('day', suggestion.day)
-      .eq('shift', shift);
+      .eq('day', suggestion.day);
 
     if (existingSlots && existingSlots.length > 0) {
       const idsToDelete = existingSlots
-        .filter((e) => Math.abs(toMins(e.start_time) - targetStartMins) < 20)
+        .filter((e) => Math.abs(normalizeEntryMinutes(e.start_time, isMorning) - targetStartMins) < 20)
         .map((e) => e.id);
       if (idsToDelete.length > 0) {
         await supabase.from('schedule_entries').delete().in('id', idsToDelete);
@@ -2983,7 +3040,7 @@ export const scheduleService = {
     const sStart = suggestion.targetSlot.start.length === 5 ? suggestion.targetSlot.start + ':00' : suggestion.targetSlot.start;
     const sEnd = suggestion.targetSlot.end.length === 5 ? suggestion.targetSlot.end + ':00' : suggestion.targetSlot.end;
 
-    // 6. Insertar la nueva clase de forma limpia
+    // 6. Insertar la nueva clase de forma limpia con la tanda efectiva
     const { error: insErr } = await supabase.from('schedule_entries').insert([
       {
         center_id: profile.center_id,
@@ -2991,7 +3048,7 @@ export const scheduleService = {
         subject_id: targetSubjectId,
         teacher_id: teacherId,
         day: suggestion.day,
-        shift,
+        shift: effectiveTargetShift,
         start_time: sStart,
         end_time: sEnd,
         school_year: finalSchoolYear
@@ -3069,6 +3126,16 @@ export const scheduleService = {
       const h = Math.floor(mins / 60);
       const m = mins % 60;
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    };
+
+    const normalizeEntryMinutes = (timeStr: string, isMorn: boolean) => {
+      let mins = toMins(timeStr);
+      if (mins <= 0) return 0;
+      if (!isMorn) {
+        if (mins < 420) mins += 720;
+        else if (mins >= 420 && mins < 780) mins += 360;
+      }
+      return mins;
     };
 
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
@@ -3171,45 +3238,120 @@ export const scheduleService = {
 
     const workingSchedule = rawSchedule.filter((e: any) => !idsToDelete.includes(e.id));
 
-    // 4. IDENTIFICAR MATERIAS FALTANTES REALES (Basado en cuadrícula visible del curso)
+    // 4. IDENTIFICAR MATERIAS FALTANTES REALES (Asignaciones explícitas + Materias curriculares oficiales del grado)
     const missingTasks: any[] = [];
-    const targetAssignments = targetCourseId
-      ? assignments.filter((a: any) => String(a.course_id || a.courseId) === String(targetCourseId))
-      : assignments;
+    const targetCourses = targetCourseId
+      ? courses.filter((c: any) => String(c.id) === String(targetCourseId))
+      : courses;
 
-    targetAssignments.forEach((a: any) => {
-      const cId = String(a.course_id || a.courseId);
-      const sId = String(a.subject_id);
-      const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-      const courseObj = courses.find((c: any) => String(c.id) === cId);
+    targetCourses.forEach((courseObj: any) => {
+      const cId = String(courseObj.id);
+      const cTanda = (courseObj.tanda || '').toLowerCase();
+      const isCourseMorning = cTanda ? (!cTanda.includes('ves') && !cTanda.includes('tar')) : shiftBase === 'mat';
       const courseSlots = getSlotsForCourse(courseObj);
-      
-      let placed = 0;
-      days.forEach((d) => {
-        courseSlots.forEach((slot: any) => {
-          if (slot.isBreak) return;
-          const sMins = toMins(slot.start);
-          const hasEntry = workingSchedule.some((e: any) => {
-            if (String(e.course_id || e.courseId) !== cId) return false;
-            if (String(e.subject_id) !== sId) return false;
-            if ((e.day || '').trim().toLowerCase() !== d.toLowerCase()) return false;
-            const eMins = toMins(e.start_time);
-            return Math.abs(eMins - sMins) <= 25;
-          });
-          if (hasEntry) placed++;
-        });
-      });
-      
-      const missing = Math.max(0, required - placed);
 
-      for (let k = 0; k < missing; k++) {
-        missingTasks.push({
-          courseId: cId,
-          subjectId: sId,
-          teacherId: a.teacher_id || a.teacherId,
+      // A. Mapeo de asignaciones registradas en base de datos
+      const courseAssignments = (assignments || []).filter(
+        (a: any) => String(a.course_id || a.courseId) === cId
+      );
+      const assignMap = new Map<string, any>();
+
+      courseAssignments.forEach((a: any) => {
+        const sId = String(a.subject_id);
+        const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+        assignMap.set(sId, {
+          subject_id: sId,
+          teacher_id: a.teacher_id || a.teacherId,
+          hours: req,
           assign: a
         });
-      }
+      });
+
+      // B. Materias curriculares oficiales si no estuviesen en la tabla de asignaciones
+      const levelStr = (courseObj.level || '').toLowerCase();
+      const isSec = levelStr.includes('secun');
+
+      (allSubjects || []).forEach((sub: any) => {
+        const sId = String(sub.id);
+        if (assignMap.has(sId)) return;
+
+        const sName = (sub.name || '').toLowerCase();
+        let shouldInclude = false;
+        let defaultHours = 2;
+
+        if (isSec) {
+          if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
+          else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
+          else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
+          else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
+          else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
+        } else {
+          if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 7; }
+          else if (sName.includes('matem')) { shouldInclude = true; defaultHours = 7; }
+          else if (sName.includes('social')) { shouldInclude = true; defaultHours = 5; }
+          else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 5; }
+          else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('físic') || sName.includes('fisic')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('human') || sName.includes('relig')) { shouldInclude = true; defaultHours = 2; }
+          else if (sName.includes('ingl')) { shouldInclude = true; defaultHours = 2; }
+        }
+
+        if (shouldInclude) {
+          const genTch = (allAssignments || []).find(
+            (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
+          );
+          const teacherId = genTch?.teacher_id || genTch?.teacherId || (state.teachers && state.teachers[0]?.id) || '';
+          assignMap.set(sId, {
+            subject_id: sId,
+            teacher_id: teacherId,
+            hours: defaultHours,
+            assign: {
+              id: `curric-${sId}`,
+              course_id: cId,
+              subject_id: sId,
+              teacher_id: teacherId,
+              hours_per_week: defaultHours
+            }
+          });
+        }
+      });
+
+      // C. Evaluar cuántas horas faltan por colocar para cada materia
+      assignMap.forEach((item: any) => {
+        const sId = item.subject_id;
+        const required = item.hours;
+
+        let placed = 0;
+        days.forEach((d) => {
+          courseSlots.forEach((slot: any) => {
+            if (slot.isBreak) return;
+            const sMins = toMins(slot.start);
+            const hasEntry = workingSchedule.some((e: any) => {
+              if (String(e.course_id || e.courseId) !== cId) return false;
+              if (String(e.subject_id) !== sId) return false;
+              if ((e.day || '').trim().toLowerCase() !== d.toLowerCase()) return false;
+              const eMins = normalizeEntryMinutes(e.start_time, isCourseMorning);
+              return Math.abs(eMins - sMins) <= 25;
+            });
+            if (hasEntry) placed++;
+          });
+        });
+
+        const missing = Math.max(0, required - placed);
+        for (let k = 0; k < missing; k++) {
+          missingTasks.push({
+            courseId: cId,
+            subjectId: sId,
+            teacherId: item.teacher_id,
+            isMorning: isCourseMorning,
+            assign: item.assign
+          });
+        }
+      });
     });
 
     const newEntriesToInsert: any[] = [];
@@ -3223,16 +3365,17 @@ export const scheduleService = {
       day: string,
       sStartMins: number,
       sEndMins: number,
-      courseObj: any
+      courseObj: any,
+      isCourseMorning: boolean
     ) => {
       // 1. Recreo del curso
-      if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) return false;
+      if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, isCourseMorning ? 'Matutina' : 'Vespertina', toMins)) return false;
 
       // 2. Deporte en recreo
       const sub = allSubjects.find((s: any) => s.id === sId);
       const sName = (sub?.name || '').toLowerCase();
       if (sName.includes('deporte') || sName.includes('educación física') || sName.includes('educacion fisica')) {
-        if (doesOverlapSportsBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) return false;
+        if (doesOverlapSportsBreak(sStartMins, sEndMins, courseObj, breakPreferences, isCourseMorning ? 'Matutina' : 'Vespertina', toMins)) return false;
       }
 
       // 3. Máximo 2 horas al día de la misma materia
@@ -3248,8 +3391,9 @@ export const scheduleService = {
       const courseBusy = workingSchedule.some((e: any) => {
         if (String(e.course_id) !== String(cId)) return false;
         if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-        const eS = toMins(e.start_time);
-        const eE = toMins(e.end_time);
+        const eS = normalizeEntryMinutes(e.start_time, isCourseMorning);
+        let eE = normalizeEntryMinutes(e.end_time, isCourseMorning);
+        if (eE <= eS) eE = eS + 45;
         return sStartMins < eE && sEndMins > eS;
       });
       if (courseBusy) return false;
@@ -3259,8 +3403,9 @@ export const scheduleService = {
         const teacherBusy = workingSchedule.some((e: any) => {
           if (String(e.teacher_id) !== String(tId)) return false;
           if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-          const eS = toMins(e.start_time);
-          const eE = toMins(e.end_time);
+          const eS = normalizeEntryMinutes(e.start_time, isCourseMorning);
+          let eE = normalizeEntryMinutes(e.end_time, isCourseMorning);
+          if (eE <= eS) eE = eS + 45;
           return sStartMins < eE && sEndMins > eS;
         });
         if (teacherBusy) return false;
@@ -3283,14 +3428,14 @@ export const scheduleService = {
           const sStartMins = toMins(slot.start);
           const sEndMins = toMins(slot.end);
 
-          if (isSlotValidForTeacherAndCourse(task.courseId, task.teacherId, task.subjectId, day, sStartMins, sEndMins, courseObj)) {
+          if (isSlotValidForTeacherAndCourse(task.courseId, task.teacherId, task.subjectId, day, sStartMins, sEndMins, courseObj, task.isMorning)) {
             const newEntry = {
               center_id: centerId,
               course_id: task.courseId,
               subject_id: task.subjectId,
               teacher_id: task.teacherId,
               day,
-              shift,
+              shift: task.isMorning ? 'Matutina' : 'Vespertina',
               start_time: slot.start.length === 5 ? slot.start + ':00' : slot.start,
               end_time: slot.end.length === 5 ? slot.end + ':00' : slot.end,
               school_year: schoolYear
@@ -3308,11 +3453,10 @@ export const scheduleService = {
 
     // 6. FASE 2: MOVIMIENTOS EN CASCADA ESTRICTAMENTE DENTRO DEL MISMO CURSO (Intra-Course Swaps)
     for (const task of missingTasks) {
-      // Si la tarea ya fue colocada en Fase 1, saltar
       const currentPlaced = workingSchedule.filter(
         (e: any) => String(e.course_id) === String(task.courseId) && String(e.subject_id) === String(task.subjectId)
       ).length;
-      const req = Number(task.assign.hours_per_week || task.assign.hoursPerWeek) || 0;
+      const req = Number(task.assign?.hours_per_week || task.assign?.hoursPerWeek || task.assign?.hours) || 2;
       if (currentPlaced >= req) continue;
 
       const courseObj = courses.find((c: any) => String(c.id) === String(task.courseId));
@@ -3328,15 +3472,15 @@ export const scheduleService = {
           const sEndMins = toMins(slot.end);
 
           // 1. Verificar si el recreo del curso choca
-          if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) continue;
+          if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, task.isMorning ? 'Matutina' : 'Vespertina', toMins)) continue;
 
           // 2. Verificar si el docente de la materia faltante está ocupado en OTRO curso a esta hora
           const teacherBusyHere = task.teacherId && workingSchedule.some((e: any) => {
             if (String(e.teacher_id) !== String(task.teacherId)) return false;
             if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
             if (String(e.course_id) === String(task.courseId)) return false;
-            const eS = toMins(e.start_time);
-            let eE = toMins(e.end_time);
+            const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
+            let eE = normalizeEntryMinutes(e.end_time, task.isMorning);
             if (eE <= eS) eE = eS + 45;
             return sStartMins < eE && sEndMins > eS;
           });
@@ -3346,8 +3490,8 @@ export const scheduleService = {
           const occupyingEntry = workingSchedule.find((e: any) => {
             if (String(e.course_id) !== String(task.courseId)) return false;
             if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-            const eS = toMins(e.start_time);
-            let eE = toMins(e.end_time);
+            const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
+            let eE = normalizeEntryMinutes(e.end_time, task.isMorning);
             if (eE <= eS) eE = eS + 45;
             return sStartMins < eE && sEndMins > eS;
           });
@@ -3366,14 +3510,14 @@ export const scheduleService = {
               if (altDay.toLowerCase() === day.toLowerCase() && altStartMins === sStartMins) continue;
 
               // Recreo en casilla alternativa
-              if (doesOverlapCourseBreak(altStartMins, altEndMins, courseObj, breakPreferences, shift, toMins)) continue;
+              if (doesOverlapCourseBreak(altStartMins, altEndMins, courseObj, breakPreferences, task.isMorning ? 'Matutina' : 'Vespertina', toMins)) continue;
 
               // Verificar si la casilla alternativa en ESTE MISMO CURSO está libre
               const altOccupiedInCourse = workingSchedule.some((e: any) => {
                 if (String(e.course_id) !== String(task.courseId)) return false;
                 if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
-                const eS = toMins(e.start_time);
-                let eE = toMins(e.end_time);
+                const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
+                let eE = normalizeEntryMinutes(e.end_time, task.isMorning);
                 if (eE <= eS) eE = eS + 45;
                 return altStartMins < eE && altEndMins > eS;
               });
@@ -3385,8 +3529,8 @@ export const scheduleService = {
                 if (String(e.teacher_id) !== String(occupyingEntry.teacher_id)) return false;
                 if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
                 if (String(e.course_id) === String(task.courseId)) return false;
-                const eS = toMins(e.start_time);
-                let eE = toMins(e.end_time);
+                const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
+                let eE = normalizeEntryMinutes(e.end_time, task.isMorning);
                 if (eE <= eS) eE = eS + 45;
                 return altStartMins < eE && altEndMins > eS;
               });
@@ -3416,7 +3560,7 @@ export const scheduleService = {
                 subject_id: task.subjectId,
                 teacher_id: task.teacherId,
                 day,
-                shift,
+                shift: task.isMorning ? 'Matutina' : 'Vespertina',
                 start_time: curS,
                 end_time: curE,
                 school_year: schoolYear
