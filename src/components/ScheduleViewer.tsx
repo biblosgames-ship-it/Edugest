@@ -425,9 +425,7 @@ export const ScheduleViewer = () => {
     if (filterType === 'course' && filterId) {
       return list.filter((s: any) => {
         const sCid = s.course_id || s.courseId;
-        if (String(sCid) !== String(filterId)) return false;
-        if (selectedYear && s.school_year && s.school_year !== '' && s.school_year !== selectedYear) return false;
-        return true;
+        return String(sCid) === String(filterId);
       });
     }
 

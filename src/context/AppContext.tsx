@@ -478,14 +478,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           });
 
-          // 2. Filtrar horarios para el año activo (sin descartar los existentes sin año)
+          // 2. Horarios completos de la institución (sin descartar clases por discrepancias de año)
           const rawSchedule = schedRes.data || [];
-          const filteredSchedule = rawSchedule.filter((s: any) => {
-            if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
-            return s.school_year === currentFetchYear;
-          });
-
-          const scheduleUnified = filteredSchedule.map((s: any) => ({
+          const scheduleUnified = rawSchedule.map((s: any) => ({
             ...s,
             school_year: s.school_year || currentFetchYear,
             teacher_id: idMap[s.teacher_id] || s.teacher_id
