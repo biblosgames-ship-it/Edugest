@@ -446,10 +446,14 @@ export const ScheduleViewer = () => {
     return null;
   }, [filterType, filterId, state.courses]);
 
-  const courseTandaStr = (activeCourse?.tanda || '').toLowerCase();
-  const effectiveShift: 'Matutina' | 'Vespertina' = activeCourse
-    ? (courseTandaStr.includes('ves') || courseTandaStr.includes('tar') ? 'Vespertina' : 'Matutina')
-    : selectedShift;
+  const effectiveShift: 'Matutina' | 'Vespertina' = useMemo(() => {
+    if (activeCourse?.tanda) {
+      const t = activeCourse.tanda.toLowerCase();
+      if (t.includes('ves') || t.includes('tar')) return 'Vespertina';
+      if (t.includes('mat') || t.includes('mañ') || t.includes('ext') || t.includes('com')) return 'Matutina';
+    }
+    return selectedShift;
+  }, [activeCourse, selectedShift]);
 
   const isMorning = effectiveShift === 'Matutina';
   const cleanDuration = isMorning ? 45 : 40;
