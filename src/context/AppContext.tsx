@@ -484,10 +484,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes de la institución:
-          // Todos los estudiantes matriculados en este centro educativo
+          // 3. Estudiantes realmente matriculados en las aulas/cursos del centro educativo:
           const rawStudents = studRes.data || [];
-          const filteredStudents = rawStudents;
+          const centerCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
+
+          const filteredStudents = rawStudents.filter((s: any) => {
+            // A. Estudiante asignado a un curso del centro (Aquí están los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
+            if (s.course_id && centerCourseIdSet.has(String(s.course_id))) {
+              return true;
+            }
+
+            // B. Estudiante sin curso pero registrado activamente para el ciclo actual
+            if (!s.course_id && s.school_year === currentFetchYear) {
+              const st = (s.status || '').toLowerCase();
+              return st !== 'retirado' && st !== 'inactivo' && st !== 'graduado' && st !== 'egresado';
+            }
+
+            return false;
+          });
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
