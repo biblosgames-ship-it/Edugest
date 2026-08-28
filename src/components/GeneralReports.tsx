@@ -637,17 +637,28 @@ export const GeneralReports = () => {
 
     // Contar alumnos
     students.forEach((s) => {
-      const c = courseMap[s.course_id];
-      const lvl = c?.level || 'General';
-      let normLvl = lvl;
-      if (lvl.toLowerCase().includes('ini')) normLvl = 'Inicial';
-      else if (lvl.toLowerCase().includes('prim')) normLvl = 'Primaria';
-      else if (lvl.toLowerCase().includes('sec')) normLvl = 'Secundaria';
+      let c = courseMap[s.course_id];
+      if (!c && s.course_id) {
+        c = courses.find((cr: any) => String(cr.id) === String(s.course_id));
+      }
+      
+      const lvl = c?.level || s.level || 'Inicial';
+      let normLvl = 'General';
+      const lvlLower = (lvl || '').toLowerCase();
+      const gradeStr = (c?.grade || s.grade || '').toLowerCase();
+
+      if (lvlLower.includes('ini') || gradeStr.includes('pre') || gradeStr.includes('kinder') || gradeStr.includes('párv') || gradeStr.includes('maternal')) {
+        normLvl = 'Inicial';
+      } else if (lvlLower.includes('prim')) {
+        normLvl = 'Primaria';
+      } else if (lvlLower.includes('sec')) {
+        normLvl = 'Secundaria';
+      }
 
       if (!levelGroups[normLvl]) levelGroups[normLvl] = {};
-      const baseGrade = c?.grade ? c.grade.trim() : c?.name ? c.name.trim() : 'General';
-      const sec = c?.section ? c.section.trim() : '';
-      const tandaStr = c?.tanda ? c.tanda.trim() : '';
+      const baseGrade = c?.grade ? c.grade.trim() : (s.grade ? s.grade.trim() : (normLvl === 'Inicial' ? 'Pre-Primario' : 'General'));
+      const sec = c?.section ? c.section.trim() : (s.section ? s.section.trim() : '');
+      const tandaStr = c?.tanda ? c.tanda.trim() : (s.tanda ? s.tanda.trim() : '');
       let gradeLabel = sec ? `${baseGrade} - Sec. ${sec}` : baseGrade;
       if (tandaStr && tandaStr.toLowerCase() !== 'general') {
         const tLower = tandaStr.toLowerCase();

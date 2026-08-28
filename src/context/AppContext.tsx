@@ -229,12 +229,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('courses')
               .select('*')
-              .eq('center_id', targetCid),
-            supabase.from('subjects').select('*').eq('center_id', targetCid),
-            supabase.from('profiles').select('*').eq('center_id', targetCid),
-            supabase.from('assignments').select('*').eq('center_id', targetCid),
-            supabase.from('staff').select('*').eq('center_id', targetCid),
-            supabase.from('teachers').select('*').eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .range(0, 9999),
+            supabase.from('subjects').select('*').eq('center_id', targetCid).range(0, 9999),
+            supabase.from('profiles').select('*').eq('center_id', targetCid).range(0, 9999),
+            supabase.from('assignments').select('*').eq('center_id', targetCid).range(0, 9999),
+            supabase.from('staff').select('*').eq('center_id', targetCid).range(0, 9999),
+            supabase.from('teachers').select('*').eq('center_id', targetCid).range(0, 9999),
             supabase.from('academic_requirements').select('*').eq('center_id', targetCid),
             supabase.from('teacher_preferences').select('*').eq('center_id', targetCid),
             supabase.from('break_preferences').select('*').eq('center_id', targetCid),
@@ -248,7 +249,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('schedule_entries')
               .select('*')
-              .eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .range(0, 9999),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -267,7 +269,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('students')
               .select('*')
-              .eq('center_id', targetCid),
+              .eq('center_id', targetCid)
+              .range(0, 9999),
             supabase
               .from('activities')
               .select('*')
@@ -486,11 +489,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes del centro: incluir todos los inscritos en cursos activos del centro o con el año escolar activo
+          // 3. Estudiantes del centro: incluir todos los inscritos en cursos del centro o con el año escolar activo
           const rawStudents = studRes.data || [];
+          const allCenterCourseIds = new Set((cRes.data || []).map((c: any) => String(c.id)));
           const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
           const filteredStudents = rawStudents.filter((s: any) => {
-            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) return true;
+            if (s.course_id && (activeCourseIdSet.has(String(s.course_id)) || allCenterCourseIds.has(String(s.course_id)))) return true;
             if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
             return s.school_year === currentFetchYear;
           });
