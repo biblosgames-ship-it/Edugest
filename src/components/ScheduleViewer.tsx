@@ -304,21 +304,55 @@ export const ScheduleViewer = () => {
       }
     });
 
-    // 3. Materias del currículo oficial del nivel de este curso si faltase alguna en DB
-    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
-    const isSecundaria = (courseObj?.level || '').toLowerCase().includes('secun');
-    if (isSecundaria) {
-      const mathSub = state.subjects.find((s: any) => (s.name || '').toLowerCase().includes('matem'));
-      if (mathSub && !map.has(String(mathSub.id))) {
-        map.set(String(mathSub.id), {
-          id: `req-math-${mathSub.id}`,
-          subject_id: String(mathSub.id),
-          teacher_id: '',
-          assignedHours: 6,
-          assign: { course_id: targetCourseId, subject_id: String(mathSub.id), hours_per_week: 6 }
+    // 3. Materias del catálogo institucional para este curso
+    (state.subjects || []).forEach((sub: any) => {
+      const sId = String(sub.id);
+      if (!map.has(sId)) {
+        const subName = (sub?.name || '').toLowerCase();
+        let defaultHours = 2;
+        if (subName.includes('matem')) defaultHours = 6;
+        else if (subName.includes('español') || subName.includes('lengua')) defaultHours = 5;
+        else if (subName.includes('social') || subName.includes('natur')) defaultHours = 4;
+        else if (
+          subName.includes('ingl') ||
+          subName.includes('franc') ||
+          subName.includes('art') ||
+          subName.includes('físic') ||
+          subName.includes('human') ||
+          subName.includes('relig')
+        ) {
+          defaultHours = 2;
+        }
+
+        // Buscar si hay docente asignado en este curso o en el centro
+        const tchAssign = (state.assignments || []).find(
+          (a: any) =>
+            String(a.subject_id) === sId &&
+            String(a.course_id || a.courseId) === String(targetCourseId)
+        );
+        const generalTchAssign = (state.assignments || []).find(
+          (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
+        );
+        const teacherId =
+          tchAssign?.teacher_id ||
+          generalTchAssign?.teacher_id ||
+          (state.teachers[0]?.id || '');
+
+        map.set(sId, {
+          id: `curric-${sId}`,
+          subject_id: sId,
+          teacher_id: teacherId,
+          assignedHours: defaultHours,
+          assign: {
+            id: `temp-${sId}`,
+            course_id: targetCourseId,
+            subject_id: sId,
+            teacher_id: teacherId,
+            hours_per_week: defaultHours
+          }
         });
       }
-    }
+    });
 
     return Array.from(map.values());
   };
@@ -2836,13 +2870,17 @@ export const ScheduleViewer = () => {
                     const assignItem = items.find(
                       (a) => String(a.subject_id) === String(directAssignModal.subjectId)
                     );
-                    if (!assignItem) return;
 
                     // Si no tiene teacher_id específico, buscar si hay algún docente asignado a esta materia
-                    let finalTeacherId = assignItem.teacher_id;
+                    let finalTeacherId = assignItem?.teacher_id;
                     if (!finalTeacherId) {
-                      const otherAssign = (state.assignments || []).find((a: any) => String(a.subject_id) === String(directAssignModal.subjectId));
-                      finalTeacherId = otherAssign?.teacher_id || otherAssign?.teacherId || (state.teachers[0]?.id || '');
+                      const otherAssign = (state.assignments || []).find(
+                        (a: any) => String(a.subject_id) === String(directAssignModal.subjectId)
+                      );
+                      finalTeacherId =
+                        otherAssign?.teacher_id ||
+                        otherAssign?.teacherId ||
+                        (state.teachers[0]?.id || '');
                     }
 
                     const finalYear = selectedYear || state.currentYear || '2026-2027';
