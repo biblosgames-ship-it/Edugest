@@ -449,13 +449,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Filtrar cursos para el año activo (sin descartar los existentes sin año)
+          // 1. Cursos de la institución
           const rawCourses = cRes.data || [];
-          const filteredCourses = rawCourses.filter((c: any) => {
-            if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
-            return c.school_year === currentFetchYear;
-          });
-
           let localTitularMap: Record<string, any> = {};
           try {
             localTitularMap = JSON.parse(
@@ -463,7 +458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } catch {}
 
-          const coursesUnified = filteredCourses.map((c: any) => {
+          const coursesUnified = rawCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
             const rawTeacherId = c.titular_teacher_id || localTitular.titular_teacher_id || null;
             const mappedTeacherId = rawTeacherId ? (idMap[rawTeacherId] || rawTeacherId) : null;
@@ -489,34 +484,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes del año escolar activo:
+          // 3. Estudiantes de la institución:
+          // Todos los estudiantes matriculados en este centro educativo
           const rawStudents = studRes.data || [];
-          const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
-          const pastCourseIdSet = new Set(
-            (cRes.data || [])
-              .filter((c: any) => c.school_year && c.school_year !== currentFetchYear)
-              .map((c: any) => String(c.id))
-          );
-
-          const filteredStudents = rawStudents.filter((s: any) => {
-            // 1. Si está asignado a un curso de este año activo: INCLUIR SIEMPRE
-            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
-              return true;
-            }
-
-            // 2. Si está asignado a un curso de un año anterior: DESCARTAR
-            if (s.course_id && pastCourseIdSet.has(String(s.course_id))) {
-              return false;
-            }
-
-            // 3. Si no tiene curso asignado pero su año es el activo o no tiene año: INCLUIR
-            if (!s.course_id) {
-              if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
-              return s.school_year === currentFetchYear;
-            }
-
-            return false;
-          });
+          const filteredStudents = rawStudents;
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
