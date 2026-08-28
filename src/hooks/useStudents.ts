@@ -13,18 +13,43 @@ export const useStudents = () => {
     queryKey: ['students', centerId, schoolYear],
     queryFn: async () => {
       if (!centerId) return [];
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('center_id', centerId)
-        .or(`school_year.eq.${schoolYear},school_year.is.null,school_year.eq.""`)
-        .order('order_number', { ascending: true })
-        .order('last_name', { ascending: true });
+      const [studRes, coursesRes] = await Promise.all([
+        supabase
+          .from('students')
+          .select('*')
+          .eq('center_id', centerId)
+          .range(0, 9999)
+          .order('order_number', { ascending: true })
+          .order('last_name', { ascending: true }),
+        supabase
+          .from('courses')
+          .select('id, school_year')
+          .eq('center_id', centerId)
+          .range(0, 9999)
+      ]);
 
-      if (error) throw error;
-      const raw = data || [];
-      const yearSpecific = raw.filter((s: any) => s.school_year === schoolYear);
-      return yearSpecific.length > 0 ? yearSpecific : (raw.every((s: any) => !s.school_year) ? raw : []);
+      if (studRes.error) throw studRes.error;
+      const raw = studRes.data || [];
+      const rawCourses = coursesRes.data || [];
+
+      const activeCourseIds = new Set(
+        rawCourses
+          .filter((c: any) => !c.school_year || c.school_year === schoolYear || c.school_year === 'undefined' || c.school_year === 'null')
+          .map((c: any) => String(c.id))
+      );
+
+      return raw.filter((s: any) => {
+        // A. Alumno asignado a un curso activo de la institución
+        if (s.course_id && activeCourseIds.has(String(s.course_id))) return true;
+
+        // B. Alumno sin curso registrado para este ciclo
+        if (!s.course_id && (s.school_year === schoolYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
+          const st = (s.status || '').toLowerCase().trim();
+          return st !== 'retirado' && st !== 'inactivo' && st !== 'graduado' && st !== 'egresado';
+        }
+
+        return false;
+      });
     },
     staleTime: 1000 * 5 // 5 segundos de caché para reflejar cambios de inmediato
   });

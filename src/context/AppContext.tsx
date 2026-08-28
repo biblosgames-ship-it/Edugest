@@ -449,17 +449,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Cursos de la institución (año escolar activo + cursos con matrícula vigente)
+          // 1. Unificar cursos por grado, sección, nivel y tanda de la institución
           const rawCourses = cRes.data || [];
-          const studentCourseIdSet = new Set(
-            (studRes.data || []).filter((s: any) => s.course_id).map((s: any) => String(s.course_id))
-          );
+          const courseGroupMap = new Map<string, any[]>();
+          rawCourses.forEach((c: any) => {
+            const gradeKey = `${(c.level || '').trim().toLowerCase()}_${(c.grade || '').trim().toLowerCase()}_${(c.section || 'A').trim().toLowerCase()}_${(c.tanda || 'Matutina').trim().toLowerCase()}`;
+            if (!courseGroupMap.has(gradeKey)) {
+              courseGroupMap.set(gradeKey, []);
+            }
+            courseGroupMap.get(gradeKey)!.push(c);
+          });
 
-          const activeCourses = rawCourses.filter((c: any) => {
-            if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
-            if (c.school_year === currentFetchYear) return true;
-            if (studentCourseIdSet.has(String(c.id))) return true;
-            return false;
+          // Seleccionar el curso representativo para cada grado escolar
+          const canonicalCourses: any[] = [];
+          const courseIdToCanonicalId = new Map<string, string>();
+          const allValidCenterCourseIds = new Set<string>();
+
+          courseGroupMap.forEach((courseList) => {
+            const preferred = courseList.find((c: any) => c.school_year === currentFetchYear) || courseList[0];
+            canonicalCourses.push(preferred);
+
+            courseList.forEach((c: any) => {
+              courseIdToCanonicalId.set(String(c.id), String(preferred.id));
+              allValidCenterCourseIds.add(String(c.id));
+            });
           });
 
           let localTitularMap: Record<string, any> = {};
@@ -469,13 +482,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } catch {}
 
-          const coursesUnified = activeCourses.map((c: any) => {
+          const coursesUnified = canonicalCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
             const rawTeacherId = c.titular_teacher_id || localTitular.titular_teacher_id || null;
             const mappedTeacherId = rawTeacherId ? (idMap[rawTeacherId] || rawTeacherId) : null;
             return {
               ...c,
-              school_year: c.school_year || currentFetchYear,
+              school_year: currentFetchYear,
               titular_teacher_id: mappedTeacherId,
               titular_subject_id: c.titular_subject_id || localTitular.titular_subject_id || null,
               titular_monday_first_hour:
@@ -489,36 +502,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // 2. Horarios completos de la institución (sin descartar clases por discrepancias de año)
           const rawSchedule = schedRes.data || [];
-          const scheduleUnified = rawSchedule.map((s: any) => ({
-            ...s,
-            school_year: s.school_year || currentFetchYear,
-            teacher_id: idMap[s.teacher_id] || s.teacher_id
-          }));
+          const scheduleUnified = rawSchedule.map((s: any) => {
+            const mappedCourseId = s.course_id && courseIdToCanonicalId.has(String(s.course_id))
+              ? courseIdToCanonicalId.get(String(s.course_id))
+              : s.course_id;
 
-          // 3. Estudiantes activos matriculados en las aulas/cursos del centro educativo:
-          const rawStudents = studRes.data || [];
-          const validCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
-
-          const filteredStudents = rawStudents.filter((s: any) => {
-            // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
-            const st = (s.status || '').toLowerCase().trim();
-            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
-              return false;
-            }
-
-            // B. Estudiante asignado a un curso con matrícula vigente (Aquí entran los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
-            if (s.course_id && validCourseIdSet.has(String(s.course_id))) {
-              return true;
-            }
-
-            // C. Estudiante sin curso pero registrado para el ciclo actual
-            if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
-              const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
-              return hasName;
-            }
-
-            return false;
+            return {
+              ...s,
+              course_id: mappedCourseId,
+              school_year: s.school_year || currentFetchYear,
+              teacher_id: idMap[s.teacher_id] || s.teacher_id
+            };
           });
+
+          // 3. Estudiantes activos matriculados en las aulas del centro educativo:
+          const rawStudents = studRes.data || [];
+
+          const filteredStudents = rawStudents
+            .filter((s: any) => {
+              // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
+              const st = (s.status || '').toLowerCase().trim();
+              if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
+                return false;
+              }
+
+              // B. Si está asignado a un curso/aula de la institución: INCLUIR SIEMPRE
+              if (s.course_id && allValidCenterCourseIds.has(String(s.course_id))) {
+                return true;
+              }
+
+              // C. Si no tiene curso pero su año coincide con el ciclo activo: INCLUIR
+              if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
+                const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
+                return hasName;
+              }
+
+              return false;
+            })
+            .map((s: any) => {
+              // Remapear course_id al curso representativo único del grado
+              const mappedCourseId = s.course_id && courseIdToCanonicalId.has(String(s.course_id))
+                ? courseIdToCanonicalId.get(String(s.course_id))
+                : s.course_id;
+
+              return {
+                ...s,
+                course_id: mappedCourseId,
+                school_year: currentFetchYear
+              };
+            });
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
