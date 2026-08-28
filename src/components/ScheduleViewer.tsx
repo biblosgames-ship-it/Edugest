@@ -293,79 +293,27 @@ export const ScheduleViewer = () => {
           else if (subName.includes('social') || subName.includes('natur')) defaultHours = 4;
           else if (subName.includes('ingl') || subName.includes('franc')) defaultHours = 2;
 
+          // Contar horas reales colocadas en el horario para esta materia
+          const countPlaced = (state.schedule || []).filter(
+            (sc: any) =>
+              String(sc.course_id || sc.courseId) === String(targetCourseId) &&
+              String(sc.subject_id) === sId
+          ).length;
+
           map.set(sId, {
             id: `sched-subject-${sId}`,
             subject_id: sId,
             teacher_id: s.teacher_id,
-            assignedHours: defaultHours,
-            assign: { course_id: targetCourseId, subject_id: sId, teacher_id: s.teacher_id, hours_per_week: defaultHours }
+            assignedHours: Math.max(defaultHours, countPlaced),
+            assign: {
+              id: `sched-${sId}`,
+              course_id: targetCourseId,
+              subject_id: sId,
+              teacher_id: s.teacher_id,
+              hours_per_week: Math.max(defaultHours, countPlaced)
+            }
           });
         }
-      }
-    });
-
-    // 3. Materias del currículo oficial según el nivel del curso (Secundaria / Primaria)
-    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
-    const levelStr = (courseObj?.level || '').toLowerCase();
-    const isSecundaria = levelStr.includes('secun');
-
-    (state.subjects || []).forEach((sub: any) => {
-      const sId = String(sub.id);
-      if (map.has(sId)) return;
-
-      const sName = (sub.name || '').toLowerCase();
-      let shouldInclude = false;
-      let defaultHours = 2;
-
-      if (isSecundaria) {
-        if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
-        else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
-        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
-        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
-        else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
-      } else {
-        // Primaria
-        if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 7; }
-        else if (sName.includes('matem')) { shouldInclude = true; defaultHours = 7; }
-        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 5; }
-        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 5; }
-        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('físic') || sName.includes('fisic')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('human') || sName.includes('relig')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('ingl')) { shouldInclude = true; defaultHours = 2; }
-      }
-
-      if (shouldInclude) {
-        const tchAssign = (state.assignments || []).find(
-          (a: any) =>
-            String(a.subject_id) === sId &&
-            String(a.course_id || a.courseId) === String(targetCourseId)
-        );
-        const generalTchAssign = (state.assignments || []).find(
-          (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
-        );
-        const teacherId =
-          tchAssign?.teacher_id ||
-          generalTchAssign?.teacher_id ||
-          (state.teachers[0]?.id || '');
-
-        map.set(sId, {
-          id: `curric-${sId}`,
-          subject_id: sId,
-          teacher_id: teacherId,
-          assignedHours: defaultHours,
-          assign: {
-            id: `temp-${sId}`,
-            course_id: targetCourseId,
-            subject_id: sId,
-            teacher_id: teacherId,
-            hours_per_week: defaultHours
-          }
-        });
       }
     });
 
@@ -2799,75 +2747,119 @@ export const ScheduleViewer = () => {
                 </label>
                 {directAssignModal.courseId ? (
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {getCourseSubjectsAndAssignments(directAssignModal.courseId).map((item) => {
-                      const subject = state.subjects.find((s) => String(s.id) === String(item.subject_id));
-                      const teacherId = item.teacher_id;
-                      const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
-                      const assigned = Number(item.assignedHours) || 0;
-                      let placed = 0;
-                      days.forEach((d) => {
-                        slots.forEach((slot) => {
-                          if (slot.isBreak) return;
-                          const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
-                          if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
-                            placed++;
+                    {(() => {
+                      const courseItems = getCourseSubjectsAndAssignments(directAssignModal.courseId);
+                      const courseObj = state.courses.find((c: any) => String(c.id) === String(directAssignModal.courseId));
+                      const isSec = (courseObj?.level || '').toLowerCase().includes('secun');
+
+                      const displayedList = [...courseItems];
+                      (state.subjects || []).forEach((sub: any) => {
+                        const sId = String(sub.id);
+                        if (!displayedList.some((it) => String(it.subject_id) === sId)) {
+                          const sName = (sub.name || '').toLowerCase();
+                          let isRelevant = false;
+                          if (isSec) {
+                            isRelevant =
+                              sName.includes('matem') ||
+                              sName.includes('español') ||
+                              sName.includes('lengua') ||
+                              sName.includes('social') ||
+                              sName.includes('natur') ||
+                              sName.includes('ingl') ||
+                              sName.includes('franc') ||
+                              sName.includes('art') ||
+                              sName.includes('físic') ||
+                              sName.includes('fisic') ||
+                              sName.includes('human') ||
+                              sName.includes('relig');
+                          } else {
+                            isRelevant = true;
                           }
+                          if (isRelevant) {
+                            const genTch = (state.assignments || []).find(
+                              (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
+                            );
+                            displayedList.push({
+                              id: `opt-${sId}`,
+                              subject_id: sId,
+                              teacher_id: genTch?.teacher_id || (state.teachers[0]?.id || ''),
+                              assignedHours: 2,
+                              assign: null
+                            });
+                          }
+                        }
+                      });
+
+                      return displayedList.map((item) => {
+                        const subject = state.subjects.find((s) => String(s.id) === String(item.subject_id));
+                        const teacherId = item.teacher_id;
+                        const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
+                        const assigned = Number(item.assignedHours) || 0;
+                        let placed = 0;
+                        days.forEach((d) => {
+                          slots.forEach((slot) => {
+                            if (slot.isBreak) return;
+                            const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                            if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
+                              placed++;
+                            }
+                          });
                         });
-                      });
-                      const missing = Math.max(0, assigned - placed);
+                        const missing = Math.max(0, assigned - placed);
 
-                      // Verificar si el docente tiene clase en otro curso a esta misma hora
-                      const sStartM = toMins(directAssignModal.slot?.start);
-                      const sEndM = toMins(directAssignModal.slot?.end);
-                      const teacherClash = (state.schedule || []).find((s) => {
-                        if (!teacherId || String(s.teacher_id) !== String(teacherId)) return false;
-                        if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
-                        const eStart = toMins(s.start_time);
-                        let eEnd = toMins(s.end_time);
-                        if (eEnd <= eStart) eEnd = eStart + 45;
-                        const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
-                        return overlap > 10;
-                      });
+                        // Verificar si el docente tiene clase en otro curso a esta misma hora
+                        const sStartM = toMins(directAssignModal.slot?.start);
+                        const sEndM = toMins(directAssignModal.slot?.end);
+                        const teacherClash = (state.schedule || []).find((s) => {
+                          if (!teacherId || String(s.teacher_id) !== String(teacherId)) return false;
+                          if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
+                          const eStart = toMins(s.start_time);
+                          let eEnd = toMins(s.end_time);
+                          if (eEnd <= eStart) eEnd = eStart + 45;
+                          const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
+                          return overlap > 10;
+                        });
 
-                      const isSelected = String(directAssignModal.subjectId) === String(item.subject_id);
+                        const isSelected = String(directAssignModal.subjectId) === String(item.subject_id);
 
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => setDirectAssignModal({ ...directAssignModal, subjectId: item.subject_id })}
-                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                            isSelected
-                              ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/20'
-                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                          }`}
-                        >
-                          <div className="space-y-0.5">
-                            <p className="text-xs font-black text-slate-800 uppercase">
-                              {subject?.name || 'Materia'}
-                            </p>
-                            <p className="text-[10px] font-bold text-indigo-600 uppercase">
-                              👨‍🏫 {teacher?.name || 'Docente de la Materia'}
-                            </p>
-                            {teacherClash && (
-                              <p className="text-[9px] font-bold text-amber-600 uppercase">
-                                ⚠️ Docente con clase en otro curso a esta hora
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => setDirectAssignModal({ ...directAssignModal, subjectId: item.subject_id })}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/20'
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-black text-slate-800 uppercase">
+                                {subject?.name || 'Materia'}
                               </p>
-                            )}
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase">
+                                👨‍🏫 {teacher?.name || 'Docente de la Materia'}
+                              </p>
+                              {teacherClash && (
+                                <p className="text-[9px] font-bold text-amber-600 uppercase">
+                                  ⚠️ Docente con clase en otro curso a esta hora
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                                  missing > 0
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}
+                              >
+                                {placed}/{assigned}h {missing > 0 ? `(Falta ${missing}h)` : '✓ Completo'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <span
-                              className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
-                                missing > 0
-                                  ? 'bg-rose-100 text-rose-700'
-                                  : 'bg-emerald-100 text-emerald-700'
-                              }`}
-                            >
-                              {placed}/{assigned}h {missing > 0 ? `(Falta ${missing}h)` : '✓ Completo'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 italic">
