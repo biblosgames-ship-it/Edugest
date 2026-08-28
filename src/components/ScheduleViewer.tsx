@@ -36,7 +36,8 @@ export const ScheduleViewer = () => {
     refreshData,
     selectedYear,
     setAvoidDeporteDuringAnyBreak,
-    deleteAssignment
+    deleteAssignment,
+    setAppState
   } = useApp();
 
   const isAdminOrStaff =
@@ -886,11 +887,14 @@ export const ScheduleViewer = () => {
       });
     });
 
+    const normStr = (str: string) =>
+      (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
     filteredSchedule.forEach((entry) => {
       if (!entry.day || !entry.start_time) return;
 
-      const normDay = (entry.day || '').trim();
-      const matchedDay = days.find((d) => d.toLowerCase() === normDay.toLowerCase()) || days[0];
+      const normDay = normStr(entry.day);
+      const matchedDay = days.find((d) => normStr(d) === normDay) || days[0];
       let eMins = toMins(entry.start_time);
       if (!isMorning && eMins < 720 && eMins > 0) {
         eMins += 720;
@@ -923,7 +927,7 @@ export const ScheduleViewer = () => {
             String(existing.id) === String(entry.id) ||
             (String(existing.course_id || existing.courseId) === String(entry.course_id || entry.courseId) &&
               String(existing.subject_id) === String(entry.subject_id) &&
-              (existing.day || '').trim().toLowerCase() === (entry.day || '').trim().toLowerCase() &&
+              normStr(existing.day) === normDay &&
               existing.start_time === entry.start_time)
         );
         if (!isDup) listInSlot.push(entry);
@@ -2844,20 +2848,32 @@ export const ScheduleViewer = () => {
                     const sEnd = directAssignModal.slot.end.length === 5 ? directAssignModal.slot.end + ':00' : directAssignModal.slot.end;
 
                     try {
-                      const { error } = await supabase.from('schedule_entries').insert([
-                        {
-                          center_id: profile.center_id,
-                          course_id: directAssignModal.courseId,
-                          subject_id: directAssignModal.subjectId,
-                          teacher_id: finalTeacherId,
-                          day: directAssignModal.day,
-                          shift: selectedShift,
-                          start_time: sStart,
-                          end_time: sEnd,
-                          school_year: finalYear
-                        }
-                      ]);
+                      const entryPayload = {
+                        center_id: profile.center_id,
+                        course_id: directAssignModal.courseId,
+                        subject_id: directAssignModal.subjectId,
+                        teacher_id: finalTeacherId,
+                        day: directAssignModal.day,
+                        shift: effectiveShift || selectedShift,
+                        start_time: sStart,
+                        end_time: sEnd,
+                        school_year: finalYear
+                      };
+
+                      const { data: insertedData, error } = await supabase
+                        .from('schedule_entries')
+                        .insert([entryPayload])
+                        .select();
+
                       if (error) throw error;
+
+                      if (insertedData && insertedData.length > 0) {
+                        setAppState((prev: any) => ({
+                          ...prev,
+                          schedule: [...(prev.schedule || []), ...insertedData]
+                        }));
+                      }
+
                       await refreshData(undefined, true);
                       alert('✅ ¡Clase asignada exitosamente!');
                       setDirectAssignModal({ open: false, day: '', slot: null, courseId: '', subjectId: '' });
