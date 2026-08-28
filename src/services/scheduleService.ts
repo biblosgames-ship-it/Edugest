@@ -2481,17 +2481,29 @@ export const scheduleService = {
     shift: string,
     lockedKeys: string[] = []
   ) => {
-    const { courses, subjects, assignments, schedule, levelSchedules, breakPreferences } = state;
-    const course = (courses || []).find((c: any) => c.id === targetCourseId);
-    const subject = (subjects || []).find((s: any) => s.id === targetSubjectId);
-    if (!course || !subject) return [];
+    const emptyResult = {
+      suggestions: [],
+      teacherGrid: {},
+      teacherName: 'Docente',
+      teacherTotalAssigned: 0,
+      teacherTotalPlaced: 0,
+      slotTimes: []
+    };
+
+    const { courses, subjects, assignments, schedule, levelSchedules, breakPreferences, teachers } = state;
+    const course = (courses || []).find((c: any) => String(c.id) === String(targetCourseId));
+    const subject = (subjects || []).find((s: any) => String(s.id) === String(targetSubjectId));
+    if (!course || !subject) return emptyResult;
 
     const assign = (assignments || []).find(
-      (a: any) => (a.course_id === targetCourseId || a.courseId === targetCourseId) && a.subject_id === targetSubjectId
+      (a: any) =>
+        (String(a.course_id) === String(targetCourseId) || String(a.courseId) === String(targetCourseId)) &&
+        String(a.subject_id) === String(targetSubjectId)
     );
-    if (!assign) return [];
+    if (!assign) return emptyResult;
 
-    const teacherId = assign.teacher_id;
+    const teacherId = assign.teacher_id || assign.teacherId;
+    const teacherObj = (teachers || []).find((t: any) => String(t.id) === String(teacherId));
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
     const currentSchedule = (schedule || []).filter(
       (s: any) =>
@@ -2989,7 +3001,7 @@ export const scheduleService = {
     targetCourseId?: string
   ) => {
     const centerId = profile.center_id;
-    const schoolYear = year;
+    const schoolYear = year || state.currentYear || '2026-2027';
     const { courses: allCourses, assignments: allAssignments, subjects: allSubjects, levelSchedules, breakPreferences } = state;
 
     const shiftBase = shift.toLowerCase().substring(0, 3);
@@ -3009,16 +3021,17 @@ export const scheduleService = {
     const assignments = allAssignments.filter((a: any) => courseIdSet.has(String(a.course_id || a.courseId)));
 
     // 1. Cargar horario actual de la base de datos
-    const { data: rawSchedule, error: fetchErr } = await supabase
+    const { data: rawData, error: fetchErr } = await supabase
       .from('schedule_entries')
       .select('*')
       .eq('center_id', centerId)
-      .eq('shift', shift)
-      .eq('school_year', schoolYear);
+      .eq('shift', shift);
 
-    if (fetchErr || !rawSchedule) {
+    if (fetchErr || !rawData) {
       throw new Error('No se pudo consultar el horario actual: ' + (fetchErr?.message || 'Error desconocido'));
     }
+
+    const rawSchedule = rawData.filter((e: any) => !e.school_year || e.school_year === schoolYear);
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
