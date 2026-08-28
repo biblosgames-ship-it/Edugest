@@ -649,15 +649,15 @@ export const ScheduleViewer = () => {
         currTimePre = eTime;
 
         slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
+          start: fromMins(sTime),
+          end: fromMins(eTime),
           isBreak: false,
           label: `${i + 1}ra Hora`
         });
       }
 
       // EL RECREO
-      slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
+      slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
       // Eventos Fijos Post-Recreo (filtrados por nivel y ciclo)
       let currTimePost = bEnd;
@@ -688,8 +688,8 @@ export const ScheduleViewer = () => {
 
         if (intersectingEvent) {
           slots.push({
-            start: fromMins(sTime) + ':00',
-            end: fromMins(toMins(intersectingEvent.end_time)) + ':00',
+            start: fromMins(sTime),
+            end: fromMins(toMins(intersectingEvent.end_time)),
             isBreak: true,
             label: intersectingEvent.name
           });
@@ -697,8 +697,8 @@ export const ScheduleViewer = () => {
         } else {
           currTimePost = eTime;
           slots.push({
-            start: fromMins(sTime) + ':00',
-            end: fromMins(eTime) + ':00',
+            start: fromMins(sTime),
+            end: fromMins(eTime),
             isBreak: false,
             label: `${preCountLocal + i + 1}ra Hora`
           });
