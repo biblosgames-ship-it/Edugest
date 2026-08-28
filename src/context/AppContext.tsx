@@ -486,9 +486,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Filtrar estudiantes para el año activo (sin descartar los existentes sin año)
+          // 3. Estudiantes del centro: incluir todos los inscritos en cursos activos del centro o con el año escolar activo
           const rawStudents = studRes.data || [];
+          const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
           const filteredStudents = rawStudents.filter((s: any) => {
+            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) return true;
             if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
             return s.school_year === currentFetchYear;
           });

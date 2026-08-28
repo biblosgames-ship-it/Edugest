@@ -73,24 +73,15 @@ export const dataService = {
   },
 
   // ESTUDIANTES
-  async getStudents(courseId: string, centerId: string, schoolYear?: string) {
+  async getStudents(courseId: string, centerId: string, _schoolYear?: string) {
     if (!centerId) return [];
     let query = supabase
       .from('students')
       .select('*')
       .eq('course_id', courseId)
       .eq('center_id', centerId);
-    if (schoolYear) {
-      query = query.or(`school_year.eq.${schoolYear},school_year.is.null,school_year.eq.""`);
-    }
     const { data, error } = await query.order('first_surname', { ascending: true });
     if (error || !data) return [];
-    if (schoolYear) {
-      const yearSpecific = data.filter((s: any) => s.school_year === schoolYear);
-      if (yearSpecific.length > 0) return yearSpecific;
-      if (data.every((s: any) => !s.school_year)) return data;
-      return [];
-    }
     return data;
   },
 
