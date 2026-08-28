@@ -3029,62 +3029,12 @@ export const scheduleService = {
 
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
-    // 2. FASE 0: SANITIZACIÓN Y LIMPIEZA DE ENTRADAS DUPLICADAS EN DB
-    const idsToDelete: string[] = [];
-    const seenCourseSlotKeys = new Set<string>();
-    const countByCourseSubject: Record<string, number> = {};
-
-    // Mapear requerimiento máximo por materia en cada curso
-    const requiredHoursMap: Record<string, number> = {};
-    assignments.forEach((a: any) => {
-      const cId = String(a.course_id || a.courseId);
-      const sId = String(a.subject_id);
-      const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-      requiredHoursMap[`${cId}_${sId}`] = req;
-    });
-
-    rawSchedule.forEach((e: any) => {
-      const cId = String(e.course_id);
-      const sId = String(e.subject_id);
-      const day = (e.day || '').trim().toLowerCase();
-      const sTime = e.start_time;
-
-      const slotKey = `${cId}_${day}_${sTime}`;
-      const csKey = `${cId}_${sId}`;
-
-      // Si la misma casilla en el mismo curso ya está ocupada por otra fila (duplicado idéntico)
-      if (seenCourseSlotKeys.has(slotKey)) {
-        idsToDelete.push(e.id);
-        return;
-      }
-      seenCourseSlotKeys.add(slotKey);
-
-      // Si ya se superó la cantidad de horas asignadas para esta materia
-      const maxReq = requiredHoursMap[csKey] ?? 99;
-      const currentCount = countByCourseSubject[csKey] || 0;
-      if (currentCount >= maxReq) {
-        idsToDelete.push(e.id);
-        return;
-      }
-      countByCourseSubject[csKey] = currentCount + 1;
-    });
-
-    if (idsToDelete.length > 0) {
-      const chunkSize = 200;
-      for (let i = 0; i < idsToDelete.length; i += chunkSize) {
-        const chunk = idsToDelete.slice(i, i + chunkSize);
-        await supabase.from('schedule_entries').delete().in('id', chunk);
-      }
-    }
-
-    const workingSchedule = rawSchedule.filter((e: any) => !idsToDelete.includes(e.id));
-
-    // 3. GENERADOR DINÁMICO DE SLOTS OFICIALES POR CURSO
+    // 2. GENERADOR DINÁMICO DE SLOTS OFICIALES POR CURSO
     const getSlotsForCourse = (course: any) => {
       const isMorning = shiftBase === 'mat';
       const official = (levelSchedules || []).find(
         (ls: any) =>
-          ls.level === course.level &&
+          ls.level === course?.level &&
           (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
       );
 
@@ -3145,6 +3095,67 @@ export const scheduleService = {
       return slots;
     };
 
+    // 3. FASE 0: SANITIZACIÓN Y LIMPIEZA DE ENTRADAS DUPLICADAS O FUERA DE HORARIO
+    const idsToDelete: string[] = [];
+    const seenCourseSlotKeys = new Set<string>();
+    const countByCourseSubject: Record<string, number> = {};
+
+    const requiredHoursMap: Record<string, number> = {};
+    assignments.forEach((a: any) => {
+      const cId = String(a.course_id || a.courseId);
+      const sId = String(a.subject_id);
+      const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+      requiredHoursMap[`${cId}_${sId}`] = req;
+    });
+
+    rawSchedule.forEach((e: any) => {
+      const cId = String(e.course_id);
+      const sId = String(e.subject_id);
+      const day = (e.day || '').trim().toLowerCase();
+      const sTime = e.start_time;
+
+      const slotKey = `${cId}_${day}_${sTime}`;
+      const csKey = `${cId}_${sId}`;
+
+      // A. Si la misma casilla en el mismo curso ya está ocupada por otra fila (duplicado idéntico)
+      if (seenCourseSlotKeys.has(slotKey)) {
+        idsToDelete.push(e.id);
+        return;
+      }
+      seenCourseSlotKeys.add(slotKey);
+
+      // B. Si la hora no corresponde a un slot oficial del curso (registro fantasma)
+      const courseObj = courses.find((c: any) => String(c.id) === cId);
+      if (courseObj) {
+        const cSlots = getSlotsForCourse(courseObj);
+        const eMins = toMins(sTime);
+        const matchesOfficialSlot = cSlots.some((s: any) => Math.abs(toMins(s.start) - eMins) < 15);
+        if (!matchesOfficialSlot) {
+          idsToDelete.push(e.id);
+          return;
+        }
+      }
+
+      // C. Si ya se superó la cantidad de horas asignadas para esta materia
+      const maxReq = requiredHoursMap[csKey] ?? 99;
+      const currentCount = countByCourseSubject[csKey] || 0;
+      if (currentCount >= maxReq) {
+        idsToDelete.push(e.id);
+        return;
+      }
+      countByCourseSubject[csKey] = currentCount + 1;
+    });
+
+    if (idsToDelete.length > 0) {
+      const chunkSize = 200;
+      for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+        const chunk = idsToDelete.slice(i, i + chunkSize);
+        await supabase.from('schedule_entries').delete().in('id', chunk);
+      }
+    }
+
+    const workingSchedule = rawSchedule.filter((e: any) => !idsToDelete.includes(e.id));
+
     // 4. IDENTIFICAR MATERIAS FALTANTES REALES
     const missingTasks: any[] = [];
     const targetAssignments = targetCourseId
@@ -3155,10 +3166,22 @@ export const scheduleService = {
       const cId = String(a.course_id || a.courseId);
       const sId = String(a.subject_id);
       const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-      const placed = workingSchedule.filter(
-        (e: any) => String(e.course_id) === cId && String(e.subject_id) === sId
-      ).length;
-      const missing = Math.max(0, required - placed);
+      const courseObj = courses.find((c: any) => String(c.id) === cId);
+      const cSlots = courseObj ? getSlotsForCourse(courseObj) : [];
+
+      // Contar solo las casillas que coinciden con los slots oficiales de la cuadrícula
+      const placedEntries = workingSchedule.filter((e: any) => {
+        if (String(e.course_id) !== cId || String(e.subject_id) !== sId) return false;
+        const eMins = toMins(e.start_time);
+        return cSlots.some((s: any) => Math.abs(toMins(s.start) - eMins) < 15);
+      });
+
+      const uniqueSlotKeys = new Set(
+        placedEntries.map((e: any) => `${(e.day || '').trim().toLowerCase()}_${e.start_time}`)
+      );
+      const uniquePlaced = uniqueSlotKeys.size;
+      const missing = Math.max(0, required - uniquePlaced);
+
       for (let k = 0; k < missing; k++) {
         missingTasks.push({
           courseId: cId,
