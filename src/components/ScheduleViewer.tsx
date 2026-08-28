@@ -419,37 +419,26 @@ export const ScheduleViewer = () => {
   };
 
   const filteredSchedule = useMemo(() => {
-    let list = [...(state.schedule || [])];
+    const list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
 
-    list = list.filter((s: any) => {
-      const sShift = (s.shift || '').toLowerCase();
-      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      
-      let yearMatch = true;
-      if (selectedYear) {
-        yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
-      }
-      return shiftMatch && yearMatch;
-    });
-
-    // 2. DEDUPLICACIÓN ESTRICTA (Evita mostrar 2 veces la misma hora por duplicados en DB)
-    const seenSlotKeys = new Set<string>();
-    list = list.filter((s: any) => {
-      const key = `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.start_time}`;
-      if (seenSlotKeys.has(key)) return false;
-      seenSlotKeys.add(key);
-      return true;
-    });
+    if (filterType === 'course' && filterId) {
+      return list.filter((s: any) => {
+        const sCid = s.course_id || s.courseId;
+        if (String(sCid) !== String(filterId)) return false;
+        if (selectedYear && s.school_year && s.school_year !== '' && s.school_year !== selectedYear) return false;
+        return true;
+      });
+    }
 
     if (filterType === 'teacher' && filterId) {
-      list = list.filter((s: any) => {
+      return list.filter((s: any) => {
         if (String(s.teacher_id) === String(filterId)) return true;
         if (!s.teacher_id) {
           return (state.assignments || []).some(
             (a: any) =>
               String(a.teacher_id || a.teacherId) === String(filterId) &&
-              (String(a.course_id || a.courseId) === String(s.course_id || s.courseId)) &&
+              String(a.course_id || a.courseId) === String(s.course_id || s.courseId) &&
               String(a.subject_id) === String(s.subject_id)
           );
         }
@@ -457,14 +446,16 @@ export const ScheduleViewer = () => {
       });
     }
 
-    if (filterType === 'course' && filterId) {
-      list = list.filter((s: any) => {
-        const sCid = s.course_id || s.courseId;
-        return String(sCid) === String(filterId);
-      });
-    }
-
-    return list;
+    // Vista general (Todos los cursos)
+    return list.filter((s: any) => {
+      const sShift = (s.shift || '').toLowerCase();
+      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
+      let yearMatch = true;
+      if (selectedYear) {
+        yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
+      }
+      return shiftMatch && yearMatch;
+    });
   }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear]);
 
   const timeSlots = useMemo(() => {
@@ -910,7 +901,7 @@ export const ScheduleViewer = () => {
       });
 
       // Asociar si la entrada corresponde al slot más cercano
-      if (closestSlot && minDiff <= 35) {
+      if (closestSlot && minDiff <= 60) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
