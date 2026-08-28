@@ -2200,57 +2200,54 @@ export const ScheduleViewer = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {state.assignments
-              .filter((a) => String(a.course_id || a.courseId) === String(filterId))
-              .map((a) => {
-                const subject = state.subjects.find((s) => String(s.id) === String(a.subject_id));
-
-                let placedHours = 0;
-                days.forEach((d) => {
-                  slots.forEach((slot) => {
-                    if (slot.isBreak) return;
-                    const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
-                    if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
-                      placedHours++;
-                    }
-                  });
+            {getCourseSubjectsAndAssignments(filterId).map((item) => {
+              const subject = state.subjects.find((s) => String(s.id) === String(item.subject_id));
+              let placedHours = 0;
+              days.forEach((d) => {
+                slots.forEach((slot) => {
+                  if (slot.isBreak) return;
+                  const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                  if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
+                    placedHours++;
+                  }
                 });
-                const assignedHours = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                const isComplete = placedHours >= assignedHours && assignedHours > 0;
+              });
+              const assignedHours = Number(item.assignedHours) || 0;
+              const isComplete = placedHours >= assignedHours && assignedHours > 0;
 
-                return (
-                  <div
-                    key={a.id}
-                    className={`p-4 rounded-2xl border transition-all ${isComplete ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-200 shadow-lg animate-pulse'}`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="text-[10px] font-black uppercase text-slate-700 leading-tight pr-4">
-                        {subject?.name}
-                      </p>
-                      {isComplete ? (
-                        <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                      ) : (
-                        <AlertCircle size={14} className="text-rose-500 shrink-0" />
-                      )}
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <span
-                        className={`text-2xl font-black ${isComplete ? 'text-emerald-700' : 'text-rose-700'}`}
-                      >
-                        {placedHours}
-                      </span>
-                      <span className="text-xs font-bold text-slate-400 mb-1.5">
-                        / {assignedHours} Horas
-                      </span>
-                    </div>
-                    {!isComplete && (
-                      <p className="text-[9px] font-black text-rose-600 mt-2 uppercase tracking-tighter italic">
-                        ❌ Faltan {assignedHours - placedHours} horas por colocar
-                      </p>
+              return (
+                <div
+                  key={item.id}
+                  className={`p-4 rounded-2xl border transition-all ${isComplete ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-200 shadow-lg animate-pulse'}`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black uppercase text-slate-700 leading-tight pr-4">
+                      {subject?.name || 'Materia'}
+                    </p>
+                    {isComplete ? (
+                      <CheckCircle size={14} className="text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertCircle size={14} className="text-rose-500 shrink-0" />
                     )}
                   </div>
-                );
-              })}
+                  <div className="flex items-end gap-2">
+                    <span
+                      className={`text-2xl font-black ${isComplete ? 'text-emerald-700' : 'text-rose-700'}`}
+                    >
+                      {placedHours}
+                    </span>
+                    <span className="text-xs font-bold text-slate-400 mb-1.5">
+                      / {assignedHours} Horas
+                    </span>
+                  </div>
+                  {!isComplete && (
+                    <p className="text-[9px] font-black text-rose-600 mt-2 uppercase tracking-tighter italic">
+                      ❌ Faltan {assignedHours - placedHours} horas por colocar
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2327,28 +2324,26 @@ export const ScheduleViewer = () => {
                 >
                   <option value="">-- Elige una Materia --</option>
                   {swapCourseId &&
-                    state.assignments
-                      .filter((a: any) => String(a.course_id || a.courseId) === String(swapCourseId))
-                      .map((a: any) => {
-                        const sub = state.subjects.find((s: any) => String(s.id) === String(a.subject_id));
-                        const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                        let placed = 0;
-                        days.forEach((d) => {
-                          slots.forEach((slot) => {
-                            if (slot.isBreak) return;
-                            const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
-                            if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
-                              placed++;
-                            }
-                          });
+                    getCourseSubjectsAndAssignments(swapCourseId).map((item: any) => {
+                      const sub = state.subjects.find((s: any) => String(s.id) === String(item.subject_id));
+                      const assigned = Number(item.assignedHours) || 0;
+                      let placed = 0;
+                      days.forEach((d) => {
+                        slots.forEach((slot) => {
+                          if (slot.isBreak) return;
+                          const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                          if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
+                            placed++;
+                          }
                         });
-                        const missing = Math.max(0, assigned - placed);
-                        return (
-                          <option key={a.subject_id} value={a.subject_id}>
-                            {sub?.name || 'Materia'} ({placed}/{assigned}h {missing > 0 ? `❌ FALTAN ${missing}h` : '✓ COMPLETO'})
-                          </option>
-                        );
-                      })}
+                      });
+                      const missing = Math.max(0, assigned - placed);
+                      return (
+                        <option key={item.subject_id} value={item.subject_id}>
+                          {sub?.name || 'Materia'} ({placed}/{assigned}h {missing > 0 ? `❌ FALTAN ${missing}h` : '✓ COMPLETO'})
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
             </div>
@@ -2645,83 +2640,80 @@ export const ScheduleViewer = () => {
                 </label>
                 {directAssignModal.courseId ? (
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {state.assignments
-                      .filter(
-                        (a) =>
-                          String(a.course_id || a.courseId) === String(directAssignModal.courseId)
-                      )
-                      .map((a) => {
-                        const subject = state.subjects.find((s) => String(s.id) === String(a.subject_id));
-                        const teacherId = a.teacher_id || a.teacherId;
-                        const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
-                        const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                        let placed = 0;
-                        days.forEach((d) => {
-                          slots.forEach((slot) => {
-                            if (slot.isBreak) return;
-                            const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
-                            if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
-                              placed++;
-                            }
-                          });
+                    {getCourseSubjectsAndAssignments(directAssignModal.courseId).map((item) => {
+                      const subject = state.subjects.find((s) => String(s.id) === String(item.subject_id));
+                      const teacherId = item.teacher_id;
+                      const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
+                      const assigned = Number(item.assignedHours) || 0;
+                      let placed = 0;
+                      days.forEach((d) => {
+                        slots.forEach((slot) => {
+                          if (slot.isBreak) return;
+                          const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                          if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
+                            placed++;
+                          }
                         });
-                        const missing = Math.max(0, assigned - placed);
+                      });
+                      const missing = Math.max(0, assigned - placed);
 
-                        // Verificar si el docente tiene clase en otro curso a esta misma hora
-                        const sStartM = toMins(directAssignModal.slot?.start);
-                        const sEndM = toMins(directAssignModal.slot?.end);
-                        const teacherClash = (state.schedule || []).find((s) => {
-                          if (String(s.teacher_id) !== String(teacherId)) return false;
-                          if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
-                          const eStart = toMins(s.start_time);
-                          let eEnd = toMins(s.end_time);
-                          if (eEnd <= eStart) eEnd = eStart + 45;
-                          const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
-                          return overlap > 10;
-                        });
+                      // Verificar si el docente tiene clase en otro curso a esta misma hora
+                      const sStartM = toMins(directAssignModal.slot?.start);
+                      const sEndM = toMins(directAssignModal.slot?.end);
+                      const teacherClash = (state.schedule || []).find((s) => {
+                        if (!teacherId || String(s.teacher_id) !== String(teacherId)) return false;
+                        if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
+                        const eStart = toMins(s.start_time);
+                        let eEnd = toMins(s.end_time);
+                        if (eEnd <= eStart) eEnd = eStart + 45;
+                        const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
+                        return overlap > 10;
+                      });
 
-                        const isSelected = String(directAssignModal.subjectId) === String(a.subject_id);
+                      const isSelected = String(directAssignModal.subjectId) === String(item.subject_id);
 
-                        return (
-                          <div
-                            key={a.id}
-                            onClick={() => setDirectAssignModal({ ...directAssignModal, subjectId: a.subject_id })}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                              isSelected
-                                ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/20'
-                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                            }`}
-                          >
-                            <div className="space-y-0.5">
-                              <p className="text-xs font-black text-slate-800 uppercase">
-                                {subject?.name || 'Materia'}
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => setDirectAssignModal({ ...directAssignModal, subjectId: item.subject_id })}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500/20'
+                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                          }`}
+                        >
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-black text-slate-800 uppercase">
+                              {subject?.name || 'Materia'}
+                            </p>
+                            <p className="text-[10px] font-bold text-indigo-600 uppercase">
+                              👨‍🏫 {teacher?.name || 'Docente de la Materia'}
+                            </p>
+                            {teacherClash && (
+                              <p className="text-[9px] font-bold text-amber-600 uppercase">
+                                ⚠️ Docente con clase en otro curso a esta hora
                               </p>
-                              <p className="text-[10px] font-bold text-indigo-600 uppercase">
-                                👨‍🏫 {teacher?.name || 'Docente no asignado'}
-                              </p>
-                              {teacherClash && (
-                                <p className="text-[9px] font-bold text-amber-600 uppercase">
-                                  ⚠️ Docente con clase en otro curso a esta hora
-                                </p>
-                              )}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span
-                                className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
-                                  missing > 0
-                                    ? 'bg-rose-100 text-rose-700'
-                                    : 'bg-emerald-100 text-emerald-700'
-                                }`}
-                              >
-                                {placed}/{assigned}h {missing > 0 ? `(Falta ${missing}h)` : '✓ Completo'}
-                              </span>
-                            </div>
+                            )}
                           </div>
-                        );
-                      })}
+                          <div className="text-right shrink-0">
+                            <span
+                              className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                                missing > 0
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                              }`}
+                            >
+                              {placed}/{assigned}h {missing > 0 ? `(Falta ${missing}h)` : '✓ Completo'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 italic">Selecciona un curso primero.</p>
+                  <p className="text-xs text-slate-400 italic">
+                    Selecciona un curso primero para ver sus materias
+                  </p>
                 )}
               </div>
 
@@ -2730,14 +2722,19 @@ export const ScheduleViewer = () => {
                 <button
                   disabled={!directAssignModal.courseId || !directAssignModal.subjectId}
                   onClick={async () => {
-                    const assign = state.assignments.find(
-                      (a) =>
-                        String(a.course_id || a.courseId) === String(directAssignModal.courseId) &&
-                        String(a.subject_id) === String(directAssignModal.subjectId)
+                    const items = getCourseSubjectsAndAssignments(directAssignModal.courseId);
+                    const assignItem = items.find(
+                      (a) => String(a.subject_id) === String(directAssignModal.subjectId)
                     );
-                    if (!assign) return;
+                    if (!assignItem) return;
 
-                    const finalTeacherId = assign.teacher_id || assign.teacherId;
+                    // Si no tiene teacher_id específico, buscar si hay algún docente asignado a esta materia
+                    let finalTeacherId = assignItem.teacher_id;
+                    if (!finalTeacherId) {
+                      const otherAssign = (state.assignments || []).find((a: any) => String(a.subject_id) === String(directAssignModal.subjectId));
+                      finalTeacherId = otherAssign?.teacher_id || otherAssign?.teacherId || (state.teachers[0]?.id || '');
+                    }
+
                     const finalYear = selectedYear || state.currentYear || '2026-2027';
                     const sStart = directAssignModal.slot.start.length === 5 ? directAssignModal.slot.start + ':00' : directAssignModal.slot.start;
                     const sEnd = directAssignModal.slot.end.length === 5 ? directAssignModal.slot.end + ':00' : directAssignModal.slot.end;
