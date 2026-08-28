@@ -915,22 +915,16 @@ export const ScheduleViewer = () => {
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
 
-        // En vista de curso, la casilla solo debe tener una materia asignada (evitar amontonamiento)
-        if (filterType === 'course') {
-          if (listInSlot.length === 0) {
-            listInSlot.push(entry);
-          }
-        } else {
-          // En vista general o docente, evitar duplicados exactos
-          const isDup = listInSlot.some(
-            (existing: any) =>
-              existing.course_id === entry.course_id &&
-              existing.subject_id === entry.subject_id &&
-              existing.day === entry.day &&
-              existing.start_time === entry.start_time
-          );
-          if (!isDup) listInSlot.push(entry);
-        }
+        // Evitar duplicados exactos en la casilla
+        const isDup = listInSlot.some(
+          (existing: any) =>
+            String(existing.id) === String(entry.id) ||
+            (String(existing.course_id || existing.courseId) === String(entry.course_id || entry.courseId) &&
+              String(existing.subject_id) === String(entry.subject_id) &&
+              (existing.day || '').trim().toLowerCase() === (entry.day || '').trim().toLowerCase() &&
+              existing.start_time === entry.start_time)
+        );
+        if (!isDup) listInSlot.push(entry);
       }
     });
 
@@ -2093,9 +2087,9 @@ export const ScheduleViewer = () => {
                     });
 
                     // 2. ¿ES UN RECREO SEGÚN LA REJILLA DINÁMICA?
-                    // Las franjas de recreo son inviolables y se muestran de Lunes a Viernes
+                    // Las franjas de recreo son inviolables y se muestran si no hay clases
                     const isRecreo = filterType === 'teacher' ? false : Boolean(slot.isBreak);
-                    const blockName = (fixedEvent && entries.length === 0) ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null;
+                    const blockName = entries.length === 0 ? (fixedEvent ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null) : null;
 
                     return (
                       <div key={day} className="px-2 h-full">
