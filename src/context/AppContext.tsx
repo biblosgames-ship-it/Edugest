@@ -489,14 +489,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes del centro: incluir todos los inscritos en cursos del centro o con el año escolar activo
+          // 3. Estudiantes del año escolar activo:
           const rawStudents = studRes.data || [];
-          const allCenterCourseIds = new Set((cRes.data || []).map((c: any) => String(c.id)));
           const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
+          const pastCourseIdSet = new Set(
+            (cRes.data || [])
+              .filter((c: any) => c.school_year && c.school_year !== currentFetchYear)
+              .map((c: any) => String(c.id))
+          );
+
           const filteredStudents = rawStudents.filter((s: any) => {
-            if (s.course_id && (activeCourseIdSet.has(String(s.course_id)) || allCenterCourseIds.has(String(s.course_id)))) return true;
-            if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
-            return s.school_year === currentFetchYear;
+            // A. Si está asignado a un curso de este año activo
+            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) return true;
+
+            // B. Si está asignado explícitamente a un curso de un año anterior, descartar
+            if (s.course_id && pastCourseIdSet.has(String(s.course_id))) return false;
+
+            // C. Si su año escolar individual es de un año anterior, descartar
+            if (s.school_year && s.school_year !== currentFetchYear && s.school_year !== 'undefined' && s.school_year !== 'null') return false;
+
+            // D. Si su año escolar coincide con el año activo
+            if (s.school_year === currentFetchYear) return true;
+
+            // E. Si no tiene año ni curso asignado, pero pertenece al centro
+            if (!s.course_id && (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null')) return true;
+
+            return false;
           });
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
