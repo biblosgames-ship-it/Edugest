@@ -343,21 +343,13 @@ export const ScheduleViewer = () => {
     let list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
 
-    // 1. FILTRO ROBUSTO POR AÑO Y TANDA
-    // Si existen entradas con el año seleccionado explícito, priorizar solo esas para evitar duplicación con registros antiguos sin año
-    const hasExplicitYearEntries = selectedYear && list.some((s: any) => s.school_year === selectedYear);
-
     list = list.filter((s: any) => {
       const sShift = (s.shift || '').toLowerCase();
       const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
       
       let yearMatch = true;
       if (selectedYear) {
-        if (hasExplicitYearEntries) {
-          yearMatch = s.school_year === selectedYear;
-        } else {
-          yearMatch = !s.school_year || s.school_year === selectedYear;
-        }
+        yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
       }
       return shiftMatch && yearMatch;
     });

@@ -249,8 +249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase
               .from('schedule_entries')
               .select('*')
-              .eq('center_id', targetCid)
-              .or(`school_year.eq.${currentFetchYear},school_year.is.null,school_year.eq.""`),
+              .eq('center_id', targetCid),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -449,13 +448,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Filtrar cursos para el año activo (evitar mezclas de otros años)
+          // 1. Filtrar cursos para el año activo (sin descartar los existentes sin año)
           const rawCourses = cRes.data || [];
-          const yearSpecificCourses = rawCourses.filter((c: any) => c.school_year === currentFetchYear);
-          const unassignedCourses = rawCourses.filter((c: any) => !c.school_year || c.school_year === '');
-          const filteredCourses = yearSpecificCourses.length > 0
-            ? yearSpecificCourses
-            : (rawCourses.every((c: any) => !c.school_year) ? unassignedCourses : []);
+          const filteredCourses = rawCourses.filter((c: any) => {
+            if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
+            return c.school_year === currentFetchYear;
+          });
 
           let localTitularMap: Record<string, any> = {};
           try {
@@ -482,13 +480,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           });
 
-          // 2. Filtrar horarios para el año activo
+          // 2. Filtrar horarios para el año activo (sin descartar los existentes sin año)
           const rawSchedule = schedRes.data || [];
-          const yearSpecificSchedule = rawSchedule.filter((s: any) => s.school_year === currentFetchYear);
-          const unassignedSchedule = rawSchedule.filter((s: any) => !s.school_year || s.school_year === '');
-          const filteredSchedule = yearSpecificSchedule.length > 0
-            ? yearSpecificSchedule
-            : (rawSchedule.every((s: any) => !s.school_year) ? unassignedSchedule : []);
+          const filteredSchedule = rawSchedule.filter((s: any) => {
+            if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
+            return s.school_year === currentFetchYear;
+          });
 
           const scheduleUnified = filteredSchedule.map((s: any) => ({
             ...s,
@@ -496,13 +493,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Filtrar estudiantes para el año activo (evitar sumar los 1000 estudiantes de años anteriores)
+          // 3. Filtrar estudiantes para el año activo (sin descartar los existentes sin año)
           const rawStudents = studRes.data || [];
-          const yearSpecificStudents = rawStudents.filter((s: any) => s.school_year === currentFetchYear);
-          const unassignedStudents = rawStudents.filter((s: any) => !s.school_year || s.school_year === '');
-          const filteredStudents = yearSpecificStudents.length > 0
-            ? yearSpecificStudents
-            : (rawStudents.every((s: any) => !s.school_year) ? unassignedStudents : []);
+          const filteredStudents = rawStudents.filter((s: any) => {
+            if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
+            return s.school_year === currentFetchYear;
+          });
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {
