@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { SEO } from './SEO';
 
 import { scheduleService } from '../services/scheduleService';
@@ -220,18 +222,24 @@ export const ScheduleViewer = () => {
     // Persistir blindaje completo en Supabase DB
     try {
       if (profile?.center_id) {
-        let query = supabase
+        await supabase
           .from('schedule_entries')
           .update({ is_locked: newLockState })
           .eq('center_id', profile.center_id)
           .eq('shift', selectedShift);
-        if (selectedYear) {
-          query = query.eq('school_year', selectedYear);
-        }
-        await query;
       }
     } catch (err) {
       console.warn('Nota de guardado en DB de blindaje:', err);
+    }
+
+    if (newLockState) {
+      alert(
+        `🔒 HORARIO ${selectedShift.toUpperCase()} BLINDADO CON ÉXITO\n\nTodas las materias están aseguradas con candado y protegidas contra cualquier cambio o movimiento accidental.\n\nLos botones automáticos (Regenerar, Reparar y Rellenar) han quedado protegidos.`
+      );
+    } else {
+      alert(
+        `🔓 HORARIO ${selectedShift.toUpperCase()} DESBLOQUEADO\n\nLas materias han sido liberadas para permitir modificaciones.`
+      );
     }
   };
 
@@ -1129,19 +1137,145 @@ export const ScheduleViewer = () => {
 
     const worksheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Horario');
-
-    let filename = `Horario_${selectedShift}`;
-    if (filterType === 'course' && filterId) {
-      const course = state.courses.find((c) => c.id === filterId);
-      if (course)
-        filename = `Horario_Curso_${course.grade}_${course.section || ''}`.replace(/\s+/g, '_');
-    } else if (filterType === 'teacher' && filterId) {
-      const teacher = state.teachers.find((t) => t.id === filterId);
-      if (teacher) filename = `Horario_Docente_${teacher.name}`.replace(/\s+/g, '_');
-    }
-
     XLSX.writeFile(workbook, `${filename}.xlsx`);
+  };
+
+  const handleExportDataPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const shiftCourses = state.courses.filter((c: any) => {
+        const sBase = selectedShift.toLowerCase().substring(0, 3);
+        const tStr = (c.tanda || '').toLowerCase();
+        const lvlStr = (c.level || '').toLowerCase();
+        if (sBase === 'mat') {
+          return !tStr.includes('ves') && !tStr.includes('tar');
+        } else {
+          return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+        }
+      });
+
+      const targetCourses = filterType === 'course' && filterId
+        ? shiftCourses.filter((c: any) => String(c.id) === String(filterId))
+        : shiftCourses;
+
+      if (targetCourses.length === 0) {
+        alert('No hay cursos disponibles para exportar en esta tanda.');
+        return;
+      }
+
+      const centerName = profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+
+      targetCourses.forEach((course: any, idx: number) => {
+        if (idx > 0) {
+          doc.addPage('a4', 'landscape');
+        }
+
+        // Header Superior Elegante
+        doc.setFillColor(30, 41, 59); // slate-800
+        doc.rect(0, 0, 297, 18, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(centerName.toUpperCase(), 14, 11);
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`TANDA ${selectedShift.toUpperCase()} | AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
+
+        // Título del Curso
+        doc.setTextColor(15, 23, 42); // slate-900
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        const courseTitle = `HORARIO: ${course.grade} "${course.section || ''}" - NIVEL ${course.level || ''}`;
+        doc.text(courseTitle.toUpperCase(), 14, 28);
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
+
+        const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+        const tableBody = slots.map((slot: any) => {
+          const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+          
+          if (slot.isBreak) {
+            return [
+              timeLabel,
+              {
+                content: `🔔 ${slot.label || 'RECREO'}`,
+                colSpan: 5,
+                styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
+              }
+            ];
+          }
+
+          const dayCols = tableDays.map((day) => {
+            const entries = (state.schedule || []).filter((s: any) => {
+              if (String(s.course_id || s.courseId) !== String(course.id)) return false;
+              if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+              const sM = toMins(slot.start);
+              const eM = toMins(s.start_time);
+              return Math.abs(sM - eM) <= 25;
+            });
+
+            if (entries.length === 0) return '';
+
+            return entries.map((e: any) => {
+              const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
+              const teacher = state.teachers.find((t: any) => String(t.id) === String(e.teacher_id));
+              return `${(sub?.name || 'Materia').toUpperCase()}\n${teacher?.name || 'Docente'}`;
+            }).join('\n---\n');
+          });
+
+          return [timeLabel, ...dayCols];
+        });
+
+        autoTable(doc, {
+          startY: 37,
+          head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
+          body: tableBody,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [79, 70, 229],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center',
+            fontSize: 9,
+            cellPadding: 3
+          },
+          bodyStyles: {
+            fontSize: 8,
+            cellPadding: 3,
+            valign: 'middle',
+            textColor: [30, 41, 59]
+          },
+          columnStyles: {
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
+            1: { cellWidth: 48, halign: 'center' },
+            2: { cellWidth: 48, halign: 'center' },
+            3: { cellWidth: 48, halign: 'center' },
+            4: { cellWidth: 48, halign: 'center' },
+            5: { cellWidth: 48, halign: 'center' }
+          },
+          margin: { left: 14, right: 14 }
+        });
+      });
+
+      const filename = filterType === 'course' && filterId
+        ? `Horario_${targetCourses[0]?.grade}_${targetCourses[0]?.section || ''}_${selectedShift}`.replace(/\s+/g, '_')
+        : `Horarios_Todos_los_Grados_${selectedShift}`.replace(/\s+/g, '_');
+
+      doc.save(`${filename}.pdf`);
+    } catch (err: any) {
+      alert('Error al generar PDF: ' + err.message);
+    }
   };
 
   return (
@@ -1349,6 +1483,14 @@ export const ScheduleViewer = () => {
           >
             <FileText size={14} className="text-indigo-600" />
             Imprimir / PDF
+          </button>
+          <button
+            onClick={handleExportDataPDF}
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md transition-all no-print cursor-pointer"
+            title="Descargar documento PDF con cada grado por separado en base a los datos"
+          >
+            <Download size={14} className="text-white" />
+            Descargar PDF Oficial
           </button>
           <button
             onClick={handleExportImage}
