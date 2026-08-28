@@ -449,8 +449,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Cursos de la institución
+          // 1. Cursos del año escolar activo
           const rawCourses = cRes.data || [];
+          const activeCourses = rawCourses.filter((c: any) => {
+            if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
+            return c.school_year === currentFetchYear;
+          });
+
           let localTitularMap: Record<string, any> = {};
           try {
             localTitularMap = JSON.parse(
@@ -458,7 +463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } catch {}
 
-          const coursesUnified = rawCourses.map((c: any) => {
+          const coursesUnified = activeCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
             const rawTeacherId = c.titular_teacher_id || localTitular.titular_teacher_id || null;
             const mappedTeacherId = rawTeacherId ? (idMap[rawTeacherId] || rawTeacherId) : null;
@@ -484,13 +489,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes realmente matriculados en las aulas/cursos del centro educativo:
+          // 3. Estudiantes realmente matriculados en las aulas/cursos del año escolar activo:
           const rawStudents = studRes.data || [];
-          const centerCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
+          const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
 
           const filteredStudents = rawStudents.filter((s: any) => {
-            // A. Estudiante asignado a un curso del centro (Aquí están los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
-            if (s.course_id && centerCourseIdSet.has(String(s.course_id))) {
+            // A. Estudiante asignado a un curso del año activo (Aquí están los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
+            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
               return true;
             }
 
