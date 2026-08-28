@@ -373,13 +373,13 @@ export const ScheduleViewer = () => {
 
     if (filterType === 'teacher' && filterId) {
       list = list.filter((s: any) => {
-        if (s.teacher_id === filterId) return true;
+        if (String(s.teacher_id) === String(filterId)) return true;
         if (!s.teacher_id) {
           return (state.assignments || []).some(
             (a: any) =>
-              a.teacher_id === filterId &&
-              (a.course_id === s.course_id || a.courseId === s.course_id) &&
-              a.subject_id === s.subject_id
+              String(a.teacher_id || a.teacherId) === String(filterId) &&
+              (String(a.course_id || a.courseId) === String(s.course_id || s.courseId)) &&
+              String(a.subject_id) === String(s.subject_id)
           );
         }
         return false;
@@ -389,7 +389,7 @@ export const ScheduleViewer = () => {
     if (filterType === 'course' && filterId) {
       list = list.filter((s: any) => {
         const sCid = s.course_id || s.courseId;
-        return sCid === filterId;
+        return String(sCid) === String(filterId);
       });
     }
 
@@ -2563,17 +2563,17 @@ export const ScheduleViewer = () => {
                     {state.assignments
                       .filter(
                         (a) =>
-                          a.course_id === directAssignModal.courseId ||
-                          a.courseId === directAssignModal.courseId
+                          String(a.course_id || a.courseId) === String(directAssignModal.courseId)
                       )
                       .map((a) => {
-                        const subject = state.subjects.find((s) => s.id === a.subject_id);
-                        const teacher = state.teachers.find((t) => t.id === a.teacher_id);
+                        const subject = state.subjects.find((s) => String(s.id) === String(a.subject_id));
+                        const teacherId = a.teacher_id || a.teacherId;
+                        const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
                         const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
                         const placed = (state.schedule || []).filter(
                           (s) =>
-                            s.course_id === directAssignModal.courseId &&
-                            s.subject_id === a.subject_id
+                            String(s.course_id || s.courseId) === String(directAssignModal.courseId) &&
+                            String(s.subject_id) === String(a.subject_id)
                         ).length;
                         const missing = assigned - placed;
 
@@ -2581,15 +2581,16 @@ export const ScheduleViewer = () => {
                         const sStartM = toMins(directAssignModal.slot?.start);
                         const sEndM = toMins(directAssignModal.slot?.end);
                         const teacherClash = (state.schedule || []).find((s) => {
-                          if (s.teacher_id !== a.teacher_id) return false;
+                          if (String(s.teacher_id) !== String(teacherId)) return false;
                           if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
                           const eStart = toMins(s.start_time);
-                          const eEnd = toMins(s.end_time);
+                          let eEnd = toMins(s.end_time);
+                          if (eEnd <= eStart) eEnd = eStart + 45;
                           const overlap = Math.min(sEndM, eEnd) - Math.max(sStartM, eStart);
                           return overlap > 10;
                         });
 
-                        const isSelected = directAssignModal.subjectId === a.subject_id;
+                        const isSelected = String(directAssignModal.subjectId) === String(a.subject_id);
 
                         return (
                           <div
@@ -2641,11 +2642,15 @@ export const ScheduleViewer = () => {
                   onClick={async () => {
                     const assign = state.assignments.find(
                       (a) =>
-                        (a.course_id === directAssignModal.courseId ||
-                          a.courseId === directAssignModal.courseId) &&
-                        a.subject_id === directAssignModal.subjectId
+                        String(a.course_id || a.courseId) === String(directAssignModal.courseId) &&
+                        String(a.subject_id) === String(directAssignModal.subjectId)
                     );
                     if (!assign) return;
+
+                    const finalTeacherId = assign.teacher_id || assign.teacherId;
+                    const finalYear = selectedYear || state.currentYear || '2026-2027';
+                    const sStart = directAssignModal.slot.start.length === 5 ? directAssignModal.slot.start + ':00' : directAssignModal.slot.start;
+                    const sEnd = directAssignModal.slot.end.length === 5 ? directAssignModal.slot.end + ':00' : directAssignModal.slot.end;
 
                     try {
                       const { error } = await supabase.from('schedule_entries').insert([
@@ -2653,12 +2658,12 @@ export const ScheduleViewer = () => {
                           center_id: profile.center_id,
                           course_id: directAssignModal.courseId,
                           subject_id: directAssignModal.subjectId,
-                          teacher_id: assign.teacher_id,
+                          teacher_id: finalTeacherId,
                           day: directAssignModal.day,
                           shift: selectedShift,
-                          start_time: directAssignModal.slot.start,
-                          end_time: directAssignModal.slot.end,
-                          school_year: selectedYear
+                          start_time: sStart,
+                          end_time: sEnd,
+                          school_year: finalYear
                         }
                       ]);
                       if (error) throw error;
