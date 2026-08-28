@@ -3310,12 +3310,14 @@ export const scheduleService = {
           // 1. Verificar si el recreo del curso choca
           if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) continue;
 
-          // 2. Verificar si el docente de la materia faltante está LIBRE en este día y hora
+          // 2. Verificar si el docente de la materia faltante está ocupado en OTRO curso a esta hora
           const teacherBusyHere = task.teacherId && workingSchedule.some((e: any) => {
             if (String(e.teacher_id) !== String(task.teacherId)) return false;
             if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+            if (String(e.course_id) === String(task.courseId)) return false;
             const eS = toMins(e.start_time);
-            const eE = toMins(e.end_time);
+            let eE = toMins(e.end_time);
+            if (eE <= eS) eE = eS + 45;
             return sStartMins < eE && sEndMins > eS;
           });
           if (teacherBusyHere) continue;
@@ -3325,7 +3327,8 @@ export const scheduleService = {
             if (String(e.course_id) !== String(task.courseId)) return false;
             if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
             const eS = toMins(e.start_time);
-            const eE = toMins(e.end_time);
+            let eE = toMins(e.end_time);
+            if (eE <= eS) eE = eS + 45;
             return sStartMins < eE && sEndMins > eS;
           });
 
@@ -3350,18 +3353,21 @@ export const scheduleService = {
                 if (String(e.course_id) !== String(task.courseId)) return false;
                 if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
                 const eS = toMins(e.start_time);
-                const eE = toMins(e.end_time);
+                let eE = toMins(e.end_time);
+                if (eE <= eS) eE = eS + 45;
                 return altStartMins < eE && altEndMins > eS;
               });
               if (altOccupiedInCourse) continue;
 
-              // Verificar si el docente de la materia ocupante está libre en altDay y altSlot
+              // Verificar si el docente de la materia ocupante está ocupado en OTRO curso en altDay y altSlot
               const occTeacherBusyInAlt = occupyingEntry.teacher_id && workingSchedule.some((e: any) => {
                 if (String(e.id) === String(occupyingEntry.id)) return false;
                 if (String(e.teacher_id) !== String(occupyingEntry.teacher_id)) return false;
                 if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
+                if (String(e.course_id) === String(task.courseId)) return false;
                 const eS = toMins(e.start_time);
-                const eE = toMins(e.end_time);
+                let eE = toMins(e.end_time);
+                if (eE <= eS) eE = eS + 45;
                 return altStartMins < eE && altEndMins > eS;
               });
               if (occTeacherBusyInAlt) continue;
