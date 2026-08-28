@@ -385,7 +385,20 @@ export const ScheduleViewer = () => {
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
   const schedule = state.schedule || [];
-  const isMorning = selectedShift === 'Matutina';
+
+  const activeCourse = useMemo(() => {
+    if (filterType === 'course' && filterId) {
+      return state.courses.find((c) => String(c.id) === String(filterId)) || null;
+    }
+    return null;
+  }, [filterType, filterId, state.courses]);
+
+  const courseTandaStr = (activeCourse?.tanda || '').toLowerCase();
+  const effectiveShift: 'Matutina' | 'Vespertina' = activeCourse
+    ? (courseTandaStr.includes('ves') || courseTandaStr.includes('tar') ? 'Vespertina' : 'Matutina')
+    : selectedShift;
+
+  const isMorning = effectiveShift === 'Matutina';
   const cleanDuration = isMorning ? 45 : 40;
   const targetTotal = isMorning ? 5 : 6;
   const preCount = Math.floor(targetTotal / 2);
@@ -1505,7 +1518,21 @@ export const ScheduleViewer = () => {
               {filterType === 'course' && (
                 <select
                   value={filterId}
-                  onChange={(e) => setFilterId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterId(val);
+                    if (val) {
+                      const c = state.courses.find((cr) => String(cr.id) === String(val));
+                      if (c?.tanda) {
+                        const t = c.tanda.toLowerCase();
+                        if (t.includes('ves') || t.includes('tar')) {
+                          setSelectedShift('Vespertina');
+                        } else {
+                          setSelectedShift('Matutina');
+                        }
+                      }
+                    }
+                  }}
                   className="px-6 py-2.5 rounded-2xl bg-slate-50 border-none text-[10px] font-black uppercase shadow-inner"
                 >
                   <option value="">Seleccionar Curso...</option>
