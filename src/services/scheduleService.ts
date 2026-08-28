@@ -2493,7 +2493,11 @@ export const scheduleService = {
 
     const teacherId = assign.teacher_id;
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-    const currentSchedule = schedule || [];
+    const currentSchedule = (schedule || []).filter(
+      (s: any) =>
+        !s.shift ||
+        (s.shift || '').toLowerCase().includes(shift.toLowerCase().substring(0, 3))
+    );
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);

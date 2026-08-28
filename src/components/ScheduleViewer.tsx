@@ -2250,6 +2250,7 @@ export const ScheduleViewer = () => {
                           (s: any) =>
                             (String(s.course_id) === String(swapCourseId) || String(s.courseId) === String(swapCourseId)) &&
                             String(s.subject_id) === String(a.subject_id) &&
+                            (!s.shift || (s.shift || '').toLowerCase().includes(selectedShift.toLowerCase().substring(0, 3))) &&
                             (!selectedYear || !s.school_year || s.school_year === selectedYear)
                         );
                         const uniqueSlots = new Set(
