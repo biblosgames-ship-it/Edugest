@@ -293,7 +293,7 @@ export const ScheduleViewer = () => {
   // Sincronizar la tanda del curso de manera automática para alumnos y padres
   useEffect(() => {
     if (isStudentOrParent && filterId) {
-      const activeCourse = state.courses.find((c) => c.id === filterId);
+      const activeCourse = state.courses.find((c) => String(c.id) === String(filterId));
       if (activeCourse) {
         const tStr = (activeCourse.tanda || '').toLowerCase();
         const lvlStr = (activeCourse.level || '').toLowerCase();
@@ -431,7 +431,7 @@ export const ScheduleViewer = () => {
 
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
-      const course = state.courses.find((c) => c.id === filterId);
+      const course = state.courses.find((c) => String(c.id) === String(filterId));
       if (course) {
         const official = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
         if (official) {
@@ -474,7 +474,7 @@ export const ScheduleViewer = () => {
     };
 
     const getSlotsForCourse = (course: any) => {
-      const courseOfficial = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
+      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, selectedShift);
       let courseStartT = startT;
       let courseEndT = endT;
       if (courseOfficial?.start_time) {
@@ -488,80 +488,36 @@ export const ScheduleViewer = () => {
         courseEndT = e;
       }
 
-      const grade = course.grade?.toLowerCase() || '';
-      const cycleStr = (course.cycle || '').toLowerCase();
-
-      const isFirstCycle =
-        cycleStr.includes('primer') ||
-        cycleStr.includes('1er') ||
-        cycleStr.includes('1') ||
-        (!cycleStr.includes('segundo') &&
-          !cycleStr.includes('2do') &&
-          !grade.includes('segundo ciclo') &&
-          !grade.includes('2do ciclo') &&
-          (/^[1-3]/.test(grade) ||
-            grade.includes('1ro') ||
-            grade.includes('2do') ||
-            grade.includes('3ro') ||
-            grade.includes('primer') ||
-            grade.includes('tercer')));
-
-      const isSecondCycle =
-        cycleStr.includes('segundo') ||
-        cycleStr.includes('2do') ||
-        cycleStr.includes('2') ||
-        grade.includes('segundo ciclo') ||
-        grade.includes('2do ciclo') ||
-        /^[4-6]/.test(grade) ||
-        grade.includes('4to') ||
-        grade.includes('5to') ||
-        grade.includes('6to') ||
-        grade.includes('cuarto') ||
-        grade.includes('quinto') ||
-        grade.includes('sexto');
-
-      const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
+      const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
         let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 420) bpMins += 720;
+        if (!isMorning && bpMins < 720) bpMins += 720;
         const isBpMorning = bpMins < 780;
         if (isMorning !== isBpMorning) return false;
 
-        const levelNormBP = (bp.level || '').toLowerCase();
-        const levelNormCourse = (course.level || '').toLowerCase();
-
-        // Coincidencia permisiva (General, Todo el Centro, Primario vs Primaria)
-        if (!levelNormBP || levelNormBP.includes('gen') || levelNormBP.includes('todo')) return true;
+        const bpLevel = (bp.level || '').toLowerCase();
+        const levelNorm = (course?.level || '').toLowerCase();
+        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
         return (
-          levelNormBP.substring(0, 3) === levelNormCourse.substring(0, 3) ||
-          levelNormCourse.includes(levelNormBP.substring(0, 3))
+          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(bpLevel.substring(0, 3))
         );
       });
 
-      let bPref = applicableBPs.find((bp: any) => {
-        const cNorm = (bp.cycle || '').toLowerCase();
-        if (isFirstCycle && (cNorm.includes('primer') || cNorm.includes('1er') || cNorm.includes('1'))) return true;
-        if (isSecondCycle && (cNorm.includes('segundo') || cNorm.includes('2do') || cNorm.includes('2'))) return true;
-        return false;
-      });
-
-      if (!bPref) {
-        bPref = applicableBPs.find((bp: any) => {
-          const cNorm = (bp.cycle || '').toLowerCase();
-          return !cNorm || cNorm === 'general' || cNorm === 'gen';
-        });
-      }
-
-      bPref = bPref || masterBPref;
-
-      let bStart = toMins(bPref.startTime);
+      const effectiveBPref = cycleBPref || masterBPref;
+      let bStart = toMins(effectiveBPref.startTime);
       if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
       if (!isMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
+      const bDuration = Number(effectiveBPref.durationMinutes) || (isMorning ? 30 : 15);
+      const bEnd = bStart + bDuration;
 
-      // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
+      // Evento de Acto Cívico/Apertura
       const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
-        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        if (!isActo) return false;
+        const feLevel = (fe.level || '').toLowerCase();
+        const levelNorm = (course?.level || '').toLowerCase();
+        return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
       });
 
       let classStart = courseOfficial?.start_time ? courseStartT : (isMorning && startT <= 480 ? 480 : startT);
@@ -579,8 +535,7 @@ export const ScheduleViewer = () => {
         });
       }
 
-      const levelNormCourse = (course.level || '').toLowerCase();
-      const isPrimariaOrInicial = levelNormCourse.includes('primar') || levelNormCourse.includes('ini');
+      const levelNormCourse = (course?.level || '').toLowerCase();
       const isSecundaria = levelNormCourse.includes('secun');
       const targetTotalLocal = isSecundaria ? 6 : 5;
 
@@ -639,49 +594,41 @@ export const ScheduleViewer = () => {
         if (isActo || feStartMins < bStart - 5 || feStartMins >= courseEndT) return false;
 
         const feLevel = (fe.level || '').toLowerCase();
-        const feCycle = (fe.cycle || '').toLowerCase();
-        const levelMatch =
-          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNormCourse.substring(0, 3);
-        const cycleMatch =
-          !feCycle ||
-          feCycle.includes('gen') ||
-          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
-          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
-        return levelMatch && cycleMatch;
-      });
-
-      postFixedEvents.forEach((fe: any) => {
-        const feEndMins = toMins(fe.end_time);
-        if (feEndMins > currTimePost) {
-          const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
-          const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
-          slots.push({
-            start: sFormatted,
-            end: eFormatted,
-            isBreak: true,
-            label: fe.name
-          });
-          currTimePost = Math.max(currTimePost, feEndMins);
-        }
+        const levelNorm = (course?.level || '').toLowerCase();
+        return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
       });
 
       // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO
       const postWindow = Math.max(0, courseEndT - currTimePost);
       let postCountLocal = Math.max(1, targetTotalLocal - preCountLocal);
       const postDurs = calculateSlotDurations(postWindow, postCountLocal);
-
       for (let i = 0; i < postDurs.length; i++) {
         let dur = postDurs[i];
         let sTime = currTimePost;
         let eTime = i === postDurs.length - 1 ? courseEndT : sTime + dur;
-        currTimePost = eTime;
 
-        slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
-          isBreak: false,
-          label: `${preCountLocal + i + 1}ra Hora`
+        const intersectingEvent = postFixedEvents.find((fe: any) => {
+          const feStartMins = toMins(fe.start_time);
+          return Math.abs(feStartMins - sTime) < 5;
         });
+
+        if (intersectingEvent) {
+          slots.push({
+            start: fromMins(sTime) + ':00',
+            end: fromMins(toMins(intersectingEvent.end_time)) + ':00',
+            isBreak: true,
+            label: intersectingEvent.name
+          });
+          currTimePost = toMins(intersectingEvent.end_time);
+        } else {
+          currTimePost = eTime;
+          slots.push({
+            start: fromMins(sTime) + ':00',
+            end: fromMins(eTime) + ':00',
+            isBreak: false,
+            label: `${preCountLocal + i + 1}ra Hora`
+          });
+        }
       }
 
       return slots;
@@ -689,7 +636,7 @@ export const ScheduleViewer = () => {
 
     // Si estamos filtrando por un curso específico, usamos sus slots exactos
     if (filterType === 'course' && filterId) {
-      const course = state.courses.find((c) => c.id === filterId);
+      const course = state.courses.find((c) => String(c.id) === String(filterId));
       if (course) {
         const slotsForCourse = getSlotsForCourse(course);
         return { slots: slotsForCourse, startT, endT, masterBPref };
@@ -697,20 +644,18 @@ export const ScheduleViewer = () => {
     }
 
     // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña
-    // Esto garantiza que cada bloque horario aparezca en su fila exacta,
-    // sin importar que el docente enseñe en múltiples niveles o ciclos con distintos recreos.
     if (filterType === 'teacher' && filterId) {
       const shiftBaseTeacher = selectedShift.toLowerCase().substring(0, 3);
       // Obtener los cursos asignados a este docente en este turno
       const teacherAssignmentCourseIds = [
         ...new Set(
           (state.assignments || [])
-            .filter((a: any) => a.teacher_id === filterId)
-            .map((a: any) => a.course_id || a.courseId)
+            .filter((a: any) => String(a.teacher_id || a.teacherId) === String(filterId))
+            .map((a: any) => String(a.course_id || a.courseId))
         )
       ];
       const teacherCourses = (state.courses || []).filter((c: any) => {
-        if (!teacherAssignmentCourseIds.includes(c.id)) return false;
+        if (!teacherAssignmentCourseIds.includes(String(c.id))) return false;
         const tStr = (c.tanda || '').toLowerCase();
         const lvlStr = (c.level || '').toLowerCase();
         if (shiftBaseTeacher === 'mat') {
@@ -743,8 +688,6 @@ export const ScheduleViewer = () => {
             if (!existing) {
               mergedSlotsMap.set(slot.start, { ...slot });
             } else {
-              // Si CUALQUIER curso marca este bloque como clase (no recreo), prevalece como clase
-              // Solo es recreo si TODOS los cursos que tienen este bloque lo marcan como recreo
               if (!slot.isBreak) existing.isBreak = false;
             }
           });
@@ -757,26 +700,18 @@ export const ScheduleViewer = () => {
         // Vista Compacta para Docentes: solo conservar slots con clases programadas o recreos
         const teacherSchedule = (state.schedule || []).filter(
           (s: any) =>
-            s.teacher_id === filterId &&
+            String(s.teacher_id) === String(filterId) &&
             s.shift === selectedShift &&
             (!selectedYear || !s.school_year || s.school_year === selectedYear)
         );
         if (teacherSchedule.length > 0) {
           mergedSlots = mergedSlots.filter((slot) => {
-            const hasEntry = teacherSchedule.some((entry) => {
+            if (slot.isBreak) return true;
+            return teacherSchedule.some((entry: any) => {
               const eMins = toMins(entry.start_time);
-              let closest = mergedSlots[0],
-                bestDiff = Infinity;
-              mergedSlots.forEach((temp) => {
-                const diff = Math.abs(toMins(temp.start) - eMins);
-                if (diff < bestDiff) {
-                  bestDiff = diff;
-                  closest = temp;
-                }
-              });
-              return closest.start === slot.start && bestDiff <= 25;
+              const slotMins = toMins(slot.start);
+              return Math.abs(slotMins - eMins) <= 25;
             });
-            return hasEntry;
           });
         }
 
@@ -1852,13 +1787,13 @@ export const ScheduleViewer = () => {
             {filterType === 'course' &&
               filterId &&
               (() => {
-                const course = state.courses.find((c: any) => c.id === filterId);
+                const course = state.courses.find((c: any) => String(c.id) === String(filterId));
                 return `Curso: ${course?.grade || ''} ${course?.section || ''}`;
               })()}
             {filterType === 'teacher' &&
               filterId &&
               (() => {
-                const teacher = state.teachers.find((t: any) => t.id === filterId);
+                const teacher = state.teachers.find((t: any) => String(t.id) === String(filterId));
                 return `Docente: ${teacher?.name || ''}`;
               })()}
             {filterType === 'all' && 'Vista General (Todos los Cursos)'}
@@ -1904,7 +1839,7 @@ export const ScheduleViewer = () => {
 
                       // Validación por curso
                       if (filterType === 'course' && filterId) {
-                        const course = state.courses.find((c) => c.id === filterId);
+                        const course = state.courses.find((c) => String(c.id) === String(filterId));
                         const grade = course?.grade?.toLowerCase() || '';
                         const level = course?.level?.toLowerCase() || '';
 
@@ -1977,9 +1912,9 @@ export const ScheduleViewer = () => {
                           <div className="h-full bg-slate-50 rounded-2xl border border-slate-100 p-3 flex flex-col justify-center gap-1 hover:border-indigo-200 transition-all group">
                             {entries.length > 0 ? (
                               entries.map((e: any, i: number) => {
-                                const subject = state.subjects.find((s) => s.id === e.subject_id);
-                                const teacher = state.teachers.find((t) => t.id === e.teacher_id);
-                                const course = state.courses.find((c) => c.id === e.course_id);
+                                const subject = state.subjects.find((s) => String(s.id) === String(e.subject_id));
+                                const teacher = state.teachers.find((t) => String(t.id) === String(e.teacher_id));
+                                const course = state.courses.find((c) => String(c.id) === String(e.course_id));
                                 const courseName = course
                                   ? `${course.grade} ${course.section || ''}`.trim()
                                   : 'Curso';
@@ -2127,9 +2062,9 @@ export const ScheduleViewer = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {state.assignments
-              .filter((a) => a.course_id === filterId || a.courseId === filterId)
+              .filter((a) => String(a.course_id || a.courseId) === String(filterId))
               .map((a) => {
-                const subject = state.subjects.find((s) => s.id === a.subject_id);
+                const subject = state.subjects.find((s) => String(s.id) === String(a.subject_id));
 
                 let placedHours = 0;
                 days.forEach((d) => {
