@@ -2886,7 +2886,7 @@ export const scheduleService = {
     });
 
     const teacherName = teacherObj?.name || teacherObj?.full_name || 'Docente';
-    const teacherAssignments = (allAssignments || []).filter((a: any) => (a.teacher_id || a.teacherId) === teacherId);
+    const teacherAssignments = (assignments || []).filter((a: any) => (a.teacher_id || a.teacherId) === teacherId);
     const teacherTotalAssigned = teacherAssignments.reduce((acc: number, a: any) => acc + (Number(a.hours_per_week || a.hoursPerWeek) || 0), 0);
     const teacherTotalPlaced = currentSchedule.filter((e: any) => e.teacher_id === teacherId).length;
 

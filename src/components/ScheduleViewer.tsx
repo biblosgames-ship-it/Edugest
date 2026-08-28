@@ -2513,12 +2513,17 @@ export const ScheduleViewer = () => {
                         const teacherId = a.teacher_id || a.teacherId;
                         const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
                         const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                        const placed = (state.schedule || []).filter(
-                          (s) =>
-                            String(s.course_id || s.courseId) === String(directAssignModal.courseId) &&
-                            String(s.subject_id) === String(a.subject_id)
-                        ).length;
-                        const missing = assigned - placed;
+                        let placed = 0;
+                        days.forEach((d) => {
+                          slots.forEach((slot) => {
+                            if (slot.isBreak) return;
+                            const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                            if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
+                              placed++;
+                            }
+                          });
+                        });
+                        const missing = Math.max(0, assigned - placed);
 
                         // Verificar si el docente tiene clase en otro curso a esta misma hora
                         const sStartM = toMins(directAssignModal.slot?.start);
