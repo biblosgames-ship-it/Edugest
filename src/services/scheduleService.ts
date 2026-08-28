@@ -2479,7 +2479,8 @@ export const scheduleService = {
     targetCourseId: string,
     targetSubjectId: string,
     shift: string,
-    lockedKeys: string[] = []
+    lockedKeys: string[] = [],
+    customSlots?: any[]
   ) => {
     const emptyResult = {
       suggestions: [],
@@ -2637,37 +2638,47 @@ export const scheduleService = {
       return sList;
     };
 
-    const preDurs = calculateSlotDurations(preWindow, preCount);
-    preCount = preDurs.length;
+    let slotTimes: any[] = [];
+    if (customSlots && customSlots.length > 0) {
+      slotTimes = customSlots
+        .filter((s: any) => !s.isBreak)
+        .map((s: any, idx: number) => ({
+          start: s.start,
+          end: s.end,
+          label: s.label || `${idx + 1}ra Hora`
+        }));
+    } else {
+      const preDurs = calculateSlotDurations(preWindow, preCount);
+      preCount = preDurs.length;
 
-    const slotTimes: any[] = [];
-    let currTimePre = classStart;
-    for (let i = 0; i < preCount; i++) {
-      let dur = preDurs[i];
-      let sTime = currTimePre;
-      let eTime = i === preCount - 1 ? bStart : sTime + dur;
-      currTimePre = eTime;
-      slotTimes.push({
-        start: fromMins(sTime),
-        end: fromMins(eTime),
-        label: `${i + 1}ra Hora`
-      });
-    }
+      let currTimePre = classStart;
+      for (let i = 0; i < preCount; i++) {
+        let dur = preDurs[i];
+        let sTime = currTimePre;
+        let eTime = i === preCount - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+        slotTimes.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          label: `${i + 1}ra Hora`
+        });
+      }
 
-    let currTimePost = bEnd;
-    const postWindow = Math.max(0, endT - currTimePost);
-    let postCount = Math.max(1, targetTotal - preCount);
-    const postDurs = calculateSlotDurations(postWindow, postCount);
-    for (let i = 0; i < postDurs.length; i++) {
-      let dur = postDurs[i];
-      let sTime = currTimePost;
-      let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
-      currTimePost = eTime;
-      slotTimes.push({
-        start: fromMins(sTime),
-        end: fromMins(eTime),
-        label: `${preCount + i + 1}ra Hora`
-      });
+      let currTimePost = bEnd;
+      const postWindow = Math.max(0, endT - currTimePost);
+      let postCount = Math.max(1, targetTotal - preCount);
+      const postDurs = calculateSlotDurations(postWindow, postCount);
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
+        let sTime = currTimePost;
+        let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
+        currTimePost = eTime;
+        slotTimes.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          label: `${preCount + i + 1}ra Hora`
+        });
+      }
     }
 
     const suggestions: any[] = [];
@@ -3033,8 +3044,7 @@ export const scheduleService = {
 
     const rawSchedule = rawData.filter((e: any) => {
       const sShift = (e.shift || '').toLowerCase();
-      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      return shiftMatch && (!e.school_year || e.school_year === schoolYear);
+      return !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
     });
 
     const toMins = (val: string) => {
@@ -3267,8 +3277,8 @@ export const scheduleService = {
               teacher_id: task.teacherId,
               day,
               shift,
-              start_time: slot.start,
-              end_time: slot.end,
+              start_time: slot.start.length === 5 ? slot.start + ':00' : slot.start,
+              end_time: slot.end.length === 5 ? slot.end + ':00' : slot.end,
               school_year: schoolYear
             };
             workingSchedule.push(newEntry);
@@ -3370,15 +3380,20 @@ export const scheduleService = {
 
               // ¡CASCADA EXITOSA DENTRO DEL MISMO CURSO!
               // A. Mover la clase ocupante dentro del curso en DB
+              const altS = altSlot.start.length === 5 ? altSlot.start + ':00' : altSlot.start;
+              const altE = altSlot.end.length === 5 ? altSlot.end + ':00' : altSlot.end;
+              const curS = slot.start.length === 5 ? slot.start + ':00' : slot.start;
+              const curE = slot.end.length === 5 ? slot.end + ':00' : slot.end;
+
               if (occupyingEntry.id) {
                 await supabase
                   .from('schedule_entries')
-                  .update({ day: altDay, start_time: altSlot.start, end_time: altSlot.end })
+                  .update({ day: altDay, start_time: altS, end_time: altE })
                   .eq('id', occupyingEntry.id);
               }
               occupyingEntry.day = altDay;
-              occupyingEntry.start_time = altSlot.start;
-              occupyingEntry.end_time = altSlot.end;
+              occupyingEntry.start_time = altS;
+              occupyingEntry.end_time = altE;
 
               // B. Colocar la materia pendiente en la casilla liberada
               const newEntry = {
@@ -3388,8 +3403,8 @@ export const scheduleService = {
                 teacher_id: task.teacherId,
                 day,
                 shift,
-                start_time: slot.start,
-                end_time: slot.end,
+                start_time: curS,
+                end_time: curE,
                 school_year: schoolYear
               };
               workingSchedule.push(newEntry);

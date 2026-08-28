@@ -2456,7 +2456,8 @@ export const ScheduleViewer = () => {
                     swapCourseId,
                     swapSubjectId,
                     selectedShift,
-                    Array.from(lockedEntries)
+                    Array.from(lockedEntries),
+                    slots
                   );
 
                   const {
