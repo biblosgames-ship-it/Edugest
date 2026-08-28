@@ -2190,16 +2190,16 @@ export const ScheduleViewer = () => {
                       .map((a: any) => {
                         const sub = state.subjects.find((s: any) => String(s.id) === String(a.subject_id));
                         const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-                        const courseEntries = (state.schedule || []).filter(
-                          (s: any) =>
-                            String(s.course_id || s.courseId) === String(swapCourseId) &&
-                            String(s.subject_id) === String(a.subject_id) &&
-                            (!s.shift || (s.shift || '').toLowerCase().includes(selectedShift.toLowerCase().substring(0, 3)))
-                        );
-                        const uniqueSlots = new Set(
-                          courseEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
-                        );
-                        const placed = uniqueSlots.size;
+                        let placed = 0;
+                        days.forEach((d) => {
+                          slots.forEach((slot) => {
+                            if (slot.isBreak) return;
+                            const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
+                            if (entriesInSlot.some((e: any) => String(e.subject_id) === String(a.subject_id))) {
+                              placed++;
+                            }
+                          });
+                        });
                         const missing = Math.max(0, assigned - placed);
                         return (
                           <option key={a.subject_id} value={a.subject_id}>

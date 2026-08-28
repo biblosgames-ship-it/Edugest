@@ -3025,14 +3025,17 @@ export const scheduleService = {
     const { data: rawData, error: fetchErr } = await supabase
       .from('schedule_entries')
       .select('*')
-      .eq('center_id', centerId)
-      .eq('shift', shift);
+      .eq('center_id', centerId);
 
     if (fetchErr || !rawData) {
       throw new Error('No se pudo consultar el horario actual: ' + (fetchErr?.message || 'Error desconocido'));
     }
 
-    const rawSchedule = rawData.filter((e: any) => !e.school_year || e.school_year === schoolYear);
+    const rawSchedule = rawData.filter((e: any) => {
+      const sShift = (e.shift || '').toLowerCase();
+      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
+      return shiftMatch && (!e.school_year || e.school_year === schoolYear);
+    });
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
@@ -3117,7 +3120,7 @@ export const scheduleService = {
       return slots;
     };
 
-    // 3. FASE 0: DEDUPLICACIÓN SEGURA (Solo elimina entradas idénticas en la misma casilla exacta)
+    // 3. FASE 0: DEDUPLICACIÓN SEGURA
     const idsToDelete: string[] = [];
     const seenCourseSlotKeys = new Set<string>();
 
@@ -3144,7 +3147,7 @@ export const scheduleService = {
 
     const workingSchedule = rawSchedule.filter((e: any) => !idsToDelete.includes(e.id));
 
-    // 4. IDENTIFICAR MATERIAS FALTANTES REALES
+    // 4. IDENTIFICAR MATERIAS FALTANTES REALES (Basado en cuadrícula visible del curso)
     const missingTasks: any[] = [];
     const targetAssignments = targetCourseId
       ? assignments.filter((a: any) => String(a.course_id || a.courseId) === String(targetCourseId))
@@ -3154,10 +3157,24 @@ export const scheduleService = {
       const cId = String(a.course_id || a.courseId);
       const sId = String(a.subject_id);
       const required = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+      const courseObj = courses.find((c: any) => String(c.id) === cId);
+      const courseSlots = getSlotsForCourse(courseObj);
       
-      const placed = workingSchedule.filter(
-        (e: any) => String(e.course_id || e.courseId) === cId && String(e.subject_id) === sId
-      ).length;
+      let placed = 0;
+      days.forEach((d) => {
+        courseSlots.forEach((slot: any) => {
+          if (slot.isBreak) return;
+          const sMins = toMins(slot.start);
+          const hasEntry = workingSchedule.some((e: any) => {
+            if (String(e.course_id || e.courseId) !== cId) return false;
+            if (String(e.subject_id) !== sId) return false;
+            if ((e.day || '').trim().toLowerCase() !== d.toLowerCase()) return false;
+            const eMins = toMins(e.start_time);
+            return Math.abs(eMins - sMins) <= 25;
+          });
+          if (hasEntry) placed++;
+        });
+      });
       
       const missing = Math.max(0, required - placed);
 
