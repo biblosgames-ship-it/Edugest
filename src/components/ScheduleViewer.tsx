@@ -944,15 +944,27 @@ export const ScheduleViewer = () => {
     const normStr = (str: string) =>
       (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+    const normalizeEntryMinutes = (timeStr: string, isMorn: boolean) => {
+      let mins = toMins(timeStr);
+      if (mins <= 0) return 0;
+      if (!isMorn) {
+        if (mins < 420) {
+          // Formato 12h (ej: 02:00 = 120 min -> 840 min / 14:00)
+          mins += 720;
+        } else if (mins >= 420 && mins < 780) {
+          // Horas guardadas en base matutina (ej: 08:00 = 480 min -> +360 = 840 min / 14:00)
+          mins += 360;
+        }
+      }
+      return mins;
+    };
+
     filteredSchedule.forEach((entry) => {
       if (!entry.day || !entry.start_time) return;
 
       const normDay = normStr(entry.day);
       const matchedDay = days.find((d) => normStr(d) === normDay) || days[0];
-      let eMins = toMins(entry.start_time);
-      if (!isMorning && eMins < 720 && eMins > 0) {
-        eMins += 720;
-      }
+      const eMins = normalizeEntryMinutes(entry.start_time, isMorning);
 
       let closestSlot: any = null;
       let minDiff = Infinity;
@@ -1173,7 +1185,7 @@ export const ScheduleViewer = () => {
       const res = await scheduleService.fastTargetedFill(
         state,
         profile,
-        selectedShift,
+        effectiveShift || selectedShift,
         selectedYear,
         Array.from(lockedEntries),
         targetCourseId,

@@ -3016,8 +3016,18 @@ export const scheduleService = {
     const schoolYear = year || state.currentYear || '2026-2027';
     const { courses: allCourses, assignments: allAssignments, subjects: allSubjects, levelSchedules, breakPreferences } = state;
 
-    const shiftBase = shift.toLowerCase().substring(0, 3);
+    let effectiveTargetShift = shift;
+    if (targetCourseId) {
+      const tc = allCourses.find((c: any) => String(c.id) === String(targetCourseId));
+      if (tc?.tanda) {
+        const t = tc.tanda.toLowerCase();
+        effectiveTargetShift = t.includes('ves') || t.includes('tar') ? 'Vespertina' : 'Matutina';
+      }
+    }
+    const shiftBase = effectiveTargetShift.toLowerCase().substring(0, 3);
+
     const courses = allCourses.filter((c: any) => {
+      if (targetCourseId && String(c.id) === String(targetCourseId)) return true;
       const tStr = (c.tanda || '').toLowerCase().trim();
       const lvlStr = (c.level || '').toLowerCase().trim();
       if (shiftBase === 'mat') {
@@ -3043,6 +3053,9 @@ export const scheduleService = {
     }
 
     const rawSchedule = rawData.filter((e: any) => {
+      if (targetCourseId && String(e.course_id || e.courseId) === String(targetCourseId)) {
+        return true;
+      }
       const sShift = (e.shift || '').toLowerCase();
       return !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
     });
@@ -3066,7 +3079,8 @@ export const scheduleService = {
         return passedSlots.filter((s: any) => !s.isBreak);
       }
 
-      const isMorning = shiftBase === 'mat';
+      const cTanda = (course?.tanda || '').toLowerCase();
+      const isMorning = cTanda ? (!cTanda.includes('ves') && !cTanda.includes('tar')) : shiftBase === 'mat';
       const official = (levelSchedules || []).find(
         (ls: any) =>
           ls.level === course?.level &&
