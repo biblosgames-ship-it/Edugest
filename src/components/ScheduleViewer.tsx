@@ -1116,7 +1116,8 @@ export const ScheduleViewer = () => {
         selectedShift,
         selectedYear,
         Array.from(lockedEntries),
-        targetCourseId
+        targetCourseId,
+        slots
       );
       await refreshData(undefined, true);
       alert(res.message);
