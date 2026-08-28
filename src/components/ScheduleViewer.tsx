@@ -30,7 +30,14 @@ import { scheduleService } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 
 export const ScheduleViewer = () => {
-  const { state, profile, refreshData, selectedYear, setAvoidDeporteDuringAnyBreak } = useApp();
+  const {
+    state,
+    profile,
+    refreshData,
+    selectedYear,
+    setAvoidDeporteDuringAnyBreak,
+    deleteAssignment
+  } = useApp();
 
   const isAdminOrStaff =
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
@@ -2285,11 +2292,36 @@ export const ScheduleViewer = () => {
                     <p className="text-[10px] font-black uppercase text-slate-700 leading-tight pr-4">
                       {subject?.name || 'Materia'}
                     </p>
-                    {isComplete ? (
-                      <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                    ) : (
-                      <AlertCircle size={14} className="text-rose-500 shrink-0" />
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isAdminOrStaff && item.assign?.id && placedHours === 0 && (
+                        <button
+                          onClick={async (evt) => {
+                            evt.stopPropagation();
+                            if (
+                              confirm(
+                                `¿Eliminar la asignación de "${subject?.name || 'esta materia'}" de este curso porque no corresponde a este grado?`
+                              )
+                            ) {
+                              try {
+                                await deleteAssignment(item.assign.id);
+                                alert(`✅ Asignación de ${subject?.name || 'materia'} eliminada de este curso.`);
+                              } catch (err: any) {
+                                alert('Error al eliminar asignación: ' + err.message);
+                              }
+                            }
+                          }}
+                          title="Eliminar asignación que no corresponde a este grado 🗑️"
+                          className="p-1 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-100 transition-all cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                      {isComplete ? (
+                        <CheckCircle size={14} className="text-emerald-500 shrink-0" />
+                      ) : (
+                        <AlertCircle size={14} className="text-rose-500 shrink-0" />
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-end gap-2">
                     <span
