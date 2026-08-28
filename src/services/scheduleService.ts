@@ -2901,9 +2901,14 @@ export const scheduleService = {
     schoolYear: string
   ) => {
     const assign = (state.assignments || []).find(
-      (a: any) => (a.course_id === targetCourseId || a.courseId === targetCourseId) && a.subject_id === targetSubjectId
+      (a: any) =>
+        (String(a.course_id) === String(targetCourseId) || String(a.courseId) === String(targetCourseId)) &&
+        String(a.subject_id) === String(targetSubjectId)
     );
     if (!assign) throw new Error('No se encontró la asignación académica.');
+
+    const teacherId = assign.teacher_id || assign.teacherId;
+    const finalSchoolYear = schoolYear || state.currentYear || '2026-2027';
 
     const toMins = (val: string) => {
       const [h, m] = (val || '').replace(/[^0-9:]/g, '').split(':').map(Number);
@@ -2919,7 +2924,7 @@ export const scheduleService = {
       const sEnd = newEnd.length === 5 ? newEnd + ':00' : newEnd;
       await supabase
         .from('schedule_entries')
-        .update({ day: newDay, start_time: sStart, end_time: sEnd })
+        .update({ day: newDay, start_time: sStart, end_time: sEnd, school_year: finalSchoolYear })
         .eq('id', entryId);
     }
 
@@ -2935,8 +2940,7 @@ export const scheduleService = {
       .eq('center_id', profile.center_id)
       .eq('course_id', targetCourseId)
       .eq('day', suggestion.day)
-      .eq('shift', shift)
-      .eq('school_year', schoolYear);
+      .eq('shift', shift);
 
     if (existingSlots && existingSlots.length > 0) {
       const idsToDelete = existingSlots
@@ -2962,12 +2966,12 @@ export const scheduleService = {
         center_id: profile.center_id,
         course_id: targetCourseId,
         subject_id: targetSubjectId,
-        teacher_id: assign.teacher_id,
+        teacher_id: teacherId,
         day: suggestion.day,
         shift,
         start_time: sStart,
         end_time: sEnd,
-        school_year: schoolYear
+        school_year: finalSchoolYear
       }
     ]);
 
