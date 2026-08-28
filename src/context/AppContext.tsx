@@ -499,20 +499,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
 
           const filteredStudents = rawStudents.filter((s: any) => {
-            // A. Si está asignado a un curso de este año activo
-            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) return true;
+            // 1. Si está asignado a un curso de este año activo: INCLUIR SIEMPRE
+            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+              return true;
+            }
 
-            // B. Si está asignado explícitamente a un curso de un año anterior, descartar
-            if (s.course_id && pastCourseIdSet.has(String(s.course_id))) return false;
+            // 2. Si está asignado a un curso de un año anterior: DESCARTAR
+            if (s.course_id && pastCourseIdSet.has(String(s.course_id))) {
+              return false;
+            }
 
-            // C. Si su año escolar individual es de un año anterior, descartar
-            if (s.school_year && s.school_year !== currentFetchYear && s.school_year !== 'undefined' && s.school_year !== 'null') return false;
-
-            // D. Si su año escolar coincide con el año activo
-            if (s.school_year === currentFetchYear) return true;
-
-            // E. Si no tiene año ni curso asignado, pero pertenece al centro
-            if (!s.course_id && (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null')) return true;
+            // 3. Si no tiene curso asignado pero su año es el activo o no tiene año: INCLUIR
+            if (!s.course_id) {
+              if (!s.school_year || s.school_year === '' || s.school_year === 'undefined' || s.school_year === 'null') return true;
+              return s.school_year === currentFetchYear;
+            }
 
             return false;
           });
