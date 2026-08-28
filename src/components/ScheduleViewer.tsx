@@ -1775,14 +1775,11 @@ export const ScheduleViewer = () => {
                     });
 
               coursesToAudit.forEach((course: any) => {
-                const courseAssignments = state.assignments.filter(
-                  (a: any) => a.course_id === course.id || a.courseId === course.id
-                );
+                const courseItems = getCourseSubjectsAndAssignments(course.id);
                 let courseHasMissing = false;
                 let courseMissingCount = 0;
-                courseAssignments.forEach((assign: any) => {
-                  const weeklyHours =
-                    Number(assign.hours_per_week || assign.hoursPerWeek || assign.weekly_hours) || 0;
+                courseItems.forEach((item: any) => {
+                  const weeklyHours = Number(item.assignedHours) || 0;
                   if (weeklyHours === 0) return;
                   totalAssigned += weeklyHours;
 
@@ -1792,7 +1789,7 @@ export const ScheduleViewer = () => {
                       slots.forEach((slot) => {
                         if (slot.isBreak) return;
                         const entriesInSlot = entriesBySlotAndDay.get(`${d}-${slot.start}`) || [];
-                        if (entriesInSlot.some((e: any) => e.subject_id === assign.subject_id)) {
+                        if (entriesInSlot.some((e: any) => String(e.subject_id) === String(item.subject_id))) {
                           uniquePlaced++;
                         }
                       });
@@ -1800,8 +1797,8 @@ export const ScheduleViewer = () => {
                   } else {
                     const placedEntries = state.schedule.filter(
                       (s: any) =>
-                        s.course_id === course.id &&
-                        s.subject_id === assign.subject_id &&
+                        String(s.course_id || s.courseId) === String(course.id) &&
+                        String(s.subject_id) === String(item.subject_id) &&
                         (!selectedYear || !s.school_year || s.school_year === selectedYear)
                     );
                     const uniqueSlotKeys = new Set(
