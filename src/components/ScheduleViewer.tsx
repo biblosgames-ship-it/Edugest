@@ -304,27 +304,42 @@ export const ScheduleViewer = () => {
       }
     });
 
-    // 3. Materias del catálogo institucional para este curso
+    // 3. Materias del currículo oficial según el nivel del curso (Secundaria / Primaria)
+    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
+    const levelStr = (courseObj?.level || '').toLowerCase();
+    const isSecundaria = levelStr.includes('secun');
+
     (state.subjects || []).forEach((sub: any) => {
       const sId = String(sub.id);
-      if (!map.has(sId)) {
-        const subName = (sub?.name || '').toLowerCase();
-        let defaultHours = 2;
-        if (subName.includes('matem')) defaultHours = 6;
-        else if (subName.includes('español') || subName.includes('lengua')) defaultHours = 5;
-        else if (subName.includes('social') || subName.includes('natur')) defaultHours = 4;
-        else if (
-          subName.includes('ingl') ||
-          subName.includes('franc') ||
-          subName.includes('art') ||
-          subName.includes('físic') ||
-          subName.includes('human') ||
-          subName.includes('relig')
-        ) {
-          defaultHours = 2;
-        }
+      if (map.has(sId)) return;
 
-        // Buscar si hay docente asignado en este curso o en el centro
+      const sName = (sub.name || '').toLowerCase();
+      let shouldInclude = false;
+      let defaultHours = 2;
+
+      if (isSecundaria) {
+        if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
+        else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
+        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
+        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
+        else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
+      } else {
+        // Primaria
+        if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 7; }
+        else if (sName.includes('matem')) { shouldInclude = true; defaultHours = 7; }
+        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 5; }
+        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 5; }
+        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('físic') || sName.includes('fisic')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('human') || sName.includes('relig')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('ingl')) { shouldInclude = true; defaultHours = 2; }
+      }
+
+      if (shouldInclude) {
         const tchAssign = (state.assignments || []).find(
           (a: any) =>
             String(a.subject_id) === sId &&
