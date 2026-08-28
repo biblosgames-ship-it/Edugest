@@ -18,8 +18,7 @@ import {
   Lock,
   Unlock,
   Zap,
-  Trash2,
-  Copy
+  Trash2
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
@@ -1128,38 +1127,6 @@ export const ScheduleViewer = () => {
     }
   };
 
-  const [isCloningShift, setIsCloningShift] = useState(false);
-
-  const handleCloneShift = async () => {
-    const fromShift = selectedShift === 'Matutina' ? 'Matutina' : 'Vespertina';
-    const toShift = fromShift === 'Matutina' ? 'Vespertina' : 'Matutina';
-
-    const confirmed = confirm(
-      `📋 ¿Deseas copiar y clonar todo el horario de la tanda ${fromShift} a la tanda ${toShift}?\n\n` +
-      `Las clases se adaptarán automáticamente a los bloques horarios oficiales de la tanda ${toShift} (mismos días, cursos, materias y docentes).\n\n` +
-      `⚠️ Nota: Se reemplazarán las clases existentes en la tanda ${toShift}.`
-    );
-    if (!confirmed) return;
-
-    setIsCloningShift(true);
-    try {
-      const res = await scheduleService.cloneShiftSchedule(
-        state,
-        profile,
-        fromShift,
-        toShift,
-        selectedYear
-      );
-      await refreshData(undefined, true);
-      setSelectedShift(toShift);
-      alert(res.message);
-    } catch (err: any) {
-      alert('Error al clonar horario: ' + err.message);
-    } finally {
-      setIsCloningShift(false);
-    }
-  };
-
   const handleExportImage = async () => {
     if (!tableRef.current) return;
     try {
@@ -1573,23 +1540,6 @@ export const ScheduleViewer = () => {
               >
                 <Zap size={16} className="text-amber-300 fill-amber-300" />
                 Asistente de Intercambio Directo
-              </button>
-              <button
-                onClick={handleCloneShift}
-                disabled={isGenerating || isRepairing || isDeepRepairing || isFastFilling || isCloningShift}
-                className="flex items-center gap-2 px-8 py-3 bg-teal-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-teal-700 transition-all disabled:opacity-50 cursor-pointer"
-                title={`Copia y proyecta exactamente el horario de ${selectedShift} a ${selectedShift === 'Matutina' ? 'Vespertina' : 'Matutina'}`}
-              >
-                {isCloningShift ? (
-                  <RefreshCw size={16} className="animate-spin" />
-                ) : (
-                  <Copy size={16} />
-                )}
-                {isCloningShift
-                  ? 'Clonando...'
-                  : selectedShift === 'Matutina'
-                  ? '📋 Clonar a Tarde'
-                  : '📋 Clonar a Mañana'}
               </button>
             </>
           )}
