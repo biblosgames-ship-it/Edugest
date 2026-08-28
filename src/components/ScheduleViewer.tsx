@@ -1462,7 +1462,12 @@ export const ScheduleViewer = () => {
                   : 'Ajustar Horas Faltantes'}
               </button>
               <button
-                onClick={() => setShowSwapModal(true)}
+                onClick={() => {
+                  if (filterType === 'course' && filterId) {
+                    setSwapCourseId(filterId);
+                  }
+                  setShowSwapModal(true);
+                }}
                 disabled={isGenerating || isRepairing || isDeepRepairing || isFastFilling}
                 className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-700 transition-all cursor-pointer"
               >
@@ -2149,11 +2154,22 @@ export const ScheduleViewer = () => {
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">-- Elige un Curso --</option>
-                  {state.courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
-                    </option>
-                  ))}
+                  {state.courses
+                    .filter((c: any) => {
+                      const sBase = selectedShift.toLowerCase().substring(0, 3);
+                      const tStr = (c.tanda || '').toLowerCase();
+                      const lvlStr = (c.level || '').toLowerCase();
+                      if (sBase === 'mat') {
+                        return !tStr.includes('ves') && !tStr.includes('tar');
+                      } else {
+                        return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+                      }
+                    })
+                    .map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -2170,16 +2186,15 @@ export const ScheduleViewer = () => {
                   <option value="">-- Elige una Materia --</option>
                   {swapCourseId &&
                     state.assignments
-                      .filter((a) => a.course_id === swapCourseId || a.courseId === swapCourseId)
-                      .map((a) => {
-                        const sub = state.subjects.find((s) => s.id === a.subject_id);
+                      .filter((a: any) => String(a.course_id || a.courseId) === String(swapCourseId))
+                      .map((a: any) => {
+                        const sub = state.subjects.find((s: any) => String(s.id) === String(a.subject_id));
                         const assigned = Number(a.hours_per_week || a.hoursPerWeek) || 0;
                         const courseEntries = (state.schedule || []).filter(
                           (s: any) =>
-                            (String(s.course_id) === String(swapCourseId) || String(s.courseId) === String(swapCourseId)) &&
+                            String(s.course_id || s.courseId) === String(swapCourseId) &&
                             String(s.subject_id) === String(a.subject_id) &&
-                            (!s.shift || (s.shift || '').toLowerCase().includes(selectedShift.toLowerCase().substring(0, 3))) &&
-                            (!selectedYear || !s.school_year || s.school_year === selectedYear)
+                            (!s.shift || (s.shift || '').toLowerCase().includes(selectedShift.toLowerCase().substring(0, 3)))
                         );
                         const uniqueSlots = new Set(
                           courseEntries.map((s: any) => `${(s.day || '').trim().toLowerCase()}_${s.start_time}`)
