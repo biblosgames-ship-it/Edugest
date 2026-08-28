@@ -449,11 +449,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Cursos del año escolar activo
+          // 1. Cursos de la institución (año escolar activo + cursos con matrícula vigente)
           const rawCourses = cRes.data || [];
+          const studentCourseIdSet = new Set(
+            (studRes.data || []).filter((s: any) => s.course_id).map((s: any) => String(s.course_id))
+          );
+
           const activeCourses = rawCourses.filter((c: any) => {
             if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
-            return c.school_year === currentFetchYear;
+            if (c.school_year === currentFetchYear) return true;
+            if (studentCourseIdSet.has(String(c.id))) return true;
+            return false;
           });
 
           let localTitularMap: Record<string, any> = {};
@@ -489,20 +495,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes realmente matriculados en las aulas/cursos del año escolar activo:
+          // 3. Estudiantes activos matriculados en las aulas/cursos del centro educativo:
           const rawStudents = studRes.data || [];
-          const activeCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
+          const validCourseIdSet = new Set(coursesUnified.map((c: any) => String(c.id)));
 
           const filteredStudents = rawStudents.filter((s: any) => {
-            // A. Estudiante asignado a un curso del año activo (Aquí están los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
-            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+            // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
+            const st = (s.status || '').toLowerCase().trim();
+            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
+              return false;
+            }
+
+            // B. Estudiante asignado a un curso con matrícula vigente (Aquí entran los 19 de Pre-primario y los ~480 alumnos de todas las aulas)
+            if (s.course_id && validCourseIdSet.has(String(s.course_id))) {
               return true;
             }
 
-            // B. Estudiante sin curso pero registrado activamente para el ciclo actual
-            if (!s.course_id && s.school_year === currentFetchYear) {
-              const st = (s.status || '').toLowerCase();
-              return st !== 'retirado' && st !== 'inactivo' && st !== 'graduado' && st !== 'egresado';
+            // C. Estudiante sin curso pero registrado para el ciclo actual
+            if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
+              const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
+              return hasName;
             }
 
             return false;
