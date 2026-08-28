@@ -507,7 +507,7 @@ export const ScheduleViewer = () => {
     if (filterType === 'course' && filterId) {
       const course = state.courses.find((c) => String(c.id) === String(filterId));
       if (course) {
-        const official = findOfficialSchedule(state.levelSchedules, course.level, selectedShift);
+        const official = findOfficialSchedule(state.levelSchedules, course.level, effectiveShift);
         if (official) {
           let s = toMins(official.start_time);
           if (!isMorning && s < 720 && s > 0) s += 720;
@@ -519,7 +519,7 @@ export const ScheduleViewer = () => {
       }
     } else if (filterType === 'all') {
       // En vista general, buscamos el horario más común de la tanda seleccionada
-      const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', selectedShift);
+      const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', effectiveShift);
       if (primaryOfficial) {
         let s = toMins(primaryOfficial.start_time);
         if (!isMorning && s < 720 && s > 0) s += 720;
@@ -548,7 +548,7 @@ export const ScheduleViewer = () => {
     };
 
     const getSlotsForCourse = (course: any) => {
-      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, selectedShift);
+      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, effectiveShift);
       let courseStartT = startT;
       let courseEndT = endT;
       if (courseOfficial?.start_time) {
@@ -719,7 +719,7 @@ export const ScheduleViewer = () => {
 
     // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña
     if (filterType === 'teacher' && filterId) {
-      const shiftBaseTeacher = selectedShift.toLowerCase().substring(0, 3);
+      const shiftBaseTeacher = effectiveShift.toLowerCase().substring(0, 3);
       // Obtener los cursos asignados a este docente en este turno
       const teacherAssignmentCourseIds = [
         ...new Set(
@@ -775,7 +775,7 @@ export const ScheduleViewer = () => {
         const teacherSchedule = (state.schedule || []).filter(
           (s: any) =>
             String(s.teacher_id) === String(filterId) &&
-            s.shift === selectedShift &&
+            s.shift === effectiveShift &&
             (!selectedYear || !s.school_year || s.school_year === selectedYear)
         );
         if (teacherSchedule.length > 0) {
@@ -793,24 +793,27 @@ export const ScheduleViewer = () => {
       }
     }
 
-    // VISTA GENERAL: Generar periodos estándar alineados al Recreo Maestro
-    const slots = [];
+    // VISTA GENERAL (O CURSO SIN HORARIOS OFICIALES)
+    const slots: any[] = [];
     let bStartMaster = toMins(masterBPref.startTime);
     if (!isMorning && bStartMaster < 720 && bStartMaster > 0) bStartMaster += 720;
     if (!isMorning && (bStartMaster <= startT || bStartMaster >= endT)) bStartMaster = 960;
     const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || (isMorning ? 20 : 15));
 
-    let classStart = startT;
-
-    // Solo mostrar Acto de Bandera/Apertura si está configurado explícitamente en la base de datos
+    // Evento de Acto Cívico/Apertura General
     const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
       const feName = (fe.name || '').toLowerCase();
-      return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      if (!isActo) return false;
+      const feLevel = (fe.level || '').toLowerCase();
+      return !feLevel || feLevel.includes('gen');
     });
 
+    let classStart = isMorning && startT <= 480 ? 480 : startT;
     if (isMorning && dbActoEvent) {
       const feEndMins = toMins(dbActoEvent.end_time);
       if (feEndMins > 0) classStart = feEndMins;
+
       slots.push({
         start: dbActoEvent.start_time,
         end: dbActoEvent.end_time,
@@ -822,14 +825,11 @@ export const ScheduleViewer = () => {
     const targetTotalGen = isMorning ? 5 : 6;
     let preCountGen = isMorning ? 2 : 3;
     if (isMorning) {
-      // Para la tanda matutina (8:00 a 9:30 AM = 90 min), son 2 bloques de 45 min
-      if (bStartMaster - classStart <= 100) {
-        preCountGen = 2;
-      } else {
-        preCountGen = Math.min(3, Math.floor((bStartMaster - classStart) / 33));
-      }
+      if (bStartMaster - classStart >= 120) preCountGen = 3;
+      else if (bStartMaster - classStart < 80) preCountGen = 1;
     } else {
-      preCountGen = 3;
+      if (bStartMaster - classStart >= 120) preCountGen = 3;
+      else if (bStartMaster - classStart < 70) preCountGen = 1;
     }
     const postCountGen = Math.max(1, targetTotalGen - preCountGen);
 
@@ -869,6 +869,8 @@ export const ScheduleViewer = () => {
     state.levelSchedules,
     state.breakPreferences,
     state.assignments,
+    effectiveShift,
+    isMorning,
     selectedShift,
     filterType,
     filterId,
@@ -935,7 +937,7 @@ export const ScheduleViewer = () => {
     });
 
     return map;
-  }, [filteredSchedule, slots, days]);
+  }, [filteredSchedule, slots, days, isMorning]);
 
   const conflicts = useMemo(() => {
     const conflictIds: string[] = [];
