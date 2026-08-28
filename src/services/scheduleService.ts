@@ -3263,6 +3263,124 @@ export const scheduleService = {
       }
     }
 
+    // 6. FASE 2: MOVIMIENTOS EN CASCADA ESTRICTAMENTE DENTRO DEL MISMO CURSO (Intra-Course Swaps)
+    for (const task of missingTasks) {
+      // Si la tarea ya fue colocada en Fase 1, saltar
+      const currentPlaced = workingSchedule.filter(
+        (e: any) => String(e.course_id) === String(task.courseId) && String(e.subject_id) === String(task.subjectId)
+      ).length;
+      const req = Number(task.assign.hours_per_week || task.assign.hoursPerWeek) || 0;
+      if (currentPlaced >= req) continue;
+
+      const courseObj = courses.find((c: any) => String(c.id) === String(task.courseId));
+      if (!courseObj) continue;
+
+      const courseSlots = getSlotsForCourse(courseObj);
+      let placedCascade = false;
+
+      for (const day of days) {
+        for (const slot of courseSlots) {
+          if (slot.isBreak) continue;
+          const sStartMins = toMins(slot.start);
+          const sEndMins = toMins(slot.end);
+
+          // 1. Verificar si el recreo del curso choca
+          if (doesOverlapCourseBreak(sStartMins, sEndMins, courseObj, breakPreferences, shift, toMins)) continue;
+
+          // 2. Verificar si el docente de la materia faltante está LIBRE en este día y hora
+          const teacherBusyHere = task.teacherId && workingSchedule.some((e: any) => {
+            if (String(e.teacher_id) !== String(task.teacherId)) return false;
+            if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+            const eS = toMins(e.start_time);
+            const eE = toMins(e.end_time);
+            return sStartMins < eE && sEndMins > eS;
+          });
+          if (teacherBusyHere) continue;
+
+          // 3. Ver qué clase ocupa actualmente este slot EN ESTE MISMO CURSO
+          const occupyingEntry = workingSchedule.find((e: any) => {
+            if (String(e.course_id) !== String(task.courseId)) return false;
+            if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+            const eS = toMins(e.start_time);
+            const eE = toMins(e.end_time);
+            return sStartMins < eE && sEndMins > eS;
+          });
+
+          // Si no hay ocupante o tiene candado, no se puede mover
+          if (!occupyingEntry || occupyingEntry.is_locked || (lockedKeys || []).includes(occupyingEntry.id)) continue;
+
+          // 4. Buscar un hueco alternativo LIBRE DENTRO DE ESTE MISMO CURSO para mover al ocupante
+          for (const altDay of days) {
+            for (const altSlot of courseSlots) {
+              if (altSlot.isBreak) continue;
+              const altStartMins = toMins(altSlot.start);
+              const altEndMins = toMins(altSlot.end);
+
+              // Evitar la misma casilla
+              if (altDay.toLowerCase() === day.toLowerCase() && altStartMins === sStartMins) continue;
+
+              // Recreo en casilla alternativa
+              if (doesOverlapCourseBreak(altStartMins, altEndMins, courseObj, breakPreferences, shift, toMins)) continue;
+
+              // Verificar si la casilla alternativa en ESTE MISMO CURSO está libre
+              const altOccupiedInCourse = workingSchedule.some((e: any) => {
+                if (String(e.course_id) !== String(task.courseId)) return false;
+                if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
+                const eS = toMins(e.start_time);
+                const eE = toMins(e.end_time);
+                return altStartMins < eE && altEndMins > eS;
+              });
+              if (altOccupiedInCourse) continue;
+
+              // Verificar si el docente de la materia ocupante está libre en altDay y altSlot
+              const occTeacherBusyInAlt = occupyingEntry.teacher_id && workingSchedule.some((e: any) => {
+                if (String(e.id) === String(occupyingEntry.id)) return false;
+                if (String(e.teacher_id) !== String(occupyingEntry.teacher_id)) return false;
+                if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
+                const eS = toMins(e.start_time);
+                const eE = toMins(e.end_time);
+                return altStartMins < eE && altEndMins > eS;
+              });
+              if (occTeacherBusyInAlt) continue;
+
+              // ¡CASCADA EXITOSA DENTRO DEL MISMO CURSO!
+              // A. Mover la clase ocupante dentro del curso en DB
+              if (occupyingEntry.id) {
+                await supabase
+                  .from('schedule_entries')
+                  .update({ day: altDay, start_time: altSlot.start, end_time: altSlot.end })
+                  .eq('id', occupyingEntry.id);
+              }
+              occupyingEntry.day = altDay;
+              occupyingEntry.start_time = altSlot.start;
+              occupyingEntry.end_time = altSlot.end;
+
+              // B. Colocar la materia pendiente en la casilla liberada
+              const newEntry = {
+                center_id: centerId,
+                course_id: task.courseId,
+                subject_id: task.subjectId,
+                teacher_id: task.teacherId,
+                day,
+                shift,
+                start_time: slot.start,
+                end_time: slot.end,
+                school_year: schoolYear
+              };
+              workingSchedule.push(newEntry);
+              newEntriesToInsert.push(newEntry);
+              placedCount++;
+              placedCascade = true;
+              break;
+            }
+            if (placedCascade) break;
+          }
+          if (placedCascade) break;
+        }
+        if (placedCascade) break;
+      }
+    }
+
     // 7. Guardar nuevas inserciones en Supabase
     if (newEntriesToInsert.length > 0) {
       const chunkSize = 200;
