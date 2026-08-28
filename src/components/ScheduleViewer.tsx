@@ -251,6 +251,70 @@ export const ScheduleViewer = () => {
   const [isFastFilling, setIsFastFilling] = useState(false);
   const [showBottleneckModal, setShowBottleneckModal] = useState(false);
 
+  const getCourseSubjectsAndAssignments = (targetCourseId: string) => {
+    if (!targetCourseId) return [];
+    const directAssignments = (state.assignments || []).filter(
+      (a: any) => String(a.course_id || a.courseId) === String(targetCourseId)
+    );
+
+    const map = new Map<string, any>();
+
+    // 1. Asignaciones directas del curso
+    directAssignments.forEach((a: any) => {
+      const sId = String(a.subject_id);
+      const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+      map.set(sId, {
+        id: a.id || `assign-${sId}`,
+        subject_id: sId,
+        teacher_id: a.teacher_id || a.teacherId,
+        assignedHours: req,
+        assign: a
+      });
+    });
+
+    // 2. Si hay materias ya colocadas en el horario de este curso en la cuadrícula
+    (state.schedule || []).forEach((s: any) => {
+      if (String(s.course_id || s.courseId) === String(targetCourseId)) {
+        const sId = String(s.subject_id);
+        if (!map.has(sId)) {
+          const sub = state.subjects.find((sub: any) => String(sub.id) === sId);
+          const subName = (sub?.name || '').toLowerCase();
+          let defaultHours = 2;
+          if (subName.includes('matem')) defaultHours = 6;
+          else if (subName.includes('español') || subName.includes('lengua')) defaultHours = 5;
+          else if (subName.includes('social') || subName.includes('natur')) defaultHours = 4;
+          else if (subName.includes('ingl') || subName.includes('franc')) defaultHours = 2;
+
+          map.set(sId, {
+            id: `sched-subject-${sId}`,
+            subject_id: sId,
+            teacher_id: s.teacher_id,
+            assignedHours: defaultHours,
+            assign: { course_id: targetCourseId, subject_id: sId, teacher_id: s.teacher_id, hours_per_week: defaultHours }
+          });
+        }
+      }
+    });
+
+    // 3. Materias del currículo oficial del nivel de este curso si faltase alguna en DB
+    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
+    const isSecundaria = (courseObj?.level || '').toLowerCase().includes('secun');
+    if (isSecundaria) {
+      const mathSub = state.subjects.find((s: any) => (s.name || '').toLowerCase().includes('matem'));
+      if (mathSub && !map.has(String(mathSub.id))) {
+        map.set(String(mathSub.id), {
+          id: `req-math-${mathSub.id}`,
+          subject_id: String(mathSub.id),
+          teacher_id: '',
+          assignedHours: 6,
+          assign: { course_id: targetCourseId, subject_id: String(mathSub.id), hours_per_week: 6 }
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  };
+
   // Modal de Asignación Directa desde Casilla Vacía
   const [directAssignModal, setDirectAssignModal] = useState<{
     open: boolean;
