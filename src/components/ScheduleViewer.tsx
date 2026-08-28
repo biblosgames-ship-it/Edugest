@@ -317,6 +317,61 @@ export const ScheduleViewer = () => {
       }
     });
 
+    // 3. Materias del currículo oficial para este nivel si faltasen en DB
+    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
+    const levelStr = (courseObj?.level || '').toLowerCase();
+    const isSecundaria = levelStr.includes('secun');
+
+    (state.subjects || []).forEach((sub: any) => {
+      const sId = String(sub.id);
+      if (map.has(sId)) return;
+
+      const sName = (sub.name || '').toLowerCase();
+      let shouldInclude = false;
+      let defaultHours = 2;
+
+      if (isSecundaria) {
+        if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
+        else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
+        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
+        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
+        else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
+        else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
+      }
+
+      if (shouldInclude) {
+        const tchAssign = (state.assignments || []).find(
+          (a: any) =>
+            String(a.subject_id) === sId &&
+            String(a.course_id || a.courseId) === String(targetCourseId)
+        );
+        const generalTchAssign = (state.assignments || []).find(
+          (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
+        );
+        const teacherId =
+          tchAssign?.teacher_id ||
+          generalTchAssign?.teacher_id ||
+          (state.teachers[0]?.id || '');
+
+        map.set(sId, {
+          id: `curric-${sId}`,
+          subject_id: sId,
+          teacher_id: teacherId,
+          assignedHours: defaultHours,
+          assign: {
+            id: `temp-${sId}`,
+            course_id: targetCourseId,
+            subject_id: sId,
+            teacher_id: teacherId,
+            hours_per_week: defaultHours
+          }
+        });
+      }
+    });
+
     return Array.from(map.values());
   };
 
