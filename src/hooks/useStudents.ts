@@ -89,7 +89,7 @@ export const useStudents = () => {
           if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
           const key = normIdentity(s);
-          if (isOfficial2026Student(s) || s.school_year === '2026-2027' || (s.course_id && activeCourseIds.has(String(s.course_id)))) {
+          if (isOfficial2026Student(s)) {
             if (key && !seenIdentities.has(key)) {
               seenIdentities.add(key);
               
