@@ -510,17 +510,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const officialSet = new Set(officialRosterData as string[]);
           const isOfficial2026Student = (s: any) => {
-            const key = normIdentity(s);
-            if (officialSet.has(key)) return true;
+            const k1 = normIdentity(s);
+            if (officialSet.has(k1)) return true;
+            const k2 = normIdentity({
+              first_surname: s.names || s.first_name,
+              second_surname: '',
+              names: `${s.first_surname || s.last_name || ''} ${s.second_surname || ''}`
+            });
+            if (officialSet.has(k2)) return true;
+
             return (officialRosterData as string[]).some(
               (item: string) =>
-                item === key ||
-                (item.length > 12 && key.length > 12 && (item.includes(key) || key.includes(item)))
+                item === k1 ||
+                item === k2 ||
+                (item.length > 10 && k1.length > 10 && (item.includes(k1) || k1.includes(item)))
             );
-          };
-
-          const isNewlyEnrolled2026 = (s: any) => {
-            return s.school_year === '2026-2027' && s.course_id && activeCourseIdSet.has(String(s.course_id));
           };
 
           const seenIdentities = new Set<string>();
@@ -534,7 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
               const key = normIdentity(s);
-              if (isOfficial2026Student(s) || isNewlyEnrolled2026(s)) {
+              if (isOfficial2026Student(s)) {
                 if (key && !seenIdentities.has(key)) {
                   seenIdentities.add(key);
                   const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
@@ -555,17 +559,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             });
           } else {
-            // Ciclo 2025-2026: mostrar los más de 540 alumnos históricos reales
+            // Ciclo 2025-2026: mostrar los 540+ alumnos históricos reales
             rawStudents.forEach((s: any) => {
               const st = (s.status || '').toLowerCase().trim();
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
               const key = normIdentity(s);
-              if (s.school_year === '2025-2026' || !s.school_year || s.school_year === '' || !isNewlyEnrolled2026(s)) {
-                if (key && !seenIdentities.has(key)) {
-                  seenIdentities.add(key);
-                  filteredStudents.push(s);
-                }
+              if (key && !seenIdentities.has(key)) {
+                seenIdentities.add(key);
+                filteredStudents.push(s);
               }
             });
           }
