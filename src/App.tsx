@@ -118,12 +118,12 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'facility'
   ],
   teacher: ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications'],
-  student: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
-  parent: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
-  padre: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
-  tutor: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
-  madre: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
-  familiar: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  student: ['dashboard'],
+  parent: ['dashboard'],
+  padre: ['dashboard'],
+  tutor: ['dashboard'],
+  madre: ['dashboard'],
+  familiar: ['dashboard'],
   support: ['dashboard', 'facility', 'agenda'],
   supervisor: ['dashboard', 'facility', 'agenda'],
   conserje: ['dashboard', 'facility', 'agenda'],
@@ -167,6 +167,12 @@ function AppContent() {
   // Garantizar paneles obligatorios por rol
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
+
+    // Para padres y alumnos: acceso exclusivo a su grado/aula virtual
+    if (isStudentOrParent) {
+      return ['dashboard'];
+    }
+
     let panels = [...rawAllowed];
 
     if (['teacher', 'management_teacher', 'coordinator', 'admin'].includes(userRole)) {
@@ -179,13 +185,6 @@ function AppContent() {
       if (!panels.includes('dashboard')) {
         panels.push('dashboard');
       }
-    }
-    if (isStudentOrParent) {
-      if (!panels.includes('dashboard')) panels.push('dashboard');
-      if (!panels.includes('schedule')) panels.push('schedule');
-      if (!panels.includes('agenda')) panels.push('agenda');
-      if (!panels.includes('tasks')) panels.push('tasks');
-      if (!panels.includes('communications')) panels.push('communications');
     }
     return panels;
   }, [profile?.role, rawAllowed, isStudentOrParent]);
@@ -368,7 +367,11 @@ function AppContent() {
   }
 
   const navItems = [
-    { id: 'dashboard', label: 'Panel Principal', icon: LayoutDashboard },
+    {
+      id: 'dashboard',
+      label: isParentRole ? 'Grado de mi Hijo' : profile?.role === 'student' ? 'Mi Aula Virtual' : 'Panel Principal',
+      icon: LayoutDashboard
+    },
     { id: 'classroom', label: 'Mi Aula', icon: UserCheck },
     { id: 'students', label: 'Gestión de Alumnos', icon: Users },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
