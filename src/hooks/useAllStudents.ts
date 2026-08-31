@@ -96,14 +96,20 @@ export const useAllStudents = () => {
           if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
           const key = normIdentity(s);
-          if (isOfficial2026Student(s)) {
+          if (isOfficial2026Student(s) || s.school_year === '2026-2027') {
             if (key && !seenIdentities.has(key)) {
               seenIdentities.add(key);
-              const targetCid = s.course_id && activeCourseIds.has(String(s.course_id))
-                ? s.course_id
-                : (s.course_id && canonicalCourseMap.has(String(s.course_id))
-                    ? canonicalCourseMap.get(String(s.course_id))!
-                    : s.course_id);
+              
+              let targetCid = s.course_id;
+
+              const isVespShift = (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+              if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isVespShift && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36'))) {
+                targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
+              } else if (s.course_id && activeCourseIds.has(String(s.course_id))) {
+                targetCid = s.course_id;
+              } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                targetCid = canonicalCourseMap.get(String(s.course_id))!;
+              }
 
               s.course_id = targetCid;
               s.school_year = targetYear;
