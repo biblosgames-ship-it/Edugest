@@ -37,16 +37,21 @@ export const useAllStudents = () => {
       const raw = studRes.data || [];
       const rawCourses = coursesRes.data || [];
 
-      const activeCourses = rawCourses.filter((c: any) => c.school_year === targetYear);
-      const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses.filter((c: any) => c.school_year === targetYear);
+      const activeCourses = rawCourses.filter((c: any) => {
+        if (targetYear === '2026-2027') return c.school_year === '2026-2027';
+        return c.school_year === targetYear || !c.school_year || c.school_year === '2025-2026';
+      });
+      const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
       const activeCourseIds = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
       const normStr = (str: string) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
       const canonicalCourseMap = new Map<string, string>();
       rawCourses.forEach((c: any) => {
-        const key = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+        const tandaStr = normStr(c.tanda || 'matutina');
+        const key = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}_${tandaStr}`.replace(/primaria|secundaria|inicial/g, '').trim();
         const activeMatch = finalActiveCourses.find((ac: any) => {
-          const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}_${normStr(ac.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+          const acTanda = normStr(ac.tanda || 'matutina');
+          const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}_${normStr(ac.section)}_${acTanda}`.replace(/primaria|secundaria|inicial/g, '').trim();
           return acKey === key;
         });
         if (activeMatch) {
@@ -66,15 +71,15 @@ export const useAllStudents = () => {
       const officialSet = new Set(officialRosterData as string[]);
       const isOfficial2026Student = (s: any) => {
         const key = normIdentity(s);
-        return (
-          officialSet.has(key) ||
-          (officialRosterData as string[]).some(
-            (item) =>
-              key === item ||
-              (key.length > 8 && item.includes(key)) ||
-              (item.length > 8 && key.includes(item))
-          )
-        );
+        if (officialSet.has(key)) return true;
+        const tokens = key.split(' ').filter((t: string) => t.length > 2);
+        return (officialRosterData as string[]).some((item: string) => {
+          if (item === key) return true;
+          if (item.length > 8 && (item.includes(key) || key.includes(item))) return true;
+          const itemTokens = item.split(' ').filter((t: string) => t.length > 2);
+          const matchCount = tokens.filter((t: string) => itemTokens.includes(t)).length;
+          return matchCount >= Math.min(tokens.length, 2) && matchCount >= 2;
+        });
       };
 
       const seenIdentities = new Set<string>();
@@ -100,16 +105,15 @@ export const useAllStudents = () => {
           }
         });
       } else {
+        // Ciclo 2025-2026: mostrar todos los alumnos del historial
         raw.forEach((s: any) => {
           const st = (s.status || '').toLowerCase().trim();
           if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
           const key = normIdentity(s);
-          if (!isOfficial2026Student(s) || s.school_year === targetYear) {
-            if (key && !seenIdentities.has(key)) {
-              seenIdentities.add(key);
-              unified.push(s);
-            }
+          if (key && !seenIdentities.has(key)) {
+            seenIdentities.add(key);
+            unified.push(s);
           }
         });
       }
