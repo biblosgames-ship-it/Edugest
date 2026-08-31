@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import officialRosterData from '../data/official_2026_students.json';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -502,80 +503,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .replace(/\s+/g, ' ')
               .trim();
 
-          // Nombres de los alumnos activos de este ciclo cuya ficha no tenía fijado 2026-2027
-          const missingActiveNames = [
-            'BUENO', 'DE PENA', 'PAYNE', 'ELIAM DAVID', 'LIZMEILY', 'BRAYAN OSIRIS',
-            'ZOE NIGELLA', 'ELIANNY SANTANA', 'GINO ELIAN', 'ESTEBAN JOSIAS', 'CRUZADO LORELINE',
-            'IHAM NICOLAS', 'PERLA CAMIL', 'JOSEPH SEBASTIAN', 'JEISELL ALEXANDER',
-            'ELIAS JOSE', 'JUAN MARCOS ABREU', 'GREGORY STEVEN', 'DAYBEL MANUEL',
-            'CHRIS ANIBAL', 'JOSMEIRY PENA', 'ARISON BRAND', 'YOMAIRI MASIEL',
-            'ALANNAH MARIE', 'KARL FABRICIO', 'HADID CASTILLO', 'KALEB ENRIQUE'
-          ];
-
-          const isMissingActiveStudent = (s: any) => {
+          const officialSet = new Set(officialRosterData as string[]);
+          const isOfficial2026Student = (s: any) => {
             const key = normIdentity(s);
-            return missingActiveNames.some((m) => key.includes(m));
+            return (
+              officialSet.has(key) ||
+              (officialRosterData as string[]).some(
+                (item) =>
+                  key === item ||
+                  (key.length > 8 && item.includes(key)) ||
+                  (item.length > 8 && key.includes(item))
+              )
+            );
           };
 
           const seenIdentities = new Set<string>();
           const filteredStudents: any[] = [];
-          const studentsToHeal: { id: string; course_id: string; school_year: string }[] = [];
+          const studentsToHeal2026: { id: string; course_id?: string; school_year: string }[] = [];
+          const studentsToHeal2025: { id: string; school_year: string }[] = [];
 
-          // PASO 1: Alumnos registrados explícitamente en el ciclo escolar 2026-2027
-          rawStudents.forEach((s: any) => {
-            const st = (s.status || '').toLowerCase().trim();
-            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
+          if (currentFetchYear === '2026-2027') {
+            rawStudents.forEach((s: any) => {
+              const st = (s.status || '').toLowerCase().trim();
+              if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-            // PASO 1: Alumnos registrados explícitamente en el ciclo escolar 2026-2027
-            if (s.school_year === currentFetchYear) {
               const key = normIdentity(s);
-              if (key && !seenIdentities.has(key)) {
-                seenIdentities.add(key);
-                if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                  const targetCid = canonicalCourseMap.get(String(s.course_id))!;
-                  if (s.course_id !== targetCid) {
-                    s.course_id = targetCid;
-                    studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
+              if (isOfficial2026Student(s)) {
+                if (key && !seenIdentities.has(key)) {
+                  seenIdentities.add(key);
+                  const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
+                    ? canonicalCourseMap.get(String(s.course_id))!
+                    : s.course_id;
+
+                  if (s.school_year !== currentFetchYear || s.course_id !== targetCid) {
+                    studentsToHeal2026.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
                   }
+                  s.school_year = currentFetchYear;
+                  s.course_id = targetCid;
+                  filteredStudents.push(s);
                 }
-                s.school_year = currentFetchYear;
-                filteredStudents.push(s);
+              } else {
+                // Alumno que NO pertenece a la nómina oficial 2026-2027 pero tenía school_year = 2026-2027: restaurar a 2025-2026
+                if (s.school_year === '2026-2027') {
+                  studentsToHeal2025.push({ id: s.id, school_year: '2025-2026' });
+                }
               }
-            }
-          });
+            });
+          } else {
+            // Ciclo 2025-2026 y años anteriores
+            rawStudents.forEach((s: any) => {
+              const st = (s.status || '').toLowerCase().trim();
+              if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-          // PASO 2: Los alumnos activos faltantes del ciclo (sin traer graduados ni retirados de 2025-2026)
-          rawStudents.forEach((s: any) => {
-            const st = (s.status || '').toLowerCase().trim();
-            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-
-            if (s.school_year !== currentFetchYear && isMissingActiveStudent(s)) {
               const key = normIdentity(s);
-              if (key && !seenIdentities.has(key)) {
-                seenIdentities.add(key);
-                const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
-                  ? canonicalCourseMap.get(String(s.course_id))!
-                  : s.course_id;
-                s.course_id = targetCid;
-                s.school_year = currentFetchYear;
-                studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
-                filteredStudents.push(s);
+              if (!isOfficial2026Student(s) || s.school_year === currentFetchYear) {
+                if (key && !seenIdentities.has(key)) {
+                  seenIdentities.add(key);
+                  filteredStudents.push(s);
+                }
               }
-            }
-          });
+            });
+          }
 
-          // Auto-healing en segundo plano: sincroniza permanentemente course_id y school_year en Supabase
-          if (studentsToHeal.length > 0) {
-            Promise.all(
-              studentsToHeal.map((item) =>
+          // Auto-healing bidireccional en segundo plano: sincroniza permanentemente la base de datos
+          if (studentsToHeal2026.length > 0 || studentsToHeal2025.length > 0) {
+            Promise.all([
+              ...studentsToHeal2026.map((item) =>
                 supabase
                   .from('students')
                   .update({ course_id: item.course_id, school_year: item.school_year })
                   .eq('id', item.id)
+              ),
+              ...studentsToHeal2025.map((item) =>
+                supabase
+                  .from('students')
+                  .update({ school_year: item.school_year })
+                  .eq('id', item.id)
               )
-            )
+            ])
               .then(() => {
-                console.log(`[AppContext] ${studentsToHeal.length} alumnos sincronizados y remapeados con éxito en la base de datos.`);
+                console.log(`[AppContext] Saneamiento completado: ${studentsToHeal2026.length} alumnos fijados a 2026-2027 y ${studentsToHeal2025.length} egresados restaurados a 2025-2026.`);
               })
               .catch((err) => {
                 console.warn('[AppContext] Sincronización en segundo plano:', err);

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useSupabase, useApp } from '../context/AppContext';
+import officialRosterData from '../data/official_2026_students.json';
 
 export const useStudents = () => {
   const { profile } = useSupabase();
@@ -58,57 +59,56 @@ export const useStudents = () => {
           .replace(/\s+/g, ' ')
           .trim();
 
-      const missingActiveNames = [
-        'BUENO', 'DE PENA', 'PAYNE', 'ELIAM DAVID', 'LIZMEILY', 'BRAYAN OSIRIS',
-        'ZOE NIGELLA', 'ELIANNY SANTANA', 'GINO ELIAN', 'ESTEBAN JOSIAS', 'CRUZADO LORELINE',
-        'IHAM NICOLAS', 'PERLA CAMIL', 'JOSEPH SEBASTIAN', 'JEISELL ALEXANDER',
-        'ELIAS JOSE', 'JUAN MARCOS ABREU', 'GREGORY STEVEN', 'DAYBEL MANUEL',
-        'CHRIS ANIBAL', 'JOSMEIRY PENA', 'ARISON BRAND', 'YOMAIRI MASIEL',
-        'ALANNAH MARIE', 'KARL FABRICIO', 'HADID CASTILLO', 'KALEB ENRIQUE'
-      ];
-
-      const isMissingActiveStudent = (s: any) => {
+      const officialSet = new Set(officialRosterData as string[]);
+      const isOfficial2026Student = (s: any) => {
         const key = normIdentity(s);
-        return missingActiveNames.some((m) => key.includes(m));
+        return (
+          officialSet.has(key) ||
+          (officialRosterData as string[]).some(
+            (item) =>
+              key === item ||
+              (key.length > 8 && item.includes(key)) ||
+              (item.length > 8 && key.includes(item))
+          )
+        );
       };
 
       const seenIdentities = new Set<string>();
       const unified: any[] = [];
 
-      // PASO 1: Alumnos de este ciclo escolar activo
-      raw.forEach((s: any) => {
-        const st = (s.status || '').toLowerCase().trim();
-        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-        if (s.school_year === schoolYear) {
-          const key = normIdentity(s);
-          if (key && !seenIdentities.has(key)) {
-            seenIdentities.add(key);
-            if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-              s.course_id = canonicalCourseMap.get(String(s.course_id))!;
-            }
-            s.school_year = schoolYear;
-            unified.push(s);
-          }
-        }
-      });
+      if (schoolYear === '2026-2027') {
+        raw.forEach((s: any) => {
+          const st = (s.status || '').toLowerCase().trim();
+          if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-      // PASO 2: Alumnos activos faltantes del ciclo (sin incluir graduados 2025-2026)
-      raw.forEach((s: any) => {
-        const st = (s.status || '').toLowerCase().trim();
-        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-        if (s.school_year !== schoolYear && isMissingActiveStudent(s)) {
           const key = normIdentity(s);
-          if (key && !seenIdentities.has(key)) {
-            seenIdentities.add(key);
-            const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
-              ? canonicalCourseMap.get(String(s.course_id))!
-              : s.course_id;
-            s.course_id = targetCid;
-            s.school_year = schoolYear;
-            unified.push(s);
+          if (isOfficial2026Student(s)) {
+            if (key && !seenIdentities.has(key)) {
+              seenIdentities.add(key);
+              const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
+                ? canonicalCourseMap.get(String(s.course_id))!
+                : s.course_id;
+
+              s.course_id = targetCid;
+              s.school_year = schoolYear;
+              unified.push(s);
+            }
           }
-        }
-      });
+        });
+      } else {
+        raw.forEach((s: any) => {
+          const st = (s.status || '').toLowerCase().trim();
+          if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
+
+          const key = normIdentity(s);
+          if (!isOfficial2026Student(s) || s.school_year === schoolYear) {
+            if (key && !seenIdentities.has(key)) {
+              seenIdentities.add(key);
+              unified.push(s);
+            }
+          }
+        });
+      }
 
       return unified;
     },
