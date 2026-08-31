@@ -493,6 +493,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // 3. Estudiantes realmente matriculados en las aulas/cursos del año escolar activo:
           const rawStudents = studRes.data || [];
 
+          const outDatedStudentIds: string[] = [];
+
           const filteredStudents = rawStudents.filter((s: any) => {
             // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
             const st = (s.status || '').toLowerCase().trim();
@@ -500,19 +502,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return false;
             }
 
-            // B. Si está asignado a un curso de este ciclo escolar activo (Aquí entran los 19 de Pre-primario y todos los alumnos de los cursos activos)
+            // B. Si está asignado a un curso de este ciclo escolar activo (garantiza inclusión de todos los grados)
             if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+              if (s.school_year !== currentFetchYear) {
+                outDatedStudentIds.push(s.id);
+              }
               return true;
             }
 
-            // C. Si no tiene curso pero su año coincide con el ciclo activo: INCLUIR
-            if (!s.course_id && s.school_year === currentFetchYear) {
+            // C. Si no tiene curso pero su año coincide con el ciclo activo o es no nulo: INCLUIR
+            if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
               const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
               return hasName;
             }
 
             return false;
           });
+
+          // Auto-healing en segundo plano: sincroniza permanentemente school_year en Supabase para alumnos asignados a cursos activos
+          if (outDatedStudentIds.length > 0) {
+            supabase
+              .from('students')
+              .update({ school_year: currentFetchYear })
+              .in('id', outDatedStudentIds)
+              .then(({ error: syncErr }) => {
+                if (syncErr) {
+                  console.warn('[AppContext] Sincronización automática de ciclo escolar:', syncErr.message);
+                } else {
+                  console.log(`[AppContext] ${outDatedStudentIds.length} alumnos sincronizados automáticamente al ciclo ${currentFetchYear}.`);
+                }
+              })
+              .catch(() => {});
+          }
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
             if (p.targetType === 'teacher') {

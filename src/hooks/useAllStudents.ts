@@ -13,28 +13,48 @@ export const useAllStudents = () => {
     queryFn: async () => {
       if (!centerId) return [];
 
-      let query = supabase
-        .from('students')
-        .select('*')
-        .eq('center_id', centerId);
-
       const targetYear = selectedYear || '2026-2027';
-      if (targetYear) {
-        query = query.or(`school_year.eq.${targetYear},school_year.is.null,school_year.eq.""`);
-      }
+      const [studRes, coursesRes] = await Promise.all([
+        supabase
+          .from('students')
+          .select('*')
+          .eq('center_id', centerId)
+          .range(0, 9999)
+          .order('first_surname', { ascending: true }),
+        supabase
+          .from('courses')
+          .select('id, school_year')
+          .eq('center_id', centerId)
+          .range(0, 9999)
+      ]);
 
-      const { data, error } = await query.order('first_surname', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching all students:', error);
+      if (studRes.error) {
+        console.error('Error fetching all students:', studRes.error);
         return [];
       }
 
-      const raw = data || [];
-      const yearSpecific = raw.filter((s: any) => s.school_year === targetYear);
-      return yearSpecific.length > 0 ? yearSpecific : (raw.every((s: any) => !s.school_year) ? raw : []);
+      const raw = studRes.data || [];
+      const rawCourses = coursesRes.data || [];
+
+      const activeCourseIds = new Set(
+        rawCourses
+          .filter((c: any) => !c.school_year || c.school_year === targetYear || c.school_year === 'undefined' || c.school_year === 'null')
+          .map((c: any) => String(c.id))
+      );
+
+      return raw.filter((s: any) => {
+        const st = (s.status || '').toLowerCase().trim();
+        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
+          return false;
+        }
+        if (s.course_id && activeCourseIds.has(String(s.course_id))) return true;
+        if (!s.course_id && (s.school_year === targetYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
+          return true;
+        }
+        return false;
+      });
     },
-    staleTime: 1000 * 60 * 10 // 10 minutos de cache
+    staleTime: 1000 * 60 * 5 // 5 minutos de cache
   });
 };
 

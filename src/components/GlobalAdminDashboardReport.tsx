@@ -62,16 +62,27 @@ export const GlobalAdminDashboardReport: React.FC<ReportProps> = ({ onClose }) =
     if (!center?.id) return;
     setLoading(true);
     try {
-      // 1. Alumnos inscritos en el rango o históricos hasta endDate
+      // 1. Alumnos inscritos en el ciclo escolar o activos en cursos hasta endDate
+      const currentYear = selectedYear || '2026-2027';
+      const activeCourseIds = new Set((courses || []).map((c: any) => String(c.id)));
+      
       const { data: stds, error: stdErr } = await supabase
         .from('students')
-        .select('id, names, first_surname, course_id, school_year, created_at')
+        .select('id, names, first_surname, course_id, school_year, created_at, status')
         .eq('center_id', center.id)
-        .eq('school_year', selectedYear || '2026-2027')
         .lte('created_at', `${endDate}T23:59:59Z`);
 
       if (stdErr) throw stdErr;
-      setStudentsList(stds || []);
+      
+      const validStudents = (stds || []).filter((s: any) => {
+        const st = (s.status || '').toLowerCase().trim();
+        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return false;
+        if (s.course_id && activeCourseIds.has(String(s.course_id))) return true;
+        if (!s.course_id && (s.school_year === currentYear || !s.school_year)) return true;
+        return false;
+      });
+
+      setStudentsList(validStudents);
 
       // 2. Personal registrado histórico hasta endDate
       const { data: staff, error: staffErr } = await supabase

@@ -724,30 +724,49 @@ export const dataService = {
         .trim();
       const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
 
-      const studentNameKey = `${s.first_surname || ''} ${s.second_surname || ''} ${s.names || ''}`
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .trim();
+      const cleanNames = (s.names || '').trim().replace(/\s+/g, ' ');
+      const cleanFirstSurname = (s.first_surname || '').trim().replace(/\s+/g, ' ');
+      const cleanSecondSurname = (s.second_surname || '').trim().replace(/\s+/g, ' ');
+
+      const normString = (str: string) =>
+        (str || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const studentNameKey = normString(`${cleanFirstSurname} ${cleanSecondSurname} ${cleanNames}`);
+      const fallbackNameKey = normString(`${cleanNames} ${cleanFirstSurname} ${cleanSecondSurname}`);
+
       const match = (existingStudents || []).find((es: any) => {
-        const dbName =
-          `${es.first_surname || es.last_name || ''} ${es.second_surname || ''} ${es.names || es.first_name || ''}`
-            .toLowerCase()
-            .replace(/\s+/g, ' ')
-            .trim();
-        return dbName === studentNameKey || (s.sigerd_code && es.sigerd_code === s.sigerd_code);
+        const esNames = (es.names || es.first_name || '').trim();
+        const esFirstSur = (es.first_surname || es.last_name || '').trim();
+        const esSecSur = (es.second_surname || '').trim();
+
+        const dbName1 = normString(`${esFirstSur} ${esSecSur} ${esNames}`);
+        const dbName2 = normString(`${esNames} ${esFirstSur} ${esSecSur}`);
+        const dbName3 = normString(`${esFirstSur} ${esNames}`);
+
+        return (
+          dbName1 === studentNameKey ||
+          dbName2 === fallbackNameKey ||
+          (cleanFirstSurname && cleanNames && dbName3 === normString(`${cleanFirstSurname} ${cleanNames}`)) ||
+          (s.sigerd_code && es.sigerd_code && String(s.sigerd_code).trim() === String(es.sigerd_code).trim())
+        );
       });
 
       const studentPayload = {
         center_id: centerId,
         school_year: schoolYear,
-        names: s.names,
-        first_name: s.names,
-        first_surname: s.first_surname,
-        last_name: s.first_surname,
-        second_surname: s.second_surname || null,
+        names: cleanNames,
+        first_name: cleanNames,
+        first_surname: cleanFirstSurname,
+        last_name: cleanFirstSurname,
+        second_surname: cleanSecondSurname || null,
         sex: s.sex || 'M',
         birth_date: s.birth_date || null,
-        address: s.address_street ? `${s.address_street}, ${s.address_sector || ''}` : null,
+        address: s.address_street ? `${s.address_street}, ${s.address_sector || ''}`.trim() : null,
         address_street: s.address_street || null,
         address_sector: s.address_sector || null,
         sigerd_code: s.sigerd_code || null,
@@ -960,23 +979,48 @@ export const dataService = {
     }
 
     if (!existingEnrollment) {
-      // Fallback: buscar por nombres, primer apellido y año destino
-      const { data } = await supabase
+      // Fallback: buscar en el centro por nombres normalizados y año destino
+      const { data: sameCenterStudents } = await supabase
         .from('students')
-        .select('id')
-        .eq('names', sourceStudent.names)
-        .eq('first_surname', sourceStudent.first_surname)
-        .eq('school_year', targetYear)
-        .maybeSingle();
-      existingEnrollment = data;
+        .select('id, names, first_surname, second_surname, school_year')
+        .eq('center_id', sourceStudent.center_id)
+        .eq('school_year', targetYear);
+
+      const normString = (str: string) =>
+        (str || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const srcName = normString(sourceStudent.names || sourceStudent.first_name || '');
+      const srcFirstSur = normString(sourceStudent.first_surname || sourceStudent.last_name || '');
+      const srcSecSur = normString(sourceStudent.second_surname || '');
+
+      const match = (sameCenterStudents || []).find((s: any) => {
+        const sName = normString(s.names || s.first_name || '');
+        const sFirstSur = normString(s.first_surname || s.last_name || '');
+        const sSecSur = normString(s.second_surname || '');
+
+        return (
+          (sName === srcName && sFirstSur === srcFirstSur) ||
+          `${sFirstSur} ${sSecSur} ${sName}` === `${srcFirstSur} ${srcSecSur} ${srcName}`
+        );
+      });
+
+      if (match) {
+        existingEnrollment = match;
+      }
     }
 
     if (existingEnrollment) {
-      // Si ya está registrado en el nuevo ciclo, solo actualizamos el curso destino
+      // Si ya está registrado en el nuevo ciclo, actualizamos el curso destino y aseguramos el school_year
       const { error: updErr } = await supabase
         .from('students')
         .update({
           course_id: targetCourseId,
+          school_year: targetYear,
           status: 'Active'
         })
         .eq('id', existingEnrollment.id);
@@ -984,12 +1028,15 @@ export const dataService = {
       return existingEnrollment.id;
     }
 
-    // 3. Crear una nueva inscripción duplicando los datos demográficos
+    // 3. Crear una nueva inscripción duplicando los datos demográficos limpios
     const { id, created_at, ...studentData } = sourceStudent;
     const { data: newStudent, error: insErr } = await supabase
       .from('students')
       .insert({
         ...studentData,
+        names: (studentData.names || '').trim().replace(/\s+/g, ' '),
+        first_surname: (studentData.first_surname || '').trim().replace(/\s+/g, ' '),
+        second_surname: studentData.second_surname ? String(studentData.second_surname).trim().replace(/\s+/g, ' ') : null,
         school_year: targetYear,
         course_id: targetCourseId,
         status: 'Active'
