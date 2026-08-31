@@ -18,7 +18,7 @@ export const useGrades = (courseId: string, subjectId: string) => {
         .select('*')
         .eq('course_id', courseId)
         .eq('subject_id', subjectId)
-        .eq('school_year', selectedYear || '2025-2026');
+        .eq('school_year', selectedYear || '2026-2027');
 
       if (error) throw error;
 

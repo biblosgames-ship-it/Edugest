@@ -73,13 +73,16 @@ export const dataService = {
   },
 
   // ESTUDIANTES
-  async getStudents(courseId: string, centerId: string, _schoolYear?: string) {
+  async getStudents(courseId: string, centerId: string, schoolYear?: string) {
     if (!centerId) return [];
     let query = supabase
       .from('students')
       .select('*')
       .eq('course_id', courseId)
       .eq('center_id', centerId);
+    if (schoolYear) {
+      query = query.eq('school_year', schoolYear);
+    }
     const { data, error } = await query.order('first_surname', { ascending: true });
     if (error || !data) return [];
     return data;

@@ -93,7 +93,7 @@ export const ClassroomManager = () => {
   // Clave de scope estricto: centro_año_docente_curso_asignatura_periodo
   const storageScopeKey = useMemo(() => {
     const centerId = profile?.center_id || 'default_center';
-    const year = selectedYear || '2025-2026';
+    const year = selectedYear || '2026-2027';
     const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
     const courseId = selectedCourseId || 'nocourse';
     const subjectId = selectedSubjectId || 'nosubject';

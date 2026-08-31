@@ -18,6 +18,15 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
     if (!targetCid) return;
     setIsLoading(true);
     try {
+      if (state.students && state.students.length > 0) {
+        const matching = state.students.filter(
+          (s: any) => String(s.course_id) === String(gradeId) || String(s.courseId) === String(gradeId)
+        );
+        setStudents(matching);
+        setIsLoading(false);
+        return;
+      }
+
       const year = selectedYear || '2026-2027';
       const data = await dataService.getStudents(
         gradeId,
@@ -34,7 +43,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
 
   useEffect(() => {
     fetchStudents();
-  }, [gradeId]);
+  }, [gradeId, selectedYear, state.students]);
 
   const exportExcel = () => {
     const course = state.courses?.find((c: any) => c.id === gradeId);

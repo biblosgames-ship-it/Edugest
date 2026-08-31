@@ -53,7 +53,7 @@ export const StudentForm = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
   const [customSchoolYear, setCustomSchoolYear] = useState(
-    initialData?.school_year || selectedYear || '2025-2026'
+    initialData?.school_year || selectedYear || '2026-2027'
   );
   const [canEditSchoolYear, setCanEditSchoolYear] = useState(false);
 

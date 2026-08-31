@@ -83,7 +83,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
   const config = useMemo(
     () => ({
-      year: selectedYear || '2025-2026',
+      year: selectedYear || '2026-2027',
       periods: ['P1', 'P2', 'P3', 'P4'],
       competencies: isSecundario
         ? [
@@ -285,7 +285,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       return;
     }
     const centerId = profile?.center_id || 'default_center';
-    const year = selectedYear || '2025-2026';
+    const year = selectedYear || '2026-2027';
     const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
 
     let importedCount = 0;
@@ -1999,7 +1999,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                       <span className="text-text-muted text-[8px] mt-0.5">
                         Año Escolar:{' '}
                         <span className="text-slate-800 dark:text-slate-200 font-black">
-                          {selectedYear || '2025-2026'}
+                          {selectedYear || '2026-2027'}
                         </span>
                       </span>
                     </div>
