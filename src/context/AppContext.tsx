@@ -449,13 +449,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (err) {}
           }
 
-          // 1. Cursos del año escolar activo
+          // 1. Cursos del año escolar activo y resolución de equivalencias
           const rawCourses = cRes.data || [];
           const activeCourses = rawCourses.filter((c: any) => {
             if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
             return c.school_year === currentFetchYear;
           });
-          const activeCourseIdSet = new Set(activeCourses.map((c: any) => String(c.id)));
+
+          // Si no hay cursos marcados con el año, usamos todos los cursos de la institución
+          const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
+          const activeCourseIdSet = new Set(finalActiveCourses.map((c: any) => String(c.id)));
+
+          // Mapeo canónico de cursos (por nivel, grado y sección) para vincular automáticamente alumnos con IDs de cursos antiguos
+          const normStr = (str: string) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
+          const canonicalCourseMap = new Map<string, string>(); // course_id antiguo -> course_id activo 2026-2027
+          
+          rawCourses.forEach((c: any) => {
+            const key = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+            const activeMatch = finalActiveCourses.find((ac: any) => {
+              const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}_${normStr(ac.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+              return acKey === key;
+            });
+            if (activeMatch) {
+              canonicalCourseMap.set(String(c.id), String(activeMatch.id));
+              activeCourseIdSet.add(String(c.id));
+            }
+          });
 
           let localTitularMap: Record<string, any> = {};
           try {
@@ -464,7 +483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } catch {}
 
-          const coursesUnified = activeCourses.map((c: any) => {
+          const coursesUnified = finalActiveCourses.map((c: any) => {
             const localTitular = localTitularMap[c.id] || {};
             const rawTeacherId = c.titular_teacher_id || localTitular.titular_teacher_id || null;
             const mappedTeacherId = rawTeacherId ? (idMap[rawTeacherId] || rawTeacherId) : null;
@@ -493,7 +512,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // 3. Estudiantes realmente matriculados en las aulas/cursos del año escolar activo:
           const rawStudents = studRes.data || [];
 
-          const outDatedStudentIds: string[] = [];
+          const studentsToHeal: { id: string; course_id: string; school_year: string }[] = [];
 
           const filteredStudents = rawStudents.filter((s: any) => {
             // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
@@ -502,15 +521,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return false;
             }
 
-            // B. Si está asignado a un curso de este ciclo escolar activo (garantiza inclusión de todos los grados)
-            if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
-              if (s.school_year !== currentFetchYear) {
-                outDatedStudentIds.push(s.id);
+            // B. Si está asignado a un curso activo o equivalente de la institución (Aquí entran los 19 alumnos y todos los de grados activos)
+            if (s.course_id && (activeCourseIdSet.has(String(s.course_id)) || canonicalCourseMap.has(String(s.course_id)))) {
+              const activeTargetCourseId = canonicalCourseMap.get(String(s.course_id)) || s.course_id;
+              if (s.course_id !== activeTargetCourseId || s.school_year !== currentFetchYear) {
+                studentsToHeal.push({
+                  id: s.id,
+                  course_id: activeTargetCourseId,
+                  school_year: currentFetchYear
+                });
               }
+              // Normalizar en memoria para la sesión activa
+              s.course_id = activeTargetCourseId;
+              s.school_year = currentFetchYear;
               return true;
             }
 
-            // C. Si no tiene curso pero su año coincide con el ciclo activo o es no nulo: INCLUIR
+            // C. Si no tiene curso pero su año coincide con el ciclo activo o no tiene ciclo especificado: INCLUIR
             if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
               const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
               return hasName;
@@ -519,20 +546,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return false;
           });
 
-          // Auto-healing en segundo plano: sincroniza permanentemente school_year en Supabase para alumnos asignados a cursos activos
-          if (outDatedStudentIds.length > 0) {
-            supabase
-              .from('students')
-              .update({ school_year: currentFetchYear })
-              .in('id', outDatedStudentIds)
-              .then(({ error: syncErr }) => {
-                if (syncErr) {
-                  console.warn('[AppContext] Sincronización automática de ciclo escolar:', syncErr.message);
-                } else {
-                  console.log(`[AppContext] ${outDatedStudentIds.length} alumnos sincronizados automáticamente al ciclo ${currentFetchYear}.`);
-                }
+          // Auto-healing en segundo plano: sincroniza permanentemente course_id y school_year en Supabase
+          if (studentsToHeal.length > 0) {
+            Promise.all(
+              studentsToHeal.map((item) =>
+                supabase
+                  .from('students')
+                  .update({ course_id: item.course_id, school_year: item.school_year })
+                  .eq('id', item.id)
+              )
+            )
+              .then(() => {
+                console.log(`[AppContext] ${studentsToHeal.length} alumnos sincronizados y remapeados con éxito en la base de datos.`);
               })
-              .catch(() => {});
+              .catch((err) => {
+                console.warn('[AppContext] Sincronización en segundo plano:', err);
+              });
           }
 
           const priorityPrefsUnified = priorityPrefs.map((p: any) => {
