@@ -52,7 +52,6 @@ export const useAllStudents = () => {
         });
         if (activeMatch) {
           canonicalCourseMap.set(String(c.id), String(activeMatch.id));
-          activeCourseIds.add(String(c.id));
         }
       });
 

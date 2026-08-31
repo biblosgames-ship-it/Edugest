@@ -472,7 +472,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             if (activeMatch) {
               canonicalCourseMap.set(String(c.id), String(activeMatch.id));
-              activeCourseIdSet.add(String(c.id));
             }
           });
 
