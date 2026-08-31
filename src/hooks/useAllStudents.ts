@@ -83,7 +83,7 @@ export const useAllStudents = () => {
       raw.forEach((s: any) => {
         const st = (s.status || '').toLowerCase().trim();
         if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-        if (s.school_year === targetYear || (s.course_id && activeCourseIds.has(String(s.course_id)))) {
+        if (s.school_year === targetYear) {
           const key = normIdentity(s);
           if (key && !seenIdentities.has(key)) {
             seenIdentities.add(key);

@@ -525,7 +525,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const st = (s.status || '').toLowerCase().trim();
             if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-            if (s.school_year === currentFetchYear || (s.course_id && activeCourseIdSet.has(String(s.course_id)))) {
+            // PASO 1: Alumnos registrados explícitamente en el ciclo escolar 2026-2027
+            if (s.school_year === currentFetchYear) {
               const key = normIdentity(s);
               if (key && !seenIdentities.has(key)) {
                 seenIdentities.add(key);
