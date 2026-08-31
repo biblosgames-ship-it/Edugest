@@ -115,7 +115,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (profile?.center_id) {
       const stored = localStorage.getItem(`edugest_selected_year_${profile.center_id}`);
-      setSelectedYear(stored || '2026-2027');
+      const effectiveYear = (stored && stored !== '2025-2026') ? stored : '2026-2027';
+      setSelectedYear(effectiveYear);
       const storedDeporteBreak = localStorage.getItem(`edugest_avoid_deporte_break_${profile.center_id}`);
       setState((prev) => ({
         ...prev,
