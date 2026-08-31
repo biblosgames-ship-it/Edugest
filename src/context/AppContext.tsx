@@ -538,8 +538,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
               const key = normIdentity(s);
-              // Admitir si está en la nómina oficial O está matriculado activamente en 2026-2027
-              if (isOfficial2026Student(s) || s.school_year === '2026-2027') {
+              // Admitir si está en la nómina oficial O está matriculado activamente en 2026-2027 O tiene un curso activo asignado
+              if (isOfficial2026Student(s) || s.school_year === '2026-2027' || (s.course_id && activeCourseIdSet.has(String(s.course_id)))) {
                 if (key && !seenIdentities.has(key)) {
                   seenIdentities.add(key);
                   

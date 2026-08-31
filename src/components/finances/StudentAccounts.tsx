@@ -701,7 +701,9 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
                                   {student.first_surname?.[0]}
                                 </div>
                                 <span className="text-xs font-black text-slate-700">
-                                  {student.names} {student.first_surname}
+                                  {`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()
+                                    ? `${`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()}, ${student.names || student.first_name || ''}`
+                                    : student.names || student.first_name || 'Estudiante'}
                                 </span>
                               </div>
                             </td>
