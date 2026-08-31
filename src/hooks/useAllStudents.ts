@@ -98,6 +98,10 @@ export const useAllStudents = () => {
         });
         if (officialSet.has(k2)) return true;
 
+        if (s.created_at && s.created_at >= '2026-08-01T00:00:00') return true;
+        if (s.created_at && s.created_at.includes('2026-08')) return true;
+        if (s.created_at && s.created_at > '2026-07-20') return true;
+
         return (officialRosterData as string[]).some(
           (item: string) =>
             item === k1 ||
