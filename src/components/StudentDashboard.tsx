@@ -214,7 +214,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         const coursesList =
           allCourses.length > 0
             ? allCourses
-            : await dataService.getCourses(profile.center_id, selectedYear || '2025-2026');
+            : await dataService.getCourses(profile.center_id, selectedYear || '2026-2027');
         const currentCourse = coursesList.find(
           (c: any) => c.id === activeId || c.code === activeId
         );

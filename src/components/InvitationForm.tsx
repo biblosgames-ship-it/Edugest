@@ -350,13 +350,15 @@ export const InvitationForm = () => {
 
       // Actualización segura y directa del perfil del usuario
       const profileUpdates: any = {
+        id: user.id,
+        email: user.email,
         center_id: detectedCourse.center_id,
         role: role,
         full_name: finalFullName,
         course_code: sanitizedCode,
         course_id: detectedCourse.course_id,
         is_active: true,
-        allowed_panels: ['dashboard', 'schedule', 'agenda']
+        allowed_panels: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications']
       };
 
       if (role === 'parent') {
@@ -366,8 +368,7 @@ export const InvitationForm = () => {
       try {
         await supabase
           .from('profiles')
-          .update(profileUpdates)
-          .eq('id', user.id);
+          .upsert(profileUpdates);
       } catch (e) {
         console.warn('Profile direct update fallback error:', e);
       }
