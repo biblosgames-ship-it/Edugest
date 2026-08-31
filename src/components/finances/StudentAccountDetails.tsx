@@ -250,7 +250,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     }
   }, [studentId, transactions]); // Depend on transactions so it re-fetches when a new global transaction happens
 
-  const currentYear = selectedYear || '2025-2026';
+  const currentYear = selectedYear || '2026-2027';
   const student = state.students.find((s) => s.id === studentId);
   const studentInvoices = invoices
     .filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear)

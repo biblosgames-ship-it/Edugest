@@ -440,7 +440,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
   const students = state.students || [];
 
   const studentBalances = useMemo(() => {
-    const currentYear = selectedYear || '2025-2026';
+    const currentYear = selectedYear || '2026-2027';
     return students.map((student) => {
       const studentInvoices = invoices.filter((i) => i.student_id === student.id && i.period === currentYear);
       const totalDebt = studentInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
@@ -469,9 +469,18 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
         hasOverdue
       };
     });
-  }, [students, invoices]);
+  }, [students, invoices, selectedYear]);
 
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+
+  const normalizeSearch = (str: string) =>
+    (str || '')
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   const groupedBalances = useMemo(() => {
     const groups: { [key: string]: any } = {};
@@ -502,11 +511,15 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
   // Si hay búsqueda, expandir automáticamente los cursos que tengan resultados
   useEffect(() => {
-    if (searchTerm.length > 2) {
+    if (searchTerm.trim().length >= 2) {
+      const tokens = normalizeSearch(searchTerm).split(' ').filter(Boolean);
       const firstMatch = groupedBalances.find((g) =>
-        g.students.some((s: any) =>
-          `${s.names} ${s.first_surname}`.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+        g.students.some((s: any) => {
+          const haystack = normalizeSearch(
+            `${s.first_surname || s.last_name || ''} ${s.second_surname || ''} ${s.names || s.first_name || ''} ${s.student_code || ''} ${s.rne || ''}`
+          );
+          return tokens.every((t) => haystack.includes(t));
+        })
       );
       if (firstMatch) setExpandedCourse(firstMatch.id);
     }
@@ -531,7 +544,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input
               type="text"
-              placeholder="Buscar alumno en cualquier grado..."
+              placeholder="Buscar alumno en cualquier grado (por nombre o apellido)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-16 pr-6 py-5 bg-slate-50 border-none rounded-[1.8rem] text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
@@ -586,14 +599,18 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
       {/* 2. CUADRÍCULA DE GRADOS (ACORDEÓN) */}
       <div className="space-y-4">
         {groupedBalances.map((group) => {
-          const isExpanded = expandedCourse === group.id;
+          const tokens = normalizeSearch(searchTerm).split(' ').filter(Boolean);
           const filteredStudents = group.students.filter((s: any) => {
-            const fullName =
-              `${s.names || ''} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase();
-            return fullName.includes(searchTerm.toLowerCase());
+            if (tokens.length === 0) return true;
+            const haystack = normalizeSearch(
+              `${s.first_surname || s.last_name || ''} ${s.second_surname || ''} ${s.names || s.first_name || ''} ${s.student_code || ''} ${s.rne || ''}`
+            );
+            return tokens.every((t) => haystack.includes(t));
           });
 
-          if (searchTerm && filteredStudents.length === 0) return null;
+          if (searchTerm.trim() && filteredStudents.length === 0) return null;
+
+          const isExpanded = (searchTerm.trim().length >= 2 && filteredStudents.length > 0) || expandedCourse === group.id;
 
           return (
             <div
