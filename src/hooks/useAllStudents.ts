@@ -99,9 +99,11 @@ export const useAllStudents = () => {
           if (isOfficial2026Student(s)) {
             if (key && !seenIdentities.has(key)) {
               seenIdentities.add(key);
-              const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
-                ? canonicalCourseMap.get(String(s.course_id))!
-                : s.course_id;
+              const targetCid = s.course_id && activeCourseIds.has(String(s.course_id))
+                ? s.course_id
+                : (s.course_id && canonicalCourseMap.has(String(s.course_id))
+                    ? canonicalCourseMap.get(String(s.course_id))!
+                    : s.course_id);
 
               s.course_id = targetCid;
               s.school_year = targetYear;

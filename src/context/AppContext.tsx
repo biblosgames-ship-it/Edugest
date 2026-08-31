@@ -541,9 +541,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (isOfficial2026Student(s)) {
                 if (key && !seenIdentities.has(key)) {
                   seenIdentities.add(key);
-                  const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
-                    ? canonicalCourseMap.get(String(s.course_id))!
-                    : s.course_id;
+                  const targetCid = s.course_id && activeCourseIdSet.has(String(s.course_id))
+                    ? s.course_id
+                    : (s.course_id && canonicalCourseMap.has(String(s.course_id))
+                        ? canonicalCourseMap.get(String(s.course_id))!
+                        : s.course_id);
 
                   if (s.school_year !== currentFetchYear || s.course_id !== targetCid) {
                     studentsToHeal2026.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
