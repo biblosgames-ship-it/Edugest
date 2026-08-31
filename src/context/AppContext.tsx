@@ -446,22 +446,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
           const activeCourseIdSet = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
-          // Mapeo canónico de cursos (por nivel, grado, sección y tanda) para preservar división matutina/vespertina
+          // Mapeo canónico de cursos (por nivel, grado, sección y tanda) para preservar división matutina/vespertina y cambios de turno
           const normStr = (str: string) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
           const canonicalCourseMap = new Map<string, string>(); // course_id antiguo -> course_id activo 2026-2027
           
           rawCourses.forEach((c: any) => {
             const tandaStr = normStr(c.tanda || 'matutina');
-            const key = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}_${tandaStr}`.replace(/primaria|secundaria|inicial/g, '').trim();
-            const activeMatch = finalActiveCourses.find((ac: any) => {
+            const keyWithTanda = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}_${tandaStr}`.replace(/primaria|secundaria|inicial/g, '').trim();
+            const keyNoTanda = `${normStr(c.level)}_${normStr(c.grade)}_${normStr(c.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+            const keyGradeOnly = `${normStr(c.level)}_${normStr(c.grade)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+
+            let activeMatch = finalActiveCourses.find((ac: any) => {
               const acTanda = normStr(ac.tanda || 'matutina');
               const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}_${normStr(ac.section)}_${acTanda}`.replace(/primaria|secundaria|inicial/g, '').trim();
-              return acKey === key;
+              return acKey === keyWithTanda;
             });
+
+            if (!activeMatch && !normStr(c.grade).includes('pre')) {
+              activeMatch = finalActiveCourses.find((ac: any) => {
+                const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}_${normStr(ac.section)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+                return acKey === keyNoTanda;
+              });
+            }
+
+            if (!activeMatch && !normStr(c.grade).includes('pre')) {
+              activeMatch = finalActiveCourses.find((ac: any) => {
+                const acKey = `${normStr(ac.level)}_${normStr(ac.grade)}`.replace(/primaria|secundaria|inicial/g, '').trim();
+                return acKey === keyGradeOnly;
+              });
+            }
+
             if (activeMatch) {
               canonicalCourseMap.set(String(c.id), String(activeMatch.id));
             }
           });
+          canonicalCourseMap.set('7291214b-2cf8-4064-b232-42ad86c8c570', '45d99eaf-28e8-4901-b8e7-950fce7f4f0d');
 
           let localTitularMap: Record<string, any> = {};
           try {
@@ -527,6 +546,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           };
 
+          const vespIdentitiesSet = new Set([
+            'BRITO MARIANO MAXIMILIANO',
+            'CASTILLO DELGADO HADID',
+            'CEDANO SOLER LUCAS',
+            'CEDENO ADAISCHA',
+            'CORDERO CEDENO KALEB ENRIQUE',
+            'DE LOS SANTOS VALERA YOHANDRY',
+            'FLORES RODRIGUEZ DAPHNE',
+            'GARCIA JISMEIRY KAMILL',
+            'JIMENEZ CABRERA YAHIRA ABIGAIL',
+            'JOSE GUERRERO DAMIAN',
+            'MEJIA SANTANA BRIANNA KAILANNY',
+            'MOJICA RIJO JULIO ALEJANDRO',
+            'MONTAS AMARANTE MANUEL ANTONIO',
+            'NUNEZ SANTANA YAILEINYS CHARLOTTE',
+            'PICHARDO RIJO GAEL ANDRES'
+          ]);
+
           const seenIdentities = new Set<string>();
           const filteredStudents: any[] = [];
           const studentsToHeal2026: { id: string; course_id?: string; school_year: string }[] = [];
@@ -538,15 +575,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
               const key = normIdentity(s);
-              if (isOfficial2026Student(s) || (s.school_year === '2026-2027' && s.course_id && activeCourseIdSet.has(String(s.course_id)))) {
+              if (isOfficial2026Student(s)) {
                 if (key && !seenIdentities.has(key)) {
                   seenIdentities.add(key);
                   
                   let targetCid = s.course_id;
 
                   // Resolución especial de Preprimario por tanda (Matutina vs Vespertina)
-                  const isVespShift = (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
-                  if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isVespShift && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36'))) {
+                  const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+                  if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
                     targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
                   } else if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
                     targetCid = s.course_id;
