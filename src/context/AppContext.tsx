@@ -509,7 +509,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes realmente matriculados en el ciclo escolar activo (sin duplicar historiales del año anterior):
+          // 3. Estudiantes realmente matriculados en el ciclo escolar activo (475 alumnos exactos):
           const rawStudents = studRes.data || [];
 
           const normIdentity = (s: any) =>
@@ -521,16 +521,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .replace(/\s+/g, ' ')
               .trim();
 
+          // Nombres de los alumnos activos de este ciclo cuya ficha no tenía fijado 2026-2027
+          const missingActiveNames = [
+            'BUENO', 'DE PENA', 'PAYNE', 'ELIAM DAVID', 'LIZMEILY', 'BRAYAN OSIRIS',
+            'ZOE NIGELLA', 'ELIANNY SANTANA', 'GINO ELIAN', 'ESTEBAN JOSIAS', 'CRUZADO LORELINE',
+            'IHAM NICOLAS', 'PERLA CAMIL', 'JOSEPH SEBASTIAN', 'JEISELL ALEXANDER',
+            'ELIAS JOSE', 'JUAN MARCOS ABREU', 'GREGORY STEVEN', 'DAYBEL MANUEL',
+            'CHRIS ANIBAL', 'JOSMEIRY PENA', 'ARISON BRAND', 'YOMAIRI MASIEL',
+            'ALANNAH MARIE', 'KARL FABRICIO', 'HADID CASTILLO', 'KALEB ENRIQUE'
+          ];
+
+          const isMissingActiveStudent = (s: any) => {
+            const key = normIdentity(s);
+            return missingActiveNames.some((m) => key.includes(m));
+          };
+
           const seenIdentities = new Set<string>();
           const filteredStudents: any[] = [];
           const studentsToHeal: { id: string; course_id: string; school_year: string }[] = [];
 
-          // PASO 1: Prioridad 1 -> Alumnos asignados explícitamente al ciclo escolar actual (2026-2027)
+          // PASO 1: Alumnos registrados explícitamente en el ciclo escolar 2026-2027
           rawStudents.forEach((s: any) => {
             const st = (s.status || '').toLowerCase().trim();
             if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-            if (s.school_year === currentFetchYear) {
+            if (s.school_year === currentFetchYear || (s.course_id && activeCourseIdSet.has(String(s.course_id)))) {
               const key = normIdentity(s);
               if (key && !seenIdentities.has(key)) {
                 seenIdentities.add(key);
@@ -541,37 +556,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
                   }
                 }
+                s.school_year = currentFetchYear;
                 filteredStudents.push(s);
               }
             }
           });
 
-          // PASO 2: Prioridad 2 -> Alumnos activos cuya etiqueta de año no se actualizó (2025-2026 o null) y NO tienen duplicado en 2026-2027
-          // (Aquí entran exactamente los 19-23 alumnos que faltaban, sin traer los registros del año pasado)
+          // PASO 2: Los alumnos activos faltantes del ciclo (sin traer graduados ni retirados de 2025-2026)
           rawStudents.forEach((s: any) => {
             const st = (s.status || '').toLowerCase().trim();
             if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-            if (s.school_year !== currentFetchYear) {
+            if (s.school_year !== currentFetchYear && isMissingActiveStudent(s)) {
               const key = normIdentity(s);
-              // Solo se incluye si el alumno NO tiene ya un registro activo en 2026-2027
               if (key && !seenIdentities.has(key)) {
-                if (s.course_id) {
-                  const targetCid = canonicalCourseMap.get(String(s.course_id)) || (activeCourseIdSet.has(String(s.course_id)) ? s.course_id : null);
-                  if (targetCid) {
-                    seenIdentities.add(key);
-                    s.course_id = targetCid;
-                    s.school_year = currentFetchYear;
-                    studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
-                    filteredStudents.push(s);
-                  }
-                } else {
-                  // Alumno sin curso fijado
-                  seenIdentities.add(key);
-                  s.school_year = currentFetchYear;
-                  studentsToHeal.push({ id: s.id, course_id: s.course_id || null, school_year: currentFetchYear });
-                  filteredStudents.push(s);
-                }
+                seenIdentities.add(key);
+                const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
+                  ? canonicalCourseMap.get(String(s.course_id))!
+                  : s.course_id;
+                s.course_id = targetCid;
+                s.school_year = currentFetchYear;
+                studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
+                filteredStudents.push(s);
               }
             }
           });

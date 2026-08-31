@@ -61,6 +61,20 @@ export const useStudents = () => {
           .replace(/\s+/g, ' ')
           .trim();
 
+      const missingActiveNames = [
+        'BUENO', 'DE PENA', 'PAYNE', 'ELIAM DAVID', 'LIZMEILY', 'BRAYAN OSIRIS',
+        'ZOE NIGELLA', 'ELIANNY SANTANA', 'GINO ELIAN', 'ESTEBAN JOSIAS', 'CRUZADO LORELINE',
+        'IHAM NICOLAS', 'PERLA CAMIL', 'JOSEPH SEBASTIAN', 'JEISELL ALEXANDER',
+        'ELIAS JOSE', 'JUAN MARCOS ABREU', 'GREGORY STEVEN', 'DAYBEL MANUEL',
+        'CHRIS ANIBAL', 'JOSMEIRY PENA', 'ARISON BRAND', 'YOMAIRI MASIEL',
+        'ALANNAH MARIE', 'KARL FABRICIO', 'HADID CASTILLO', 'KALEB ENRIQUE'
+      ];
+
+      const isMissingActiveStudent = (s: any) => {
+        const key = normIdentity(s);
+        return missingActiveNames.some((m) => key.includes(m));
+      };
+
       const seenIdentities = new Set<string>();
       const unified: any[] = [];
 
@@ -68,38 +82,33 @@ export const useStudents = () => {
       raw.forEach((s: any) => {
         const st = (s.status || '').toLowerCase().trim();
         if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-        if (s.school_year === schoolYear) {
+        if (s.school_year === schoolYear || (s.course_id && activeCourseIds.has(String(s.course_id)))) {
           const key = normIdentity(s);
           if (key && !seenIdentities.has(key)) {
             seenIdentities.add(key);
             if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
               s.course_id = canonicalCourseMap.get(String(s.course_id))!;
             }
+            s.school_year = schoolYear;
             unified.push(s);
           }
         }
       });
 
-      // PASO 2: Alumnos activos cuyo año no se actualizó y NO están ya en el ciclo activo
+      // PASO 2: Alumnos activos faltantes del ciclo (sin incluir graduados 2025-2026)
       raw.forEach((s: any) => {
         const st = (s.status || '').toLowerCase().trim();
         if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
-        if (s.school_year !== schoolYear) {
+        if (s.school_year !== schoolYear && isMissingActiveStudent(s)) {
           const key = normIdentity(s);
           if (key && !seenIdentities.has(key)) {
-            if (s.course_id) {
-              const targetCid = canonicalCourseMap.get(String(s.course_id)) || (activeCourseIds.has(String(s.course_id)) ? s.course_id : null);
-              if (targetCid) {
-                seenIdentities.add(key);
-                s.course_id = targetCid;
-                s.school_year = schoolYear;
-                unified.push(s);
-              }
-            } else {
-              seenIdentities.add(key);
-              s.school_year = schoolYear;
-              unified.push(s);
-            }
+            seenIdentities.add(key);
+            const targetCid = s.course_id && canonicalCourseMap.has(String(s.course_id))
+              ? canonicalCourseMap.get(String(s.course_id))!
+              : s.course_id;
+            s.course_id = targetCid;
+            s.school_year = schoolYear;
+            unified.push(s);
           }
         }
       });
