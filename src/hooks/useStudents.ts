@@ -52,27 +52,59 @@ export const useStudents = () => {
         }
       });
 
-      return raw.filter((s: any) => {
-        // A. Excluir retirados
+      const normIdentity = (s: any) =>
+        `${s.first_surname || s.last_name || ''} ${s.second_surname || ''} ${s.names || s.first_name || ''}`
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^A-Z0-9]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const seenIdentities = new Set<string>();
+      const unified: any[] = [];
+
+      // PASO 1: Alumnos de este ciclo escolar activo
+      raw.forEach((s: any) => {
         const st = (s.status || '').toLowerCase().trim();
-        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
-          return false;
+        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
+        if (s.school_year === schoolYear) {
+          const key = normIdentity(s);
+          if (key && !seenIdentities.has(key)) {
+            seenIdentities.add(key);
+            if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+              s.course_id = canonicalCourseMap.get(String(s.course_id))!;
+            }
+            unified.push(s);
+          }
         }
-
-        // B. Alumno asignado a un curso activo o equivalente de la institución
-        if (s.course_id && (activeCourseIds.has(String(s.course_id)) || canonicalCourseMap.has(String(s.course_id)))) {
-          s.course_id = canonicalCourseMap.get(String(s.course_id)) || s.course_id;
-          s.school_year = schoolYear;
-          return true;
-        }
-
-        // C. Alumno sin curso registrado para este ciclo
-        if (!s.course_id && (s.school_year === schoolYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
-          return true;
-        }
-
-        return false;
       });
+
+      // PASO 2: Alumnos activos cuyo año no se actualizó y NO están ya en el ciclo activo
+      raw.forEach((s: any) => {
+        const st = (s.status || '').toLowerCase().trim();
+        if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
+        if (s.school_year !== schoolYear) {
+          const key = normIdentity(s);
+          if (key && !seenIdentities.has(key)) {
+            if (s.course_id) {
+              const targetCid = canonicalCourseMap.get(String(s.course_id)) || (activeCourseIds.has(String(s.course_id)) ? s.course_id : null);
+              if (targetCid) {
+                seenIdentities.add(key);
+                s.course_id = targetCid;
+                s.school_year = schoolYear;
+                unified.push(s);
+              }
+            } else {
+              seenIdentities.add(key);
+              s.school_year = schoolYear;
+              unified.push(s);
+            }
+          }
+        }
+      });
+
+      return unified;
     },
     staleTime: 1000 * 5 // 5 segundos de caché para reflejar cambios de inmediato
   });

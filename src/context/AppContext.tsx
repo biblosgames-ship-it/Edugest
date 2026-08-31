@@ -509,41 +509,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[s.teacher_id] || s.teacher_id
           }));
 
-          // 3. Estudiantes realmente matriculados en las aulas/cursos del año escolar activo:
+          // 3. Estudiantes realmente matriculados en el ciclo escolar activo (sin duplicar historiales del año anterior):
           const rawStudents = studRes.data || [];
 
+          const normIdentity = (s: any) =>
+            `${s.first_surname || s.last_name || ''} ${s.second_surname || ''} ${s.names || s.first_name || ''}`
+              .toUpperCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^A-Z0-9]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+          const seenIdentities = new Set<string>();
+          const filteredStudents: any[] = [];
           const studentsToHeal: { id: string; course_id: string; school_year: string }[] = [];
 
-          const filteredStudents = rawStudents.filter((s: any) => {
-            // A. Excluir estudiantes con estado explícito de retiro, inactividad o graduación
+          // PASO 1: Prioridad 1 -> Alumnos asignados explícitamente al ciclo escolar actual (2026-2027)
+          rawStudents.forEach((s: any) => {
             const st = (s.status || '').toLowerCase().trim();
-            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') {
-              return false;
-            }
+            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
-            // B. Si está asignado a un curso activo o equivalente de la institución (Aquí entran los 19 alumnos y todos los de grados activos)
-            if (s.course_id && (activeCourseIdSet.has(String(s.course_id)) || canonicalCourseMap.has(String(s.course_id)))) {
-              const activeTargetCourseId = canonicalCourseMap.get(String(s.course_id)) || s.course_id;
-              if (s.course_id !== activeTargetCourseId || s.school_year !== currentFetchYear) {
-                studentsToHeal.push({
-                  id: s.id,
-                  course_id: activeTargetCourseId,
-                  school_year: currentFetchYear
-                });
+            if (s.school_year === currentFetchYear) {
+              const key = normIdentity(s);
+              if (key && !seenIdentities.has(key)) {
+                seenIdentities.add(key);
+                if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                  const targetCid = canonicalCourseMap.get(String(s.course_id))!;
+                  if (s.course_id !== targetCid) {
+                    s.course_id = targetCid;
+                    studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
+                  }
+                }
+                filteredStudents.push(s);
               }
-              // Normalizar en memoria para la sesión activa
-              s.course_id = activeTargetCourseId;
-              s.school_year = currentFetchYear;
-              return true;
             }
+          });
 
-            // C. Si no tiene curso pero su año coincide con el ciclo activo o no tiene ciclo especificado: INCLUIR
-            if (!s.course_id && (s.school_year === currentFetchYear || !s.school_year || s.school_year === 'undefined' || s.school_year === 'null')) {
-              const hasName = Boolean((s.names || s.first_name || s.first_surname || s.last_name || '').trim());
-              return hasName;
+          // PASO 2: Prioridad 2 -> Alumnos activos cuya etiqueta de año no se actualizó (2025-2026 o null) y NO tienen duplicado en 2026-2027
+          // (Aquí entran exactamente los 19-23 alumnos que faltaban, sin traer los registros del año pasado)
+          rawStudents.forEach((s: any) => {
+            const st = (s.status || '').toLowerCase().trim();
+            if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
+
+            if (s.school_year !== currentFetchYear) {
+              const key = normIdentity(s);
+              // Solo se incluye si el alumno NO tiene ya un registro activo en 2026-2027
+              if (key && !seenIdentities.has(key)) {
+                if (s.course_id) {
+                  const targetCid = canonicalCourseMap.get(String(s.course_id)) || (activeCourseIdSet.has(String(s.course_id)) ? s.course_id : null);
+                  if (targetCid) {
+                    seenIdentities.add(key);
+                    s.course_id = targetCid;
+                    s.school_year = currentFetchYear;
+                    studentsToHeal.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
+                    filteredStudents.push(s);
+                  }
+                } else {
+                  // Alumno sin curso fijado
+                  seenIdentities.add(key);
+                  s.school_year = currentFetchYear;
+                  studentsToHeal.push({ id: s.id, course_id: s.course_id || null, school_year: currentFetchYear });
+                  filteredStudents.push(s);
+                }
+              }
             }
-
-            return false;
           });
 
           // Auto-healing en segundo plano: sincroniza permanentemente course_id y school_year en Supabase
