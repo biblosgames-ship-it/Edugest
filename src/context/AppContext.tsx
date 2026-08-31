@@ -165,20 +165,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return fetchPromiseRef.current;
       }
 
-      const latestState = stateRef.current;
-      const yearChanged = lastFetchedYearRef.current !== selectedYear;
-
-      // Si no es forzado ni cambió el año, y ya hay datos cargados, evitamos recargar
-      if (
-        !force &&
-        !yearChanged &&
-        latestState.courses.length > 0 &&
-        latestState.teachers.length > 0
-      ) {
-        setState((prev) => ({ ...prev, loading: false }));
-        return;
-      }
-
       const performFetch = async () => {
         setState((prev) => ({ ...prev, loading: true }));
         try {

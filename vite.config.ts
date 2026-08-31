@@ -14,7 +14,10 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'Edugest2.png'],
         workbox: {
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 // Aumenta el límite a 5 MB
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // Aumenta el límite a 5 MB
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true
         },
         manifest: {
           name: 'Edugest',
