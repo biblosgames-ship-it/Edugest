@@ -19,9 +19,10 @@ import { SEO } from './SEO';
 
 export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   const { state, selectedYear } = useApp();
+  const isParent = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(() => {
     // Si es padre y tiene cursos vinculados, por defecto cargar el primero
-    if (profile?.role === 'parent') {
+    if (isParent) {
       const saved = localStorage.getItem('parent_course_ids');
       let localList: string[] = [];
       try {
@@ -106,7 +107,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   // Autovinculación de cursos de hermanos para padres
   useEffect(() => {
     const autoLinkSiblings = async () => {
-      if (profile?.role !== 'parent' || !profile.full_name || !profile.center_id || !allCourses.length) {
+      if (!isParent || !profile?.full_name || !profile?.center_id || !allCourses.length) {
         return;
       }
       if (hasCheckedSiblings.current) return;
@@ -391,7 +392,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         );
         handleLinkCourse(suggestedCourse.id, true);
       }
-    } else if (profile?.role === 'parent') {
+    } else if (isParent) {
       const hasActiveCourseInCycle = linkedParentCourses.length > 0;
       if (!hasActiveCourseInCycle) {
         console.log(
@@ -402,7 +403,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         handleLinkParentCourse(suggestedCourse.id, true);
       }
     }
-  }, [suggestedCourse, selectedCourseId, allCourses, linkedParentCourses, profile?.role]);
+  }, [suggestedCourse, selectedCourseId, allCourses, linkedParentCourses, profile?.role, isParent]);
 
   // Clases del curso programadas para el día de hoy
   const todaySchedule = useMemo(() => {
@@ -602,7 +603,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
       />
 
       {/* TABS DE HIJOS PARA PADRES */}
-      {profile?.role === 'parent' && linkedParentCourses.length > 0 && (
+      {isParent && linkedParentCourses.length > 0 && (
         <div className="flex flex-wrap gap-2 animate-fade-in">
           {linkedParentCourses.map((c) => (
             <div key={c.id} className="relative group">
@@ -639,7 +640,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] bg-indigo-50 px-4 py-1.5 rounded-full mb-3 inline-block">
-            {profile?.role === 'parent' ? 'VISTA DEL PADRE' : 'MI AULA VIRTUAL'}
+            {isParent ? 'VISTA DEL PADRE / FAMILIA' : 'MI AULA VIRTUAL'}
           </span>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
             {course.grade} {course.section}
@@ -652,7 +653,7 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          {profile?.role === 'parent' && (
+          {isParent && (
             <form
               onSubmit={async (e) => {
                 e.preventDefault();

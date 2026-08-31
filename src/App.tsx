@@ -118,8 +118,12 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'facility'
   ],
   teacher: ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications'],
-  student: ['dashboard', 'schedule', 'agenda'],
-  parent: ['dashboard', 'schedule', 'agenda'],
+  student: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  parent: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  padre: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  tutor: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  madre: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
+  familiar: ['dashboard', 'schedule', 'agenda', 'tasks', 'communications'],
   support: ['dashboard', 'facility', 'agenda'],
   supervisor: ['dashboard', 'facility', 'agenda'],
   conserje: ['dashboard', 'facility', 'agenda'],
@@ -151,13 +155,16 @@ function AppContent() {
 
   const isSuperAdmin = !!profile?.is_superadmin;
 
+  const isParentRole = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
+  const isStudentOrParent = profile?.role === 'student' || isParentRole;
+
   // Obtener paneles permitidos (del perfil o por defecto según su rol)
   const rawAllowed =
     profile?.allowed_panels && profile.allowed_panels.length > 0
       ? profile.allowed_panels
       : ROLE_FALLBACKS[profile?.role || 'student'] || ROLE_FALLBACKS.student;
 
-  // Garantizar que 'classroom' y 'digital-register' (Calificaciones) estén SIEMPRE disponibles para docentes, coordinadores y administradores
+  // Garantizar paneles obligatorios por rol
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
     let panels = [...rawAllowed];
@@ -169,9 +176,19 @@ function AppContent() {
       if (!panels.includes('digital-register')) {
         panels.push('digital-register');
       }
+      if (!panels.includes('dashboard')) {
+        panels.push('dashboard');
+      }
+    }
+    if (isStudentOrParent) {
+      if (!panels.includes('dashboard')) panels.push('dashboard');
+      if (!panels.includes('schedule')) panels.push('schedule');
+      if (!panels.includes('agenda')) panels.push('agenda');
+      if (!panels.includes('tasks')) panels.push('tasks');
+      if (!panels.includes('communications')) panels.push('communications');
     }
     return panels;
-  }, [profile?.role, rawAllowed]);
+  }, [profile?.role, rawAllowed, isStudentOrParent]);
 
   // Redirigir al primer panel permitido si intenta acceder a uno no autorizado
   useEffect(() => {
@@ -399,7 +416,7 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'dashboard' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              {profile?.role === 'student' || profile?.role === 'parent' ? (
+              {isStudentOrParent ? (
                 <StudentDashboard userData={profile} />
               ) : profile?.role === 'teacher' ? (
                 <TeacherDashboard userData={profile} />
