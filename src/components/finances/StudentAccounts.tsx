@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
+import { useStudents } from '../../hooks/useStudents';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
@@ -72,6 +73,7 @@ const normalizeInvoiceKey = (inv: any) => {
 
 export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) => void }) => {
   const { state, profile, selectedYear } = useApp();
+  const { students: allStudents } = useStudents();
   const { invoices, paymentPlans, refresh, loading, scholarships } = useFinance({
     invoices: true,
     paymentPlans: true,
@@ -437,7 +439,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
     }
   };
 
-  const students = state.students || [];
+  const students = allStudents && allStudents.length > 0 ? allStudents : (state.students || []);
 
   const studentBalances = useMemo(() => {
     const currentYear = selectedYear || '2026-2027';

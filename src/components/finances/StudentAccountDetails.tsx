@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
+import { useStudents } from '../../hooks/useStudents';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { PaymentModal } from './PaymentModal';
@@ -82,6 +83,7 @@ export const normalizeInvoiceKey = (inv: any) => {
 
 export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props) => {
   const { state, profile, selectedYear } = useApp();
+  const { students: allStudents } = useStudents();
   const {
     invoices,
     transactions,
@@ -251,7 +253,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
   }, [studentId, transactions]); // Depend on transactions so it re-fetches when a new global transaction happens
 
   const currentYear = selectedYear || '2026-2027';
-  const student = state.students.find((s) => s.id === studentId);
+  const student = (allStudents || []).find((s) => s.id === studentId) || state.students?.find((s) => s.id === studentId);
   const studentInvoices = invoices
     .filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear)
     .sort((a, b) => {
