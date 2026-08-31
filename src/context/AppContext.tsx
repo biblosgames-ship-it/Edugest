@@ -437,13 +437,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // 1. Cursos del año escolar activo y resolución de equivalencias
           const rawCourses = cRes.data || [];
-          const activeCourses = rawCourses.filter((c: any) => {
-            if (!c.school_year || c.school_year === '' || c.school_year === 'undefined' || c.school_year === 'null') return true;
-            return c.school_year === currentFetchYear;
-          });
-
-          // Si no hay cursos marcados con el año, usamos todos los cursos de la institución
-          const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
+          const activeCourses = rawCourses.filter((c: any) => c.school_year === currentFetchYear);
+          const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses.filter((c: any) => c.school_year === currentFetchYear);
           const activeCourseIdSet = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
           // Mapeo canónico de cursos (por nivel, grado y sección) para vincular automáticamente alumnos con IDs de cursos antiguos

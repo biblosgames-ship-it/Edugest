@@ -32,10 +32,8 @@ export const useStudents = () => {
       const raw = studRes.data || [];
       const rawCourses = coursesRes.data || [];
 
-      const activeCourses = rawCourses.filter(
-        (c: any) => !c.school_year || c.school_year === schoolYear || c.school_year === 'undefined' || c.school_year === 'null'
-      );
-      const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
+      const activeCourses = rawCourses.filter((c: any) => c.school_year === schoolYear);
+      const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses.filter((c: any) => c.school_year === schoolYear);
       const activeCourseIds = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
       const normStr = (str: string) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
