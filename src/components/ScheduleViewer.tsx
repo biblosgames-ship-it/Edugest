@@ -2272,8 +2272,54 @@ export const ScheduleViewer = () => {
                                               }
                                               if (confirm(`¿Eliminar la clase de "${subject?.name || 'esta materia'}" de esta casilla?`)) {
                                                 try {
-                                                  const { error } = await supabase.from('schedule_entries').delete().eq('id', e.id);
-                                                  if (error) throw error;
+                                                  if (e.id) {
+                                                    await supabase.from('schedule_entries').delete().eq('id', e.id);
+                                                  } else {
+                                                    await supabase
+                                                      .from('schedule_entries')
+                                                      .delete()
+                                                      .eq('course_id', e.course_id)
+                                                      .eq('day', e.day)
+                                                      .eq('start_time', e.start_time);
+                                                  }
+
+                                                  // Limpiar de localStorage si estaba guardado
+                                                  try {
+                                                    const customEntries = JSON.parse(
+                                                      localStorage.getItem('edugens_custom_schedule_entries') || '[]'
+                                                    );
+                                                    const filtered = customEntries.filter(
+                                                      (ce: any) =>
+                                                        !(
+                                                          (e.id && ce.id === e.id) ||
+                                                          (String(ce.course_id) === String(e.course_id) &&
+                                                            (ce.day || '').trim().toLowerCase() ===
+                                                              (e.day || '').trim().toLowerCase() &&
+                                                            (ce.start_time || '').substring(0, 5) ===
+                                                              (e.start_time || '').substring(0, 5))
+                                                        )
+                                                    );
+                                                    localStorage.setItem(
+                                                      'edugens_custom_schedule_entries',
+                                                      JSON.stringify(filtered)
+                                                    );
+                                                  } catch {}
+
+                                                  setAppState((prev: any) => ({
+                                                    ...prev,
+                                                    schedule: (prev.schedule || []).filter(
+                                                      (s: any) =>
+                                                        !(
+                                                          (e.id && s.id === e.id) ||
+                                                          (String(s.course_id) === String(e.course_id) &&
+                                                            (s.day || '').trim().toLowerCase() ===
+                                                              (e.day || '').trim().toLowerCase() &&
+                                                            (s.start_time || '').substring(0, 5) ===
+                                                              (e.start_time || '').substring(0, 5))
+                                                        )
+                                                    )
+                                                  }));
+
                                                   await refreshData(undefined, true);
                                                 } catch (err: any) {
                                                   alert('Error al eliminar: ' + err.message);
@@ -2983,22 +3029,32 @@ export const ScheduleViewer = () => {
                     const sStart = rawStart.length === 5 ? rawStart + ':00' : rawStart;
                     const sEnd = rawEnd.length === 5 ? rawEnd + ':00' : rawEnd;
 
+                    const finalCenterId =
+                      targetCourse?.center_id || profile?.center_id || state.courses?.[0]?.center_id;
+
                     try {
                       // Asegurar que el docente exista en la tabla teachers para no violar FK
-                      if (finalTeacherId && profile?.center_id) {
-                        const tName = state.teachers?.find((t: any) => String(t.id) === String(finalTeacherId))?.name || 'Docente';
+                      if (finalTeacherId && finalCenterId) {
+                        const tName =
+                          state.teachers?.find((t: any) => String(t.id) === String(finalTeacherId))?.name ||
+                          'Docente';
                         try {
-                          await supabase.from('teachers').upsert([{
-                            id: finalTeacherId,
-                            center_id: profile.center_id,
-                            name: tName,
-                            hours_available: 40
-                          }], { onConflict: 'id' });
+                          await supabase.from('teachers').upsert(
+                            [
+                              {
+                                id: finalTeacherId,
+                                center_id: finalCenterId,
+                                name: tName,
+                                hours_available: 40
+                              }
+                            ],
+                            { onConflict: 'id' }
+                          );
                         } catch (e) {}
                       }
 
                       const entryPayload: any = {
-                        center_id: profile.center_id,
+                        center_id: finalCenterId,
                         course_id: directAssignModal.courseId,
                         subject_id: directAssignModal.subjectId,
                         teacher_id: finalTeacherId || null,
@@ -3032,6 +3088,27 @@ export const ScheduleViewer = () => {
                       } else {
                         insertedEntry = insertedData?.[0] || entryPayload;
                       }
+
+                      if (!insertedEntry.id) {
+                        insertedEntry.id = crypto.randomUUID();
+                      }
+
+                      // Guardar en backup persistente de entradas manuales
+                      try {
+                        const customEntries = JSON.parse(
+                          localStorage.getItem('edugens_custom_schedule_entries') || '[]'
+                        );
+                        const filtered = customEntries.filter(
+                          (s: any) =>
+                            !(
+                              String(s.course_id) === String(directAssignModal.courseId) &&
+                              (s.day || '').trim().toLowerCase() === (directAssignModal.day || '').trim().toLowerCase() &&
+                              (s.start_time || '').substring(0, 5) === rawStart.substring(0, 5)
+                            )
+                        );
+                        filtered.push(insertedEntry);
+                        localStorage.setItem('edugens_custom_schedule_entries', JSON.stringify(filtered));
+                      } catch {}
 
                       // Actualizar inmediatamente estado local reactivo
                       setAppState((prev: any) => {
@@ -3068,8 +3145,8 @@ export const ScheduleViewer = () => {
                       }
 
                       setDirectAssignModal({ open: false, day: '', slot: null, courseId: '', subjectId: '' });
-                      await refreshData(undefined, true);
-                      alert('✅ ¡Clase asignada y asegurada con éxito en la casilla!');
+                      await refreshData(finalCenterId, true);
+                      alert('✅ ¡Clase asignada y blindada con éxito en la casilla!');
                     } catch (err: any) {
                       alert('Error al asignar clase: ' + err.message);
                     }
