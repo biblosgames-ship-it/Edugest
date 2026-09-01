@@ -371,8 +371,9 @@ export const StudentForm = ({
     };
 
     try {
+      const targetCenterId = profile?.center_id || selectedCourse?.center_id || state.courses?.[0]?.center_id || (state as any).center?.id;
       const studentData = {
-        center_id: profile.center_id,
+        center_id: targetCenterId,
         first_surname: student.firstSurname,
         second_surname: student.secondSurname,
         names: student.names,

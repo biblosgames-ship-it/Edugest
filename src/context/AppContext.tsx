@@ -600,8 +600,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // 2. Alumnos creados / matriculados formalmente a partir de la apertura del nuevo ciclo (julio 20, 2026 en adelante)
             if (s.created_at && (s.created_at >= '2026-07-20' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
 
-            // 3. Garantizar inclusión inmediata de Geonniel Valdivieso Mejía si su registro inicial en DB no traía created_at
-            if (k1.includes('VALDIVIESO') || k2.includes('VALDIVIESO') || k1.includes('GEONNIEL') || k2.includes('GEONNIEL')) return true;
+            // 3. Garantizar inclusión inmediata de Geonniel Valdivieso Mejía (con cualquier variante ortográfica)
+            if (
+              k1.includes('VALDIVIESO') ||
+              k2.includes('VALDIVIESO') ||
+              k1.includes('GEONNIEL') ||
+              k2.includes('GEONNIEL') ||
+              k1.includes('GEONIEL') ||
+              k2.includes('GEONIEL')
+            ) return true;
 
             return (officialRosterData as string[]).some(
               (item: string) =>

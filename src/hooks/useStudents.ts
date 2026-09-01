@@ -95,7 +95,14 @@ export const useStudents = () => {
 
         if (s.created_at && (s.created_at >= '2026-07-20' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
 
-        if (k1.includes('VALDIVIESO') || k2.includes('VALDIVIESO') || k1.includes('GEONNIEL') || k2.includes('GEONNIEL')) return true;
+        if (
+          k1.includes('VALDIVIESO') ||
+          k2.includes('VALDIVIESO') ||
+          k1.includes('GEONNIEL') ||
+          k2.includes('GEONNIEL') ||
+          k1.includes('GEONIEL') ||
+          k2.includes('GEONIEL')
+        ) return true;
 
         return (officialRosterData as string[]).some(
           (item: string) =>
