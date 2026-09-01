@@ -57,11 +57,9 @@ export const StudentManagement = () => {
       .replace(/[\u0300-\u036f]/g, '')
       .trim();
 
-  const rawList = allStudents && allStudents.length > 0 ? allStudents : (state.students || []);
-
   // El filtrado ahora es local y ultra-rápido
   const filteredStudents = useMemo(() => {
-    let result = [...rawList];
+    let result = [...(allStudents || [])];
 
     // Filtro por curso
     if (selectedCourseId) {
