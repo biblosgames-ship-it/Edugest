@@ -582,8 +582,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .replace(/\s+/g, ' ')
               .trim();
 
+          const isGenesis = targetCid === '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
           const officialSet = new Set(officialRosterData as string[]);
           const isOfficial2026Student = (s: any) => {
+            // Para centros que no son Génesis (ej: Los Serafines, Juan Pablo Duarte), todos sus alumnos activos son válidos
+            if (!isGenesis) return true;
+
             const k1 = normIdentity(s);
             if (officialSet.has(k1)) return true;
             const k2 = normIdentity({
@@ -638,23 +642,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (key && !seenIdentities.has(key)) {
                   seenIdentities.add(key);
                   
-                  let targetCid = s.course_id;
+                  let studentCourseId = s.course_id;
 
-                  // Resolución especial de Preprimario por tanda (Matutina vs Vespertina)
-                  const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
-                  if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
-                    targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
-                  } else if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
-                    targetCid = s.course_id;
-                  } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                    targetCid = canonicalCourseMap.get(String(s.course_id))!;
+                  if (isGenesis) {
+                    // Resolución especial de Preprimario por tanda (Matutina vs Vespertina) solo en Génesis
+                    const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+                    if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
+                      studentCourseId = '8400e2af-1124-421c-8ad3-f35e96c49525';
+                    } else if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+                      studentCourseId = s.course_id;
+                    } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                      studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
+                    }
+                  } else {
+                    // Para Los Serafines y demás centros: mapeo canónico hacia el curso activo del centro
+                    if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+                      studentCourseId = s.course_id;
+                    } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                      studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
+                    }
                   }
 
-                  if (s.school_year !== currentFetchYear || s.course_id !== targetCid) {
-                    studentsToHeal2026.push({ id: s.id, course_id: targetCid, school_year: currentFetchYear });
+                  if (s.school_year !== currentFetchYear || s.course_id !== studentCourseId) {
+                    studentsToHeal2026.push({ id: s.id, course_id: studentCourseId, school_year: currentFetchYear });
                   }
                   s.school_year = currentFetchYear;
-                  s.course_id = targetCid;
+                  s.course_id = studentCourseId;
                   filteredStudents.push(s);
                 }
               }

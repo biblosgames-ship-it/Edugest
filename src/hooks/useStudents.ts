@@ -80,8 +80,10 @@ export const useStudents = () => {
           .replace(/\s+/g, ' ')
           .trim();
 
+      const isGenesis = centerId === '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
       const officialSet = new Set(officialRosterData as string[]);
       const isOfficial2026Student = (s: any) => {
+        if (!isGenesis) return true;
         const k1 = normIdentity(s);
         if (officialSet.has(k1)) return true;
         const k2 = normIdentity({
@@ -136,13 +138,21 @@ export const useStudents = () => {
               
               let targetCid = s.course_id;
 
-              const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
-              if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
-                targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
-              } else if (s.course_id && activeCourseIds.has(String(s.course_id))) {
-                targetCid = s.course_id;
-              } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                targetCid = canonicalCourseMap.get(String(s.course_id))!;
+              if (isGenesis) {
+                const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+                if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
+                  targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
+                } else if (s.course_id && activeCourseIds.has(String(s.course_id))) {
+                  targetCid = s.course_id;
+                } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                  targetCid = canonicalCourseMap.get(String(s.course_id))!;
+                }
+              } else {
+                if (s.course_id && activeCourseIds.has(String(s.course_id))) {
+                  targetCid = s.course_id;
+                } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                  targetCid = canonicalCourseMap.get(String(s.course_id))!;
+                }
               }
 
               s.course_id = targetCid;
