@@ -652,6 +652,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return p;
           });
 
+          const performanceAlertsUnified = (perfRes.data || []).map((p: any) => ({
+            ...p,
+            teacher_id: idMap[p.teacher_id] || p.teacher_id
+          }));
+
           let localCustomEntries: any[] = [];
           try {
             localCustomEntries = JSON.parse(localStorage.getItem('edugens_custom_schedule_entries') || '[]');
