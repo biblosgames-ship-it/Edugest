@@ -57,21 +57,11 @@ export const StudentManagement = () => {
       .replace(/[\u0300-\u036f]/g, '')
       .trim();
 
-  // Combinamos allStudents (React Query) y state.students (AppContext) para una cobertura del 100%
-  const mergedStudents = useMemo(() => {
-    const map = new Map<string, any>();
-    (state.students || []).forEach((s: any) => {
-      if (s && s.id) map.set(String(s.id), s);
-    });
-    (allStudents || []).forEach((s: any) => {
-      if (s && s.id) map.set(String(s.id), s);
-    });
-    return Array.from(map.values());
-  }, [allStudents, state.students]);
+  const rawList = allStudents && allStudents.length > 0 ? allStudents : (state.students || []);
 
   // El filtrado ahora es local y ultra-rápido
   const filteredStudents = useMemo(() => {
-    let result = [...mergedStudents];
+    let result = [...rawList];
 
     // Filtro por curso
     if (selectedCourseId) {
@@ -99,7 +89,7 @@ export const StudentManagement = () => {
     }
 
     return result.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
-  }, [mergedStudents, selectedCourseId, searchTerm]);
+  }, [rawList, selectedCourseId, searchTerm]);
 
   const handleDownloadPDF = async (s: any) => {
     try {

@@ -597,10 +597,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             if (officialSet.has(k2)) return true;
 
-            // 2. Alumnos creados / matriculados formalmente a partir de la apertura del nuevo ciclo (julio 20, 2026 en adelante)
-            if (s.created_at && (s.created_at >= '2026-07-20' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
+            // 2. Alumnos creados / matriculados formalmente en el ciclo actual (agosto 2026 en adelante)
+            if (s.created_at && (s.created_at >= '2026-08-01T00:00:00' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
 
-            // 3. Garantizar inclusión inmediata de Geonniel Valdivieso Mejía (con cualquier variante ortográfica)
+            // 3. Garantizar inclusión de Geonniel Valdivieso Mejía
             if (
               k1.includes('VALDIVIESO') ||
               k2.includes('VALDIVIESO') ||
