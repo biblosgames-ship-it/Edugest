@@ -91,8 +91,6 @@ export const useAllStudents = () => {
       const officialSet = new Set(officialRosterData as string[]);
       const isOfficial2026Student = (s: any) => {
         if (!isGenesis) return true;
-        if (s.school_year === '2026-2027' || s.school_year === targetYear) return true;
-        if (s.created_at && (s.created_at >= '2026-01-01' || s.created_at.includes('2026'))) return true;
         const k1 = normIdentity(s);
         if (officialSet.has(k1)) return true;
         const k2 = normIdentity({
@@ -101,6 +99,10 @@ export const useAllStudents = () => {
           names: `${s.first_surname || s.last_name || ''} ${s.second_surname || ''}`
         });
         if (officialSet.has(k2)) return true;
+
+        if (s.created_at && (s.created_at >= '2026-07-20' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
+
+        if (k1.includes('VALDIVIESO') || k2.includes('VALDIVIESO') || k1.includes('GEONNIEL') || k2.includes('GEONNIEL')) return true;
 
         return (officialRosterData as string[]).some(
           (item: string) =>

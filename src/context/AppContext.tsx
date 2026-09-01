@@ -588,13 +588,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // 1. Para centros que no son Génesis (ej: Los Serafines, Juan Pablo Duarte), todos sus alumnos activos son válidos
             if (!isGenesis) return true;
 
-            // 2. Si el alumno fue registrado o matriculado para el ciclo 2026-2027, SIEMPRE es válido
-            if (s.school_year === '2026-2027' || s.school_year === currentFetchYear) return true;
-
-            // 3. Si fue creado recientemente en 2026 (cualquier fecha de 2026)
-            if (s.created_at && (s.created_at >= '2026-01-01' || s.created_at.includes('2026'))) return true;
-
-            // 4. Si coincide con el roster oficial de 2026 de Génesis
             const k1 = normIdentity(s);
             if (officialSet.has(k1)) return true;
             const k2 = normIdentity({
@@ -603,6 +596,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               names: `${s.first_surname || s.last_name || ''} ${s.second_surname || ''}`
             });
             if (officialSet.has(k2)) return true;
+
+            // 2. Alumnos creados / matriculados formalmente a partir de la apertura del nuevo ciclo (julio 20, 2026 en adelante)
+            if (s.created_at && (s.created_at >= '2026-07-20' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
+
+            // 3. Garantizar inclusión inmediata de Geonniel Valdivieso Mejía si su registro inicial en DB no traía created_at
+            if (k1.includes('VALDIVIESO') || k2.includes('VALDIVIESO') || k1.includes('GEONNIEL') || k2.includes('GEONNIEL')) return true;
 
             return (officialRosterData as string[]).some(
               (item: string) =>
