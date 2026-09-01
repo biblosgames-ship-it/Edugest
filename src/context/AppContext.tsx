@@ -291,6 +291,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const name = (t.name || t.full_name || 'Sin Nombre').trim();
             let rawRole = (t.team || t.role || t.cargo || t.position || '').toLowerCase();
 
+            const isStudent =
+              rawRole.includes('student') ||
+              rawRole.includes('estudiant') ||
+              rawRole.includes('alumno');
+
+            const isParent =
+              rawRole.includes('parent') ||
+              rawRole.includes('padre') ||
+              rawRole.includes('madre') ||
+              rawRole.includes('tutor') ||
+              rawRole.includes('familiar');
+
+            if (isStudent) {
+              return {
+                ...t,
+                name: name,
+                full_name: name,
+                role: 'student',
+                sex: (t.sex || t.gender || 'M').startsWith('F') ? 'F' : 'M',
+                _priority: priority
+              };
+            }
+
+            if (isParent) {
+              return {
+                ...t,
+                name: name,
+                full_name: name,
+                role: 'parent',
+                sex: (t.sex || t.gender || 'M').startsWith('F') ? 'F' : 'M',
+                _priority: priority
+              };
+            }
+
             const isManagement =
               rawRole.includes('gest') ||
               rawRole.includes('direc') ||
@@ -349,10 +383,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           };
 
+          const isPersonnelProfile = (p: any) => {
+            const r = (p.role || p.cargo || p.team || '').toLowerCase();
+            if (
+              r.includes('student') ||
+              r.includes('estudiant') ||
+              r.includes('alumno') ||
+              r.includes('parent') ||
+              r.includes('padre') ||
+              r.includes('madre') ||
+              r.includes('tutor') ||
+              r.includes('familiar')
+            ) {
+              return false;
+            }
+            return true;
+          };
+
+          const filteredProfiles = (pRes.data || []).filter(isPersonnelProfile);
+          const filteredLegacyTeachers = (tLegacy.data || []).filter(isPersonnelProfile);
+
           const rawList = [
             ...(stRes.data || []).map((s) => normalize(s, 1)),
-            ...(pRes.data || []).map((p) => normalize(p, 2)),
-            ...(tLegacy.data || []).map((t) => normalize(t, 3))
+            ...filteredProfiles.map((p) => normalize(p, 2)),
+            ...filteredLegacyTeachers.map((t) => normalize(t, 3))
           ];
 
           const assignedIds = new Set((aRes.data || []).map((a: any) => a.teacher_id));
@@ -361,6 +415,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const seenNames = new Set();
 
           rawList
+            .filter((p) => p.role !== 'student' && p.role !== 'parent')
             .sort((a, b) => {
               if (a._priority !== b._priority) return a._priority - b._priority;
               const aAssigned = assignedIds.has(a.id);
