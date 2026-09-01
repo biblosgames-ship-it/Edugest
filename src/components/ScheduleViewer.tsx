@@ -44,7 +44,13 @@ export const ScheduleViewer = () => {
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
   const isStudentOrParent = profile?.role === 'student' || profile?.role === 'parent';
 
-  const [selectedShift, setSelectedShift] = useState<'Matutina' | 'Vespertina'>('Matutina');
+  const [selectedShift, setSelectedShift] = useState<'Matutina' | 'Vespertina'>(() => {
+    try {
+      const saved = localStorage.getItem('edugens_selected_shift');
+      if (saved === 'Vespertina' || saved === 'Matutina') return saved;
+    } catch {}
+    return 'Matutina';
+  });
   const [filterType, setFilterType] = useState<'all' | 'course' | 'teacher'>(() => {
     if (profile?.role === 'student' || profile?.role === 'parent') return 'course';
     return 'all';
@@ -757,13 +763,16 @@ export const ScheduleViewer = () => {
     // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña
     if (filterType === 'teacher' && filterId) {
       const shiftBaseTeacher = effectiveShift.toLowerCase().substring(0, 3);
-      // Obtener los cursos asignados a este docente en este turno
+      // Obtener los cursos asignados a este docente en este turno (desde asignaciones y desde el horario activo)
       const teacherAssignmentCourseIds = [
-        ...new Set(
-          (state.assignments || [])
+        ...new Set([
+          ...(state.assignments || [])
             .filter((a: any) => String(a.teacher_id || a.teacherId) === String(filterId))
-            .map((a: any) => String(a.course_id || a.courseId))
-        )
+            .map((a: any) => String(a.course_id || a.courseId)),
+          ...(state.schedule || [])
+            .filter((s: any) => String(s.teacher_id) === String(filterId))
+            .map((s: any) => String(s.course_id || s.courseId))
+        ])
       ];
       const teacherCourses = (state.courses || []).filter((c: any) => {
         if (!teacherAssignmentCourseIds.includes(String(c.id))) return false;
@@ -810,17 +819,21 @@ export const ScheduleViewer = () => {
 
         // Vista Compacta para Docentes: solo conservar slots con clases programadas o recreos
         const teacherSchedule = (state.schedule || []).filter(
-          (s: any) =>
-            String(s.teacher_id) === String(filterId) &&
-            s.shift === effectiveShift &&
-            (!selectedYear || !s.school_year || s.school_year === selectedYear)
+          (s: any) => {
+            if (String(s.teacher_id) !== String(filterId)) return false;
+            const sShift = (s.shift || '').toLowerCase();
+            const isMatch = !sShift || sShift.includes(shiftBaseTeacher) || shiftBaseTeacher.includes(sShift.substring(0, 3));
+            return isMatch && (!selectedYear || !s.school_year || s.school_year === selectedYear);
+          }
         );
         if (teacherSchedule.length > 0) {
           mergedSlots = mergedSlots.filter((slot) => {
             if (slot.isBreak) return true;
             return teacherSchedule.some((entry: any) => {
-              const eMins = toMins(entry.start_time);
-              const slotMins = toMins(slot.start);
+              let eMins = toMins(entry.start_time);
+              if (!isMorning && eMins < 720 && eMins > 0) eMins += 720;
+              let slotMins = toMins(slot.start);
+              if (!isMorning && slotMins < 720 && slotMins > 0) slotMins += 720;
               return Math.abs(slotMins - eMins) <= 25;
             });
           });
@@ -1493,10 +1506,17 @@ export const ScheduleViewer = () => {
               return sh.includes('ves') || sh.includes('tar');
             }).length;
 
+            const handleShiftChange = (shift: 'Matutina' | 'Vespertina') => {
+              setSelectedShift(shift);
+              try {
+                localStorage.setItem('edugens_selected_shift', shift);
+              } catch {}
+            };
+
             return (
               <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
                 <button
-                  onClick={() => setSelectedShift('Matutina')}
+                  onClick={() => handleShiftChange('Matutina')}
                   className={`flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${
                     selectedShift === 'Matutina'
                       ? 'bg-indigo-600 text-white shadow-lg'
@@ -1517,7 +1537,7 @@ export const ScheduleViewer = () => {
                   )}
                 </button>
                 <button
-                  onClick={() => setSelectedShift('Vespertina')}
+                  onClick={() => handleShiftChange('Vespertina')}
                   className={`flex items-center gap-1.5 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${
                     selectedShift === 'Vespertina'
                       ? 'bg-indigo-600 text-white shadow-lg'
@@ -1557,7 +1577,22 @@ export const ScheduleViewer = () => {
               {filterType === 'teacher' && (
                 <select
                   value={filterId}
-                  onChange={(e) => setFilterId(e.target.value)}
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    setFilterId(tId);
+                    if (tId) {
+                      const tEntries = (state.schedule || []).filter((s: any) => String(s.teacher_id) === String(tId));
+                      const hasVes = tEntries.some((s: any) => (s.shift || '').toLowerCase().includes('ves') || (s.shift || '').toLowerCase().includes('tar'));
+                      const hasMat = tEntries.some((s: any) => (s.shift || '').toLowerCase().includes('mat') || (s.shift || '').toLowerCase().includes('mañ'));
+                      if (hasVes && !hasMat) {
+                        setSelectedShift('Vespertina');
+                        try { localStorage.setItem('edugens_selected_shift', 'Vespertina'); } catch {}
+                      } else if (hasMat && !hasVes) {
+                        setSelectedShift('Matutina');
+                        try { localStorage.setItem('edugens_selected_shift', 'Matutina'); } catch {}
+                      }
+                    }
+                  }}
                   className="px-6 py-2.5 rounded-2xl bg-slate-50 border-none text-[10px] font-black uppercase shadow-inner"
                 >
                   <option value="">Seleccionar Docente...</option>
@@ -1578,13 +1613,14 @@ export const ScheduleViewer = () => {
                     setFilterId(val);
                     if (val) {
                       const c = state.courses.find((cr) => String(cr.id) === String(val));
-                      if (c?.tanda) {
-                        const t = c.tanda.toLowerCase();
-                        if (t.includes('ves') || t.includes('tar')) {
-                          setSelectedShift('Vespertina');
-                        } else {
-                          setSelectedShift('Matutina');
-                        }
+                      const t = (c?.tanda || '').toLowerCase();
+                      const lvl = (c?.level || '').toLowerCase();
+                      if (t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'))) {
+                        setSelectedShift('Vespertina');
+                        try { localStorage.setItem('edugens_selected_shift', 'Vespertina'); } catch {}
+                      } else {
+                        setSelectedShift('Matutina');
+                        try { localStorage.setItem('edugens_selected_shift', 'Matutina'); } catch {}
                       }
                     }
                   }}
