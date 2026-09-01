@@ -1006,11 +1006,11 @@ export const ScheduleViewer = () => {
         // Evitar duplicados exactos en la casilla
         const isDup = listInSlot.some(
           (existing: any) =>
-            String(existing.id) === String(entry.id) ||
+            (existing.id && entry.id && String(existing.id) === String(entry.id)) ||
             (String(existing.course_id || existing.courseId) === String(entry.course_id || entry.courseId) &&
               String(existing.subject_id) === String(entry.subject_id) &&
               normStr(existing.day) === normDay &&
-              existing.start_time === entry.start_time)
+              (existing.start_time || '').substring(0, 5) === (entry.start_time || '').substring(0, 5))
         );
         if (!isDup) listInSlot.push(entry);
       }
@@ -2969,7 +2969,7 @@ export const ScheduleViewer = () => {
                       finalTeacherId =
                         otherAssign?.teacher_id ||
                         otherAssign?.teacherId ||
-                        (state.teachers[0]?.id || '');
+                        (state.teachers[0]?.id || null);
                     }
 
                     const targetCourse = state.courses.find((c) => String(c.id) === String(directAssignModal.courseId));
@@ -2978,43 +2978,98 @@ export const ScheduleViewer = () => {
                     const targetShift = isCourseVespertina ? 'Vespertina' : (effectiveShift || selectedShift);
 
                     const finalYear = selectedYear || state.currentYear || '2026-2027';
-                    const sStart = directAssignModal.slot.start.length === 5 ? directAssignModal.slot.start + ':00' : directAssignModal.slot.start;
-                    const sEnd = directAssignModal.slot.end.length === 5 ? directAssignModal.slot.end + ':00' : directAssignModal.slot.end;
+                    const rawStart = directAssignModal.slot.start;
+                    const rawEnd = directAssignModal.slot.end;
+                    const sStart = rawStart.length === 5 ? rawStart + ':00' : rawStart;
+                    const sEnd = rawEnd.length === 5 ? rawEnd + ':00' : rawEnd;
 
                     try {
-                      const entryPayload = {
+                      // Asegurar que el docente exista en la tabla teachers para no violar FK
+                      if (finalTeacherId && profile?.center_id) {
+                        const tName = state.teachers?.find((t: any) => String(t.id) === String(finalTeacherId))?.name || 'Docente';
+                        try {
+                          await supabase.from('teachers').upsert([{
+                            id: finalTeacherId,
+                            center_id: profile.center_id,
+                            name: tName,
+                            hours_available: 40
+                          }], { onConflict: 'id' });
+                        } catch (e) {}
+                      }
+
+                      const entryPayload: any = {
                         center_id: profile.center_id,
                         course_id: directAssignModal.courseId,
                         subject_id: directAssignModal.subjectId,
-                        teacher_id: finalTeacherId,
+                        teacher_id: finalTeacherId || null,
                         day: directAssignModal.day,
                         shift: targetShift,
                         start_time: sStart,
                         end_time: sEnd,
-                        school_year: finalYear
+                        school_year: finalYear,
+                        is_locked: true
                       };
 
+                      let insertedEntry: any = null;
                       const { data: insertedData, error } = await supabase
                         .from('schedule_entries')
                         .insert([entryPayload])
                         .select();
 
-                      if (error) throw error;
-
-                      if (insertedData && insertedData.length > 0) {
-                        setAppState((prev: any) => ({
-                          ...prev,
-                          schedule: [...(prev.schedule || []), ...insertedData]
-                        }));
+                      if (error) {
+                        // Reintento sin campo is_locked si la columna no existe en alguna versión antigua de la DB
+                        if (error.message?.includes('is_locked') || error.code === 'PGRST204') {
+                          delete entryPayload.is_locked;
+                          const { data: retryData, error: retryErr } = await supabase
+                            .from('schedule_entries')
+                            .insert([entryPayload])
+                            .select();
+                          if (retryErr) throw retryErr;
+                          insertedEntry = retryData?.[0] || entryPayload;
+                        } else {
+                          throw error;
+                        }
+                      } else {
+                        insertedEntry = insertedData?.[0] || entryPayload;
                       }
+
+                      // Actualizar inmediatamente estado local reactivo
+                      setAppState((prev: any) => {
+                        const prevSched = (prev.schedule || []).filter(
+                          (s: any) =>
+                            !(
+                              String(s.course_id) === String(directAssignModal.courseId) &&
+                              (s.day || '').trim().toLowerCase() === (directAssignModal.day || '').trim().toLowerCase() &&
+                              (s.start_time || '').substring(0, 5) === rawStart.substring(0, 5)
+                            )
+                        );
+                        return {
+                          ...prev,
+                          schedule: [...prevSched, insertedEntry]
+                        };
+                      });
+
+                      // Activar candado localmente
+                      const locKey1 = `${directAssignModal.courseId}_${directAssignModal.day}_${sStart}`;
+                      const locKey2 = `${directAssignModal.courseId}_${directAssignModal.day}_${rawStart.substring(0, 5)}`;
+                      setLockedEntries((prev) => {
+                        const next = new Set(prev);
+                        next.add(locKey1);
+                        next.add(locKey2);
+                        if (insertedEntry.id) next.add(insertedEntry.id);
+                        try {
+                          localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
+                        } catch {}
+                        return next;
+                      });
 
                       if (isCourseVespertina && selectedShift !== 'Vespertina') {
                         setSelectedShift('Vespertina');
                       }
 
-                      await refreshData(undefined, true);
-                      alert('✅ ¡Clase asignada exitosamente!');
                       setDirectAssignModal({ open: false, day: '', slot: null, courseId: '', subjectId: '' });
+                      await refreshData(undefined, true);
+                      alert('✅ ¡Clase asignada y asegurada con éxito en la casilla!');
                     } catch (err: any) {
                       alert('Error al asignar clase: ' + err.message);
                     }
