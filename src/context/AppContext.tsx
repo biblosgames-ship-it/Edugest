@@ -734,36 +734,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[p.teacher_id] || p.teacher_id
           }));
 
-          let localCustomEntries: any[] = [];
-          try {
-            localCustomEntries = JSON.parse(localStorage.getItem('edugens_custom_schedule_entries') || '[]');
-          } catch {}
-
-          const fetchedIds = new Set(scheduleUnified.map((s: any) => s.id).filter(Boolean));
-          const fetchedKeys = new Set(
-            scheduleUnified.map(
-              (s: any) =>
-                `${s.course_id}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').substring(0, 5)}`
-            )
-          );
-
-          const localCustomToInclude = localCustomEntries.filter((s: any) => {
-            if (!s) return false;
-            const key = `${s.course_id}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').substring(0, 5)}`;
-            if (s.id && fetchedIds.has(s.id)) return false;
-            if (fetchedKeys.has(key)) return false;
-            return true;
-          });
-
           setState((prev) => {
-            const preservedFromPrev = (prev.schedule || []).filter((s: any) => {
-              if (!s) return false;
-              const key = `${s.course_id}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').substring(0, 5)}`;
-              if (s.id && fetchedIds.has(s.id)) return false;
-              if (fetchedKeys.has(key)) return false;
-              return true;
-            });
-
             return {
               ...prev,
               courses: coursesUnified,
@@ -780,7 +751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               schoolYears: syRes.data || [],
               rooms: roomRes.data || [],
               timeBlocks: blockRes.data || [],
-              schedule: [...scheduleUnified, ...localCustomToInclude, ...preservedFromPrev],
+              schedule: scheduleUnified,
               attendanceRecords: [],
               performanceAlerts: performanceAlertsUnified,
               students: filteredStudents,

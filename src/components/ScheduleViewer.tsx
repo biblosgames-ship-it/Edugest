@@ -978,8 +978,7 @@ export const ScheduleViewer = () => {
             (existing.id && entry.id && String(existing.id) === String(entry.id)) ||
             (String(existing.course_id || existing.courseId) === String(entry.course_id || entry.courseId) &&
               String(existing.subject_id) === String(entry.subject_id) &&
-              normStr(existing.day) === normDay &&
-              (existing.start_time || '').substring(0, 5) === (entry.start_time || '').substring(0, 5))
+              normStr(existing.day) === normDay)
         );
         if (!isDup) listInSlot.push(entry);
       }
@@ -2243,7 +2242,8 @@ export const ScheduleViewer = () => {
                                                 try {
                                                   if (e.id) {
                                                     await supabase.from('schedule_entries').delete().eq('id', e.id);
-                                                  } else {
+                                                  }
+                                                  if (e.course_id && e.day && e.start_time) {
                                                     await supabase
                                                       .from('schedule_entries')
                                                       .delete()
@@ -3083,6 +3083,16 @@ export const ScheduleViewer = () => {
                         school_year: finalYear,
                         is_locked: true
                       };
+
+                      // Limpiar cualquier registro previo en esa misma casilla en Supabase
+                      try {
+                        await supabase
+                          .from('schedule_entries')
+                          .delete()
+                          .eq('course_id', directAssignModal.courseId)
+                          .eq('day', directAssignModal.day)
+                          .eq('start_time', sStart);
+                      } catch (e) {}
 
                       let insertedEntry: any = null;
                       const { data: insertedData, error } = await supabase
