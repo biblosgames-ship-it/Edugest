@@ -2253,26 +2253,27 @@ export const ScheduleViewer = () => {
                                                   }
 
                                                   // Limpiar de localStorage si estaba guardado
-                                                  try {
-                                                    const customEntries = JSON.parse(
-                                                      localStorage.getItem('edugens_custom_schedule_entries') || '[]'
-                                                    );
-                                                    const filtered = customEntries.filter(
-                                                      (ce: any) =>
-                                                        !(
-                                                          (e.id && ce.id === e.id) ||
-                                                          (String(ce.course_id) === String(e.course_id) &&
-                                                            (ce.day || '').trim().toLowerCase() ===
-                                                              (e.day || '').trim().toLowerCase() &&
-                                                            (ce.start_time || '').substring(0, 5) ===
-                                                              (e.start_time || '').substring(0, 5))
-                                                        )
-                                                    );
-                                                    localStorage.setItem(
-                                                      'edugens_custom_schedule_entries',
-                                                      JSON.stringify(filtered)
-                                                    );
-                                                  } catch {}
+                                                   try {
+                                                     const activeCid = e.center_id || profile?.center_id;
+                                                     const keysToClean = ['edugens_custom_schedule_entries'];
+                                                     if (activeCid) keysToClean.push(`edugens_custom_schedule_${activeCid}`);
+
+                                                     keysToClean.forEach((k) => {
+                                                       const customEntries = JSON.parse(localStorage.getItem(k) || '[]');
+                                                       const filtered = customEntries.filter(
+                                                         (ce: any) =>
+                                                           !(
+                                                             (e.id && ce.id === e.id) ||
+                                                             (String(ce.course_id) === String(e.course_id) &&
+                                                               (ce.day || '').trim().toLowerCase() ===
+                                                                 (e.day || '').trim().toLowerCase() &&
+                                                               (ce.start_time || '').substring(0, 5) ===
+                                                                 (e.start_time || '').substring(0, 5))
+                                                           )
+                                                       );
+                                                       localStorage.setItem(k, JSON.stringify(filtered));
+                                                     });
+                                                   } catch {}
 
                                                   setAppState((prev: any) => ({
                                                     ...prev,
@@ -3123,19 +3124,23 @@ export const ScheduleViewer = () => {
 
                       // Guardar en backup persistente de entradas manuales
                       try {
-                        const customEntries = JSON.parse(
-                          localStorage.getItem('edugens_custom_schedule_entries') || '[]'
-                        );
-                        const filtered = customEntries.filter(
-                          (s: any) =>
-                            !(
-                              String(s.course_id) === String(directAssignModal.courseId) &&
-                              (s.day || '').trim().toLowerCase() === (directAssignModal.day || '').trim().toLowerCase() &&
-                              (s.start_time || '').substring(0, 5) === rawStart.substring(0, 5)
-                            )
-                        );
-                        filtered.push(insertedEntry);
-                        localStorage.setItem('edugens_custom_schedule_entries', JSON.stringify(filtered));
+                        const activeCid = finalCenterId || profile?.center_id;
+                        const keysToSave = ['edugens_custom_schedule_entries'];
+                        if (activeCid) keysToSave.push(`edugens_custom_schedule_${activeCid}`);
+
+                        keysToSave.forEach((k) => {
+                          const customEntries = JSON.parse(localStorage.getItem(k) || '[]');
+                          const filtered = customEntries.filter(
+                            (s: any) =>
+                              !(
+                                String(s.course_id) === String(directAssignModal.courseId) &&
+                                (s.day || '').trim().toLowerCase() === (directAssignModal.day || '').trim().toLowerCase() &&
+                                (s.start_time || '').substring(0, 5) === rawStart.substring(0, 5)
+                              )
+                          );
+                          filtered.push(insertedEntry);
+                          localStorage.setItem(k, JSON.stringify(filtered));
+                        });
                       } catch {}
 
                       // Actualizar inmediatamente estado local reactivo

@@ -734,6 +734,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             teacher_id: idMap[p.teacher_id] || p.teacher_id
           }));
 
+          const customStorageKey = targetCid ? `edugens_custom_schedule_${targetCid}` : 'edugens_custom_schedule_entries';
+          let localCustomEntries: any[] = [];
+          try {
+            localCustomEntries = JSON.parse(localStorage.getItem(customStorageKey) || localStorage.getItem('edugens_custom_schedule_entries') || '[]');
+          } catch {}
+
+          const fetchedKeys = new Set(
+            scheduleUnified.map(
+              (s: any) =>
+                `${s.course_id}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').substring(0, 5)}`
+            )
+          );
+
+          const localCustomToInclude = localCustomEntries.filter((s: any) => {
+            if (!s) return false;
+            const key = `${s.course_id}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').substring(0, 5)}`;
+            return !fetchedKeys.has(key);
+          });
+
           setState((prev) => {
             return {
               ...prev,
@@ -751,7 +770,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               schoolYears: syRes.data || [],
               rooms: roomRes.data || [],
               timeBlocks: blockRes.data || [],
-              schedule: scheduleUnified,
+              schedule: [...scheduleUnified, ...localCustomToInclude],
               attendanceRecords: [],
               performanceAlerts: performanceAlertsUnified,
               students: filteredStudents,
