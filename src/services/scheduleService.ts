@@ -368,12 +368,37 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
   return score;
 };
 
+export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
+  if (!e) return false;
+  if (e.is_locked === true || e.is_locked === 'true') return true;
+  if (!lockedKeys || lockedKeys.length === 0) return false;
+  if (e.id && lockedKeys.includes(String(e.id))) return true;
+
+  const rawStart = (e.start_time || '').trim();
+  const s5 = rawStart.substring(0, 5);
+  const s8 = rawStart.length === 5 ? `${rawStart}:00` : rawStart;
+  const cId = String(e.course_id || e.courseId || '');
+  const day = (e.day || '').trim();
+
+  const k1 = `${cId}_${day}_${rawStart}`;
+  const k2 = `${cId}_${day}_${s5}`;
+  const k3 = `${cId}_${day}_${s8}`;
+
+  return lockedKeys.some((lk) => {
+    if (!lk) return false;
+    if (lk === k1 || lk === k2 || lk === k3 || lk === String(e.id)) return true;
+    if (cId && day && lk.startsWith(`${cId}_${day}_`) && lk.includes(s5)) return true;
+    return false;
+  });
+};
+
 export const scheduleService = {
   generateSchedule: async (
     state: any,
     profile: any,
     shift: 'Matutina' | 'Vespertina',
-    year: string
+    year: string,
+    lockedKeys: string[] = []
   ) => {
     const centerId = profile?.center_id;
     if (!centerId) throw new Error('No se encontró el ID del centro');
@@ -609,6 +634,36 @@ export const scheduleService = {
 
 
 
+    const preservedLockedEntries: any[] = [];
+    const lockedCountByAssign: Record<string, number> = {};
+    const lockedDailyCount: Record<string, Record<string, Record<string, number>>> = {};
+
+    if (lockedKeys.length > 0) {
+      try {
+        const { data: existingData } = await supabase
+          .from('schedule_entries')
+          .select('*')
+          .eq('center_id', centerId)
+          .eq('shift', shift)
+          .eq('school_year', schoolYear);
+
+        (existingData || []).forEach((e: any) => {
+          if (isEntryLocked(e, lockedKeys)) {
+            preservedLockedEntries.push({ ...e, is_locked: true });
+            const assignKey = `${e.course_id}_${e.subject_id}`;
+            lockedCountByAssign[assignKey] = (lockedCountByAssign[assignKey] || 0) + 1;
+
+            if (!lockedDailyCount[e.course_id]) lockedDailyCount[e.course_id] = {};
+            if (!lockedDailyCount[e.course_id][e.day]) lockedDailyCount[e.course_id][e.day] = {};
+            lockedDailyCount[e.course_id][e.day][e.subject_id] =
+              (lockedDailyCount[e.course_id][e.day][e.subject_id] || 0) + 1;
+          }
+        });
+      } catch (err) {
+        console.warn('Error loading locked entries in generateSchedule:', err);
+      }
+    }
+
     const allTasks: any[] = [];
     const taskSummary: Record<string, number> = {};
 
@@ -624,7 +679,9 @@ export const scheduleService = {
       }
 
       courseAssignments.forEach((assign: any) => {
-        let remaining = Number(assign.hours_per_week || assign.hoursPerWeek) || 0;
+        const assignKey = `${course.id}_${assign.subject_id}`;
+        const lockedHours = lockedCountByAssign[assignKey] || 0;
+        let remaining = Math.max(0, (Number(assign.hours_per_week || assign.hoursPerWeek) || 0) - lockedHours);
         taskSummary[levelKey] = (taskSummary[levelKey] || 0) + remaining;
 
         const subObj = state.subjects?.find((s: any) => s.id === assign.subject_id);
@@ -696,8 +753,14 @@ export const scheduleService = {
         return Math.random() - 0.5;
       });
 
-      const finalEntries: any[] = [];
+      const finalEntries: any[] = [...preservedLockedEntries];
       const dailyCount: Record<string, Record<string, Record<string, number>>> = {};
+      for (const cId in lockedDailyCount) {
+        dailyCount[cId] = {};
+        for (const day in lockedDailyCount[cId]) {
+          dailyCount[cId][day] = { ...lockedDailyCount[cId][day] };
+        }
+      }
 
       const placeTask = (task: any, relaxedRules = false, superRelaxed = false) => {
         const { course, assign, isDouble } = task;
@@ -1152,7 +1215,11 @@ export const scheduleService = {
         for (let i = 0; i < entries.length; i += chunkSize) {
           const chunk = entries.slice(i, i + chunkSize).map((e) => {
             const { id, created_at, ...rest } = e;
-            return rest;
+            const isLocked = isEntryLocked(e, lockedKeys);
+            return {
+              ...rest,
+              is_locked: isLocked
+            };
           });
           let { error: insError } = await supabase.from('schedule_entries').insert(chunk);
           if (insError && (insError.message?.includes('is_locked') || insError.code === 'PGRST204')) {
@@ -1514,12 +1581,10 @@ export const scheduleService = {
       if (!assign) return;
 
       // CANDADO DE SEGURIDAD 🔒: Si la clase fue bloqueada expresamente por el usuario, se preserva sin excepción.
-      const entryKey1 = e.id;
-      const entryKey2 = `${e.course_id}_${e.day}_${e.start_time}`;
-      const isLockedByUser = (lockedKeys || []).includes(entryKey1) || (lockedKeys || []).includes(entryKey2);
+      const isLockedByUser = isEntryLocked(e, lockedKeys);
 
       if (isLockedByUser) {
-        preservedEntries.push(e);
+        preservedEntries.push({ ...e, is_locked: true });
         if (!placedCount[e.course_id]) placedCount[e.course_id] = {};
         placedCount[e.course_id][e.subject_id] = (placedCount[e.course_id][e.subject_id] || 0) + 1;
         if (!preservedDailyCount[e.course_id]) preservedDailyCount[e.course_id] = {};
@@ -2412,13 +2477,7 @@ export const scheduleService = {
       for (let i = 0; i < entries.length; i += chunkSize) {
         const chunk = entries.slice(i, i + chunkSize).map((e: any) => {
           const { id, created_at, ...rest } = e;
-          const entryKey1 = e.id;
-          const entryKey2 = `${e.course_id}_${e.day}_${e.start_time}`;
-          const isLocked = Boolean(
-            e.is_locked ||
-              (lockedKeys || []).includes(entryKey1) ||
-              (lockedKeys || []).includes(entryKey2)
-          );
+          const isLocked = isEntryLocked(e, lockedKeys);
           return {
             ...rest,
             is_locked: isLocked
@@ -3218,12 +3277,14 @@ export const scheduleService = {
     rawSchedule.forEach((e: any) => {
       const cId = String(e.course_id || e.courseId);
       const day = (e.day || '').trim().toLowerCase();
-      const sTime = e.start_time;
+      const sTime = (e.start_time || '').substring(0, 5);
       const slotKey = `${cId}_${day}_${sTime}`;
 
       if (seenCourseSlotKeys.has(slotKey)) {
-        idsToDelete.push(e.id);
-        return;
+        if (!isEntryLocked(e, lockedKeys)) {
+          idsToDelete.push(e.id);
+          return;
+        }
       }
       seenCourseSlotKeys.add(slotKey);
     });
@@ -3497,7 +3558,8 @@ export const scheduleService = {
           });
 
           // Si no hay ocupante o tiene candado, no se puede mover
-          if (!occupyingEntry || occupyingEntry.is_locked || (lockedKeys || []).includes(occupyingEntry.id)) continue;
+          const isOccupantLocked = isEntryLocked(occupyingEntry, lockedKeys);
+          if (!occupyingEntry || isOccupantLocked) continue;
 
           // 4. Buscar un hueco alternativo LIBRE DENTRO DE ESTE MISMO CURSO para mover al ocupante
           for (const altDay of days) {

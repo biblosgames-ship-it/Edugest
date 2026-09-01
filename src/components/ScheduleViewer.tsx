@@ -26,7 +26,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SEO } from './SEO';
 
-import { scheduleService } from '../services/scheduleService';
+import { scheduleService, isEntryLocked } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 
 export const ScheduleViewer = () => {
@@ -140,10 +140,21 @@ export const ScheduleViewer = () => {
     setLockedEntries(combinedSet);
   }, [lockStorageKey, state.schedule, selectedShift, selectedYear, profile?.center_id]);
 
+  const checkLocked = (e: any) => isEntryLocked(e, Array.from(lockedEntries));
+
   const toggleLock = async (entry: any) => {
-    const locKey = `${entry.course_id}_${entry.day}_${entry.start_time}`;
+    const rawStart = (entry.start_time || '').trim();
+    const s5 = rawStart.substring(0, 5);
+    const s8 = rawStart.length === 5 ? `${rawStart}:00` : rawStart;
+    const cId = entry.course_id;
+    const day = entry.day;
+
+    const locKey1 = `${cId}_${day}_${rawStart}`;
+    const locKey2 = `${cId}_${day}_${s5}`;
+    const locKey3 = `${cId}_${day}_${s8}`;
     const idKey = entry.id;
-    const isCurrentlyLocked = (idKey && lockedEntries.has(idKey)) || lockedEntries.has(locKey);
+
+    const isCurrentlyLocked = checkLocked(entry);
     const newLockState = !isCurrentlyLocked;
 
     // Actualizar estado local inmediatamente
@@ -151,10 +162,14 @@ export const ScheduleViewer = () => {
       const next = new Set(prev);
       if (isCurrentlyLocked) {
         if (idKey) next.delete(idKey);
-        next.delete(locKey);
+        next.delete(locKey1);
+        next.delete(locKey2);
+        next.delete(locKey3);
       } else {
         if (idKey) next.add(idKey);
-        next.add(locKey);
+        next.add(locKey1);
+        next.add(locKey2);
+        next.add(locKey3);
       }
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
@@ -188,10 +203,7 @@ export const ScheduleViewer = () => {
         (!selectedYear || !s.school_year || s.school_year === selectedYear)
     );
     if (shiftEntries.length === 0) return false;
-    return shiftEntries.every(
-      (e: any) =>
-        lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
-    );
+    return shiftEntries.every((e: any) => checkLocked(e));
   }, [state.schedule, selectedShift, selectedYear, lockedEntries]);
 
   // Blindar / Desblindar todas las materias del turno actual juntas con un solo clic
@@ -1062,7 +1074,8 @@ export const ScheduleViewer = () => {
         state,
         profile,
         selectedShift,
-        selectedYear
+        selectedYear,
+        Array.from(lockedEntries)
       );
       await refreshData(undefined, true);
 
@@ -2201,7 +2214,7 @@ export const ScheduleViewer = () => {
                           </div>
                         ) : (
                           <div className="h-full bg-slate-50 rounded-2xl border border-slate-100 p-3 flex flex-col justify-center gap-1 hover:border-indigo-200 transition-all group">
-                            {entries.length > 0 ? (
+                  {entries.length > 0 ? (
                               entries.map((e: any, i: number) => {
                                 const subject = state.subjects.find((s) => String(s.id) === String(e.subject_id));
                                 const teacher = state.teachers.find((t) => String(t.id) === String(e.teacher_id));
@@ -2214,9 +2227,9 @@ export const ScheduleViewer = () => {
                                   <div
                                     key={i}
                                     className={`p-2.5 rounded-xl border shadow-sm group-hover:shadow-md transition-all relative ${
-                                      lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                      checkLocked(e)
                                         ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/50'
-                        : 'bg-white border-slate-200'
+                                        : 'bg-white border-slate-200'
                                     }`}
                                   >
                                     <div className="flex items-start justify-between gap-1">
@@ -2231,17 +2244,17 @@ export const ScheduleViewer = () => {
                                               toggleLock(e);
                                             }}
                                             title={
-                                              lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                              checkLocked(e)
                                                 ? 'Clase Bloqueada 🔒 (Inviolable en reparación)'
                                                 : 'Bloquear Clase 🔓'
                                             }
                                             className={`p-1 rounded-lg transition-all no-print cursor-pointer ${
-                                              lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`)
+                                              checkLocked(e)
                                                 ? 'bg-amber-500 text-white shadow-sm scale-110'
                                                 : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'
                                             }`}
                                           >
-                                            {lockedEntries.has(e.id) || lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`) ? (
+                                            {checkLocked(e) ? (
                                               <Lock size={12} />
                                             ) : (
                                               <Unlock size={12} />
@@ -2250,9 +2263,7 @@ export const ScheduleViewer = () => {
                                           <button
                                             onClick={async (evt) => {
                                               evt.stopPropagation();
-                                              const isItemLocked =
-                                                lockedEntries.has(e.id) ||
-                                                lockedEntries.has(`${e.course_id}_${e.day}_${e.start_time}`);
+                                              const isItemLocked = checkLocked(e);
                                               if (isItemLocked) {
                                                 alert(
                                                   '🔒 CLASE BLOQUEADA\n\nEsta materia está protegida con candado. Haz clic en el candado 🔒 de la casilla para desbloquearla antes de eliminarla.'
