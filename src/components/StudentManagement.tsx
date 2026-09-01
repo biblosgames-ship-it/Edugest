@@ -87,7 +87,7 @@ export const StudentManagement = () => {
     }
 
     return result.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
-  }, [rawList, selectedCourseId, searchTerm]);
+  }, [allStudents, selectedCourseId, searchTerm]);
 
   const handleDownloadPDF = async (s: any) => {
     try {
