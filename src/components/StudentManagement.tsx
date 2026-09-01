@@ -50,23 +50,40 @@ export const StudentManagement = () => {
   const [localLoading, setLocalLoading] = useState(false);
   const showLoading = loading || localLoading;
 
+  const normText = (str: string) =>
+    (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
   // El filtrado ahora es local y ultra-rápido
   const filteredStudents = useMemo(() => {
     let result = [...(allStudents || [])];
 
     // Filtro por curso
     if (selectedCourseId) {
-      result = result.filter((s) => s.course_id === selectedCourseId);
+      result = result.filter((s) => String(s.course_id) === String(selectedCourseId));
     }
 
     // Filtro por búsqueda
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter((s) =>
-        `${s.names || ''} ${s.first_surname || ''} ${s.second_surname || ''}`
-          .toLowerCase()
-          .includes(term)
-      );
+      const term = normText(searchTerm);
+      const tokens = term.split(/\s+/).filter(Boolean);
+
+      result = result.filter((s) => {
+        const fullString = normText(
+          `${s.names || s.first_name || s.firstName || ''} ${s.first_surname || s.last_name || s.lastName || ''} ${s.second_surname || s.secondSurname || ''} ${s.student_code || ''} ${s.sigerd_code || ''} ${s.id_card || ''}`
+        );
+        const altFullString = fullString.replace(/nn/g, 'n');
+        const altTerm = term.replace(/nn/g, 'n');
+
+        return (
+          fullString.includes(term) ||
+          altFullString.includes(altTerm) ||
+          tokens.every((t) => fullString.includes(t) || altFullString.includes(t.replace(/nn/g, 'n')))
+        );
+      });
     }
 
     return result.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
