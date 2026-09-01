@@ -84,61 +84,28 @@ export const ScheduleViewer = () => {
   useEffect(() => {
     const combinedSet = new Set<string>();
 
-    // 1. Cargar desde la base de datos (e.is_locked = true)
+    // 1. Cargar desde localStorage para la tanda y año actuales
+    try {
+      const saved = localStorage.getItem(lockStorageKey);
+      if (saved) {
+        JSON.parse(saved).forEach((k: string) => combinedSet.add(k));
+      }
+    } catch {}
+
+    // 2. Cargar desde la base de datos (e.is_locked = true)
     (state.schedule || []).forEach((e: any) => {
       const isShiftMatch = !selectedShift || e.shift === selectedShift;
       const isYearMatch = !selectedYear || !e.school_year || e.school_year === selectedYear;
       if (isShiftMatch && isYearMatch && e.is_locked) {
         if (e.id) combinedSet.add(e.id);
+        const s5 = (e.start_time || '').substring(0, 5);
+        combinedSet.add(`${e.course_id}_${e.day}_${s5}`);
         combinedSet.add(`${e.course_id}_${e.day}_${e.start_time}`);
       }
     });
 
-    // 2. Cargar y migrar automáticamente desde TODAS las claves anteriores de localStorage
-    try {
-      // Clave exacta actual
-      const saved = localStorage.getItem(lockStorageKey);
-      if (saved) {
-        JSON.parse(saved).forEach((k: string) => combinedSet.add(k));
-      }
-
-      // Claves de versiones anteriores para no perder ningún candado previo
-      const oldKeys = [
-        `edugens_locked_entries_${profile?.center_id || 'default'}`,
-        `edugens_locked_entries_${profile?.center_id || ''}`,
-        `edugens_locked_entries_default`,
-        `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}`
-      ];
-      oldKeys.forEach((oldKey) => {
-        const oldSaved = localStorage.getItem(oldKey);
-        if (oldSaved) {
-          try {
-            JSON.parse(oldSaved).forEach((k: string) => combinedSet.add(k));
-          } catch {}
-        }
-      });
-
-      // Escanear cualquier clave que empiece con edugens_locked_entries en el navegador
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('edugens_locked_entries')) {
-          try {
-            const raw = localStorage.getItem(k);
-            if (raw) {
-              JSON.parse(raw).forEach((entryKey: string) => combinedSet.add(entryKey));
-            }
-          } catch {}
-        }
-      }
-
-      // Guardar la combinación en la clave actual para que quede permanentemente fijada
-      if (combinedSet.size > 0) {
-        localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(combinedSet)));
-      }
-    } catch {}
-
     setLockedEntries(combinedSet);
-  }, [lockStorageKey, state.schedule, selectedShift, selectedYear, profile?.center_id]);
+  }, [lockStorageKey, selectedShift, selectedYear, profile?.center_id]);
 
   const checkLocked = (e: any) => isEntryLocked(e, Array.from(lockedEntries));
 
@@ -174,6 +141,60 @@ export const ScheduleViewer = () => {
       localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(next)));
       return next;
     });
+
+    // Actualizar también en memoria state.schedule
+    setAppState((prev: any) => ({
+      ...prev,
+      schedule: (prev.schedule || []).map((s: any) => {
+        const match =
+          (idKey && s.id === idKey) ||
+          (String(s.course_id) === String(cId) &&
+            (s.day || '').trim().toLowerCase() === (day || '').trim().toLowerCase() &&
+            (s.start_time || '').substring(0, 5) === s5);
+        if (match) {
+          return { ...s, is_locked: newLockState };
+        }
+        return s;
+      })
+    }));
+
+    // Actualizar también en custom entries backup de localStorage
+    try {
+      const customEntries = JSON.parse(
+        localStorage.getItem('edugens_custom_schedule_entries') || '[]'
+      );
+      const updatedCustom = customEntries.map((ce: any) => {
+        const match =
+          (idKey && ce.id === idKey) ||
+          (String(ce.course_id) === String(cId) &&
+            (ce.day || '').trim().toLowerCase() === (day || '').trim().toLowerCase() &&
+            (ce.start_time || '').substring(0, 5) === s5);
+        if (match) {
+          return { ...ce, is_locked: newLockState };
+        }
+        return ce;
+      });
+      localStorage.setItem('edugens_custom_schedule_entries', JSON.stringify(updatedCustom));
+    } catch {}
+
+    // Si se está desbloqueando, limpiar de todas las claves de localStorage
+    if (isCurrentlyLocked) {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('edugens_locked_entries')) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const list = JSON.parse(raw).filter(
+                (lk: string) =>
+                  lk !== idKey && lk !== locKey1 && lk !== locKey2 && lk !== locKey3
+              );
+              localStorage.setItem(k, JSON.stringify(list));
+            }
+          }
+        }
+      } catch {}
+    }
 
     // Persistir directamente en Supabase (Base de Datos)
     try {
@@ -273,13 +294,23 @@ export const ScheduleViewer = () => {
 
   const getCourseSubjectsAndAssignments = (targetCourseId: string) => {
     if (!targetCourseId) return [];
+
+    let excludedSubjectIds: string[] = [];
+    try {
+      excludedSubjectIds = JSON.parse(
+        localStorage.getItem(`edugens_excluded_course_subjects_${targetCourseId}`) || '[]'
+      );
+    } catch {}
+
     const directAssignments = (state.assignments || []).filter(
-      (a: any) => String(a.course_id || a.courseId) === String(targetCourseId)
+      (a: any) =>
+        String(a.course_id || a.courseId) === String(targetCourseId) &&
+        !excludedSubjectIds.includes(String(a.subject_id))
     );
 
     const map = new Map<string, any>();
 
-    // 1. Asignaciones directas del curso
+    // 1. Asignaciones directas del curso en la base de datos
     directAssignments.forEach((a: any) => {
       const sId = String(a.subject_id);
       const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
@@ -296,16 +327,9 @@ export const ScheduleViewer = () => {
     (state.schedule || []).forEach((s: any) => {
       if (String(s.course_id || s.courseId) === String(targetCourseId)) {
         const sId = String(s.subject_id);
+        if (excludedSubjectIds.includes(sId)) return;
         if (!map.has(sId)) {
           const sub = state.subjects.find((sub: any) => String(sub.id) === sId);
-          const subName = (sub?.name || '').toLowerCase();
-          let defaultHours = 2;
-          if (subName.includes('matem')) defaultHours = 6;
-          else if (subName.includes('español') || subName.includes('lengua')) defaultHours = 5;
-          else if (subName.includes('social') || subName.includes('natur')) defaultHours = 4;
-          else if (subName.includes('ingl') || subName.includes('franc')) defaultHours = 2;
-
-          // Contar horas reales colocadas en el horario para esta materia
           const countPlaced = (state.schedule || []).filter(
             (sc: any) =>
               String(sc.course_id || sc.courseId) === String(targetCourseId) &&
@@ -316,71 +340,16 @@ export const ScheduleViewer = () => {
             id: `sched-subject-${sId}`,
             subject_id: sId,
             teacher_id: s.teacher_id,
-            assignedHours: Math.max(defaultHours, countPlaced),
+            assignedHours: countPlaced,
             assign: {
               id: `sched-${sId}`,
               course_id: targetCourseId,
               subject_id: sId,
               teacher_id: s.teacher_id,
-              hours_per_week: Math.max(defaultHours, countPlaced)
+              hours_per_week: countPlaced
             }
           });
         }
-      }
-    });
-
-    // 3. Materias del currículo oficial para este nivel si faltasen en DB
-    const courseObj = state.courses.find((c: any) => String(c.id) === String(targetCourseId));
-    const levelStr = (courseObj?.level || '').toLowerCase();
-    const isSecundaria = levelStr.includes('secun');
-
-    (state.subjects || []).forEach((sub: any) => {
-      const sId = String(sub.id);
-      if (map.has(sId)) return;
-
-      const sName = (sub.name || '').toLowerCase();
-      let shouldInclude = false;
-      let defaultHours = 2;
-
-      if (isSecundaria) {
-        if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
-        else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
-        else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
-        else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
-        else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
-        else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
-      }
-
-      if (shouldInclude) {
-        const tchAssign = (state.assignments || []).find(
-          (a: any) =>
-            String(a.subject_id) === sId &&
-            String(a.course_id || a.courseId) === String(targetCourseId)
-        );
-        const generalTchAssign = (state.assignments || []).find(
-          (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
-        );
-        const teacherId =
-          tchAssign?.teacher_id ||
-          generalTchAssign?.teacher_id ||
-          (state.teachers[0]?.id || '');
-
-        map.set(sId, {
-          id: `curric-${sId}`,
-          subject_id: sId,
-          teacher_id: teacherId,
-          assignedHours: defaultHours,
-          assign: {
-            id: `temp-${sId}`,
-            course_id: targetCourseId,
-            subject_id: sId,
-            teacher_id: teacherId,
-            hours_per_week: defaultHours
-          }
-        });
       }
     });
 
@@ -2434,24 +2403,73 @@ export const ScheduleViewer = () => {
                       {subject?.name || 'Materia'}
                     </p>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {isAdminOrStaff && item.assign?.id && placedHours === 0 && (
+                      {isAdminOrStaff && (
                         <button
                           onClick={async (evt) => {
                             evt.stopPropagation();
                             if (
                               confirm(
-                                `¿Eliminar la asignación de "${subject?.name || 'esta materia'}" de este curso porque no corresponde a este grado?`
+                                `¿Eliminar la materia "${subject?.name || 'esta materia'}" de este curso porque no corresponde a este grado?`
                               )
                             ) {
                               try {
-                                await deleteAssignment(item.assign.id);
-                                alert(`✅ Asignación de ${subject?.name || 'materia'} eliminada de este curso.`);
+                                if (
+                                  item.assign?.id &&
+                                  !String(item.assign.id).startsWith('temp-') &&
+                                  !String(item.assign.id).startsWith('sched-')
+                                ) {
+                                  await deleteAssignment(item.assign.id);
+                                }
+
+                                // Si tuviera clases colocadas en el horario, removerlas
+                                if (placedHours > 0) {
+                                  await supabase
+                                    .from('schedule_entries')
+                                    .delete()
+                                    .eq('course_id', filterId)
+                                    .eq('subject_id', item.subject_id);
+                                }
+
+                                // Guardar en lista de exclusión persistente para este curso
+                                try {
+                                  const exList = JSON.parse(
+                                    localStorage.getItem(`edugens_excluded_course_subjects_${filterId}`) || '[]'
+                                  );
+                                  if (!exList.includes(String(item.subject_id))) {
+                                    exList.push(String(item.subject_id));
+                                    localStorage.setItem(
+                                      `edugens_excluded_course_subjects_${filterId}`,
+                                      JSON.stringify(exList)
+                                    );
+                                  }
+                                } catch {}
+
+                                setAppState((prev: any) => ({
+                                  ...prev,
+                                  assignments: (prev.assignments || []).filter(
+                                    (a: any) =>
+                                      !(
+                                        String(a.course_id || a.courseId) === String(filterId) &&
+                                        String(a.subject_id) === String(item.subject_id)
+                                      )
+                                  ),
+                                  schedule: (prev.schedule || []).filter(
+                                    (s: any) =>
+                                      !(
+                                        String(s.course_id || s.courseId) === String(filterId) &&
+                                        String(s.subject_id) === String(item.subject_id)
+                                      )
+                                  )
+                                }));
+
+                                await refreshData(undefined, true);
+                                alert(`✅ Materia "${subject?.name || ''}" eliminada de este curso con éxito.`);
                               } catch (err: any) {
-                                alert('Error al eliminar asignación: ' + err.message);
+                                alert('Error al eliminar materia: ' + err.message);
                               }
                             }
                           }}
-                          title="Eliminar asignación que no corresponde a este grado 🗑️"
+                          title="Eliminar materia de este curso 🗑️"
                           className="p-1 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-100 transition-all cursor-pointer"
                         >
                           <Trash2 size={13} />

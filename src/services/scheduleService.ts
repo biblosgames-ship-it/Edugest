@@ -370,8 +370,9 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
 
 export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
   if (!e) return false;
-  if (e.is_locked === true || e.is_locked === 'true') return true;
-  if (!lockedKeys || lockedKeys.length === 0) return false;
+  if (!lockedKeys || lockedKeys.length === 0) {
+    return e.is_locked === true || e.is_locked === 'true';
+  }
   if (e.id && lockedKeys.includes(String(e.id))) return true;
 
   const rawStart = (e.start_time || '').trim();
@@ -386,7 +387,7 @@ export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
 
   return lockedKeys.some((lk) => {
     if (!lk) return false;
-    if (lk === k1 || lk === k2 || lk === k3 || lk === String(e.id)) return true;
+    if (lk === k1 || lk === k2 || lk === k3 || (e.id && lk === String(e.id))) return true;
     if (cId && day && lk.startsWith(`${cId}_${day}_`) && lk.includes(s5)) return true;
     return false;
   });
