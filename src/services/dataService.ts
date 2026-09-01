@@ -173,9 +173,16 @@ export const dataService = {
       }
     }
 
+    const studentPayload = {
+      ...data,
+      school_year: schoolYear || data.school_year || '2026-2027',
+      created_at: data.created_at || new Date().toISOString(),
+      family_id: data.family_id || undefined
+    };
+
     const { data: student, error } = await supabase
       .from('students')
-      .insert([{ ...data, school_year: schoolYear, family_id: data.family_id || undefined }])
+      .insert([studentPayload])
       .select()
       .single();
     if (error) throw error;
