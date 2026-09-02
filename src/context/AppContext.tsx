@@ -413,7 +413,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const assignedIds = new Set((aRes.data || []).map((a: any) => a.teacher_id));
 
           const uniquePersonnel: any[] = [];
-          const seenNames = new Set();
+          const seenNames = new Set<string>();
+          const seenEmails = new Set<string>();
+          const seenIds = new Set<string>();
 
           rawList
             .filter((p) => p.role !== 'student' && p.role !== 'parent')
@@ -427,8 +429,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             })
             .forEach((p) => {
               const n = normalizeNameString(p.full_name);
-              if (n && n !== 'SIN NOMBRE' && !seenNames.has(n)) {
+              const email = (p.email || '').trim().toLowerCase();
+              const teacherId = p.teacher_id ? String(p.teacher_id) : '';
+
+              const isDuplicate =
+                (n && n !== 'SIN NOMBRE' && seenNames.has(n)) ||
+                (email && seenEmails.has(email)) ||
+                (teacherId && seenIds.has(teacherId));
+
+              if (!isDuplicate && n && n !== 'SIN NOMBRE') {
                 seenNames.add(n);
+                if (email) seenEmails.add(email);
+                if (p.id) seenIds.add(String(p.id));
+                if (teacherId) seenIds.add(teacherId);
                 uniquePersonnel.push(p);
               }
             });

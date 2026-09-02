@@ -473,6 +473,18 @@ export const InvitationForm = () => {
         allowed_panels: detectedAllowedPanels?.length ? detectedAllowedPanels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
       });
 
+      // 3. Vincular el correo y usuario en la ficha de personal existente para evitar duplicados
+      if (matchedStaffObj?.id) {
+        try {
+          await Promise.all([
+            supabase.from('staff').update({ email: user.email, user_id: user.id }).eq('id', matchedStaffObj.id),
+            supabase.from('teachers').update({ email: user.email, user_id: user.id }).eq('id', matchedStaffObj.id)
+          ]);
+        } catch (linkErr) {
+          console.warn('Error linking email to staff/teachers:', linkErr);
+        }
+      }
+
       window.location.reload();
     } catch (err: any) {
       setError(err.message || 'Error al vincular el perfil');
