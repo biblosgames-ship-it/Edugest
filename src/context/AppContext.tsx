@@ -379,7 +379,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               name: name,
               full_name: name,
               role: finalRole,
-              sex: (t.sex || t.gender || 'M').startsWith('F') ? 'F' : 'M',
+              sex: (() => {
+                const s = (t.sex || t.gender || '').toUpperCase();
+                if (s.startsWith('F')) return 'F';
+                if (s.startsWith('M')) return 'M';
+                const uName = name.toUpperCase();
+                if (
+                  uName.includes('JONAYRIS') ||
+                  uName.includes('MARIA') ||
+                  uName.includes('BERNARDA') ||
+                  uName.includes('CECILIA') ||
+                  uName.includes('DIGNA') ||
+                  uName.includes('RAQUEL') ||
+                  uName.includes('YNGRID') ||
+                  uName.includes('JELISSA') ||
+                  uName.includes('YOMARY') ||
+                  uName.includes('ANA')
+                ) return 'F';
+                return 'M';
+              })(),
               _priority: priority
             };
           };

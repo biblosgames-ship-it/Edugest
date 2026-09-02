@@ -274,13 +274,12 @@ export const CourseForm = () => {
                     (t: any) =>
                       t.role === 'teacher' ||
                       t.role === 'management_teacher' ||
-                      t.role === 'management' ||
-                      t.id === formData.titular_teacher_id ||
-                      !t.role
+                      t.role === 'docente' ||
+                      t.id === formData.titular_teacher_id
                   )
                   .map((t: any) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} {t.role === 'management' ? '(Gestión)' : ''}
+                      {t.name}
                     </option>
                   ))}
               </select>
