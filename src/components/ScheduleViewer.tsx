@@ -475,6 +475,28 @@ export const ScheduleViewer = () => {
     return `${h}:${m}`;
   };
 
+  const teacherIdToKey = useMemo(() => {
+    const map = new Map<string, string>();
+    (state.teachers || []).forEach((t: any) => {
+      const norm = (t.name || t.full_name || '').trim().toLowerCase();
+      if (t.id) map.set(String(t.id), norm || String(t.id));
+      if (t.teacher_id) map.set(String(t.teacher_id), norm || String(t.teacher_id));
+      if (t.user_id) map.set(String(t.user_id), norm || String(t.user_id));
+    });
+    return map;
+  }, [state.teachers]);
+
+  const isSameTeacher = useCallback(
+    (t1: string | null | undefined, t2: string | null | undefined) => {
+      if (!t1 || !t2) return false;
+      if (String(t1) === String(t2)) return true;
+      const k1 = teacherIdToKey.get(String(t1)) || String(t1);
+      const k2 = teacherIdToKey.get(String(t2)) || String(t2);
+      return k1 !== '' && k2 !== '' && k1 === k2;
+    },
+    [teacherIdToKey]
+  );
+
   const filteredSchedule = useMemo(() => {
     const list = [...(state.schedule || [])];
     const shiftBase = selectedShift.toLowerCase().substring(0, 3);
@@ -487,12 +509,19 @@ export const ScheduleViewer = () => {
     }
 
     if (filterType === 'teacher' && filterId) {
+      // Para docentes: traer todas sus horas asignadas (tanto de mañana como de tarde)
       return list.filter((s: any) => {
-        if (String(s.teacher_id) === String(filterId)) return true;
+        let yearMatch = true;
+        if (selectedYear) {
+          yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
+        }
+        if (!yearMatch) return false;
+
+        if (isSameTeacher(s.teacher_id, filterId)) return true;
         if (!s.teacher_id) {
           return (state.assignments || []).some(
             (a: any) =>
-              String(a.teacher_id || a.teacherId) === String(filterId) &&
+              isSameTeacher(a.teacher_id || a.teacherId, filterId) &&
               String(a.course_id || a.courseId) === String(s.course_id || s.courseId) &&
               String(a.subject_id) === String(s.subject_id)
           );
@@ -511,7 +540,7 @@ export const ScheduleViewer = () => {
       }
       return shiftMatch && yearMatch;
     });
-  }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear]);
+  }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear, isSameTeacher]);
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
@@ -591,25 +620,34 @@ export const ScheduleViewer = () => {
     };
 
     const getSlotsForCourse = (course: any) => {
-      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, effectiveShift);
-      let courseStartT = startT;
-      let courseEndT = endT;
+      const cTanda = (course?.tanda || '').toLowerCase();
+      const cLevel = (course?.level || '').toLowerCase();
+      const courseIsMorning = cTanda
+        ? !cTanda.includes('ves') && !cTanda.includes('tar')
+        : filterType === 'teacher'
+        ? !cLevel.includes('secun')
+        : isMorning;
+      const courseShiftName = courseIsMorning ? 'Matutina' : 'Vespertina';
+      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, courseShiftName);
+
+      let courseStartT = courseIsMorning ? 480 : 840;
+      let courseEndT = courseIsMorning ? 720 : 1095;
       if (courseOfficial?.start_time) {
         let s = toMins(courseOfficial.start_time);
-        if (!isMorning && s < 720 && s > 0) s += 720;
+        if (!courseIsMorning && s < 720 && s > 0) s += 720;
         courseStartT = s;
       }
       if (courseOfficial?.end_time) {
         let e = toMins(courseOfficial.end_time);
-        if (!isMorning && e < 720 && e > 0) e += 720;
+        if (!courseIsMorning && e < 720 && e > 0) e += 720;
         courseEndT = e;
       }
 
       const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
         let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
+        if (!courseIsMorning && bpMins < 720) bpMins += 720;
         const isBpMorning = bpMins < 780;
-        if (isMorning !== isBpMorning) return false;
+        if (courseIsMorning !== isBpMorning) return false;
 
         const bpLevel = (bp.level || '').toLowerCase();
         const levelNorm = (course?.level || '').toLowerCase();
@@ -622,9 +660,9 @@ export const ScheduleViewer = () => {
 
       const effectiveBPref = cycleBPref || masterBPref;
       let bStart = toMins(effectiveBPref.startTime);
-      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!isMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
-      const bDuration = Number(effectiveBPref.durationMinutes) || (isMorning ? 30 : 15);
+      if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
+      if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
+      const bDuration = Number(effectiveBPref.durationMinutes) || (courseIsMorning ? 30 : 15);
       const bEnd = bStart + bDuration;
 
       // Evento de Acto Cívico/Apertura
@@ -637,10 +675,10 @@ export const ScheduleViewer = () => {
         return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
       });
 
-      let classStart = courseOfficial?.start_time ? courseStartT : (isMorning && startT <= 480 ? 480 : startT);
+      let classStart = courseOfficial?.start_time ? courseStartT : (courseIsMorning && courseStartT <= 480 ? 480 : courseStartT);
       const slots = [];
 
-      if (isMorning && dbActoEvent) {
+      if (courseIsMorning && dbActoEvent) {
         const feEndMins = toMins(dbActoEvent.end_time);
         if (feEndMins > 0) classStart = feEndMins;
 
@@ -760,86 +798,63 @@ export const ScheduleViewer = () => {
       }
     }
 
-    // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña
+    // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña (Ambos Turnos / Jornada Completa)
     if (filterType === 'teacher' && filterId) {
-      const shiftBaseTeacher = effectiveShift.toLowerCase().substring(0, 3);
-      // Obtener los cursos asignados a este docente en este turno (desde asignaciones y desde el horario activo)
+      // Obtener los cursos asignados a este docente en CUALQUIER turno (Mañana y Tarde)
       const teacherAssignmentCourseIds = [
         ...new Set([
           ...(state.assignments || [])
-            .filter((a: any) => String(a.teacher_id || a.teacherId) === String(filterId))
+            .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, filterId))
             .map((a: any) => String(a.course_id || a.courseId)),
           ...(state.schedule || [])
-            .filter((s: any) => String(s.teacher_id) === String(filterId))
+            .filter((s: any) => isSameTeacher(s.teacher_id, filterId))
             .map((s: any) => String(s.course_id || s.courseId))
         ])
       ];
-      const teacherCourses = (state.courses || []).filter((c: any) => {
-        if (!teacherAssignmentCourseIds.includes(String(c.id))) return false;
-        const tStr = (c.tanda || '').toLowerCase();
-        const lvlStr = (c.level || '').toLowerCase();
-        if (shiftBaseTeacher === 'mat') {
-          return (
-            tStr.includes('mat') ||
-            tStr.includes('mañ') ||
-            tStr.includes('ext') ||
-            tStr.includes('com') ||
-            tStr === '' ||
-            ((lvlStr.includes('primar') || lvlStr.includes('ini')) &&
-              !tStr.includes('ves') &&
-              !tStr.includes('tar'))
-          );
-        } else {
-          return (
-            tStr.includes('ves') ||
-            tStr.includes('tar') ||
-            (tStr === '' && lvlStr.includes('secun'))
-          );
-        }
-      });
+
+      const teacherCourses = (state.courses || []).filter((c: any) =>
+        teacherAssignmentCourseIds.includes(String(c.id))
+      );
 
       if (teacherCourses.length > 0) {
-        // Generar slots para cada curso y fusionarlos
+        // Generar slots para cada curso según su tanda nativa y fusionarlos cronológicamente
         const mergedSlotsMap: Map<string, any> = new Map();
         teacherCourses.forEach((course: any) => {
           const courseSlots = getSlotsForCourse(course);
           courseSlots.forEach((slot: any) => {
-            const existing = mergedSlotsMap.get(slot.start);
-            if (!existing) {
-              mergedSlotsMap.set(slot.start, { ...slot });
+            const key = slot.start.substring(0, 5);
+            if (!mergedSlotsMap.has(key)) {
+              mergedSlotsMap.set(key, { ...slot });
             } else {
-              if (!slot.isBreak) existing.isBreak = false;
+              if (!slot.isBreak) mergedSlotsMap.get(key).isBreak = false;
             }
           });
         });
-        // Ordenar cronológicamente
+
+        // Ordenar cronológicamente (Mañana primero, Tarde después)
         let mergedSlots = [...mergedSlotsMap.values()].sort(
           (a, b) => toMins(a.start) - toMins(b.start)
         );
 
-        // Vista Compacta para Docentes: solo conservar slots con clases programadas o recreos
-        const teacherSchedule = (state.schedule || []).filter(
-          (s: any) => {
-            if (String(s.teacher_id) !== String(filterId)) return false;
-            const sShift = (s.shift || '').toLowerCase();
-            const isMatch = !sShift || sShift.includes(shiftBaseTeacher) || shiftBaseTeacher.includes(sShift.substring(0, 3));
-            return isMatch && (!selectedYear || !s.school_year || s.school_year === selectedYear);
-          }
-        );
+        // Vista Compacta para Docentes: solo conservar slots con clases programadas
+        const teacherSchedule = filteredSchedule;
         if (teacherSchedule.length > 0) {
           mergedSlots = mergedSlots.filter((slot) => {
-            if (slot.isBreak) return true;
+            if (slot.isBreak) return false;
             return teacherSchedule.some((entry: any) => {
-              let eMins = toMins(entry.start_time);
-              if (!isMorning && eMins < 720 && eMins > 0) eMins += 720;
+              const eMins = toMins(entry.start_time);
+              let adjEMins = eMins;
+              const eShift = (entry.shift || '').toLowerCase();
+              if ((eShift.includes('ves') || eShift.includes('tar')) && adjEMins < 720 && adjEMins > 0) {
+                adjEMins += 720;
+              }
               let slotMins = toMins(slot.start);
-              if (!isMorning && slotMins < 720 && slotMins > 0) slotMins += 720;
-              return Math.abs(slotMins - eMins) <= 25;
+              return Math.abs(slotMins - adjEMins) <= 25;
             });
           });
         }
 
-        return { slots: mergedSlots, startT, endT, masterBPref };
+        return { slots: mergedSlots, startT: 480, endT: 1095, masterBPref };
       }
     }
 
@@ -924,7 +939,9 @@ export const ScheduleViewer = () => {
     selectedShift,
     filterType,
     filterId,
-    state.courses
+    state.courses,
+    isSameTeacher,
+    filteredSchedule
   ]);
 
   const { slots, startT, endT, masterBPref } = timeSlots;
@@ -942,34 +959,32 @@ export const ScheduleViewer = () => {
     const normStr = (str: string) =>
       (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    const normalizeEntryMinutes = (timeStr: string, isMorn: boolean) => {
-      let mins = toMins(timeStr);
-      if (mins <= 0) return 0;
-      if (!isMorn) {
-        if (mins < 420) {
-          // Formato 12h (ej: 02:00 = 120 min -> 840 min / 14:00)
-          mins += 720;
-        } else if (mins >= 420 && mins < 780) {
-          // Horas guardadas en base matutina (ej: 08:00 = 480 min -> +360 = 840 min / 14:00)
-          mins += 360;
-        }
-      }
-      return mins;
-    };
-
     filteredSchedule.forEach((entry) => {
       if (!entry.day || !entry.start_time) return;
 
       const normDay = normStr(entry.day);
       const matchedDay = days.find((d) => normStr(d) === normDay) || days[0];
-      const eMins = normalizeEntryMinutes(entry.start_time, isMorning);
+
+      let eMins = toMins(entry.start_time);
+      const entryCourse = state.courses.find((c: any) => String(c.id) === String(entry.course_id || entry.courseId));
+      const cTanda = (entry.shift || entryCourse?.tanda || '').toLowerCase();
+      const isEntryAfternoon =
+        cTanda.includes('ves') ||
+        cTanda.includes('tar') ||
+        ((entryCourse?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
+
+      if (isEntryAfternoon && eMins < 720 && eMins > 0) {
+        eMins += 720;
+      } else if (!isEntryAfternoon && !isMorning && eMins >= 420 && eMins < 780 && filterType !== 'teacher') {
+        eMins += 360;
+      }
 
       let closestSlot: any = null;
       let minDiff = Infinity;
 
       slots.forEach((slot) => {
         let slotMins = toMins(slot.start);
-        if (!isMorning && slotMins < 720 && slotMins > 0) {
+        if (filterType !== 'teacher' && !isMorning && slotMins < 720 && slotMins > 0) {
           slotMins += 720;
         }
         const diff = Math.abs(eMins - slotMins);
@@ -980,7 +995,7 @@ export const ScheduleViewer = () => {
       });
 
       // Asociar si la entrada corresponde al slot más cercano
-      if (closestSlot && minDiff <= 60) {
+      if (closestSlot && minDiff <= 35) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
@@ -998,7 +1013,7 @@ export const ScheduleViewer = () => {
     });
 
     return map;
-  }, [filteredSchedule, slots, days, isMorning]);
+  }, [filteredSchedule, slots, days, isMorning, filterType, state.courses]);
 
   const conflicts = useMemo(() => {
     const conflictIds: string[] = [];
@@ -1283,6 +1298,86 @@ export const ScheduleViewer = () => {
         format: 'a4'
       });
 
+      const centerName = profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+
+      if (filterType === 'teacher' && filterId) {
+        const teacher = state.teachers.find((t: any) => isSameTeacher(t.id, filterId) || String(t.id) === String(filterId));
+        const teacherName = teacher?.name || 'Docente';
+
+        // Header Superior Elegante
+        doc.setFillColor(30, 41, 59); // slate-800
+        doc.rect(0, 0, 297, 18, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(centerName.toUpperCase(), 14, 11);
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`JORNADA COMPLETA | AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
+
+        // Título del Docente
+        doc.setTextColor(15, 23, 42); // slate-900
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`HORARIO SEMANAL: ${teacherName.toUpperCase()}`, 14, 28);
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Generado oficialmente a través de Edugest - Asignación Completa (Mañana y Tarde)`, 14, 33);
+
+        const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+        const tableBody = slots.map((slot: any) => {
+          const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+          const dayCols = tableDays.map((day) => {
+            const entries = entriesBySlotAndDay.get(`${day}-${slot.start}`) || [];
+            if (entries.length === 0) return '';
+            return entries.map((e: any) => {
+              const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
+              const course = state.courses.find((c: any) => String(c.id) === String(e.course_id || e.courseId));
+              const courseName = course ? `${course.grade} "${course.section || ''}"` : 'Curso';
+              return `${(sub?.name || 'Materia').toUpperCase()}\n(${courseName})`;
+            }).join('\n---\n');
+          });
+          return [timeLabel, ...dayCols];
+        });
+
+        autoTable(doc, {
+          startY: 37,
+          head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
+          body: tableBody,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [79, 70, 229],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center',
+            fontSize: 9,
+            cellPadding: 3
+          },
+          bodyStyles: {
+            fontSize: 8,
+            cellPadding: 3,
+            valign: 'middle',
+            textColor: [30, 41, 59]
+          },
+          columnStyles: {
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
+            1: { cellWidth: 48, halign: 'center' },
+            2: { cellWidth: 48, halign: 'center' },
+            3: { cellWidth: 48, halign: 'center' },
+            4: { cellWidth: 48, halign: 'center' },
+            5: { cellWidth: 48, halign: 'center' }
+          },
+          margin: { left: 14, right: 14 }
+        });
+
+        doc.save(`Horario_Docente_${teacherName.replace(/\s+/g, '_')}.pdf`);
+        return;
+      }
+
       const shiftCourses = state.courses.filter((c: any) => {
         const sBase = selectedShift.toLowerCase().substring(0, 3);
         const tStr = (c.tanda || '').toLowerCase();
@@ -1302,8 +1397,6 @@ export const ScheduleViewer = () => {
         alert('No hay cursos disponibles para exportar en esta tanda.');
         return;
       }
-
-      const centerName = profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
 
       targetCourses.forEach((course: any, idx: number) => {
         if (idx > 0) {
