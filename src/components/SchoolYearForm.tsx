@@ -121,6 +121,13 @@ export const SchoolYearForm = () => {
 
   const handleActivate = async (year: any) => {
     try {
+      const centerId = profile?.center_id;
+      if (centerId) {
+        await supabase
+          .from('school_years')
+          .update({ status: 'inactivo' })
+          .eq('center_id', centerId);
+      }
       await updateSchoolYear(year.id, { status: 'activo' });
       setSelectedYear(year.name);
       alert(`Año ${year.name} activado globalmente.`);

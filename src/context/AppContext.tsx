@@ -635,6 +635,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
               if (isGenesis && !is2026New && gradSet.has(key)) return;
 
+              // Si el registro pertenece explícitamente al ciclo escolar 2025-2026 y no fue reinscrito en 2026, dejar en el historial de 2025-2026
+              if (s.school_year === '2025-2026' && !is2026New && (!s.course_id || !activeCourseIdSet.has(String(s.course_id)))) {
+                return;
+              }
+
               if (!seenIdentities.has(key)) {
                 seenIdentities.add(key);
                 
