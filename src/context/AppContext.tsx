@@ -611,6 +611,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const st = (s.status || '').toLowerCase().trim();
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
+              const firstName = (s.names || s.first_name || '').trim();
+              const lastName = (s.first_surname || s.last_name || '').trim();
+              const secondSurname = (s.second_surname || '').trim();
+              
+              s.names = firstName || lastName;
+              s.first_name = firstName || lastName;
+              s.first_surname = lastName || firstName;
+              s.second_surname = secondSurname;
+              s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
+
               const key = normIdentity(s);
               if (key && !seenIdentities.has(key)) {
                 seenIdentities.add(key);

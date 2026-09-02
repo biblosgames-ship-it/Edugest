@@ -73,7 +73,7 @@ export const StudentManagement = () => {
 
       result = result.filter((s) => {
         const fullString = normText(
-          `${s.names || s.first_name || s.firstName || ''} ${s.first_surname || s.last_name || s.lastName || ''} ${s.second_surname || s.secondSurname || ''} ${s.student_code || ''} ${s.sigerd_code || ''} ${s.id_card || ''}`
+          `${s.first_surname || s.last_name || ''} ${s.second_surname || ''} ${s.names || s.first_name || ''} ${s.student_code || ''} ${s.sigerd_code || ''} ${s.id_card || ''}`
         );
         const altFullString = fullString.replace(/nn/g, 'n');
         const altTerm = term.replace(/nn/g, 'n');
@@ -491,7 +491,7 @@ export const StudentManagement = () => {
                   </td>
                   <td className="py-1 px-4">
                     <div className="text-[10px] font-black text-text-main uppercase leading-none">
-                      {s.first_surname} {s.second_surname || ''}, {s.names}
+                      {s.first_surname || s.last_name || ''} {s.second_surname || ''}, {s.names || s.first_name || ''}
                     </div>
                   </td>
                   {!selectedCourseId && (
