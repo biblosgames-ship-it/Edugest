@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useSupabase, useApp } from '../context/AppContext';
-import officialRosterData from '../data/official_2026_students.json';
 
 export const useAllStudents = () => {
   const { profile } = useSupabase();
@@ -88,36 +87,6 @@ export const useAllStudents = () => {
           .trim();
 
       const isGenesis = centerId === '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
-      const officialSet = new Set(officialRosterData as string[]);
-      const isOfficial2026Student = (s: any) => {
-        if (!isGenesis) return true;
-        const k1 = normIdentity(s);
-        if (officialSet.has(k1)) return true;
-        const k2 = normIdentity({
-          first_surname: s.names || s.first_name,
-          second_surname: '',
-          names: `${s.first_surname || s.last_name || ''} ${s.second_surname || ''}`
-        });
-        if (officialSet.has(k2)) return true;
-
-        if (s.created_at && (s.created_at >= '2026-08-01T00:00:00' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
-
-        if (
-          k1.includes('VALDIVIESO') ||
-          k2.includes('VALDIVIESO') ||
-          k1.includes('GEONNIEL') ||
-          k2.includes('GEONNIEL') ||
-          k1.includes('GEONIEL') ||
-          k2.includes('GEONIEL')
-        ) return true;
-
-        return (officialRosterData as string[]).some(
-          (item: string) =>
-            item === k1 ||
-            item === k2 ||
-            (item.length > 10 && k1.length > 10 && (item.includes(k1) || k1.includes(item)))
-        );
-      };
 
       const vespIdentitiesSet = new Set([
         'BRITO MARIANO MAXIMILIANO',
@@ -146,33 +115,31 @@ export const useAllStudents = () => {
           if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
           const key = normIdentity(s);
-          if (isOfficial2026Student(s)) {
-            if (key && !seenIdentities.has(key)) {
-              seenIdentities.add(key);
-              
-              let targetCid = s.course_id;
+          if (key && !seenIdentities.has(key)) {
+            seenIdentities.add(key);
+            
+            let targetCid = s.course_id;
 
-              if (isGenesis) {
-                const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
-                if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
-                  targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
-                } else if (s.course_id && activeCourseIds.has(String(s.course_id))) {
-                  targetCid = s.course_id;
-                } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                  targetCid = canonicalCourseMap.get(String(s.course_id))!;
-                }
-              } else {
-                if (s.course_id && activeCourseIds.has(String(s.course_id))) {
-                  targetCid = s.course_id;
-                } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                  targetCid = canonicalCourseMap.get(String(s.course_id))!;
-                }
+            if (isGenesis) {
+              const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+              if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
+                targetCid = '8400e2af-1124-421c-8ad3-f35e96c49525';
+              } else if (s.course_id && activeCourseIds.has(String(s.course_id))) {
+                targetCid = s.course_id;
+              } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                targetCid = canonicalCourseMap.get(String(s.course_id))!;
               }
-
-              s.course_id = targetCid;
-              s.school_year = targetYear;
-              unified.push(s);
+            } else {
+              if (s.course_id && activeCourseIds.has(String(s.course_id))) {
+                targetCid = s.course_id;
+              } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                targetCid = canonicalCourseMap.get(String(s.course_id))!;
+              }
             }
+
+            s.course_id = targetCid;
+            s.school_year = targetYear;
+            unified.push(s);
           }
         });
       } else {

@@ -596,27 +596,95 @@ export const GeneralReports = () => {
     const personnel = state.teachers || [];
 
     // Mapear cursos por ID para acceso rápido
-    const courseMap: Record<string, any> = {};
-    courses.forEach((c) => {
-      courseMap[c.id] = c;
+    const courseMap = new Map<string, any>();
+    courses.forEach((c: any) => {
+      if (c && c.id) {
+        courseMap.set(String(c.id), c);
+      }
     });
 
-    // Agrupar estudiantes por nivel y grado
-    const levelGroups: Record<string, Record<string, { male: number; female: number }>> = {};
-
-    // Inicializar con los niveles ordenados estándar
-    const orderedLevels = ['Inicial', 'Primaria', 'Secundaria'];
-    courses.forEach((c) => {
-      const lvl = c.level || 'General';
-      let normLvl = lvl;
-      if (lvl.toLowerCase().includes('ini')) normLvl = 'Inicial';
-      else if (lvl.toLowerCase().includes('prim')) normLvl = 'Primaria';
-      else if (lvl.toLowerCase().includes('sec')) normLvl = 'Secundaria';
-
-      if (!levelGroups[normLvl]) {
-        levelGroups[normLvl] = {};
+    // Detección precisa de género
+    const isStudentMale = (s: any) => {
+      const raw = (s.sex || s.gender || '').trim().toLowerCase();
+      if (
+        raw.startsWith('f') ||
+        raw.includes('fem') ||
+        raw.includes('muj') ||
+        raw.includes('niñ') ||
+        raw.includes('nina')
+      ) {
+        return false;
       }
-      const baseGrade = c.grade ? c.grade.trim() : c.name ? c.name.trim() : 'General';
+      if (
+        raw.startsWith('m') ||
+        raw.startsWith('v') ||
+        raw.includes('masc') ||
+        raw.includes('var') ||
+        raw.includes('hom')
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    // Helper para normalizar el nivel pedagógico
+    const getNormalizedLevel = (lvl: string, gradeName: string = '') => {
+      const l = (lvl || '').toLowerCase();
+      const g = (gradeName || '').toLowerCase();
+      if (
+        l.includes('ini') ||
+        g.includes('pre') ||
+        g.includes('kinder') ||
+        g.includes('kínder') ||
+        g.includes('párv') ||
+        g.includes('parv') ||
+        g.includes('maternal') ||
+        g.includes('guard')
+      ) {
+        return 'Inicial';
+      }
+      if (l.includes('prim')) {
+        return 'Primaria';
+      }
+      if (l.includes('sec')) {
+        return 'Secundaria';
+      }
+      return 'General';
+    };
+
+    // Helper para puntuación y orden pedagógico de grados
+    const gradeOrderScore = (gradeName: string) => {
+      const g = (gradeName || '').toLowerCase();
+      if (g.includes('guard')) return 1;
+      if (g.includes('maternal')) return 2;
+      if (g.includes('párv') || g.includes('parv')) return 3;
+      if (g.includes('pre-k') || g.includes('prek')) return 4;
+      if (g.includes('kinder') || g.includes('kínder')) return 5;
+      if (g.includes('pre-p') || g.includes('prep') || g.includes('preprimario') || g.includes('pre-primario')) return 6;
+
+      if (g.includes('1ro') || g.includes('primer')) return 10;
+      if (g.includes('2do') || g.includes('segund')) return 20;
+      if (g.includes('3ro') || g.includes('tercer')) return 30;
+      if (g.includes('4to') || g.includes('cuart')) return 40;
+      if (g.includes('5to') || g.includes('quint')) return 50;
+      if (g.includes('6to') || g.includes('sext')) return 60;
+      return 99;
+    };
+
+    // Estructura de niveles
+    const orderedLevels = ['Inicial', 'Primaria', 'Secundaria'];
+    const levelGroups: Record<string, any[]> = {
+      Inicial: [],
+      Primaria: [],
+      Secundaria: []
+    };
+
+    // 1. Inicializar todas las filas a partir de los cursos activos del centro
+    courses.forEach((c: any) => {
+      const normLvl = getNormalizedLevel(c.level, c.grade);
+      if (!levelGroups[normLvl]) levelGroups[normLvl] = [];
+
+      const baseGrade = c.grade ? c.grade.trim() : (c.name ? c.name.trim() : 'General');
       const sec = c.section ? c.section.trim() : '';
       const tandaStr = c.tanda ? c.tanda.trim() : '';
       let gradeLabel = sec ? `${baseGrade} - Sec. ${sec}` : baseGrade;
@@ -630,91 +698,86 @@ export const GeneralReports = () => {
               : tandaStr.substring(0, 1).toUpperCase();
         gradeLabel += ` (${shiftCode})`;
       }
-      if (!levelGroups[normLvl][gradeLabel]) {
-        levelGroups[normLvl][gradeLabel] = { male: 0, female: 0 };
+
+      // Evitar duplicados si el curso ya fue registrado
+      if (!levelGroups[normLvl].some((b: any) => b.courseId === String(c.id))) {
+        levelGroups[normLvl].push({
+          courseId: String(c.id),
+          name: gradeLabel,
+          male: 0,
+          female: 0,
+          order: gradeOrderScore(baseGrade)
+        });
       }
     });
 
-    // Contar alumnos
-    students.forEach((s) => {
-      let c = courseMap[s.course_id];
-      if (!c && s.course_id) {
-        c = courses.find((cr: any) => String(cr.id) === String(s.course_id));
-      }
-      
-      const lvl = c?.level || s.level || 'Inicial';
-      let normLvl = 'General';
-      const lvlLower = (lvl || '').toLowerCase();
-      const gradeStr = (c?.grade || s.grade || '').toLowerCase();
+    // 2. Contar cada estudiante en su curso correspondiente
+    students.forEach((s: any) => {
+      const sCid = String(s.course_id || s.courseId || '');
+      const matchedCourse = courseMap.get(sCid);
+      const isMale = isStudentMale(s);
 
-      if (lvlLower.includes('ini') || gradeStr.includes('pre') || gradeStr.includes('kinder') || gradeStr.includes('párv') || gradeStr.includes('maternal')) {
-        normLvl = 'Inicial';
-      } else if (lvlLower.includes('prim')) {
-        normLvl = 'Primaria';
-      } else if (lvlLower.includes('sec')) {
-        normLvl = 'Secundaria';
+      if (matchedCourse) {
+        const normLvl = getNormalizedLevel(matchedCourse.level, matchedCourse.grade);
+        const targetBucket = levelGroups[normLvl]?.find((b: any) => b.courseId === String(matchedCourse.id));
+        if (targetBucket) {
+          if (isMale) targetBucket.male++;
+          else targetBucket.female++;
+          return;
+        }
       }
 
-      if (!levelGroups[normLvl]) levelGroups[normLvl] = {};
-      const baseGrade = c?.grade ? c.grade.trim() : (s.grade ? s.grade.trim() : (normLvl === 'Inicial' ? 'Pre-Primario' : 'General'));
-      const sec = c?.section ? c.section.trim() : (s.section ? s.section.trim() : '');
-      const tandaStr = c?.tanda ? c.tanda.trim() : (s.tanda ? s.tanda.trim() : '');
-      let gradeLabel = sec ? `${baseGrade} - Sec. ${sec}` : baseGrade;
-      if (tandaStr && tandaStr.toLowerCase() !== 'general') {
-        const tLower = tandaStr.toLowerCase();
-        const shiftCode =
-          tLower.includes('mat') || tLower.includes('mañ')
-            ? 'M'
-            : tLower.includes('ves') || tLower.includes('tar')
-              ? 'V'
-              : tandaStr.substring(0, 1).toUpperCase();
-        gradeLabel += ` (${shiftCode})`;
-      }
-      if (!levelGroups[normLvl][gradeLabel])
-        levelGroups[normLvl][gradeLabel] = { male: 0, female: 0 };
+      // Si no tiene course_id exacto, agrupar bajo su nivel correspondiente
+      const normLvl = getNormalizedLevel(s.level, s.grade);
+      if (!levelGroups[normLvl]) levelGroups[normLvl] = [];
 
-      const isMale =
-        (s.sex || s.gender || '').toUpperCase().startsWith('M') ||
-        (s.sex || s.gender || '').toUpperCase().startsWith('V');
-      if (isMale) {
-        levelGroups[normLvl][gradeLabel].male++;
-      } else {
-        levelGroups[normLvl][gradeLabel].female++;
+      const fallbackLabel = s.grade
+        ? s.section
+          ? `${s.grade.trim()} - Sec. ${s.section.trim()}`
+          : s.grade.trim()
+        : 'Sin Curso Asignado';
+
+      let targetBucket = levelGroups[normLvl].find((b: any) => b.name === fallbackLabel);
+      if (!targetBucket) {
+        targetBucket = {
+          courseId: `fallback-${fallbackLabel}`,
+          name: fallbackLabel,
+          male: 0,
+          female: 0,
+          order: gradeOrderScore(fallbackLabel)
+        };
+        levelGroups[normLvl].push(targetBucket);
       }
+
+      if (isMale) targetBucket.male++;
+      else targetBucket.female++;
     });
 
     let grandTotalMale = 0;
     let grandTotalFemale = 0;
 
-    // Convertir a array con un orden consistente
-    const levelsResult = Object.keys(levelGroups)
-      .sort((a, b) => {
-        const idxA = orderedLevels.indexOf(a);
-        const idxB = orderedLevels.indexOf(b);
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-        if (idxA !== -1) return -1;
-        if (idxB !== -1) return 1;
-        return a.localeCompare(b);
-      })
+    // 3. Convertir a arreglo con ordenamiento pedagógico
+    const levelsResult = orderedLevels
       .map((lvlName) => {
-        const gradesObj = levelGroups[lvlName];
+        const rawGrades = levelGroups[lvlName] || [];
+        const sortedGrades = [...rawGrades].sort((a, b) => {
+          if (a.order !== b.order) return a.order - b.order;
+          return a.name.localeCompare(b.name);
+        });
+
         let lvlMale = 0;
         let lvlFemale = 0;
 
-        const gradesArr = Object.keys(gradesObj)
-          .sort()
-          .map((gName) => {
-            const m = gradesObj[gName].male;
-            const f = gradesObj[gName].female;
-            lvlMale += m;
-            lvlFemale += f;
-            return {
-              name: gName,
-              male: m,
-              female: f,
-              total: m + f
-            };
-          });
+        const gradesArr = sortedGrades.map((g) => {
+          lvlMale += g.male;
+          lvlFemale += g.female;
+          return {
+            name: g.name,
+            male: g.male,
+            female: g.female,
+            total: g.male + g.female
+          };
+        });
 
         grandTotalMale += lvlMale;
         grandTotalFemale += lvlFemale;
@@ -727,7 +790,7 @@ export const GeneralReports = () => {
           total: lvlMale + lvlFemale
         };
       })
-      .filter((l) => l.grades.some((g) => g.total > 0) || l.name !== 'General'); // Mostrar niveles con alumnos o definidos
+      .filter((l) => l.grades.length > 0 && (l.total > 0 || courses.some((c: any) => getNormalizedLevel(c.level, c.grade) === l.name)));
 
     // Personal por área
     let docentes = 0;

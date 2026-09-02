@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import officialRosterData from '../data/official_2026_students.json';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -583,40 +582,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .trim();
 
           const isGenesis = targetCid === '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
-          const officialSet = new Set(officialRosterData as string[]);
-          const isOfficial2026Student = (s: any) => {
-            // 1. Para centros que no son Génesis (ej: Los Serafines, Juan Pablo Duarte), todos sus alumnos activos son válidos
-            if (!isGenesis) return true;
-
-            const k1 = normIdentity(s);
-            if (officialSet.has(k1)) return true;
-            const k2 = normIdentity({
-              first_surname: s.names || s.first_name,
-              second_surname: '',
-              names: `${s.first_surname || s.last_name || ''} ${s.second_surname || ''}`
-            });
-            if (officialSet.has(k2)) return true;
-
-            // 2. Alumnos creados / matriculados formalmente en el ciclo actual (agosto 2026 en adelante)
-            if (s.created_at && (s.created_at >= '2026-08-01T00:00:00' || s.created_at.includes('2026-08') || s.created_at.includes('2026-09'))) return true;
-
-            // 3. Garantizar inclusión de Geonniel Valdivieso Mejía
-            if (
-              k1.includes('VALDIVIESO') ||
-              k2.includes('VALDIVIESO') ||
-              k1.includes('GEONNIEL') ||
-              k2.includes('GEONNIEL') ||
-              k1.includes('GEONIEL') ||
-              k2.includes('GEONIEL')
-            ) return true;
-
-            return (officialRosterData as string[]).some(
-              (item: string) =>
-                item === k1 ||
-                item === k2 ||
-                (item.length > 10 && k1.length > 10 && (item.includes(k1) || k1.includes(item)))
-            );
-          };
 
           const vespIdentitiesSet = new Set([
             'BRITO MARIANO MAXIMILIANO',
@@ -647,38 +612,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
               const key = normIdentity(s);
-              if (isOfficial2026Student(s)) {
-                if (key && !seenIdentities.has(key)) {
-                  seenIdentities.add(key);
-                  
-                  let studentCourseId = s.course_id;
+              if (key && !seenIdentities.has(key)) {
+                seenIdentities.add(key);
+                
+                let studentCourseId = s.course_id;
 
-                  if (isGenesis) {
-                    // Resolución especial de Preprimario por tanda (Matutina vs Vespertina) solo en Génesis
-                    const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
-                    if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
-                      studentCourseId = '8400e2af-1124-421c-8ad3-f35e96c49525';
-                    } else if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
-                      studentCourseId = s.course_id;
-                    } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                      studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
-                    }
-                  } else {
-                    // Para Los Serafines y demás centros: mapeo canónico hacia el curso activo del centro
-                    if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
-                      studentCourseId = s.course_id;
-                    } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
-                      studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
-                    }
+                if (isGenesis) {
+                  // Resolución especial de Preprimario por tanda (Matutina vs Vespertina) solo en Génesis
+                  const isPreprimarioVesp = vespIdentitiesSet.has(key) || (s.shift || '').toLowerCase().includes('vesp') || (s.shift || '').toLowerCase().includes('tard');
+                  if (s.course_id === '8400e2af-1124-421c-8ad3-f35e96c49525' || (isPreprimarioVesp && (s.course_id === '73f8f202-f31f-465b-b1ef-6028b89ae271' || s.course_id === '7291214b-2cf8-4064-b232-42ad86c8c570' || s.course_id === 'beff5a14-a3d7-4249-bff4-5b3b843adc36' || !s.course_id))) {
+                    studentCourseId = '8400e2af-1124-421c-8ad3-f35e96c49525';
+                  } else if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+                    studentCourseId = s.course_id;
+                  } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                    studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
                   }
-
-                  if (s.school_year !== currentFetchYear || s.course_id !== studentCourseId) {
-                    studentsToHeal2026.push({ id: s.id, course_id: studentCourseId, school_year: currentFetchYear });
+                } else {
+                  // Para Los Serafines y demás centros: mapeo canónico hacia el curso activo del centro
+                  if (s.course_id && activeCourseIdSet.has(String(s.course_id))) {
+                    studentCourseId = s.course_id;
+                  } else if (s.course_id && canonicalCourseMap.has(String(s.course_id))) {
+                    studentCourseId = canonicalCourseMap.get(String(s.course_id))!;
                   }
-                  s.school_year = currentFetchYear;
-                  s.course_id = studentCourseId;
-                  filteredStudents.push(s);
                 }
+
+                if (s.school_year !== currentFetchYear || (studentCourseId && s.course_id !== studentCourseId)) {
+                  studentsToHeal2026.push({ id: s.id, course_id: studentCourseId, school_year: currentFetchYear });
+                }
+                s.school_year = currentFetchYear;
+                s.course_id = studentCourseId;
+                filteredStudents.push(s);
               }
             });
           } else {
