@@ -3198,6 +3198,29 @@ export const scheduleService = {
       return mins;
     };
 
+    // Mapeo unificado de identidades docentes para evitar dobles reservas por discrepancias de ID
+    const teacherIdToKey = new Map<string, string>();
+    (state.teachers || []).forEach((t: any) => {
+      const norm = (t.name || t.full_name || '').trim().toLowerCase();
+      if (t.id) teacherIdToKey.set(String(t.id), norm || String(t.id));
+      if (t.teacher_id) teacherIdToKey.set(String(t.teacher_id), norm || String(t.teacher_id));
+      if (t.user_id) teacherIdToKey.set(String(t.user_id), norm || String(t.user_id));
+    });
+
+    const getTeacherKey = (tId: string | null | undefined) => {
+      if (!tId) return '';
+      const str = String(tId);
+      return teacherIdToKey.get(str) || str;
+    };
+
+    const isSameTeacher = (t1: string | null | undefined, t2: string | null | undefined) => {
+      if (!t1 || !t2) return false;
+      if (String(t1) === String(t2)) return true;
+      const k1 = getTeacherKey(t1);
+      const k2 = getTeacherKey(t2);
+      return k1 !== '' && k2 !== '' && k1 === k2;
+    };
+
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
     // 2. GENERADOR DINÁMICO DE SLOTS OFICIALES POR CURSO
@@ -3323,7 +3346,7 @@ export const scheduleService = {
         const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
         assignMap.set(sId, {
           subject_id: sId,
-          teacher_id: a.teacher_id || a.teacherId,
+          teacher_id: a.teacher_id || a.teacherId || '',
           hours: req,
           assign: a
         });
@@ -3366,7 +3389,8 @@ export const scheduleService = {
           const genTch = (allAssignments || []).find(
             (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
           );
-          const teacherId = genTch?.teacher_id || genTch?.teacherId || (state.teachers && state.teachers[0]?.id) || '';
+          // Si no hay docente explícito, dejar vacío para no sobrecargar erróneamente a otro profesor
+          const teacherId = genTch?.teacher_id || genTch?.teacherId || '';
           assignMap.set(sId, {
             subject_id: sId,
             teacher_id: teacherId,
@@ -3419,7 +3443,7 @@ export const scheduleService = {
     const newEntriesToInsert: any[] = [];
     let placedCount = 0;
 
-    // Helper de validación de casilla
+    // Helper de validación de casilla con chequeo estricto de choque docente
     const isSlotValidForTeacherAndCourse = (
       cId: string,
       tId: string,
@@ -3440,7 +3464,7 @@ export const scheduleService = {
         if (doesOverlapSportsBreak(sStartMins, sEndMins, courseObj, breakPreferences, isCourseMorning ? 'Matutina' : 'Vespertina', toMins)) return false;
       }
 
-      // 3. Máximo 2 horas al día de la misma materia
+      // 3. Máximo 2 horas al día de la misma materia en este curso
       const sameSubjectInDay = workingSchedule.filter(
         (e: any) =>
           String(e.course_id) === String(cId) &&
@@ -3460,10 +3484,10 @@ export const scheduleService = {
       });
       if (courseBusy) return false;
 
-      // 5. Docente ocupado en cualquier otro curso a esa hora
+      // 5. Docente ocupado en cualquier otro curso a esa hora (Evaluación unificada anti-choque)
       if (tId) {
         const teacherBusy = workingSchedule.some((e: any) => {
-          if (String(e.teacher_id) !== String(tId)) return false;
+          if (!isSameTeacher(e.teacher_id, tId)) return false;
           if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
           const eS = normalizeEntryMinutes(e.start_time, isCourseMorning);
           let eE = normalizeEntryMinutes(e.end_time, isCourseMorning);
@@ -3476,7 +3500,7 @@ export const scheduleService = {
       return true;
     };
 
-    // 5. FASE 1: COLOCACIÓN DIRECTA EN CASILLAS LIBRES
+    // 5. FASE 1: COLOCACIÓN DIRECTA EN CASILLAS LIBRES (Priorizando bloques continuos de 2 horas)
     for (const task of missingTasks) {
       const courseObj = courses.find((c: any) => String(c.id) === String(task.courseId));
       if (!courseObj) continue;
@@ -3495,7 +3519,7 @@ export const scheduleService = {
               center_id: centerId,
               course_id: task.courseId,
               subject_id: task.subjectId,
-              teacher_id: task.teacherId,
+              teacher_id: task.teacherId || null,
               day,
               shift: task.isMorning ? 'Matutina' : 'Vespertina',
               start_time: slot.start.length === 5 ? slot.start + ':00' : slot.start,
@@ -3538,7 +3562,7 @@ export const scheduleService = {
 
           // 2. Verificar si el docente de la materia faltante está ocupado en OTRO curso a esta hora
           const teacherBusyHere = task.teacherId && workingSchedule.some((e: any) => {
-            if (String(e.teacher_id) !== String(task.teacherId)) return false;
+            if (!isSameTeacher(e.teacher_id, task.teacherId)) return false;
             if ((e.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
             if (String(e.course_id) === String(task.courseId)) return false;
             const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
@@ -3589,7 +3613,7 @@ export const scheduleService = {
               // Verificar si el docente de la materia ocupante está ocupado en OTRO curso en altDay y altSlot
               const occTeacherBusyInAlt = occupyingEntry.teacher_id && workingSchedule.some((e: any) => {
                 if (String(e.id) === String(occupyingEntry.id)) return false;
-                if (String(e.teacher_id) !== String(occupyingEntry.teacher_id)) return false;
+                if (!isSameTeacher(e.teacher_id, occupyingEntry.teacher_id)) return false;
                 if ((e.day || '').trim().toLowerCase() !== altDay.toLowerCase()) return false;
                 if (String(e.course_id) === String(task.courseId)) return false;
                 const eS = normalizeEntryMinutes(e.start_time, task.isMorning);
@@ -3621,7 +3645,7 @@ export const scheduleService = {
                 center_id: centerId,
                 course_id: task.courseId,
                 subject_id: task.subjectId,
-                teacher_id: task.teacherId,
+                teacher_id: task.teacherId || null,
                 day,
                 shift: task.isMorning ? 'Matutina' : 'Vespertina',
                 start_time: curS,
