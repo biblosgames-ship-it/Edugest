@@ -16,10 +16,21 @@ const updateSW = registerSW({
       r.update();
       setInterval(() => {
         r.update();
-      }, 30 * 1000);
+      }, 15 * 1000);
     }
   }
 });
+
+// Auto-recarga inmediata cuando el Service Worker se actualiza en segundo plano
+if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+}
 
 // Crear el cliente de React Query
 const queryClient = new QueryClient({
