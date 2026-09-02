@@ -5,6 +5,27 @@ import App from './App.tsx';
 import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
+declare const __APP_BUILD_TIME__: string;
+
+// Auto-purga de Caché al detectar un nuevo despliegue
+try {
+  const currentBuildTime = typeof __APP_BUILD_TIME__ !== 'undefined' ? __APP_BUILD_TIME__ : Date.now().toString();
+  const lastBuildTime = localStorage.getItem('edugest_app_build_version');
+
+  if (lastBuildTime && lastBuildTime !== currentBuildTime) {
+    localStorage.setItem('edugest_app_build_version', currentBuildTime);
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        names.forEach((name) => caches.delete(name));
+      });
+    }
+  } else if (!lastBuildTime) {
+    localStorage.setItem('edugest_app_build_version', currentBuildTime);
+  }
+} catch (e) {
+  console.warn('Error checking app build version:', e);
+}
+
 // Registro y actualización forzada automática de la PWA
 const updateSW = registerSW({
   immediate: true,
@@ -16,7 +37,7 @@ const updateSW = registerSW({
       r.update();
       setInterval(() => {
         r.update();
-      }, 15 * 1000);
+      }, 10 * 1000);
     }
   }
 });
