@@ -45,6 +45,7 @@ import FamilyReport from './FamilyReport';
 import DemographicReport from './DemographicReport';
 import { GlobalAdminDashboardReport } from './GlobalAdminDashboardReport';
 import MasterDirectoryReport from './MasterDirectoryReport';
+import { DailyMinerdAttendanceReport } from './DailyMinerdAttendanceReport';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -120,6 +121,14 @@ export const GeneralReports = () => {
         icon: Users,
         color: 'bg-blue-600',
         id: 'summary-report'
+      },
+      {
+        title: 'Informe Diario de Asistencia MINERD',
+        description:
+          'Consolidado diario de varones y hembras presentes/ausentes por grado y nivel (1er pase de lista).',
+        icon: UserCheck,
+        color: 'bg-emerald-600',
+        id: 'daily-minerd-attendance'
       },
       {
         title: 'Control de Digitado Masivo',
@@ -264,6 +273,7 @@ export const GeneralReports = () => {
   }>({ gradeCounts: {}, levelStudentCounts: {} });
   const [isAuditing, setIsAuditing] = useState(false);
   const [showSummaryReport, setShowSummaryReport] = useState(false);
+  const [showDailyMinerdAttendance, setShowDailyMinerdAttendance] = useState(false);
   const [showInstitutionalRecord, setShowInstitutionalRecord] = useState(false);
   const [showCourseRecord, setShowCourseRecord] = useState(false);
 
@@ -1887,6 +1897,8 @@ export const GeneralReports = () => {
                       onClick={() => {
                         if (report.id === 'summary-report') {
                           setShowSummaryReport(true);
+                        } else if (report.id === 'daily-minerd-attendance') {
+                          setShowDailyMinerdAttendance(true);
                         } else if (report.id === 'institutional-record') {
                           setShowInstitutionalRecord(true);
                         } else if (report.id === 'course-record') {
@@ -2564,6 +2576,27 @@ export const GeneralReports = () => {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDailyMinerdAttendance && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl my-8 overflow-hidden border border-slate-100 flex flex-col max-h-[92vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-black uppercase text-indigo-600 tracking-widest px-3 py-1 bg-indigo-50 rounded-full">
+                MINERD Oficial
+              </span>
+              <button
+                onClick={() => setShowDailyMinerdAttendance(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 bg-slate-50/50">
+              <DailyMinerdAttendanceReport />
             </div>
           </div>
         </div>
