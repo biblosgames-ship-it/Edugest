@@ -1,5 +1,5 @@
 /** VERSION 45.0 - BLINDAJE TOTAL Y LIMPIEZA DE CÓDIGO **/
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Download,
