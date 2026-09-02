@@ -509,13 +509,26 @@ export const ScheduleViewer = () => {
     }
 
     if (filterType === 'teacher' && filterId) {
-      // Para docentes: traer todas sus horas asignadas (tanto de mañana como de tarde)
+      // Filtrar estrictamente por la tanda seleccionada (Matutina o Vespertina)
       return list.filter((s: any) => {
         let yearMatch = true;
         if (selectedYear) {
           yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
         }
         if (!yearMatch) return false;
+
+        const sShift = (s.shift || '').toLowerCase();
+        const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
+        const cTanda = (course?.tanda || '').toLowerCase();
+        const isEntryMorn =
+          sShift.includes('mat') ||
+          sShift.includes('mañ') ||
+          cTanda.includes('mat') ||
+          cTanda.includes('mañ') ||
+          (!sShift.includes('ves') && !sShift.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
+
+        const shiftMatch = selectedShift === 'Matutina' ? isEntryMorn : !isEntryMorn;
+        if (!shiftMatch) return false;
 
         if (isSameTeacher(s.teacher_id, filterId)) return true;
         if (!s.teacher_id) {
@@ -798,9 +811,8 @@ export const ScheduleViewer = () => {
       }
     }
 
-    // VISTA DE DOCENTE: construir grilla unificada desde todos los cursos que enseña (Ambos Turnos / Jornada Completa)
+    // VISTA DE DOCENTE: construir grilla separada por tanda (Matutina o Vespertina según la pestaña activa)
     if (filterType === 'teacher' && filterId) {
-      // Obtener los cursos asignados a este docente en CUALQUIER turno (Mañana y Tarde)
       const teacherAssignmentCourseIds = [
         ...new Set([
           ...(state.assignments || [])
@@ -812,12 +824,18 @@ export const ScheduleViewer = () => {
         ])
       ];
 
-      const teacherCourses = (state.courses || []).filter((c: any) =>
-        teacherAssignmentCourseIds.includes(String(c.id))
-      );
+      const teacherCourses = (state.courses || []).filter((c: any) => {
+        if (!teacherAssignmentCourseIds.includes(String(c.id))) return false;
+        const tStr = (c.tanda || '').toLowerCase();
+        const lvlStr = (c.level || '').toLowerCase();
+        if (isMorning) {
+          return !tStr.includes('ves') && !tStr.includes('tar');
+        } else {
+          return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+        }
+      });
 
       if (teacherCourses.length > 0) {
-        // Generar slots para cada curso según su tanda nativa y fusionarlos cronológicamente
         const mergedSlotsMap: Map<string, any> = new Map();
         teacherCourses.forEach((course: any) => {
           const courseSlots = getSlotsForCourse(course);
@@ -831,30 +849,11 @@ export const ScheduleViewer = () => {
           });
         });
 
-        // Ordenar cronológicamente (Mañana primero, Tarde después)
         let mergedSlots = [...mergedSlotsMap.values()].sort(
           (a, b) => toMins(a.start) - toMins(b.start)
         );
 
-        // Vista Compacta para Docentes: solo conservar slots con clases programadas
-        const teacherSchedule = filteredSchedule;
-        if (teacherSchedule.length > 0) {
-          mergedSlots = mergedSlots.filter((slot) => {
-            if (slot.isBreak) return false;
-            return teacherSchedule.some((entry: any) => {
-              const eMins = toMins(entry.start_time);
-              let adjEMins = eMins;
-              const eShift = (entry.shift || '').toLowerCase();
-              if ((eShift.includes('ves') || eShift.includes('tar')) && adjEMins < 720 && adjEMins > 0) {
-                adjEMins += 720;
-              }
-              let slotMins = toMins(slot.start);
-              return Math.abs(slotMins - adjEMins) <= 25;
-            });
-          });
-        }
-
-        return { slots: mergedSlots, startT: 480, endT: 1095, masterBPref };
+        return { slots: mergedSlots, startT: isMorning ? 480 : 840, endT: isMorning ? 720 : 1095, masterBPref };
       }
     }
 
@@ -1591,12 +1590,18 @@ export const ScheduleViewer = () => {
         <div className="flex flex-wrap items-center gap-4">
           {(() => {
             const matCount = (state.schedule || []).filter((s: any) => {
+              if (filterType === 'teacher' && filterId && !isSameTeacher(s.teacher_id, filterId)) return false;
               const sh = (s.shift || '').toLowerCase();
-              return sh.includes('mat') || sh.includes('mañ') || sh === '';
+              const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
+              const cTanda = (course?.tanda || '').toLowerCase();
+              return sh.includes('mat') || sh.includes('mañ') || cTanda.includes('mat') || cTanda.includes('mañ') || (!sh.includes('ves') && !sh.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
             }).length;
             const vesCount = (state.schedule || []).filter((s: any) => {
+              if (filterType === 'teacher' && filterId && !isSameTeacher(s.teacher_id, filterId)) return false;
               const sh = (s.shift || '').toLowerCase();
-              return sh.includes('ves') || sh.includes('tar');
+              const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
+              const cTanda = (course?.tanda || '').toLowerCase();
+              return sh.includes('ves') || sh.includes('tar') || cTanda.includes('ves') || cTanda.includes('tar');
             }).length;
 
             const handleShiftChange = (shift: 'Matutina' | 'Vespertina') => {
