@@ -48,6 +48,8 @@ import MasterDirectoryReport from './MasterDirectoryReport';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   PieChart,
   Pie,
@@ -792,34 +794,51 @@ export const GeneralReports = () => {
       })
       .filter((l) => l.grades.length > 0 && (l.total > 0 || courses.some((c: any) => getNormalizedLevel(c.level, c.grade) === l.name)));
 
-    // Personal por área
-    let docentes = 0;
-    let gestion = 0;
-    let admin = 0;
-    let apoyo = 0;
+    // Detección de género del personal
+    const isStaffMale = (p: any) => {
+      const raw = (p.sex || p.gender || '').trim().toLowerCase();
+      if (raw.startsWith('f') || raw.includes('fem') || raw.includes('muj')) return false;
+      if (raw.startsWith('m') || raw.startsWith('v') || raw.includes('masc') || raw.includes('var') || raw.includes('hom')) return true;
+      return true;
+    };
+
+    // Personal clasificado por área y sexo
+    let gestionM = 0, gestionF = 0;
+    let docentesM = 0, docentesF = 0;
+    let adminM = 0, adminF = 0;
+    let apoyoM = 0, apoyoF = 0;
 
     personnel.forEach((p) => {
-      const r = p.role;
+      const r = (p.role || '').toLowerCase();
+      const isM = isStaffMale(p);
       if (r === 'management_teacher') {
-        docentes++;
-        gestion++;
+        if (isM) { docentesM++; gestionM++; }
+        else { docentesF++; gestionF++; }
       } else if (r === 'teacher') {
-        docentes++;
+        if (isM) docentesM++;
+        else docentesF++;
       } else if (r === 'management') {
-        gestion++;
+        if (isM) gestionM++;
+        else gestionF++;
       } else if (r === 'administrative') {
-        admin++;
+        if (isM) adminM++;
+        else adminF++;
       } else {
-        apoyo++;
+        if (isM) apoyoM++;
+        else apoyoF++;
       }
     });
 
     const staffAreas = [
-      { name: 'Equipo de Gestión', count: gestion },
-      { name: 'Personal Docente', count: docentes },
-      { name: 'Personal Administrativo', count: admin },
-      { name: 'Personal de Apoyo', count: apoyo }
+      { name: 'Equipo de Gestión', count: gestionM + gestionF, male: gestionM, female: gestionF },
+      { name: 'Personal Docente', count: docentesM + docentesF, male: docentesM, female: docentesF },
+      { name: 'Personal Administrativo', count: adminM + adminF, male: adminM, female: adminF },
+      { name: 'Personal de Apoyo', count: apoyoM + apoyoF, male: apoyoM, female: apoyoF }
     ];
+
+    const totalStaffMale = gestionM + docentesM + adminM + apoyoM;
+    const totalStaffFemale = gestionF + docentesF + adminF + apoyoF;
+    const totalStaff = totalStaffMale + totalStaffFemale;
 
     return {
       levels: levelsResult,
@@ -827,9 +846,203 @@ export const GeneralReports = () => {
       grandTotalFemale,
       grandTotal: grandTotalMale + grandTotalFemale,
       staffAreas,
-      totalStaff: personnel.length
+      totalStaffMale,
+      totalStaffFemale,
+      totalStaff
     };
   }, [state.students, state.courses, state.teachers]);
+
+  const handleDownloadSummaryPDF = () => {
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      let startY = 15;
+      if (center?.logo_url || center?.logo) {
+        try {
+          doc.addImage(center.logo_url || center.logo, 'PNG', 14, startY, 18, 18);
+        } catch (e) {}
+      }
+
+      const textStartX = center?.logo_url || center?.logo ? 36 : 14;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(30, 41, 59);
+      doc.text((center?.name || 'CENTRO EDUCATIVO EDUGEST').toUpperCase(), textStartX, startY + 5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`CÓDIGO: ${center?.center_code || center?.code || 'N/A'}  |  AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, textStartX, startY + 10);
+      doc.text(`ESTADÍSTICA GENERAL CONSOLIDADA  |  FECHA: ${new Date().toLocaleDateString('es-DO')}`, textStartX, startY + 15);
+
+      doc.setDrawColor(30, 41, 59);
+      doc.setLineWidth(0.6);
+      doc.line(14, startY + 20, pageWidth - 14, startY + 20);
+
+      let currentY = startY + 26;
+
+      // 1. Matrícula Estudiantil por Niveles y Grados
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(79, 70, 229);
+      doc.text('I. MATRÍCULA ESTUDIANTIL POR NIVELES Y GRADOS', 14, currentY);
+      currentY += 3;
+
+      const studentTableBody: any[] = [];
+
+      summaryData.levels.forEach((lvl: any) => {
+        studentTableBody.push([
+          { content: lvl.name.toUpperCase(), colSpan: 4, styles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 } }
+        ]);
+
+        lvl.grades.forEach((g: any) => {
+          studentTableBody.push([
+            `  ${g.name}`,
+            { content: String(g.male), styles: { halign: 'center', textColor: [37, 99, 235] } },
+            { content: String(g.female), styles: { halign: 'center', textColor: [225, 29, 72] } },
+            { content: String(g.total), styles: { halign: 'right', fontStyle: 'bold', textColor: [79, 70, 229] } }
+          ]);
+        });
+
+        studentTableBody.push([
+          { content: `SUBTOTAL ${lvl.name.toUpperCase()}:`, styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
+          { content: String(lvl.totalMale), styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [37, 99, 235] } },
+          { content: String(lvl.totalFemale), styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [225, 29, 72] } },
+          { content: String(lvl.total), styles: { halign: 'right', fontStyle: 'bold', fillColor: [238, 242, 255], textColor: [79, 70, 229] } }
+        ]);
+      });
+
+      studentTableBody.push([
+        { content: 'TOTAL GENERAL MATRÍCULA ESTUDIANTIL:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [224, 231, 255], textColor: [49, 46, 129], fontSize: 8.5 } },
+        { content: `M: ${summaryData.grandTotalMale}`, styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 231, 255], textColor: [37, 99, 235], fontSize: 8.5 } },
+        { content: `F: ${summaryData.grandTotalFemale}`, styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 231, 255], textColor: [225, 29, 72], fontSize: 8.5 } },
+        { content: `TOTAL: ${summaryData.grandTotal}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [224, 231, 255], textColor: [79, 70, 229], fontSize: 9 } }
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['GRADO / SECCIÓN', 'MASCULINO (M)', 'FEMENINO (F)', 'TOTAL GRADO']],
+        body: studentTableBody,
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 1.5 },
+        headStyles: { fillColor: [248, 250, 252], textColor: [100, 116, 139], fontStyle: 'bold', fontSize: 7 },
+        margin: { left: 14, right: 14 }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 6;
+
+      // 2. Personal Clasificado por Área y Sexo
+      if (currentY > pageHeight - 70) {
+        doc.addPage();
+        currentY = 15;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(5, 150, 105);
+      doc.text('II. DISTRIBUCIÓN DEL PERSONAL POR ÁREA Y SEXO', 14, currentY);
+      currentY += 3;
+
+      const staffTableBody: any[] = [];
+      summaryData.staffAreas.forEach((area: any) => {
+        staffTableBody.push([
+          area.name,
+          { content: String(area.male), styles: { halign: 'center', textColor: [37, 99, 235] } },
+          { content: String(area.female), styles: { halign: 'center', textColor: [225, 29, 72] } },
+          { content: String(area.count), styles: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] } }
+        ]);
+      });
+
+      staffTableBody.push([
+        { content: 'TOTAL GENERAL PERSONAL DEL CENTRO:', styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], fontSize: 8 } },
+        { content: `M: ${summaryData.totalStaffMale}`, styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [37, 99, 235], fontSize: 8 } },
+        { content: `F: ${summaryData.totalStaffFemale}`, styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [225, 29, 72], fontSize: 8 } },
+        { content: `${summaryData.totalStaff} MIEMBROS`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [209, 250, 229], textColor: [6, 95, 70], fontSize: 8.5 } }
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['ÁREA / CARGO DEL PERSONAL', 'MASCULINO (M)', 'FEMENINO (F)', 'TOTAL MIEMBROS']],
+        body: staffTableBody,
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        headStyles: { fillColor: [248, 250, 252], textColor: [100, 116, 139], fontStyle: 'bold', fontSize: 7 },
+        margin: { left: 14, right: 14 }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 12;
+
+      // 3. Firmas y Autoridades
+      if (currentY > pageHeight - 35) {
+        doc.addPage();
+        currentY = 25;
+      }
+
+      const colW = (pageWidth - 28) / 4;
+      const sigY = currentY + 10;
+
+      // Director
+      doc.setDrawColor(148, 163, 184);
+      doc.line(14 + 3, sigY, 14 + colW - 3, sigY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(30, 41, 59);
+      if (center?.director_name) {
+        doc.text(center.director_name, 14 + colW / 2, sigY - 1.5, { align: 'center' });
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(center?.director_sex === 'M' ? 'DIRECTOR DEL CENTRO' : 'DIRECTORA DEL CENTRO', 14 + colW / 2, sigY + 3.5, { align: 'center' });
+
+      // Secretario Docente
+      doc.line(14 + colW + 3, sigY, 14 + colW * 2 - 3, sigY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(30, 41, 59);
+      if (center?.secretary_name) {
+        doc.text(center.secretary_name, 14 + colW * 1.5, sigY - 1.5, { align: 'center' });
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(center?.secretary_sex === 'M' ? 'SECRETARIO DOCENTE' : 'SECRETARIA DOCENTE', 14 + colW * 1.5, sigY + 3.5, { align: 'center' });
+
+      // Director Distrital
+      doc.line(14 + colW * 2 + 3, sigY, 14 + colW * 3 - 3, sigY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(30, 41, 59);
+      if (center?.district_director_name) {
+        doc.text(center.district_director_name, 14 + colW * 2.5, sigY - 1.5, { align: 'center' });
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(center?.district_director_sex === 'M' ? 'DIRECTOR DISTRITAL' : 'DIRECTORA DISTRITAL', 14 + colW * 2.5, sigY + 3.5, { align: 'center' });
+
+      // Sello / Certificación
+      doc.line(14 + colW * 3 + 3, sigY, 14 + colW * 4 - 3, sigY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(30, 41, 59);
+      if (center?.certification_officer_name) {
+        doc.text(center.certification_officer_name, 14 + colW * 3.5, sigY - 1.5, { align: 'center' });
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(center?.certification_officer_name ? (center?.certification_officer_sex === 'M' ? 'ENCARGADO CERTIFICACIÓN' : 'ENCARGADA CERTIFICACIÓN') : 'SELLO OFICIAL', 14 + colW * 3.5, sigY + 3.5, { align: 'center' });
+
+      doc.save(`Estadistica_General_${(center?.name || 'Centro').replace(/\s+/g, '_')}_${selectedYear || '2026-2027'}.pdf`);
+      toast.success('¡Reporte oficial descargado en PDF con éxito!');
+    } catch (err: any) {
+      console.error('Error al generar PDF de estadística general:', err);
+      toast.error('Error al generar el PDF.');
+    }
+  };
 
   // Auditoría Maestra (Totalmente independiente para no dañar otros gráficos)
   useEffect(() => {
@@ -2050,7 +2263,30 @@ export const GeneralReports = () => {
 
       {/* MODAL DE REPORTE GENERAL RESUMIDO (Una página imprimible) */}
       {showSummaryReport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:absolute print:inset-0 print:bg-white print:p-0">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #official-summary-print-container, #official-summary-print-container * {
+                visibility: visible !important;
+              }
+              #official-summary-print-container {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 10mm !important;
+                background: white !important;
+              }
+              @page {
+                size: portrait;
+                margin: 8mm;
+              }
+            }
+          `}</style>
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl my-8 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] print:max-w-none print:my-0 print:border-none print:shadow-none print:max-h-none print:rounded-none">
             {/* Barra superior de control (Oculta al imprimir) */}
             <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center print:hidden">
@@ -2061,14 +2297,22 @@ export const GeneralReports = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-indigo-700 transition-all"
+                  onClick={handleDownloadSummaryPDF}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-emerald-700 transition-all cursor-pointer"
+                  title="Descargar archivo PDF"
                 >
-                  <Printer size={16} /> Imprimir Página
+                  <Download size={16} /> Descargar PDF
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-indigo-700 transition-all cursor-pointer"
+                  title="Imprimir documento"
+                >
+                  <Printer size={16} /> Imprimir
                 </button>
                 <button
                   onClick={() => setShowSummaryReport(false)}
-                  className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all"
+                  className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all cursor-pointer"
                 >
                   Cerrar
                 </button>
@@ -2076,7 +2320,7 @@ export const GeneralReports = () => {
             </div>
 
             {/* CONTENIDO DEL REPORTE (Página imprimible) */}
-            <div className="p-12 overflow-y-auto flex-1 bg-white text-slate-800 print:p-0 print:overflow-visible">
+            <div id="official-summary-print-container" className="p-12 overflow-y-auto flex-1 bg-white text-slate-800 print:p-0 print:overflow-visible">
               {/* Encabezado Oficial */}
               <div className="flex items-center justify-between border-b-2 border-slate-900 pb-6 mb-8">
                 <div className="flex items-center gap-4">
@@ -2138,10 +2382,10 @@ export const GeneralReports = () => {
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 print:bg-slate-50 print:text-slate-600">
-                            <th className="py-2 px-4">Grado</th>
-                            <th className="py-2 px-4 text-center w-24">Masculino (M)</th>
-                            <th className="py-2 px-4 text-center w-24">Femenino (F)</th>
-                            <th className="py-2 px-4 text-right w-24">Total Grado</th>
+                            <th className="py-2 px-4">Grado / Sección</th>
+                            <th className="py-2 px-4 text-center w-28">Masculino (M)</th>
+                            <th className="py-2 px-4 text-center w-28">Femenino (F)</th>
+                            <th className="py-2 px-4 text-right w-28">Total Grado</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
@@ -2200,41 +2444,54 @@ export const GeneralReports = () => {
                   </div>
                 </div>
 
-                {/* Sección 2: Personal por Área */}
+                {/* Sección 2: Personal Clasificado por Área y Sexo */}
                 <div className="pt-4 border-t-2 border-slate-100 print:pt-2 print:border-slate-300">
                   <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-4 flex items-center gap-2 print:mb-2">
                     <span className="w-2 h-2 bg-emerald-600 rounded-full"></span>
-                    Distribución del Personal por Área
+                    Distribución del Personal por Área y Sexo
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:gap-2">
-                    {summaryData.staffAreas.map((area: any) => (
-                      <div
-                        key={area.name}
-                        className="border border-slate-200 rounded-2xl p-4 bg-slate-50 flex flex-col justify-between print:p-3 print:rounded-lg print:border-slate-300"
-                      >
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                          {area.name}
-                        </span>
-                        <div className="mt-2 flex items-baseline justify-between">
-                          <span className="text-2xl font-black text-slate-900 print:text-lg">
-                            {area.count}
-                          </span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">
-                            Miembros
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* TOTAL PERSONAL */}
-                  <div className="bg-slate-900 text-white rounded-2xl p-4 flex justify-between items-center mt-4 print:bg-slate-100 print:text-slate-900 print:border print:border-slate-400 print:rounded-lg">
-                    <span className="text-xs font-black uppercase tracking-widest text-slate-400 print:text-slate-700">
-                      Total General Personal del Centro:
-                    </span>
-                    <span className="text-base font-black text-emerald-400 print:text-slate-900">
-                      {summaryData.totalStaff} Miembros
-                    </span>
+                  
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-4 print:border-slate-300 print:rounded-lg">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 print:bg-slate-50 print:text-slate-600">
+                          <th className="py-2.5 px-4">Área / Cargo del Personal</th>
+                          <th className="py-2.5 px-4 text-center w-28">Masculino (M)</th>
+                          <th className="py-2.5 px-4 text-center w-28">Femenino (F)</th>
+                          <th className="py-2.5 px-4 text-right w-28">Total Miembros</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
+                        {summaryData.staffAreas.map((area: any) => (
+                          <tr key={area.name} className="hover:bg-slate-50/50 print:hover:bg-transparent">
+                            <td className="py-2.5 px-4 font-black text-slate-900">{area.name}</td>
+                            <td className="py-2.5 px-4 text-center text-blue-600 print:text-slate-900">
+                              {area.male}
+                            </td>
+                            <td className="py-2.5 px-4 text-center text-rose-600 print:text-slate-900">
+                              {area.female}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-black text-emerald-600 bg-emerald-50/30 print:bg-transparent print:text-slate-900">
+                              {area.count}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-slate-50 font-black text-slate-900 border-t-2 border-slate-200 print:bg-slate-100">
+                          <td className="py-2.5 px-4 text-right text-[10px] uppercase tracking-widest text-slate-500 print:text-slate-700">
+                            Total General Personal:
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-blue-700 print:text-slate-900">
+                            {summaryData.totalStaffMale}
+                          </td>
+                          <td className="py-2.5 px-4 text-center text-rose-700 print:text-slate-900">
+                            {summaryData.totalStaffFemale}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-emerald-700 bg-emerald-50 print:bg-transparent print:text-slate-900">
+                            {summaryData.totalStaff}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
