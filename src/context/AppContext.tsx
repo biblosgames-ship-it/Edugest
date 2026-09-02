@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import graduatedList from '../data/graduated_2025_students.json';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -257,6 +258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .from('students')
               .select('*')
               .eq('center_id', targetCid)
+              .order('created_at', { ascending: false })
               .range(0, 9999),
             supabase
               .from('activities')
@@ -582,6 +584,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .trim();
 
           const isGenesis = targetCid === '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
+          const gradSet = new Set(
+            (graduatedList as string[]).map((g) =>
+              g.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+            )
+          );
 
           const vespIdentitiesSet = new Set([
             'BRITO MARIANO MAXIMILIANO',
@@ -622,7 +629,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
 
               const key = normIdentity(s);
-              if (key && !seenIdentities.has(key)) {
+              if (!key) return;
+
+              // Excluir graduados de 2025 solo si no es un nuevo ingreso o reingreso formal de 2026
+              const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
+              if (isGenesis && !is2026New && gradSet.has(key)) return;
+
+              if (!seenIdentities.has(key)) {
                 seenIdentities.add(key);
                 
                 let studentCourseId = s.course_id;
