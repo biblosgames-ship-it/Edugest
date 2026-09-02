@@ -300,12 +300,13 @@ export const useTeachers = () => {
 
       const idArray = Array.from(idsToDelete);
 
-      // 3. Eliminar todas las filas asociadas en staff, teachers, asignaciones y preferencias
+      // 3. Eliminar todas las filas asociadas en staff, teachers, asignaciones, preferencias y desactivar perfiles
       await Promise.all([
         supabase.from('staff').delete().in('id', idArray),
         supabase.from('teachers').delete().in('id', idArray),
         supabase.from('assignments').delete().in('teacher_id', idArray),
-        supabase.from('teacher_preferences').delete().in('teacher_id', idArray)
+        supabase.from('teacher_preferences').delete().in('teacher_id', idArray),
+        supabase.from('profiles').update({ is_active: false, center_id: null }).in('id', idArray)
       ]);
     },
     onSuccess: () => {

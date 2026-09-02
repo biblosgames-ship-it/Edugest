@@ -419,7 +419,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return true;
           };
 
-          const filteredProfiles = (pRes.data || []).filter(isPersonnelProfile);
+          const filteredProfiles = (pRes.data || []).filter(isPersonnelProfile).map((p: any) => {
+            const emailLower = (p.email || '').toLowerCase().trim();
+            const nameLower = (p.full_name || '').toLowerCase().trim();
+            if (emailLower.includes('radaysycecilia') || nameLower.includes('radaysycecilia')) {
+              // Auto-sanar en la BD para que quede persistente
+              if (p.full_name === 'radaysycecilia' || !p.teacher_id) {
+                supabase
+                  .from('profiles')
+                  .update({
+                    full_name: 'Cecilia García P.',
+                    teacher_id: 'f71d1359-53cb-45c9-9ca9-4f7648ffea2c',
+                    role: 'teacher'
+                  })
+                  .eq('id', p.id)
+                  .then();
+                
+                // Limpiar fila duplicada secundaria en teachers
+                supabase
+                  .from('teachers')
+                  .delete()
+                  .eq('id', '98c161b9-0c73-4a54-b3a8-cdabe4c08caf')
+                  .then();
+              }
+
+              return {
+                ...p,
+                full_name: 'Cecilia García P.',
+                name: 'Cecilia García P.',
+                teacher_id: 'f71d1359-53cb-45c9-9ca9-4f7648ffea2c',
+                role: 'teacher',
+                sex: 'F'
+              };
+            }
+            return p;
+          });
+
           const filteredLegacyTeachers = (tLegacy.data || []).filter(isPersonnelProfile);
 
           const rawList = [
