@@ -555,38 +555,258 @@ export const ScheduleViewer = () => {
     });
   }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear, isSameTeacher]);
 
+  const findOfficialSchedule = useCallback((schedules: any[], levelName: string, shiftName: string) => {
+    if (!schedules || schedules.length === 0) return null;
+    const lNorm = (levelName || '').toLowerCase().substring(0, 3);
+    const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
+
+    let match = schedules.find((ls: any) => {
+      const lsLvl = (ls.level || '').toLowerCase();
+      const lsShift = (ls.shift || '').toLowerCase();
+      const lvlMatch = !lNorm || lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+      const shiftMatch =
+        lsShift.substring(0, 3) === sNorm ||
+        (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+        (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')));
+      return lvlMatch && shiftMatch;
+    });
+
+    if (!match) {
+      match = schedules.find((ls: any) => {
+        const lsShift = (ls.shift || '').toLowerCase();
+        return (
+          lsShift.substring(0, 3) === sNorm ||
+          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+          (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')))
+        );
+      });
+    }
+    return match || null;
+  }, []);
+
+  const isCourseFirstCycle = useCallback((course: any) => {
+    const cGrade = (course?.grade || '').toLowerCase();
+    const cCycle = (course?.cycle || '').toLowerCase();
+    if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+
+    return (
+      /^[1-3]/.test(cGrade) ||
+      cGrade.includes('1ro') ||
+      cGrade.includes('2do') ||
+      cGrade.includes('3ro') ||
+      cGrade.includes('1°') ||
+      cGrade.includes('2°') ||
+      cGrade.includes('3°') ||
+      cGrade.includes('primer') ||
+      cGrade.includes('segundo') ||
+      cGrade.includes('tercer') ||
+      cGrade.includes('7mo') ||
+      cGrade.includes('8vo') ||
+      cGrade.includes('9no')
+    );
+  }, []);
+
+  const isCourseSecondCycle = useCallback((course: any) => {
+    const cGrade = (course?.grade || '').toLowerCase();
+    const cCycle = (course?.cycle || '').toLowerCase();
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
+    if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+    return (
+      /^[4-6]/.test(cGrade) ||
+      cGrade.includes('4to') ||
+      cGrade.includes('5to') ||
+      cGrade.includes('6to') ||
+      cGrade.includes('4°') ||
+      cGrade.includes('5°') ||
+      cGrade.includes('6°') ||
+      cGrade.includes('cuarto') ||
+      cGrade.includes('quinto') ||
+      cGrade.includes('sexto') ||
+      cGrade.includes('10mo') ||
+      cGrade.includes('11mo') ||
+      cGrade.includes('12mo') ||
+      cGrade.includes('decimo') ||
+      cGrade.includes('décimo')
+    );
+  }, []);
+
+  const getSlotsForCourse = useCallback((course: any) => {
+    const cTanda = (course?.tanda || '').toLowerCase();
+    const cLevel = (course?.level || '').toLowerCase();
+    const courseIsMorning = cTanda
+      ? !cTanda.includes('ves') && !cTanda.includes('tar')
+      : filterType === 'teacher'
+      ? !cLevel.includes('secun')
+      : isMorning;
+    const courseShiftName = courseIsMorning ? 'Matutina' : 'Vespertina';
+    const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, courseShiftName);
+
+    const levelNormCourse = (course?.level || '').toLowerCase();
+    const isSecundaria = levelNormCourse.includes('secun');
+    const targetTotalLocal = isSecundaria ? 6 : 5;
+
+    let courseStartT = courseIsMorning ? 480 : 840;
+    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : 1095;
+    if (courseOfficial?.start_time) {
+      let s = toMins(courseOfficial.start_time);
+      if (!courseIsMorning && s < 720 && s > 0) s += 720;
+      courseStartT = s;
+    }
+    if (courseOfficial?.end_time) {
+      let e = toMins(courseOfficial.end_time);
+      if (!courseIsMorning && e < 720 && e > 0) e += 720;
+      courseEndT = e;
+    }
+
+    const isC1 = isCourseFirstCycle(course);
+    const isC2 = isCourseSecondCycle(course);
+
+    const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
+      let bpMins = toMins(bp.startTime || bp.start_time);
+      if (!courseIsMorning && bpMins < 720) bpMins += 720;
+      const isBpMorning = bpMins < 780;
+      if (courseIsMorning !== isBpMorning) return false;
+
+      const bpLevel = (bp.level || '').toLowerCase();
+      const bpCycle = (bp.cycle || '').toLowerCase();
+      const levelNorm = (course?.level || '').toLowerCase();
+
+      // 1. Validar Nivel
+      const levelMatch =
+        !bpLevel ||
+        bpLevel.includes('gen') ||
+        bpLevel.includes('todo') ||
+        bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+        levelNorm.includes(bpLevel.substring(0, 3));
+      if (!levelMatch) return false;
+
+      // 2. Validar Ciclo (Primer Ciclo vs Segundo Ciclo)
+      if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
+        if (isC1 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return false;
+        if (isC2 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return false;
+      }
+
+      return true;
+    });
+
+    const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
+      let bpMins = toMins(bp.startTime || bp.start_time);
+      if (!courseIsMorning && bpMins < 720) bpMins += 720;
+      const isBpMorning = bpMins < 780;
+      return courseIsMorning === isBpMorning;
+    });
+
+    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '16:00:00');
+    let masterStartMins = toMins(rawMasterStart);
+    if (!courseIsMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+    if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 960;
+    const masterBPref = {
+      startTime: fromMins(masterStartMins),
+      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (courseIsMorning ? 30 : 15)
+    };
+
+    const effectiveBPref = cycleBPref || masterBPref;
+    let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
+    if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
+    if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
+    const bDuration = Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) || (courseIsMorning ? 30 : 15);
+    const bEnd = bStart + bDuration;
+
+    // Evento de Acto Cívico/Apertura
+    const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
+      const feName = (fe.name || '').toLowerCase();
+      const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      if (!isActo) return false;
+      const feLevel = (fe.level || '').toLowerCase();
+      const levelNorm = (course?.level || '').toLowerCase();
+      return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
+    });
+
+    let classStart = courseOfficial?.start_time ? courseStartT : (courseIsMorning && courseStartT <= 480 ? 480 : courseStartT);
+    const slots = [];
+
+    if (courseIsMorning && dbActoEvent) {
+      const feEndMins = toMins(dbActoEvent.end_time);
+      if (feEndMins > 0) classStart = feEndMins;
+
+      slots.push({
+        start: dbActoEvent.start_time,
+        end: dbActoEvent.end_time,
+        isBreak: true,
+        label: dbActoEvent.name
+      });
+    }
+
+    const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+      if (totalMins <= 0 || preferredCount <= 0) return [];
+      let count = preferredCount;
+      while (count > 1 && totalMins / count < 28) {
+        count--;
+      }
+      while (totalMins / count > 55 && count < 6) {
+        count++;
+      }
+      const base = Math.floor(totalMins / count);
+      let rem = totalMins - base * count;
+      const durs = new Array(count).fill(base);
+      for (let idx = 0; idx < count && rem > 0; idx++) {
+        durs[idx] += 1;
+        rem -= 1;
+      }
+      return durs;
+    };
+
+    // CÁLCULO DINÁMICO ANTES DEL RECREO
+    const preWindow = Math.max(0, bStart - classStart);
+    let preCountLocal = targetTotalLocal === 6 ? 3 : (preWindow >= 115 ? 3 : 2);
+    const preDurs = calculateSlotDurations(preWindow, preCountLocal);
+    preCountLocal = preDurs.length;
+
+    let currTimePre = classStart;
+    for (let i = 0; i < preCountLocal; i++) {
+      let dur = preDurs[i];
+      let sTime = currTimePre;
+      let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
+      currTimePre = eTime;
+
+      slots.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        isBreak: false,
+        label: `${i + 1}ra Hora`
+      });
+    }
+
+    // EL RECREO
+    slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
+
+    // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
+    let currTimePost = bEnd;
+    const postWindow = Math.max(0, courseEndT - currTimePost);
+    let postCountLocal = targetTotalLocal === 6 ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+    const postDurs = calculateSlotDurations(postWindow, postCountLocal);
+    for (let i = 0; i < postDurs.length; i++) {
+      let dur = postDurs[i];
+      let sTime = currTimePost;
+      let eTime = i === postDurs.length - 1 ? courseEndT : sTime + dur;
+      currTimePost = eTime;
+
+      slots.push({
+        start: fromMins(sTime),
+        end: fromMins(eTime),
+        isBreak: false,
+        label: `${preCountLocal + i + 1}ra Hora`
+      });
+    }
+
+    return slots;
+  }, [findOfficialSchedule, isCourseFirstCycle, isCourseSecondCycle, state.levelSchedules, state.breakPreferences, state.fixedEvents, filterType, isMorning]);
+
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
     let endT = isMorning ? 720 : 1095; // 12:00 o 18:15 default
-
-    const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: string) => {
-      if (!schedules || schedules.length === 0) return null;
-      const lNorm = (levelName || '').toLowerCase().substring(0, 3);
-      const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
-
-      let match = schedules.find((ls: any) => {
-        const lsLvl = (ls.level || '').toLowerCase();
-        const lsShift = (ls.shift || '').toLowerCase();
-        const lvlMatch = !lNorm || lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
-        const shiftMatch =
-          lsShift.substring(0, 3) === sNorm ||
-          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
-          (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')));
-        return lvlMatch && shiftMatch;
-      });
-
-      if (!match) {
-        match = schedules.find((ls: any) => {
-          const lsShift = (ls.shift || '').toLowerCase();
-          return (
-            lsShift.substring(0, 3) === sNorm ||
-            (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
-            (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')))
-          );
-        });
-      }
-      return match || null;
-    };
 
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
@@ -601,9 +821,15 @@ export const ScheduleViewer = () => {
           startT = s;
           endT = e;
         }
+        const slotsForCourse = getSlotsForCourse(course);
+        return {
+          slots: slotsForCourse,
+          startT,
+          endT,
+          masterBPref: { startTime: fromMins(isMorning ? 600 : 960), durationMinutes: isMorning ? 30 : 15 }
+        };
       }
     } else if (filterType === 'all') {
-      // En vista general, buscamos el horario más común de la tanda seleccionada
       const primaryOfficial = findOfficialSchedule(state.levelSchedules, 'Primario', effectiveShift);
       if (primaryOfficial) {
         let s = toMins(primaryOfficial.start_time);
@@ -615,59 +841,10 @@ export const ScheduleViewer = () => {
       }
     }
 
-    const isCourseFirstCycle = (course: any) => {
-      const cGrade = (course?.grade || '').toLowerCase();
-      const cCycle = (course?.cycle || '').toLowerCase();
-      if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
-      if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
-
-      return (
-        /^[1-3]/.test(cGrade) ||
-        cGrade.includes('1ro') ||
-        cGrade.includes('2do') ||
-        cGrade.includes('3ro') ||
-        cGrade.includes('1°') ||
-        cGrade.includes('2°') ||
-        cGrade.includes('3°') ||
-        cGrade.includes('primer') ||
-        cGrade.includes('segundo') ||
-        cGrade.includes('tercer') ||
-        cGrade.includes('7mo') ||
-        cGrade.includes('8vo') ||
-        cGrade.includes('9no')
-      );
-    };
-
-    const isCourseSecondCycle = (course: any) => {
-      const cGrade = (course?.grade || '').toLowerCase();
-      const cCycle = (course?.cycle || '').toLowerCase();
-      if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
-      if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
-
-      return (
-        /^[4-6]/.test(cGrade) ||
-        cGrade.includes('4to') ||
-        cGrade.includes('5to') ||
-        cGrade.includes('6to') ||
-        cGrade.includes('4°') ||
-        cGrade.includes('5°') ||
-        cGrade.includes('6°') ||
-        cGrade.includes('cuarto') ||
-        cGrade.includes('quinto') ||
-        cGrade.includes('sexto') ||
-        cGrade.includes('10mo') ||
-        cGrade.includes('11mo') ||
-        cGrade.includes('12mo') ||
-        cGrade.includes('decimo') ||
-        cGrade.includes('décimo')
-      );
-    };
-
-    // Bloque maestro de recreo (priorizando el nivel del contexto actual)
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
       let bpMins = toMins(bp.startTime || bp.start_time);
       if (!isMorning && bpMins < 720) bpMins += 720;
-      const isBpMorning = bpMins < 780; // Antes de la 1 PM es mañana
+      const isBpMorning = bpMins < 780;
       return isMorning === isBpMorning;
     });
 
@@ -679,201 +856,6 @@ export const ScheduleViewer = () => {
       startTime: fromMins(masterStartMins),
       durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (isMorning ? 30 : 15)
     };
-
-    const getSlotsForCourse = (course: any) => {
-      const cTanda = (course?.tanda || '').toLowerCase();
-      const cLevel = (course?.level || '').toLowerCase();
-      const courseIsMorning = cTanda
-        ? !cTanda.includes('ves') && !cTanda.includes('tar')
-        : filterType === 'teacher'
-        ? !cLevel.includes('secun')
-        : isMorning;
-      const courseShiftName = courseIsMorning ? 'Matutina' : 'Vespertina';
-      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, courseShiftName);
-
-      let courseStartT = courseIsMorning ? 480 : 840;
-      let courseEndT = courseIsMorning ? 720 : 1095;
-      if (courseOfficial?.start_time) {
-        let s = toMins(courseOfficial.start_time);
-        if (!courseIsMorning && s < 720 && s > 0) s += 720;
-        courseStartT = s;
-      }
-      if (courseOfficial?.end_time) {
-        let e = toMins(courseOfficial.end_time);
-        if (!courseIsMorning && e < 720 && e > 0) e += 720;
-        courseEndT = e;
-      }
-
-      const isC1 = isCourseFirstCycle(course);
-      const isC2 = isCourseSecondCycle(course);
-
-      const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime || bp.start_time);
-        if (!courseIsMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        if (courseIsMorning !== isBpMorning) return false;
-
-        const bpLevel = (bp.level || '').toLowerCase();
-        const bpCycle = (bp.cycle || '').toLowerCase();
-        const levelNorm = (course?.level || '').toLowerCase();
-
-        // 1. Validar Nivel
-        const levelMatch =
-          !bpLevel ||
-          bpLevel.includes('gen') ||
-          bpLevel.includes('todo') ||
-          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-          levelNorm.includes(bpLevel.substring(0, 3));
-        if (!levelMatch) return false;
-
-        // 2. Validar Ciclo (Primer Ciclo vs Segundo Ciclo)
-        if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
-          if (isC1 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return false;
-          if (isC2 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return false;
-        }
-
-        return true;
-      });
-
-      const effectiveBPref = cycleBPref || masterBPref;
-      let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
-      if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
-      const bDuration = Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) || (courseIsMorning ? 30 : 15);
-      const bEnd = bStart + bDuration;
-
-      // Evento de Acto Cívico/Apertura
-      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
-        const feName = (fe.name || '').toLowerCase();
-        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-        if (!isActo) return false;
-        const feLevel = (fe.level || '').toLowerCase();
-        const levelNorm = (course?.level || '').toLowerCase();
-        return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
-      });
-
-      let classStart = courseOfficial?.start_time ? courseStartT : (courseIsMorning && courseStartT <= 480 ? 480 : courseStartT);
-      const slots = [];
-
-      if (courseIsMorning && dbActoEvent) {
-        const feEndMins = toMins(dbActoEvent.end_time);
-        if (feEndMins > 0) classStart = feEndMins;
-
-        slots.push({
-          start: dbActoEvent.start_time,
-          end: dbActoEvent.end_time,
-          isBreak: true,
-          label: dbActoEvent.name
-        });
-      }
-
-      const levelNormCourse = (course?.level || '').toLowerCase();
-      const isSecundaria = levelNormCourse.includes('secun');
-      const targetTotalLocal = isSecundaria ? 6 : 5;
-
-      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
-        if (totalMins <= 0 || preferredCount <= 0) return [];
-        let count = preferredCount;
-        while (count > 1 && totalMins / count < 33) {
-          count--;
-        }
-        while (totalMins / count > 45 && count < 6) {
-          count++;
-        }
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
-        }
-        return durs;
-      };
-
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 33 y 45 minutos por clase)
-      const preWindow = Math.max(0, bStart - classStart);
-      let preCountLocal = targetTotalLocal === 5 ? 2 : 3;
-      if (preWindow / preCountLocal < 33) {
-        preCountLocal = Math.max(1, Math.floor(preWindow / 33));
-      }
-      const preDurs = calculateSlotDurations(preWindow, preCountLocal);
-      preCountLocal = preDurs.length;
-
-      let currTimePre = classStart;
-      for (let i = 0; i < preCountLocal; i++) {
-        let dur = preDurs[i];
-        let sTime = currTimePre;
-        let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
-        currTimePre = eTime;
-
-        slots.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
-          isBreak: false,
-          label: `${i + 1}ra Hora`
-        });
-      }
-
-      // EL RECREO
-      slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
-
-      // Eventos Fijos Post-Recreo (filtrados por nivel y ciclo)
-      let currTimePost = bEnd;
-      const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
-        const feName = (fe.name || '').toLowerCase();
-        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-        const feStartMins = toMins(fe.start_time);
-        if (isActo || feStartMins < bStart - 5 || feStartMins >= courseEndT) return false;
-
-        const feLevel = (fe.level || '').toLowerCase();
-        const levelNorm = (course?.level || '').toLowerCase();
-        return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
-      });
-
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO
-      const postWindow = Math.max(0, courseEndT - currTimePost);
-      let postCountLocal = Math.max(1, targetTotalLocal - preCountLocal);
-      const postDurs = calculateSlotDurations(postWindow, postCountLocal);
-      for (let i = 0; i < postDurs.length; i++) {
-        let dur = postDurs[i];
-        let sTime = currTimePost;
-        let eTime = i === postDurs.length - 1 ? courseEndT : sTime + dur;
-
-        const intersectingEvent = postFixedEvents.find((fe: any) => {
-          const feStartMins = toMins(fe.start_time);
-          return Math.abs(feStartMins - sTime) < 5;
-        });
-
-        if (intersectingEvent) {
-          slots.push({
-            start: fromMins(sTime),
-            end: fromMins(toMins(intersectingEvent.end_time)),
-            isBreak: true,
-            label: intersectingEvent.name
-          });
-          currTimePost = toMins(intersectingEvent.end_time);
-        } else {
-          currTimePost = eTime;
-          slots.push({
-            start: fromMins(sTime),
-            end: fromMins(eTime),
-            isBreak: false,
-            label: `${preCountLocal + i + 1}ra Hora`
-          });
-        }
-      }
-
-      return slots;
-    };
-
-    // Si estamos filtrando por un curso específico, usamos sus slots exactos
-    if (filterType === 'course' && filterId) {
-      const course = state.courses.find((c) => String(c.id) === String(filterId));
-      if (course) {
-        const slotsForCourse = getSlotsForCourse(course);
-        return { slots: slotsForCourse, startT, endT, masterBPref };
-      }
-    }
 
     // VISTA DE DOCENTE: construir grilla separada por tanda (Matutina o Vespertina según la pestaña activa)
     if (filterType === 'teacher' && filterId) {
@@ -900,8 +882,6 @@ export const ScheduleViewer = () => {
       });
 
       if (teacherCourses.length > 0) {
-        // Encontrar el curso principal o representativo del docente en esta tanda
-        // (el curso donde imparte más clases) para usar una cuadrícula limpia, ordenada y estándar
         let primaryCourse = teacherCourses[0];
         let maxHours = 0;
         teacherCourses.forEach((c: any) => {
