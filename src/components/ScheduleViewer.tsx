@@ -1361,81 +1361,113 @@ export const ScheduleViewer = () => {
 
       const centerName = profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
 
-      if (filterType === 'teacher' && filterId) {
-        const teacher = state.teachers.find((t: any) => isSameTeacher(t.id, filterId) || String(t.id) === String(filterId));
-        const teacherName = teacher?.name || 'Docente';
+      if (filterType === 'teacher') {
+        const targetTeachers = filterId
+          ? state.teachers.filter((t: any) => isSameTeacher(t.id, filterId) || String(t.id) === String(filterId))
+          : state.teachers.filter((t: any) => {
+              return (state.schedule || []).some((s: any) => {
+                if (!isSameTeacher(s.teacher_id, t.id)) return false;
+                const sh = (s.shift || '').toLowerCase();
+                const course = state.courses.find((c: any) => String(c.id) === String(s.course_id || s.courseId));
+                const cTanda = (course?.tanda || '').toLowerCase();
+                if (selectedShift === 'Matutina') {
+                  return sh.includes('mat') || sh.includes('mañ') || cTanda.includes('mat') || (!sh.includes('ves') && !sh.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
+                } else {
+                  return sh.includes('ves') || sh.includes('tar') || cTanda.includes('ves') || cTanda.includes('tar');
+                }
+              });
+            });
 
-        // Header Superior Elegante
-        doc.setFillColor(30, 41, 59); // slate-800
-        doc.rect(0, 0, 297, 18, 'F');
+        if (targetTeachers.length === 0) {
+          alert('No hay docentes con clases asignadas para exportar en esta tanda.');
+          return;
+        }
 
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text(centerName.toUpperCase(), 14, 11);
+        targetTeachers.forEach((teacher: any, idx: number) => {
+          if (idx > 0) doc.addPage('a4', 'landscape');
+          const teacherName = teacher?.name || 'Docente';
 
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`JORNADA COMPLETA | AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
+          // Header Superior Elegante
+          doc.setFillColor(30, 41, 59); // slate-800
+          doc.rect(0, 0, 297, 18, 'F');
 
-        // Título del Docente
-        doc.setTextColor(15, 23, 42); // slate-900
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`HORARIO SEMANAL: ${teacherName.toUpperCase()}`, 14, 28);
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.text(centerName.toUpperCase(), 14, 11);
 
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Generado oficialmente a través de Edugest - Asignación Completa (Mañana y Tarde)`, 14, 33);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`TANDA ${selectedShift.toUpperCase()} | AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
 
-        const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-        const tableBody = slots.map((slot: any) => {
-          const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
-          const dayCols = tableDays.map((day) => {
-            const entries = entriesBySlotAndDay.get(`${day}-${slot.start}`) || [];
-            if (entries.length === 0) return '';
-            return entries.map((e: any) => {
-              const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
-              const course = state.courses.find((c: any) => String(c.id) === String(e.course_id || e.courseId));
-              const courseName = course ? `${course.grade} "${course.section || ''}"` : 'Curso';
-              return `${(sub?.name || 'Materia').toUpperCase()}\n(${courseName})`;
-            }).join('\n---\n');
+          // Título del Docente
+          doc.setTextColor(15, 23, 42); // slate-900
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`HORARIO SEMANAL: ${teacherName.toUpperCase()}`, 14, 28);
+
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
+
+          const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+          const tableBody = slots.map((slot: any) => {
+            const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+            const dayCols = tableDays.map((day) => {
+              const entries = (state.schedule || []).filter((s: any) => {
+                if (!isSameTeacher(s.teacher_id, teacher.id)) return false;
+                if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
+                const sM = toMins(slot.start);
+                const eM = toMins(s.start_time);
+                return Math.abs(sM - eM) <= 25;
+              });
+              if (entries.length === 0) return '';
+              return entries.map((e: any) => {
+                const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
+                const course = state.courses.find((c: any) => String(c.id) === String(e.course_id || e.courseId));
+                const courseName = course ? `${course.grade} "${course.section || ''}"` : 'Curso';
+                return `${(sub?.name || 'Materia').toUpperCase()}\n(${courseName})`;
+              }).join('\n---\n');
+            });
+            return [timeLabel, ...dayCols];
           });
-          return [timeLabel, ...dayCols];
+
+          autoTable(doc, {
+            startY: 37,
+            head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
+            body: tableBody,
+            theme: 'grid',
+            headStyles: {
+              fillColor: [79, 70, 229],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              halign: 'center',
+              fontSize: 9,
+              cellPadding: 3
+            },
+            bodyStyles: {
+              fontSize: 8,
+              cellPadding: 3,
+              valign: 'middle',
+              textColor: [30, 41, 59]
+            },
+            columnStyles: {
+              0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
+              1: { cellWidth: 48, halign: 'center' },
+              2: { cellWidth: 48, halign: 'center' },
+              3: { cellWidth: 48, halign: 'center' },
+              4: { cellWidth: 48, halign: 'center' },
+              5: { cellWidth: 48, halign: 'center' }
+            },
+            margin: { left: 14, right: 14 }
+          });
         });
 
-        autoTable(doc, {
-          startY: 37,
-          head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
-          body: tableBody,
-          theme: 'grid',
-          headStyles: {
-            fillColor: [79, 70, 229],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            halign: 'center',
-            fontSize: 9,
-            cellPadding: 3
-          },
-          bodyStyles: {
-            fontSize: 8,
-            cellPadding: 3,
-            valign: 'middle',
-            textColor: [30, 41, 59]
-          },
-          columnStyles: {
-            0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
-            1: { cellWidth: 48, halign: 'center' },
-            2: { cellWidth: 48, halign: 'center' },
-            3: { cellWidth: 48, halign: 'center' },
-            4: { cellWidth: 48, halign: 'center' },
-            5: { cellWidth: 48, halign: 'center' }
-          },
-          margin: { left: 14, right: 14 }
-        });
-
-        doc.save(`Horario_Docente_${teacherName.replace(/\s+/g, '_')}.pdf`);
+        const fname = filterId
+          ? `Horario_Docente_${targetTeachers[0]?.name || 'Docente'}_${selectedShift}`.replace(/\s+/g, '_')
+          : `Horarios_Todos_los_Docentes_${selectedShift}`.replace(/\s+/g, '_');
+        doc.save(`${fname}.pdf`);
         return;
       }
 
@@ -1490,8 +1522,9 @@ export const ScheduleViewer = () => {
         doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
 
         const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+        const courseSlots = getSlotsForCourse(course);
 
-        const tableBody = slots.map((slot: any) => {
+        const tableBody = courseSlots.map((slot: any) => {
           const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
           
           if (slot.isBreak) {
@@ -1518,7 +1551,7 @@ export const ScheduleViewer = () => {
 
             return entries.map((e: any) => {
               const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
-              const teacher = state.teachers.find((t: any) => String(t.id) === String(e.teacher_id));
+              const teacher = state.teachers.find((t: any) => isSameTeacher(t.id, e.teacher_id) || String(t.id) === String(e.teacher_id));
               return `${(sub?.name || 'Materia').toUpperCase()}\n${teacher?.name || 'Docente'}`;
             }).join('\n---\n');
           });
