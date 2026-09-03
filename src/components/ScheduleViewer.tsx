@@ -1398,9 +1398,16 @@ export const ScheduleViewer = () => {
               const entries = (state.schedule || []).filter((s: any) => {
                 if (!isSameTeacher(s.teacher_id, teacher.id)) return false;
                 if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-                const sM = toMins(slot.start);
-                const eM = toMins(s.start_time);
-                return Math.abs(sM - eM) <= 25;
+                if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+
+                let sM = toMins(slot.start);
+                let eM = toMins(s.start_time);
+                const sShift = (s.shift || selectedShift || '').toLowerCase();
+                const isEntryAfternoon = sShift.includes('ves') || sShift.includes('tar');
+                if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
+                if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
+
+                return Math.abs(sM - eM) <= 35;
               });
               if (entries.length === 0) return '';
               return entries.map((e: any) => {
@@ -1522,9 +1529,16 @@ export const ScheduleViewer = () => {
             const entries = (state.schedule || []).filter((s: any) => {
               if (String(s.course_id || s.courseId) !== String(course.id)) return false;
               if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-              const sM = toMins(slot.start);
-              const eM = toMins(s.start_time);
-              return Math.abs(sM - eM) <= 25;
+              if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+
+              let sM = toMins(slot.start);
+              let eM = toMins(s.start_time);
+              const cTanda = (s.shift || course?.tanda || selectedShift || '').toLowerCase();
+              const isEntryAfternoon = cTanda.includes('ves') || cTanda.includes('tar');
+              if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
+              if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
+
+              return Math.abs(sM - eM) <= 35;
             });
 
             if (entries.length === 0) return '';
