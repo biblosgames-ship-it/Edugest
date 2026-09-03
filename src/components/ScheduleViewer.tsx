@@ -2349,15 +2349,13 @@ export const ScheduleViewer = () => {
 
                         return levelMatch && cycleMatch;
                       }
-                      // Si filtramos por docente, NO mostrar eventos fijos porque pertenecen a los cursos, no a la agenda personal del docente
-                      if (filterType === 'teacher') return false;
 
-                      return true; // En vista general mostrar todos
+                      return true; // En vista general y docente mostrar eventos fijos
                     });
 
                     // 2. ¿ES UN RECREO SEGÚN LA REJILLA DINÁMICA?
-                    // Las franjas de recreo son inviolables y se muestran si no hay clases
-                    const isRecreo = filterType === 'teacher' ? false : Boolean(slot.isBreak);
+                    // Las franjas de recreo se muestran siempre que no haya clases colocadas
+                    const isRecreo = Boolean(slot.isBreak);
                     const blockName = entries.length === 0 ? (fixedEvent ? fixedEvent.name : isRecreo ? (slot.label || 'RECREO') : null) : null;
 
                     return (
@@ -3094,51 +3092,25 @@ export const ScheduleViewer = () => {
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {(() => {
                       const courseItems = getCourseSubjectsAndAssignments(directAssignModal.courseId);
-                      const courseObj = state.courses.find((c: any) => String(c.id) === String(directAssignModal.courseId));
-                      const isSec = (courseObj?.level || '').toLowerCase().includes('secun');
+                      const targetCourse = state.courses.find((c: any) => String(c.id) === String(directAssignModal.courseId));
+                      const targetShiftBase = (targetCourse?.tanda || selectedShift || '').toLowerCase().substring(0, 3);
 
                       const displayedList = [...courseItems];
-                      (state.subjects || []).forEach((sub: any) => {
-                        const sId = String(sub.id);
-                        if (!displayedList.some((it) => String(it.subject_id) === sId)) {
-                          const sName = (sub.name || '').toLowerCase();
-                          let isRelevant = false;
-                          if (isSec) {
-                            isRelevant =
-                              sName.includes('matem') ||
-                              sName.includes('español') ||
-                              sName.includes('lengua') ||
-                              sName.includes('social') ||
-                              sName.includes('natur') ||
-                              sName.includes('ingl') ||
-                              sName.includes('franc') ||
-                              sName.includes('art') ||
-                              sName.includes('físic') ||
-                              sName.includes('fisic') ||
-                              sName.includes('human') ||
-                              sName.includes('relig');
-                          } else {
-                            isRelevant = true;
-                          }
-                          if (isRelevant) {
-                            const genTch = (state.assignments || []).find(
-                              (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
-                            );
-                            displayedList.push({
-                              id: `opt-${sId}`,
-                              subject_id: sId,
-                              teacher_id: genTch?.teacher_id || (state.teachers[0]?.id || ''),
-                              assignedHours: 2,
-                              assign: null
-                            });
-                          }
-                        }
-                      });
+
+                      if (displayedList.length === 0) {
+                        return (
+                          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+                            <p className="text-xs text-slate-500 font-bold uppercase">
+                              No hay materias asignadas en la carga académica de este curso.
+                            </p>
+                          </div>
+                        );
+                      }
 
                       return displayedList.map((item) => {
                         const subject = state.subjects.find((s) => String(s.id) === String(item.subject_id));
                         const teacherId = item.teacher_id;
-                        const teacher = state.teachers.find((t) => String(t.id) === String(teacherId));
+                        const teacher = state.teachers.find((t) => isSameTeacher(t.id, teacherId) || String(t.id) === String(teacherId));
                         const assigned = Number(item.assignedHours) || 0;
                         let placed = 0;
                         days.forEach((d) => {
@@ -3152,12 +3124,17 @@ export const ScheduleViewer = () => {
                         });
                         const missing = Math.max(0, assigned - placed);
 
-                        // Verificar si el docente tiene clase en otro curso a esta misma hora
+                        // Verificar si el docente tiene clase en otro curso a esta misma hora (mismo año escolar y tanda)
                         const sStartM = toMins(directAssignModal.slot?.start);
                         const sEndM = toMins(directAssignModal.slot?.end);
                         const teacherClash = (state.schedule || []).find((s) => {
-                          if (!teacherId || String(s.teacher_id) !== String(teacherId)) return false;
+                          if (!teacherId || !isSameTeacher(s.teacher_id, teacherId)) return false;
                           if ((s.day || '').trim().toLowerCase() !== directAssignModal.day.toLowerCase()) return false;
+                          if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+                          const sShift = (s.shift || '').toLowerCase();
+                          const shiftMatch = !sShift || sShift.includes(targetShiftBase) || targetShiftBase.includes(sShift.substring(0, 3));
+                          if (!shiftMatch) return false;
+
                           const eStart = toMins(s.start_time);
                           let eEnd = toMins(s.end_time);
                           if (eEnd <= eStart) eEnd = eStart + 45;
