@@ -3335,7 +3335,7 @@ export const scheduleService = {
       const isCourseMorning = cTanda ? (!cTanda.includes('ves') && !cTanda.includes('tar')) : shiftBase === 'mat';
       const courseSlots = getSlotsForCourse(courseObj);
 
-      // A. Mapeo de asignaciones registradas en base de datos
+      // A. Mapeo de asignaciones registradas en base de datos para este curso
       const courseAssignments = (assignments || []).filter(
         (a: any) => String(a.course_id || a.courseId) === cId
       );
@@ -3344,67 +3344,38 @@ export const scheduleService = {
       courseAssignments.forEach((a: any) => {
         const sId = String(a.subject_id);
         const req = Number(a.hours_per_week || a.hoursPerWeek) || 0;
-        assignMap.set(sId, {
-          subject_id: sId,
-          teacher_id: a.teacher_id || a.teacherId || '',
-          hours: req,
-          assign: a
-        });
-      });
-
-      // B. Materias curriculares oficiales si no estuviesen en la tabla de asignaciones
-      const levelStr = (courseObj.level || '').toLowerCase();
-      const isSec = levelStr.includes('secun');
-
-      (allSubjects || []).forEach((sub: any) => {
-        const sId = String(sub.id);
-        if (assignMap.has(sId)) return;
-
-        const sName = (sub.name || '').toLowerCase();
-        let shouldInclude = false;
-        let defaultHours = 2;
-
-        if (isSec) {
-          if (sName.includes('matem')) { shouldInclude = true; defaultHours = 6; }
-          else if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 5; }
-          else if (sName.includes('social')) { shouldInclude = true; defaultHours = 4; }
-          else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 4; }
-          else if (sName.includes('ingl') || sName.includes('english')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('franc')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('físic') || sName.includes('fisic') || sName.includes('deport')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('human') || sName.includes('relig') || sName.includes('fihr')) { shouldInclude = true; defaultHours = 2; }
-        } else {
-          if (sName.includes('español') || sName.includes('lengua')) { shouldInclude = true; defaultHours = 7; }
-          else if (sName.includes('matem')) { shouldInclude = true; defaultHours = 7; }
-          else if (sName.includes('social')) { shouldInclude = true; defaultHours = 5; }
-          else if (sName.includes('natur')) { shouldInclude = true; defaultHours = 5; }
-          else if (sName.includes('art')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('físic') || sName.includes('fisic')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('human') || sName.includes('relig')) { shouldInclude = true; defaultHours = 2; }
-          else if (sName.includes('ingl')) { shouldInclude = true; defaultHours = 2; }
-        }
-
-        if (shouldInclude) {
-          const genTch = (allAssignments || []).find(
-            (a: any) => String(a.subject_id) === sId && (a.teacher_id || a.teacherId)
-          );
-          // Si no hay docente explícito, dejar vacío para no sobrecargar erróneamente a otro profesor
-          const teacherId = genTch?.teacher_id || genTch?.teacherId || '';
+        if (req > 0) {
           assignMap.set(sId, {
             subject_id: sId,
-            teacher_id: teacherId,
-            hours: defaultHours,
-            assign: {
-              id: `curric-${sId}`,
-              course_id: cId,
-              subject_id: sId,
-              teacher_id: teacherId,
-              hours_per_week: defaultHours
-            }
+            teacher_id: a.teacher_id || a.teacherId || '',
+            hours: req,
+            assign: a
           });
         }
       });
+
+      // B. Si el curso no tiene NINGUNA asignación explícita, tomar solo las materias que ya existen en su horario
+      if (assignMap.size === 0) {
+        workingSchedule.forEach((e: any) => {
+          if (String(e.course_id || e.courseId) === cId) {
+            const sId = String(e.subject_id);
+            if (!assignMap.has(sId)) {
+              assignMap.set(sId, {
+                subject_id: sId,
+                teacher_id: e.teacher_id || '',
+                hours: 4,
+                assign: {
+                  id: `sched-${sId}`,
+                  course_id: cId,
+                  subject_id: sId,
+                  teacher_id: e.teacher_id || '',
+                  hours_per_week: 4
+                }
+              });
+            }
+          }
+        });
+      }
 
       // C. Evaluar cuántas horas faltan por colocar para cada materia
       assignMap.forEach((item: any) => {
