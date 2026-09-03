@@ -615,21 +615,69 @@ export const ScheduleViewer = () => {
       }
     }
 
+    const isCourseFirstCycle = (course: any) => {
+      const cGrade = (course?.grade || '').toLowerCase();
+      const cCycle = (course?.cycle || '').toLowerCase();
+      if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
+      if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+
+      return (
+        /^[1-3]/.test(cGrade) ||
+        cGrade.includes('1ro') ||
+        cGrade.includes('2do') ||
+        cGrade.includes('3ro') ||
+        cGrade.includes('1°') ||
+        cGrade.includes('2°') ||
+        cGrade.includes('3°') ||
+        cGrade.includes('primer') ||
+        cGrade.includes('segundo') ||
+        cGrade.includes('tercer') ||
+        cGrade.includes('7mo') ||
+        cGrade.includes('8vo') ||
+        cGrade.includes('9no')
+      );
+    };
+
+    const isCourseSecondCycle = (course: any) => {
+      const cGrade = (course?.grade || '').toLowerCase();
+      const cCycle = (course?.cycle || '').toLowerCase();
+      if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
+      if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+      return (
+        /^[4-6]/.test(cGrade) ||
+        cGrade.includes('4to') ||
+        cGrade.includes('5to') ||
+        cGrade.includes('6to') ||
+        cGrade.includes('4°') ||
+        cGrade.includes('5°') ||
+        cGrade.includes('6°') ||
+        cGrade.includes('cuarto') ||
+        cGrade.includes('quinto') ||
+        cGrade.includes('sexto') ||
+        cGrade.includes('10mo') ||
+        cGrade.includes('11mo') ||
+        cGrade.includes('12mo') ||
+        cGrade.includes('decimo') ||
+        cGrade.includes('décimo')
+      );
+    };
+
     // Bloque maestro de recreo (priorizando el nivel del contexto actual)
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      let bpMins = toMins(bp.startTime);
+      let bpMins = toMins(bp.startTime || bp.start_time);
       if (!isMorning && bpMins < 720) bpMins += 720;
       const isBpMorning = bpMins < 780; // Antes de la 1 PM es mañana
       return isMorning === isBpMorning;
     });
 
-    const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
+    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (isMorning ? '10:00:00' : '16:00:00');
     let masterStartMins = toMins(rawMasterStart);
     if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
     if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
     const masterBPref = {
       startTime: fromMins(masterStartMins),
-      durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
+      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (isMorning ? 30 : 15)
     };
 
     const getSlotsForCourse = (course: any) => {
@@ -656,26 +704,42 @@ export const ScheduleViewer = () => {
         courseEndT = e;
       }
 
+      const isC1 = isCourseFirstCycle(course);
+      const isC2 = isCourseSecondCycle(course);
+
       const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime);
+        let bpMins = toMins(bp.startTime || bp.start_time);
         if (!courseIsMorning && bpMins < 720) bpMins += 720;
         const isBpMorning = bpMins < 780;
         if (courseIsMorning !== isBpMorning) return false;
 
         const bpLevel = (bp.level || '').toLowerCase();
+        const bpCycle = (bp.cycle || '').toLowerCase();
         const levelNorm = (course?.level || '').toLowerCase();
-        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
-        return (
+
+        // 1. Validar Nivel
+        const levelMatch =
+          !bpLevel ||
+          bpLevel.includes('gen') ||
+          bpLevel.includes('todo') ||
           bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-          levelNorm.includes(bpLevel.substring(0, 3))
-        );
+          levelNorm.includes(bpLevel.substring(0, 3));
+        if (!levelMatch) return false;
+
+        // 2. Validar Ciclo (Primer Ciclo vs Segundo Ciclo)
+        if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
+          if (isC1 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return false;
+          if (isC2 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return false;
+        }
+
+        return true;
       });
 
       const effectiveBPref = cycleBPref || masterBPref;
-      let bStart = toMins(effectiveBPref.startTime);
+      let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
       if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
       if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
-      const bDuration = Number(effectiveBPref.durationMinutes) || (courseIsMorning ? 30 : 15);
+      const bDuration = Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) || (courseIsMorning ? 30 : 15);
       const bEnd = bStart + bDuration;
 
       // Evento de Acto Cívico/Apertura
