@@ -900,24 +900,22 @@ export const ScheduleViewer = () => {
       });
 
       if (teacherCourses.length > 0) {
-        const mergedSlotsMap: Map<string, any> = new Map();
-        teacherCourses.forEach((course: any) => {
-          const courseSlots = getSlotsForCourse(course);
-          courseSlots.forEach((slot: any) => {
-            const key = slot.start.substring(0, 5);
-            if (!mergedSlotsMap.has(key)) {
-              mergedSlotsMap.set(key, { ...slot });
-            } else {
-              if (!slot.isBreak) mergedSlotsMap.get(key).isBreak = false;
-            }
-          });
+        // Encontrar el curso principal o representativo del docente en esta tanda
+        // (el curso donde imparte más clases) para usar una cuadrícula limpia, ordenada y estándar
+        let primaryCourse = teacherCourses[0];
+        let maxHours = 0;
+        teacherCourses.forEach((c: any) => {
+          const cEntriesCount = (state.schedule || []).filter(
+            (s: any) => isSameTeacher(s.teacher_id, filterId) && String(s.course_id || s.courseId) === String(c.id)
+          ).length;
+          if (cEntriesCount > maxHours) {
+            maxHours = cEntriesCount;
+            primaryCourse = c;
+          }
         });
 
-        let mergedSlots = [...mergedSlotsMap.values()].sort(
-          (a, b) => toMins(a.start) - toMins(b.start)
-        );
-
-        return { slots: mergedSlots, startT: isMorning ? 480 : 840, endT: isMorning ? 720 : 1095, masterBPref };
+        const representativeSlots = getSlotsForCourse(primaryCourse);
+        return { slots: representativeSlots, startT: isMorning ? 480 : 840, endT: isMorning ? 720 : 1095, masterBPref };
       }
     }
 
