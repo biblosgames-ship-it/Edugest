@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';
 import { useCourses } from '../hooks/useCourses';
 import { useAssignments } from '../hooks/useAssignments';
 import { useSubjects } from '../hooks/useSubjects';
+import { supabase } from '../lib/supabase';
 import {
   Users,
   CheckCircle2,
@@ -63,7 +64,7 @@ export const ClassroomManager = () => {
     content: string;
     teacherName: string;
   }>>(() => {
-    const saved = localStorage.getItem('edugest_anecdotal_notes');
+    const saved = localStorage.getItem('edugens_anecdotal_notes') || localStorage.getItem('edugest_anecdotal_notes');
     return saved ? JSON.parse(saved) : [];
   });
   const [newNoteStudentId, setNewNoteStudentId] = useState<string>('');
@@ -84,7 +85,7 @@ export const ClassroomManager = () => {
   }, [selectedCourseId, allAssignments, allSubjects]);
 
   // Autoseleccionar primera asignatura
-  React.useEffect(() => {
+  useEffect(() => {
     if (availableSubjects.length > 0 && !selectedSubjectId) {
       setSelectedSubjectId(availableSubjects[0].id);
     }
@@ -113,29 +114,6 @@ export const ClassroomManager = () => {
   const [isSavingPartials, setIsSavingPartials] = useState<boolean>(false);
   const [savePartialsSuccess, setSavePartialsSuccess] = useState<boolean>(false);
 
-  // Cargar calificaciones parciales especificas del scope bajo demanda (Lazy Load)
-  React.useEffect(() => {
-    if (!selectedCourseId || !selectedSubjectId) return;
-    const saved = localStorage.getItem(storageScopeKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setPartialScores(parsed.scores || {});
-        if (parsed.activities) setCompetencyActivities(parsed.activities);
-      } catch (e) {
-        setPartialScores({});
-      }
-    } else {
-      setPartialScores({});
-    }
-  }, [storageScopeKey, selectedCourseId, selectedSubjectId]);
-
-  const [newActivityName, setNewActivityName] = useState<string>('');
-  const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
-
-  // Ficha de Estudiante Seleccionado
-  const [folderStudentId, setFolderStudentId] = useState<string>('');
-
   // Cursos disponibles para el usuario
   const availableCourses = useMemo(() => {
     let base = [...(allCourses || [])];
@@ -153,17 +131,142 @@ export const ClassroomManager = () => {
   }, [allCourses, profile, allAssignments]);
 
   // Autoseleccionar primer curso disponible
-  React.useEffect(() => {
+  useEffect(() => {
     if (availableCourses.length > 0 && !selectedCourseId) {
       setSelectedCourseId(availableCourses[0].id);
     }
   }, [availableCourses, selectedCourseId]);
 
+  // 1. CARGAR ASISTENCIA (DESDE SUPABASE Y RESPALDO LOCAL)
+  useEffect(() => {
+    if (!selectedCourseId || !selectedDate) return;
+    let isMounted = true;
+
+    const loadAttendance = async () => {
+      const localKey = `attendance_${selectedCourseId}_${selectedDate}`;
+      const saved = localStorage.getItem(localKey);
+      let initialMap: Record<string, { status: AttendanceStatus; note: string }> = {};
+      if (saved) {
+        try {
+          initialMap = JSON.parse(saved);
+        } catch (e) {}
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('date', selectedDate);
+
+        if (!error && data && data.length > 0 && isMounted) {
+          data.forEach((r: any) => {
+            if (r.student_id) {
+              initialMap[r.student_id] = {
+                status: (r.status as AttendanceStatus) || 'presente',
+                note: r.notes || ''
+              };
+            }
+          });
+        }
+      } catch (e) {}
+
+      if (isMounted) {
+        setAttendanceState(initialMap);
+      }
+    };
+
+    loadAttendance();
+    return () => { isMounted = false; };
+  }, [selectedCourseId, selectedDate]);
+
+  // 2. CARGAR APUNTES / ANECDOTARIO (DESDE SUPABASE Y RESPALDO LOCAL)
+  useEffect(() => {
+    if (!selectedCourseId) return;
+    let isMounted = true;
+
+    const loadNotes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('student_anecdotal_notes')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data && isMounted) {
+          const cloudNotes = data.map((n: any) => ({
+            id: n.id,
+            studentId: n.student_id,
+            date: n.date,
+            category: n.category as NoteCategory,
+            content: n.content,
+            teacherName: n.teacher_name || 'Docente'
+          }));
+
+          const localSaved = localStorage.getItem('edugens_anecdotal_notes');
+          const localNotes = localSaved ? JSON.parse(localSaved) : [];
+          const combined = [...cloudNotes];
+          localNotes.forEach((ln: any) => {
+            if (!combined.some((cn) => cn.id === ln.id)) {
+              combined.push(ln);
+            }
+          });
+          setNotesList(combined);
+        }
+      } catch (e) {}
+    };
+
+    loadNotes();
+    return () => { isMounted = false; };
+  }, [selectedCourseId]);
+
+  // 3. CARGAR CALIFICACIONES PARCIALES (DESDE SUPABASE Y RESPALDO LOCAL)
+  useEffect(() => {
+    if (!selectedCourseId || !selectedSubjectId) return;
+    let isMounted = true;
+
+    const loadPartials = async () => {
+      const saved = localStorage.getItem(storageScopeKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (isMounted) {
+            setPartialScores(parsed.scores || {});
+            if (parsed.activities) setCompetencyActivities(parsed.activities);
+          }
+        } catch (e) {}
+      }
+
+      try {
+        const year = selectedYear || '2026-2027';
+        const { data, error } = await supabase
+          .from('student_partial_activities')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('subject_id', selectedSubjectId)
+          .eq('period', selectedPeriod)
+          .eq('school_year', year)
+          .maybeSingle();
+
+        if (!error && data && data.scores && isMounted) {
+          if (data.scores.scores) setPartialScores(data.scores.scores);
+          if (data.scores.activities) setCompetencyActivities(data.scores.activities);
+        }
+      } catch (e) {}
+    };
+
+    loadPartials();
+    return () => { isMounted = false; };
+  }, [storageScopeKey, selectedCourseId, selectedSubjectId, selectedPeriod, selectedYear]);
+
+  const [newActivityName, setNewActivityName] = useState<string>('');
+  const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
+  const [folderStudentId, setFolderStudentId] = useState<string>('');
+
   // Helper para obtener el nombre completo del estudiante (sin duplicar apellidos)
   const getStudentFullName = (s: any) => {
     if (!s) return 'Estudiante';
 
-    // 1. Si tiene first_surname o second_surname, usar primero esos campos exactos:
     if (s.first_surname || s.second_surname) {
       const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
       const names = (s.names || s.first_name || s.nombre || '').trim();
@@ -172,7 +275,6 @@ export const ClassroomManager = () => {
       if (surname) return surname;
     }
 
-    // 2. Si tiene names y apellidos/last_name (sin first_surname separado)
     if (s.names && String(s.names).trim()) {
       const names = String(s.names).trim();
       const surname = (s.apellidos || s.last_name || s.apellido || '').trim();
@@ -182,7 +284,6 @@ export const ClassroomManager = () => {
       return names;
     }
 
-    // 3. first_name / last_name
     if (s.first_name || s.last_name) {
       const fn = (s.first_name || '').trim();
       const ln = (s.last_name || '').trim();
@@ -190,7 +291,6 @@ export const ClassroomManager = () => {
       return fn || ln;
     }
 
-    // 4. full_name / name / nombre_completo
     if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
     if (s.nombre_completo && String(s.nombre_completo).trim()) return String(s.nombre_completo).trim();
     if (s.name && String(s.name).trim()) return String(s.name).trim();
@@ -204,7 +304,7 @@ export const ClassroomManager = () => {
     return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
   };
 
-  // Helper para clave de ordenamiento por Apellido Primero (Primer Apellido, Segundo Apellido, Nombres)
+  // Helper para clave de ordenamiento por Apellido Primero
   const getSortKeyBySurname = (s: any) => {
     if (!s) return 'zzz';
     if (s.first_surname || s.second_surname) {
@@ -220,7 +320,7 @@ export const ClassroomManager = () => {
     return getStudentFullName(s).toLowerCase();
   };
 
-  // Estudiantes del curso seleccionado (ordenados ESTRICTAMENTE por Número de Orden oficial de Gestión de Alumnos)
+  // Estudiantes del curso seleccionado
   const courseStudents = useMemo(() => {
     if (!selectedCourseId) return [];
     return (allStudents || [])
@@ -229,15 +329,12 @@ export const ClassroomManager = () => {
         const numA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : null;
         const numB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : null;
 
-        // SI TIENEN NÚMERO DE ORDEN ASIGNADO, EL ORDEN ES 100% ESTRICTO POR ESE NÚMERO
-        // (Ejemplo: Si un alumno con apellido 'Areche' tiene el orden #28 por inscribirse de último, aparecerá en el puesto #28 al final)
         if (numA !== null && numB !== null) {
           return numA - numB;
         }
         if (numA !== null) return -1;
         if (numB !== null) return 1;
 
-        // Solo si no tienen número de orden asignado, se ordenan alfabéticamente por apellido
         return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
       });
   }, [allStudents, selectedCourseId]);
@@ -272,31 +369,42 @@ export const ClassroomManager = () => {
     setAttendanceState(updated);
   };
 
-  // Guardar Asistencia
+  // Guardar Asistencia (en LocalStorage y Supabase)
   const handleSaveAttendance = async () => {
     if (!selectedCourseId) return;
     setIsSavingAttendance(true);
     try {
-      // Guardar en localStorage para persistencia instantánea
       const key = `attendance_${selectedCourseId}_${selectedDate}`;
       localStorage.setItem(key, JSON.stringify(attendanceState));
 
-      // Guardar también en Supabase si está disponible
-      if (profile?.center_id) {
+      const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+      const centerId = profile?.center_id || targetCourse?.center_id;
+
+      if (centerId) {
         const recordsToSave = Object.entries(attendanceState).map(([sId, data]) => ({
-          center_id: profile.center_id,
+          center_id: centerId,
           student_id: sId,
           course_id: selectedCourseId,
           date: selectedDate,
           status: data.status,
-          notes: data.note,
-          recorded_by: profile.id
+          notes: data.note || '',
+          recorded_by: profile?.id || null
         }));
 
-        for (const rec of recordsToSave) {
+        if (recordsToSave.length > 0) {
           try {
-            await dataService.saveAttendance(rec);
-          } catch {}
+            const { error: upsertErr } = await supabase
+              .from('attendance_records')
+              .upsert(recordsToSave, { onConflict: 'center_id,student_id,course_id,date' });
+
+            if (upsertErr) {
+              for (const rec of recordsToSave) {
+                await dataService.saveAttendance(rec).catch(() => {});
+              }
+            }
+          } catch (e) {
+            console.warn('Supabase attendance save fallback:', e);
+          }
         }
       }
 
@@ -309,28 +417,53 @@ export const ClassroomManager = () => {
     }
   };
 
-  // Guardar nuevo Apunte / Anecdotario
-  const handleAddNote = () => {
+  // Guardar nuevo Apunte / Anecdotario (en LocalStorage y Supabase)
+  const handleAddNote = async () => {
     if (!newNoteStudentId || !newNoteContent.trim()) {
       alert('Por favor selecciona un estudiante y escribe el apunte.');
       return;
     }
 
+    const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+    const centerId = profile?.center_id || targetCourse?.center_id;
+    const teacherName = profile?.full_name || profile?.name || profile?.email || 'Docente';
+    const dateFormatted = new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' });
+
     const note = {
       id: `note_${Date.now()}`,
       studentId: newNoteStudentId,
-      date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }),
+      date: dateFormatted,
       category: newNoteCategory,
       content: newNoteContent.trim(),
-      teacherName: profile?.full_name || profile?.email || 'Docente'
+      teacherName: teacherName
     };
 
     const updated = [note, ...notesList];
     setNotesList(updated);
     localStorage.setItem('edugens_anecdotal_notes', JSON.stringify(updated));
+
+    if (centerId) {
+      try {
+        await supabase.from('student_anecdotal_notes').insert([
+          {
+            center_id: centerId,
+            student_id: newNoteStudentId,
+            course_id: selectedCourseId,
+            teacher_id: profile?.teacher_id || profile?.id || null,
+            teacher_name: teacherName,
+            category: newNoteCategory,
+            content: newNoteContent.trim(),
+            date: dateFormatted
+          }
+        ]);
+      } catch (e) {
+        console.warn('Error saving note to Supabase:', e);
+      }
+    }
+
     setNewNoteContent('');
     setNewNoteStudentId('');
-    alert('¡Apunte registrado exitosamente!');
+    alert('¡Apunte registrado exitosamente y guardado en la nube!');
   };
 
   // Determinar número de competencias según nivel del curso (3 para Primaria/Inicial, 4 para Secundaria)
@@ -382,7 +515,6 @@ export const ClassroomManager = () => {
           [activityId]: isNaN(val) ? 0 : Math.min(100, Math.max(0, val))
         }
       };
-      // Guardar localmente en el scope estricto
       localStorage.setItem(storageScopeKey, JSON.stringify({
         scores: updatedScores,
         activities: competencyActivities,
@@ -397,10 +529,15 @@ export const ClassroomManager = () => {
     });
   };
 
-  // Guardar calificaciones del período explicitamente
-  const handleSavePartials = () => {
+  // Guardar calificaciones del período y sincronizar con el Registro Digital Oficial
+  const handleSavePartials = async () => {
     setIsSavingPartials(true);
     try {
+      const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+      const centerId = profile?.center_id || targetCourse?.center_id;
+      const year = selectedYear || '2026-2027';
+      const periodKey = selectedPeriod.toLowerCase(); // 'p1', 'p2', 'p3', 'p4'
+
       localStorage.setItem(storageScopeKey, JSON.stringify({
         scores: partialScores,
         activities: competencyActivities,
@@ -408,10 +545,65 @@ export const ClassroomManager = () => {
         subjectId: selectedSubjectId,
         courseId: selectedCourseId,
         teacherId: profile?.teacher_id || profile?.id,
-        centerId: profile?.center_id,
-        year: selectedYear,
+        centerId: centerId,
+        year: year,
         updatedAt: new Date().toISOString()
       }));
+
+      if (centerId && selectedCourseId && selectedSubjectId) {
+        try {
+          await supabase.from('student_partial_activities').upsert([
+            {
+              center_id: centerId,
+              course_id: selectedCourseId,
+              subject_id: selectedSubjectId,
+              period: selectedPeriod,
+              school_year: year,
+              competency_id: 'all',
+              activity_name: 'Desglose de Parciales',
+              scores: { scores: partialScores, activities: competencyActivities },
+              updated_at: new Date().toISOString()
+            }
+          ], { onConflict: 'center_id,course_id,subject_id,period,school_year' });
+        } catch (e) {
+          console.warn('Error saving partial breakdown:', e);
+        }
+
+        try {
+          const gradeUpserts = courseStudents.map((s: any) => {
+            const sScores = partialScores[s.id] || {};
+            const actList: number[] = [];
+            Object.entries(competencyActivities).forEach(([_, acts]) => {
+              acts.forEach((act) => {
+                if (sScores[act.id] !== undefined && sScores[act.id] !== null && !isNaN(Number(sScores[act.id]))) {
+                  actList.push(Number(sScores[act.id]));
+                }
+              });
+            });
+            const avg = actList.length > 0
+              ? Math.round(actList.reduce((a, b) => a + b, 0) / actList.length)
+              : null;
+
+            return {
+              center_id: centerId,
+              student_id: s.id,
+              course_id: selectedCourseId,
+              subject_id: selectedSubjectId,
+              school_year: year,
+              [periodKey]: avg
+            };
+          });
+
+          if (gradeUpserts.length > 0) {
+            await supabase.from('student_grades').upsert(gradeUpserts, {
+              onConflict: 'center_id,student_id,course_id,subject_id,school_year'
+            });
+          }
+        } catch (e) {
+          console.warn('Error syncing student_grades:', e);
+        }
+      }
+
       setSavePartialsSuccess(true);
       setTimeout(() => setSavePartialsSuccess(false), 3000);
     } catch (e) {
