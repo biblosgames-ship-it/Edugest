@@ -190,6 +190,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSelectedYear(fallbackYear);
           }
 
+          // Helper para consultar todas las páginas en tablas grandes superando el límite de 1000 filas de PostgREST
+          const fetchAllPaginated = async (
+            queryFn: (from: number, to: number) => Promise<{ data: any[] | null; error: any }>
+          ) => {
+            let allRows: any[] = [];
+            let from = 0;
+            const step = 1000;
+            while (true) {
+              const { data, error } = await queryFn(from, from + step - 1);
+              if (error) {
+                console.warn('[AppContext] Error fetching paginated chunk:', error);
+                break;
+              }
+              if (!data || data.length === 0) break;
+              allRows = allRows.concat(data);
+              if (data.length < step) break;
+              from += step;
+            }
+            return { data: allRows, error: null };
+          };
+
           const [
             cRes,
             sRes,
@@ -214,16 +235,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             licRes,
             pPrefRes
           ] = await Promise.all([
-            supabase
-              .from('courses')
-              .select('*')
-              .eq('center_id', targetCid)
-              .range(0, 9999),
-            supabase.from('subjects').select('*').eq('center_id', targetCid).range(0, 9999),
-            supabase.from('profiles').select('*').eq('center_id', targetCid).range(0, 9999),
-            supabase.from('assignments').select('*').eq('center_id', targetCid).range(0, 9999),
-            supabase.from('staff').select('*').eq('center_id', targetCid).range(0, 9999),
-            supabase.from('teachers').select('*').eq('center_id', targetCid).range(0, 9999),
+            fetchAllPaginated((from, to) =>
+              supabase.from('courses').select('*').eq('center_id', targetCid).range(from, to)
+            ),
+            fetchAllPaginated((from, to) =>
+              supabase.from('subjects').select('*').eq('center_id', targetCid).range(from, to)
+            ),
+            fetchAllPaginated((from, to) =>
+              supabase.from('profiles').select('*').eq('center_id', targetCid).range(from, to)
+            ),
+            fetchAllPaginated((from, to) =>
+              supabase.from('assignments').select('*').eq('center_id', targetCid).range(from, to)
+            ),
+            fetchAllPaginated((from, to) =>
+              supabase.from('staff').select('*').eq('center_id', targetCid).range(from, to)
+            ),
+            fetchAllPaginated((from, to) =>
+              supabase.from('teachers').select('*').eq('center_id', targetCid).range(from, to)
+            ),
             supabase.from('academic_requirements').select('*').eq('center_id', targetCid),
             supabase.from('teacher_preferences').select('*').eq('center_id', targetCid),
             supabase.from('break_preferences').select('*').eq('center_id', targetCid),
@@ -234,11 +263,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .single(),
             supabase.from('rooms').select('*').eq('center_id', targetCid),
             supabase.from('time_blocks').select('*').eq('center_id', targetCid),
-            supabase
-              .from('schedule_entries')
-              .select('*')
-              .eq('center_id', targetCid)
-              .range(0, 9999),
+            fetchAllPaginated((from, to) =>
+              supabase.from('schedule_entries').select('*').eq('center_id', targetCid).range(from, to)
+            ),
             supabase
               .from('performance_alerts')
               .select('*')
@@ -254,12 +281,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   .select('*')
                   .eq('center_id', targetCid)
                   .order('name', { ascending: false }),
-            supabase
-              .from('students')
-              .select('*')
-              .eq('center_id', targetCid)
-              .order('created_at', { ascending: false })
-              .range(0, 9999),
+            fetchAllPaginated((from, to) =>
+              supabase
+                .from('students')
+                .select('*')
+                .eq('center_id', targetCid)
+                .order('created_at', { ascending: false })
+                .range(from, to)
+            ),
             supabase
               .from('activities')
               .select('*')

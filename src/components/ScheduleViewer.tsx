@@ -224,10 +224,13 @@ export const ScheduleViewer = () => {
 
   // Verificar si todas las materias programadas de este turno están blindadas
   const isAllLocked = useMemo(() => {
+    const shiftBaseVal = selectedShift.toLowerCase().substring(0, 3);
     const shiftEntries = (state.schedule || []).filter(
-      (s: any) =>
-        s.shift === selectedShift &&
-        (!selectedYear || !s.school_year || s.school_year === selectedYear)
+      (s: any) => {
+        const sShift = (s.shift || '').toLowerCase().trim();
+        const shiftMatch = !sShift || sShift.includes(shiftBaseVal) || shiftBaseVal.includes(sShift.substring(0, 3));
+        return shiftMatch && (!selectedYear || !s.school_year || s.school_year === selectedYear);
+      }
     );
     if (shiftEntries.length === 0) return false;
     return shiftEntries.every((e: any) => checkLocked(e));
@@ -235,10 +238,13 @@ export const ScheduleViewer = () => {
 
   // Blindar / Desblindar todas las materias del turno actual juntas con un solo clic
   const toggleLockAllSchedule = async () => {
+    const shiftBaseVal = selectedShift.toLowerCase().substring(0, 3);
     const shiftEntries = (state.schedule || []).filter(
-      (s: any) =>
-        s.shift === selectedShift &&
-        (!selectedYear || !s.school_year || s.school_year === selectedYear)
+      (s: any) => {
+        const sShift = (s.shift || '').toLowerCase().trim();
+        const shiftMatch = !sShift || sShift.includes(shiftBaseVal) || shiftBaseVal.includes(sShift.substring(0, 3));
+        return shiftMatch && (!selectedYear || !s.school_year || s.school_year === selectedYear);
+      }
     );
     if (shiftEntries.length === 0) {
       alert('No hay materias programadas en este horario para blindar.');
@@ -339,7 +345,8 @@ export const ScheduleViewer = () => {
           const countPlaced = (state.schedule || []).filter(
             (sc: any) =>
               String(sc.course_id || sc.courseId) === String(targetCourseId) &&
-              String(sc.subject_id) === sId
+              String(sc.subject_id) === sId &&
+              (!selectedYear || !sc.school_year || sc.school_year === selectedYear)
           ).length;
 
           map.set(sId, {
