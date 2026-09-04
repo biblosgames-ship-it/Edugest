@@ -1367,6 +1367,45 @@ export const ScheduleViewer = () => {
           if (idx > 0) doc.addPage('a4', 'landscape');
           const teacherName = teacher?.name || 'Docente';
 
+          // Encontrar los cursos del docente en esta tanda
+          const teacherCourseIds = [
+            ...new Set([
+              ...(state.assignments || [])
+                .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, teacher.id))
+                .map((a: any) => String(a.course_id || a.courseId)),
+              ...(state.schedule || [])
+                .filter((s: any) => isSameTeacher(s.teacher_id, teacher.id))
+                .map((s: any) => String(s.course_id || s.courseId))
+            ])
+          ];
+
+          const teacherCourses = (state.courses || []).filter((c: any) => {
+            if (!teacherCourseIds.includes(String(c.id))) return false;
+            const tStr = (c.tanda || '').toLowerCase();
+            const lvlStr = (c.level || '').toLowerCase();
+            if (isMorning) {
+              return !tStr.includes('ves') && !tStr.includes('tar');
+            } else {
+              return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
+            }
+          });
+
+          let teacherSlots = slots;
+          if (teacherCourses.length > 0) {
+            let primaryCourse = teacherCourses[0];
+            let maxHours = 0;
+            teacherCourses.forEach((c: any) => {
+              const cEntriesCount = (state.schedule || []).filter(
+                (s: any) => isSameTeacher(s.teacher_id, teacher.id) && String(s.course_id || s.courseId) === String(c.id)
+              ).length;
+              if (cEntriesCount > maxHours) {
+                maxHours = cEntriesCount;
+                primaryCourse = c;
+              }
+            });
+            teacherSlots = getSlotsForCourse(primaryCourse);
+          }
+
           // Header Superior Elegante
           doc.setFillColor(30, 41, 59); // slate-800
           doc.rect(0, 0, 297, 18, 'F');
@@ -1392,8 +1431,20 @@ export const ScheduleViewer = () => {
           doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
 
           const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-          const tableBody = slots.map((slot: any) => {
+          const tableBody = teacherSlots.map((slot: any) => {
             const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+
+            if (slot.isBreak) {
+              return [
+                timeLabel,
+                {
+                  content: `🔔 ${slot.label || 'RECREO'}`,
+                  colSpan: 5,
+                  styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
+                }
+              ];
+            }
+
             const dayCols = tableDays.map((day) => {
               const entries = (state.schedule || []).filter((s: any) => {
                 if (!isSameTeacher(s.teacher_id, teacher.id)) return false;
@@ -1407,7 +1458,7 @@ export const ScheduleViewer = () => {
                 if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
                 if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
 
-                return Math.abs(sM - eM) <= 35;
+                return Math.abs(sM - eM) <= 25;
               });
               if (entries.length === 0) return '';
               return entries.map((e: any) => {
