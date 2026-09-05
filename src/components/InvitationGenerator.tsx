@@ -173,6 +173,7 @@ export const InvitationGenerator = ({
   const [customCenterCode, setCustomCenterCode] = useState<string>('');
   const [teacherSearch, setTeacherSearch] = useState<string>('');
   const [isGeneratingBulk, setIsGeneratingBulk] = useState<boolean>(false);
+  const [staffScope, setStaffScope] = useState<'only_teachers' | 'all_staff'>('only_teachers');
 
   // Estados para invitaciones administrativas individuales
   const [code, setCode] = useState('');
@@ -262,13 +263,74 @@ export const InvitationGenerator = ({
     return norm.substring(0, 7) || 'DOC';
   };
 
+  // Set de IDs de docentes con asignaciones de clase activas
+  const assignedTeacherIds = useMemo(() => {
+    return new Set(
+      (state.assignments || []).map((a: any) => a.teacher_id || a.teacherId).filter(Boolean)
+    );
+  }, [state.assignments]);
+
+  // Identificador de rol Docente / Profesor
+  const isDocente = (t: any) => {
+    if (assignedTeacherIds.has(t.id)) return true;
+
+    const raw = `${t.role || ''} ${t.team || ''} ${t.cargo || ''} ${t.position || ''}`.toLowerCase();
+
+    const isNonTeachingExplicit =
+      raw.includes('conserje') ||
+      raw.includes('porter') ||
+      raw.includes('vigilant') ||
+      raw.includes('secretar') ||
+      raw.includes('limpieza') ||
+      raw.includes('mantenimiento') ||
+      raw.includes('chofer') ||
+      raw.includes('cocin') ||
+      raw.includes('psic') ||
+      raw.includes('orientad') ||
+      raw.includes('director') ||
+      raw.includes('coordinad') ||
+      raw.includes('caj') ||
+      raw.includes('contab') ||
+      raw.includes('administrative') ||
+      raw.includes('support') ||
+      raw.includes('cashier');
+
+    const isTeachingExplicit =
+      raw.includes('docente') ||
+      raw.includes('maestr') ||
+      raw.includes('prof') ||
+      raw.includes('teach') ||
+      raw.includes('educ') ||
+      raw.includes('fisic') ||
+      raw.includes('deport') ||
+      raw.includes('instructor');
+
+    if (isTeachingExplicit) return true;
+    if (t.role === 'teacher' && !isNonTeachingExplicit) return true;
+    if (t.role === 'management_teacher') return true;
+
+    return false;
+  };
+
+  const totalDocentesCount = useMemo(() => {
+    return (state.teachers || []).filter((t: any) => isDocente(t)).length;
+  }, [state.teachers, assignedTeacherIds]);
+
+  const totalStaffCount = (state.teachers || []).length;
+
   // Mapear docentes con sus códigos existentes o calculados
   const teachersWithCodes = useMemo(() => {
-    const list = state.teachers || [];
+    const rawList = state.teachers || [];
+    const targetList =
+      staffScope === 'only_teachers'
+        ? rawList.filter((t: any) => isDocente(t))
+        : rawList;
+
     const usedSlugs = new Map<string, number>();
 
-    return list.map((t: any) => {
+    return targetList.map((t: any) => {
       const tName = t.name || t.full_name || 'Docente';
+      const isTeacherRole = isDocente(t);
       const baseSlug = getTeacherSlug(tName);
       let uniqueSlug = baseSlug;
 
@@ -285,7 +347,7 @@ export const InvitationGenerator = ({
         (c) =>
           c.code.toUpperCase() === expectedCode ||
           c.code.toUpperCase().endsWith(`-${uniqueSlug}`) ||
-          (c.role === 'teacher' && c.code.includes(baseSlug))
+          ((c.role === 'teacher' || !c.role) && c.code.includes(baseSlug))
       );
 
       // Cursos y asignaturas asignadas
@@ -301,17 +363,22 @@ export const InvitationGenerator = ({
         )
       ).join(', ');
 
+      const positionLabel =
+        t.position || t.cargo || (isTeacherRole ? 'Docente' : t.role || 'Personal');
+
       return {
         ...t,
         displayName: tName,
+        positionLabel,
+        isTeacherRole,
         generatedCode: matchingActive?.code || expectedCode,
         isCreatedInDb: !!matchingActive,
         isRegistered: matchingActive ? matchingActive.is_used : false,
         activeRecord: matchingActive,
-        coursesSummary: coursesSummary || 'Sin asignaciones'
+        coursesSummary: coursesSummary || (isTeacherRole ? 'Sin asignaciones' : 'Personal No Docente')
       };
     });
-  }, [state.teachers, state.assignments, state.courses, defaultPrefix, activeCodes]);
+  }, [state.teachers, state.assignments, state.courses, defaultPrefix, activeCodes, staffScope, assignedTeacherIds]);
 
   const filteredTeachers = useMemo(() => {
     if (!teacherSearch.trim()) return teachersWithCodes;
@@ -320,6 +387,7 @@ export const InvitationGenerator = ({
       (t) =>
         t.displayName.toLowerCase().includes(term) ||
         t.generatedCode.toLowerCase().includes(term) ||
+        t.positionLabel.toLowerCase().includes(term) ||
         t.coursesSummary.toLowerCase().includes(term)
     );
   }, [teachersWithCodes, teacherSearch]);
@@ -557,7 +625,7 @@ export const InvitationGenerator = ({
                   <h2 className="text-lg font-black uppercase text-slate-800 tracking-tight flex items-center gap-2">
                     Generador Masivo de Códigos Docentes
                     <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-full uppercase">
-                      {teachersWithCodes.length} Docentes Registrados
+                      {teachersWithCodes.length} {staffScope === 'only_teachers' ? 'Docentes' : 'Colaboradores'}
                     </span>
                   </h2>
                   <p className="text-xs font-semibold text-slate-500">
@@ -578,7 +646,7 @@ export const InvitationGenerator = ({
                   </>
                 ) : (
                   <>
-                    <KeyRound size={16} /> Generar Códigos para Todos ({teachersWithCodes.length})
+                    <KeyRound size={16} /> Generar Códigos para {staffScope === 'only_teachers' ? 'Docentes' : 'Todos'} ({teachersWithCodes.length})
                   </>
                 )}
               </button>
@@ -677,17 +745,45 @@ export const InvitationGenerator = ({
 
           {/* Tarjeta Inferior: Tabla de Códigos Generados y Distribución */}
           <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200/80 shadow-sm space-y-6">
-            {/* Barra de Acciones y Búsqueda */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar docente o código..."
-                  value={teacherSearch}
-                  onChange={(e) => setTeacherSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                />
+            {/* Barra de Acciones, Filtro y Búsqueda */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                {/* Selector de Alcance */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setStaffScope('only_teachers')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 ${
+                      staffScope === 'only_teachers'
+                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/80'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <GraduationCap size={14} /> Solo Docentes ({totalDocentesCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStaffScope('all_staff')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 ${
+                      staffScope === 'all_staff'
+                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/80'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <Users size={14} /> Todo el Personal ({totalStaffCount})
+                  </button>
+                </div>
+
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar docente, cargo o código..."
+                    value={teacherSearch}
+                    onChange={(e) => setTeacherSearch(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-2 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                  />
+                </div>
               </div>
 
               {/* Botones de Exportación */}
@@ -728,7 +824,7 @@ export const InvitationGenerator = ({
                 <p className="text-[11px] text-slate-500 leading-relaxed">
                   Los códigos que ves abajo son una <b>vista previa calculada</b> según el patrón oficial.
                   Para aplicar los permisos seleccionados arriba y guardarlos en la base de datos, pulsa el botón{' '}
-                  <span className="text-indigo-600 font-bold">"Generar Códigos para Todos"</span>. Los códigos generados pasarán al estado <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">Activo en BD</span>.
+                  <span className="text-indigo-600 font-bold">"Generar Códigos para {staffScope === 'only_teachers' ? 'Docentes' : 'Todos'}"</span>. Los códigos generados pasarán al estado <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">Activo en BD</span>.
                 </p>
               </div>
             </div>
@@ -739,7 +835,7 @@ export const InvitationGenerator = ({
                 <thead>
                   <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3.5 px-4 w-12 text-center">#</th>
-                    <th className="py-3.5 px-4">Docente / Maestro</th>
+                    <th className="py-3.5 px-4">Docente / Personal</th>
                     <th className="py-3.5 px-4">Cursos Asignados</th>
                     <th className="py-3.5 px-4 text-center">Código de Acceso</th>
                     <th className="py-3.5 px-4 text-center">Estado</th>
@@ -750,7 +846,7 @@ export const InvitationGenerator = ({
                   {filteredTeachers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-slate-400 font-bold uppercase text-[10px]">
-                        No se encontraron docentes con ese criterio de búsqueda.
+                        No se encontraron registros con ese criterio de búsqueda.
                       </td>
                     </tr>
                   ) : (
@@ -760,8 +856,19 @@ export const InvitationGenerator = ({
                           {index + 1}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-800 uppercase">{t.displayName}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-bold text-slate-800 uppercase">{t.displayName}</span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                t.isTeacherRole
+                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}
+                            >
+                              {t.positionLabel}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-normal mt-0.5">
                             {t.email || t.phone || 'Sin correo registrado'}
                           </div>
                         </td>
