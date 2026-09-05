@@ -192,7 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Helper para consultar todas las páginas en tablas grandes superando el límite de 1000 filas de PostgREST
           const fetchAllPaginated = async (
-            queryFn: (from: number, to: number) => Promise<{ data: any[] | null; error: any }>
+            queryFn: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }> | any
           ) => {
             let allRows: any[] = [];
             let from = 0;

@@ -461,15 +461,24 @@ export const dataService = {
         console.error('Error fetching teacher courses for communications:', err);
       }
 
-      return rawComms.filter(
-        (c: any) =>
-          c.sender_id === userId ||
-          (c.target_roles || []).includes('Docentes') ||
+      return rawComms.filter((c: any) => {
+        if (c.sender_id === userId) return true;
+
+        const isDirectTeacher =
           (c.target_teachers || []).includes(userId) ||
-          (effectiveTeacherId && (c.target_teachers || []).includes(effectiveTeacherId)) ||
-          (c.target_roles || []).includes('Toda la comunidad') ||
-          (c.target_courses || []).some((courseId: string) => teacherCourseIds.includes(courseId))
-      );
+          (effectiveTeacherId && (c.target_teachers || []).includes(effectiveTeacherId));
+        if (isDirectTeacher) return true;
+
+        const targetRoles = c.target_roles || [];
+        const targetCourses = c.target_courses || [];
+        const hasRoles = targetRoles.length > 0;
+        const hasCourses = targetCourses.length > 0;
+
+        const roleMatches = !hasRoles || targetRoles.includes('Docentes') || targetRoles.includes('Toda la comunidad');
+        const courseMatches = !hasCourses || targetCourses.some((cid: string) => teacherCourseIds.includes(cid));
+
+        return roleMatches && courseMatches;
+      });
     }
 
     const isParent = ['parent', 'padre', 'madre', 'tutor', 'familiar'].includes((role || '').toLowerCase());
@@ -479,12 +488,31 @@ export const dataService = {
     try {
       const { data: prof } = await supabase
         .from('profiles')
-        .select('course_code, student_id')
+        .select('course_code, course_id, student_id, parent_course_ids')
         .eq('id', userId)
         .maybeSingle();
 
       const ids = new Set<string>();
       if (prof?.course_code) ids.add(prof.course_code);
+      if (prof?.course_id) ids.add(prof.course_id);
+      if (Array.isArray(prof?.parent_course_ids)) {
+        prof.parent_course_ids.forEach((cid: string) => cid && ids.add(cid));
+      }
+
+      try {
+        const localParent = localStorage.getItem('parent_course_ids');
+        if (localParent) {
+          const parsed = JSON.parse(localParent);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((cid: string) => cid && ids.add(cid));
+          }
+        }
+        const localCourse = localStorage.getItem('selected_course_id');
+        if (localCourse) ids.add(localCourse);
+        const localCode = localStorage.getItem('course_code');
+        if (localCode) ids.add(localCode);
+      } catch (e) {}
+
       if (prof?.student_id) {
         const { data: st } = await supabase
           .from('students')
@@ -498,16 +526,24 @@ export const dataService = {
 
     return rawComms.filter((c: any) => {
       if (c.sender_id === userId) return true;
-      if ((c.target_roles || []).includes('Toda la comunidad')) return true;
-      if (isParent && (c.target_roles || []).includes('Padres')) return true;
-      if (isStudent && (c.target_roles || []).includes('Alumnos')) return true;
-      if (
-        (c.target_courses || []).length > 0 &&
-        (c.target_courses || []).some((cid: string) => userCourseIds.includes(cid))
-      ) {
-        return true;
+
+      const targetRoles = c.target_roles || [];
+      const targetCourses = c.target_courses || [];
+      const hasRoles = targetRoles.length > 0;
+      const hasCourses = targetCourses.length > 0;
+
+      let roleMatches = false;
+      if (!hasRoles || targetRoles.includes('Toda la comunidad')) {
+        roleMatches = true;
+      } else if (isParent && targetRoles.includes('Padres')) {
+        roleMatches = true;
+      } else if (isStudent && targetRoles.includes('Alumnos')) {
+        roleMatches = true;
       }
-      return false;
+
+      const courseMatches = !hasCourses || targetCourses.some((cid: string) => userCourseIds.includes(cid));
+
+      return roleMatches && courseMatches;
     });
   },
 

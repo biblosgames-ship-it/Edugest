@@ -16,6 +16,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { SEO } from './SEO';
+import { ExcuseAlert } from './ExcuseAlert';
 
 export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
   const { state, selectedYear } = useApp();
@@ -601,6 +602,9 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
         title={`Aula Virtual - ${course.grade} ${course.section}`}
         description="Muro virtual de tareas, anuncios y horarios para estudiantes."
       />
+
+      {/* AVISOS Y EXCUSAS EN TIEMPO REAL */}
+      <ExcuseAlert />
 
       {/* TABS DE HIJOS PARA PADRES */}
       {isParent && linkedParentCourses.length > 0 && (

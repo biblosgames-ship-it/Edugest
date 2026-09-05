@@ -1318,6 +1318,7 @@ export const ScheduleViewer = () => {
   };
 
   const handleExportExcel = () => {
+    const filename = `Horario_${filterType}_${filterId || 'General'}_${selectedYear || '2026-2027'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const header = ['Hora/Bloque', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
     const rows = slots.map((slot) => {
       const rowData: string[] = [`${format12h(slot.start)} - ${format12h(slot.end)}`];
@@ -1464,7 +1465,7 @@ export const ScheduleViewer = () => {
                 {
                   content: `🔔 ${slot.label || 'RECREO'}`,
                   colSpan: 5,
-                  styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
+                  styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' as any }
                 }
               ];
             }
@@ -1505,7 +1506,7 @@ export const ScheduleViewer = () => {
           autoTable(doc, {
             startY: 37,
             head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
-            body: tableBody,
+            body: tableBody as any,
             theme: 'grid',
             headStyles: {
               fillColor: [79, 70, 229],
@@ -1602,7 +1603,7 @@ export const ScheduleViewer = () => {
               {
                 content: `🔔 ${slot.label || 'RECREO'}`,
                 colSpan: 5,
-                styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
+                styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' as any }
               }
             ];
           }
@@ -1646,7 +1647,7 @@ export const ScheduleViewer = () => {
         autoTable(doc, {
           startY: 37,
           head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
-          body: tableBody,
+          body: tableBody as any,
           theme: 'grid',
           headStyles: {
             fillColor: [79, 70, 229],
@@ -3347,7 +3348,7 @@ export const ScheduleViewer = () => {
                     const isCourseVespertina = cTandaStr.includes('ves') || cTandaStr.includes('tar');
                     const targetShift = isCourseVespertina ? 'Vespertina' : (effectiveShift || selectedShift);
 
-                    const finalYear = selectedYear || state.currentYear || '2026-2027';
+                    const finalYear = selectedYear || '2026-2027';
                     const rawStart = directAssignModal.slot.start;
                     const rawEnd = directAssignModal.slot.end;
                     const sStart = rawStart.length === 5 ? rawStart + ':00' : rawStart;

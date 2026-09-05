@@ -2034,7 +2034,7 @@ export const TeacherDashboard = ({
                                   halign: 'center',
                                   fillColor: [254, 243, 199],
                                   textColor: [180, 83, 9],
-                                  fontStyle: 'bold'
+                                  fontStyle: 'bold' as any
                                 }
                               }
                             ];
@@ -2057,7 +2057,7 @@ export const TeacherDashboard = ({
                         autoTable(doc, {
                           startY: 37,
                           head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
-                          body: tableBody,
+                          body: tableBody as any,
                           theme: 'grid',
                           headStyles: {
                             fillColor: [79, 70, 229],

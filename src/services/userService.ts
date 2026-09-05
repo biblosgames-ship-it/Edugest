@@ -130,20 +130,22 @@ export const createBulkTeacherInvitationCodes = async (
     if (error) {
       console.warn('Upsert fallback for bulk codes:', error);
       for (const item of payload) {
-        await supabase
-          .from('invitation_codes')
-          .upsert([item], { onConflict: 'code' })
-          .catch(() => {});
+        try {
+          await supabase
+            .from('invitation_codes')
+            .upsert([item], { onConflict: 'code' });
+        } catch {}
       }
     }
 
     // Sincronizar perfiles existentes que ya se hayan registrado con estos códigos
     for (const item of payload) {
-      await supabase
-        .from('profiles')
-        .update({ allowed_panels: item.allowed_panels })
-        .eq('invitation_code', item.code)
-        .catch(() => {});
+      try {
+        await supabase
+          .from('profiles')
+          .update({ allowed_panels: item.allowed_panels })
+          .eq('invitation_code', item.code);
+      } catch {}
     }
 
     return true;

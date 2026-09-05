@@ -454,7 +454,9 @@ export const ClassroomManager = () => {
         if (insertErr) {
           console.warn('Supabase sparse insert fallback:', insertErr);
           for (const rec of recordsToInsert) {
-            await supabase.from('attendance_records').insert([rec]).catch(() => {});
+            try {
+              await supabase.from('attendance_records').insert([rec]);
+            } catch {}
           }
         }
       } catch (e) {

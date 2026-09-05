@@ -31,7 +31,7 @@ import { BulkPromoteModal } from './BulkPromoteModal';
 
 export const StudentManagement = () => {
   const queryClient = useQueryClient();
-  const { state, selectedYear, refreshData } = useApp();
+  const { state, selectedYear, refreshData, center } = useApp();
   const { profile } = useSupabase();
   const { students: allStudents, isLoading: loading, deleteStudent, updateStudent } = useStudents();
 
@@ -322,7 +322,7 @@ export const StudentManagement = () => {
     exportStudentsToExcel({
       students: targetStudents,
       courseInfo: course || null,
-      centerName: state.center?.name || profile?.school_name || 'Centro Educativo',
+      centerName: center?.name || profile?.school_name || 'Centro Educativo',
       schoolYear: selectedYear
     });
   };

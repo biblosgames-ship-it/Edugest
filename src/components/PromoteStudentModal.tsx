@@ -13,7 +13,7 @@ interface PromoteStudentModalProps {
 }
 
 export const PromoteStudentModal = ({ student, onClose, onSuccess }: PromoteStudentModalProps) => {
-  const { state, selectedYear } = useApp();
+  const { state, selectedYear, profile, center } = useApp();
   const queryClient = useQueryClient();
 
   const [targetYear, setTargetYear] = useState('');

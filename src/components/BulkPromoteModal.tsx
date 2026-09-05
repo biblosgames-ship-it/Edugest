@@ -23,7 +23,7 @@ interface BulkPromoteModalProps {
 }
 
 export const BulkPromoteModal = ({ sourceCourseId, onClose, onSuccess }: BulkPromoteModalProps) => {
-  const { state, selectedYear } = useApp();
+  const { state, selectedYear, profile, center } = useApp();
   const queryClient = useQueryClient();
 
   const [students, setStudents] = useState<any[]>([]);

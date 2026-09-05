@@ -278,6 +278,12 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return sum > 0 ? sum / 4 : 0;
   };
 
+  const calculateAreaFinal = (studentId: string) => {
+    if (!config.competencies || config.competencies.length === 0) return 0;
+    const sum = config.competencies.reduce((acc, c) => acc + calculateCompAvg(studentId, c.id), 0);
+    return Math.round(sum / config.competencies.length);
+  };
+
   // Importar promedios de Mi Aula bajo demanda
   const handleImportFromMiAula = () => {
     if (!selectedCourseId || !selectedSubjectId) {
@@ -777,7 +783,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    doc.text(forceYear, 235, boxY + 5.5);
+    doc.text(activeYear, 235, boxY + 5.5);
 
     // Fila 2 - Grado / Nivel
     doc.setFont('helvetica', 'bold');

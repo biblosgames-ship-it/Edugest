@@ -89,27 +89,39 @@ export const useNotifications = () => {
     window.addEventListener('edugens_notifications_updated', handleUpdate);
 
     // Suscripción Realtime en vivo para avisos y excusas instantáneas
-    const channel = supabase
-      .channel(`public:live_notifications_${userId || 'guest'}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'communications' },
-        () => {
-          fetchComms();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'announcements' },
-        () => {
-          fetchComms();
-        }
-      )
-      .subscribe();
+    const channelName = `public:live_notifications_${userId || 'guest'}_${Math.random().toString(36).substring(2, 9)}`;
+    let channel: any = null;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'communications' },
+          () => {
+            fetchComms();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'announcements' },
+          () => {
+            fetchComms();
+          }
+        );
+
+      channel.subscribe();
+    } catch (err) {
+      console.warn('Error initiating realtime channel in useNotifications:', err);
+    }
 
     return () => {
       window.removeEventListener('edugens_notifications_updated', handleUpdate);
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {}
+      }
     };
   }, [fetchComms, userId]);
 
