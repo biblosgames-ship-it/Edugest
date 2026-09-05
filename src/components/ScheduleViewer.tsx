@@ -105,8 +105,8 @@ export const ScheduleViewer = () => {
     (state.schedule || []).forEach((e: any) => {
       const isShiftMatch = !selectedShift || e.shift === selectedShift;
       const isYearMatch = !selectedYear || !e.school_year || e.school_year === selectedYear;
-      if (isShiftMatch && isYearMatch && e.is_locked) {
-        if (e.id) combinedSet.add(e.id);
+      if (isShiftMatch && isYearMatch && (e.is_locked === true || e.is_locked === 'true' || e.is_locked === 1)) {
+        if (e.id) combinedSet.add(String(e.id));
         const s5 = (e.start_time || '').substring(0, 5);
         combinedSet.add(`${e.course_id}_${e.day}_${s5}`);
         combinedSet.add(`${e.course_id}_${e.day}_${e.start_time}`);
@@ -114,7 +114,10 @@ export const ScheduleViewer = () => {
     });
 
     setLockedEntries(combinedSet);
-  }, [lockStorageKey, selectedShift, selectedYear, profile?.center_id]);
+    try {
+      localStorage.setItem(lockStorageKey, JSON.stringify(Array.from(combinedSet)));
+    } catch {}
+  }, [lockStorageKey, selectedShift, selectedYear, profile?.center_id, state.schedule]);
 
   const checkLocked = (e: any) => isEntryLocked(e, Array.from(lockedEntries));
 
@@ -261,13 +264,17 @@ export const ScheduleViewer = () => {
       if (isAllLocked) {
         // Desbloquear todas las materias del turno actual
         shiftEntries.forEach((e: any) => {
-          next.delete(e.id);
+          if (e.id) next.delete(String(e.id));
+          const s5 = (e.start_time || '').substring(0, 5);
+          next.delete(`${e.course_id}_${e.day}_${s5}`);
           next.delete(`${e.course_id}_${e.day}_${e.start_time}`);
         });
       } else {
         // Bloquear todas las materias del turno actual
         shiftEntries.forEach((e: any) => {
-          next.add(e.id);
+          if (e.id) next.add(String(e.id));
+          const s5 = (e.start_time || '').substring(0, 5);
+          next.add(`${e.course_id}_${e.day}_${s5}`);
           next.add(`${e.course_id}_${e.day}_${e.start_time}`);
         });
       }

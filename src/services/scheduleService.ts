@@ -370,9 +370,9 @@ export const computeTaskPriority = (task: any, state: any, teacherLoadMap: Recor
 
 export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
   if (!e) return false;
-  if (!lockedKeys || lockedKeys.length === 0) {
-    return e.is_locked === true || e.is_locked === 'true';
-  }
+  // Si la entrada ya tiene la propiedad is_locked activa en BD o memoria, es INVIOLABLE
+  if (e.is_locked === true || e.is_locked === 'true' || e.is_locked === 1) return true;
+  if (!lockedKeys || lockedKeys.length === 0) return false;
   if (e.id && lockedKeys.includes(String(e.id))) return true;
 
   const rawStart = (e.start_time || '').trim();
@@ -387,8 +387,9 @@ export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
 
   return lockedKeys.some((lk) => {
     if (!lk) return false;
-    if (lk === k1 || lk === k2 || lk === k3 || (e.id && lk === String(e.id))) return true;
-    if (cId && day && lk.startsWith(`${cId}_${day}_`) && lk.includes(s5)) return true;
+    const lkStr = String(lk).trim();
+    if (lkStr === k1 || lkStr === k2 || lkStr === k3 || (e.id && lkStr === String(e.id))) return true;
+    if (cId && day && lkStr.toLowerCase().startsWith(`${cId}_${day}_`.toLowerCase()) && (lkStr.includes(s5) || lkStr.includes(rawStart))) return true;
     return false;
   });
 };
@@ -641,30 +642,28 @@ export const scheduleService = {
     const lockedCountByAssign: Record<string, number> = {};
     const lockedDailyCount: Record<string, Record<string, Record<string, number>>> = {};
 
-    if (lockedKeys.length > 0) {
-      try {
-        const { data: existingData } = await supabase
-          .from('schedule_entries')
-          .select('*')
-          .eq('center_id', centerId)
-          .eq('shift', shift)
-          .eq('school_year', schoolYear);
+    try {
+      const { data: existingData } = await supabase
+        .from('schedule_entries')
+        .select('*')
+        .eq('center_id', centerId)
+        .eq('shift', shift)
+        .eq('school_year', schoolYear);
 
-        (existingData || []).forEach((e: any) => {
-          if (isEntryLocked(e, lockedKeys)) {
-            preservedLockedEntries.push({ ...e, is_locked: true });
-            const assignKey = `${e.course_id}_${e.subject_id}`;
-            lockedCountByAssign[assignKey] = (lockedCountByAssign[assignKey] || 0) + 1;
+      (existingData || []).forEach((e: any) => {
+        if (isEntryLocked(e, lockedKeys)) {
+          preservedLockedEntries.push({ ...e, is_locked: true });
+          const assignKey = `${e.course_id}_${e.subject_id}`;
+          lockedCountByAssign[assignKey] = (lockedCountByAssign[assignKey] || 0) + 1;
 
-            if (!lockedDailyCount[e.course_id]) lockedDailyCount[e.course_id] = {};
-            if (!lockedDailyCount[e.course_id][e.day]) lockedDailyCount[e.course_id][e.day] = {};
-            lockedDailyCount[e.course_id][e.day][e.subject_id] =
-              (lockedDailyCount[e.course_id][e.day][e.subject_id] || 0) + 1;
-          }
-        });
-      } catch (err) {
-        console.warn('Error loading locked entries in generateSchedule:', err);
-      }
+          if (!lockedDailyCount[e.course_id]) lockedDailyCount[e.course_id] = {};
+          if (!lockedDailyCount[e.course_id][e.day]) lockedDailyCount[e.course_id][e.day] = {};
+          lockedDailyCount[e.course_id][e.day][e.subject_id] =
+            (lockedDailyCount[e.course_id][e.day][e.subject_id] || 0) + 1;
+        }
+      });
+    } catch (err) {
+      console.warn('Error loading locked entries in generateSchedule:', err);
     }
 
     const allTasks: any[] = [];
@@ -1570,12 +1569,33 @@ export const scheduleService = {
     );
 
     // FASE 1: PRESERVACIÓN FIEL E INTELIGENTE (PINNING SELECTIVO)
-    // No fijamos materias con Alta Prioridad VIP ni Educación Física para permitir que el motor las ubique al principio como Bloques Dobles indivisibles.
+    // 1. CANDADOS INVIOLABLES: Identificar y registrar TODOS los bloqueos del usuario
+    const strictlyLockedEntries = (currentSchedule || [])
+      .filter((e) => isEntryLocked(e, lockedKeys))
+      .map((e) => ({ ...e, is_locked: true }));
+
     const preservedEntries: any[] = [];
     const placedCount: Record<string, Record<string, number>> = {};
     const preservedDailyCount: Record<string, Record<string, Record<string, number>>> = {};
 
+    // Incorporar INCONDICIONALMENTE todos los candados del usuario al conjunto preservado
+    strictlyLockedEntries.forEach((e) => {
+      preservedEntries.push(e);
+      const cId = String(e.course_id || e.courseId);
+      const sId = String(e.subject_id);
+      if (!placedCount[cId]) placedCount[cId] = {};
+      placedCount[cId][sId] = (placedCount[cId][sId] || 0) + 1;
+
+      if (!preservedDailyCount[cId]) preservedDailyCount[cId] = {};
+      if (!preservedDailyCount[cId][e.day]) preservedDailyCount[cId][e.day] = {};
+      preservedDailyCount[cId][e.day][sId] =
+        (preservedDailyCount[cId][e.day][sId] || 0) + 1;
+    });
+
+    // 2. Preservar otras entradas válidas no bloqueadas de currentSchedule que no colisionen
     (currentSchedule || []).forEach((e) => {
+      if (isEntryLocked(e, lockedKeys)) return; // Ya preservada incondicionalmente arriba
+
       const c = courses.find((course: any) => course.id === e.course_id);
       if (!c) return;
 
@@ -1585,20 +1605,6 @@ export const scheduleService = {
           a.subject_id === e.subject_id
       );
       if (!assign) return;
-
-      // CANDADO DE SEGURIDAD 🔒: Si la clase fue bloqueada expresamente por el usuario, se preserva sin excepción.
-      const isLockedByUser = isEntryLocked(e, lockedKeys);
-
-      if (isLockedByUser) {
-        preservedEntries.push({ ...e, is_locked: true });
-        if (!placedCount[e.course_id]) placedCount[e.course_id] = {};
-        placedCount[e.course_id][e.subject_id] = (placedCount[e.course_id][e.subject_id] || 0) + 1;
-        if (!preservedDailyCount[e.course_id]) preservedDailyCount[e.course_id] = {};
-        if (!preservedDailyCount[e.course_id][e.day]) preservedDailyCount[e.course_id][e.day] = {};
-        preservedDailyCount[e.course_id][e.day][e.subject_id] =
-          (preservedDailyCount[e.course_id][e.day][e.subject_id] || 0) + 1;
-        return;
-      }
 
       const subObj = state.subjects?.find((s: any) => s.id === e.subject_id);
       const sName = (subObj?.name || '').toLowerCase();
@@ -1633,11 +1639,14 @@ export const scheduleService = {
           : days;
       if (!workingDays.includes(e.day)) return;
 
-      // Verificar que el docente no esté duplicado en la misma hora en entradas ya preservadas
-      const teacherBusy = preservedEntries.some(
-        (pe) => pe.day === e.day && pe.teacher_id === e.teacher_id && pe.start_time === e.start_time
+      // Verificar que no choque con entradas ya preservadas (docente o curso)
+      const hasConflictWithPreserved = preservedEntries.some(
+        (pe) =>
+          pe.day === e.day &&
+          (pe.course_id === e.course_id || pe.teacher_id === e.teacher_id) &&
+          pe.start_time === e.start_time
       );
-      if (teacherBusy) return;
+      if (hasConflictWithPreserved) return;
 
       // Verificar horas semanales requeridas
       const requiredHours = Number(assign.hours_per_week || assign.hoursPerWeek) || 0;
@@ -2049,11 +2058,30 @@ export const scheduleService = {
         originalSlotPref[key] = { day: e.day, start: e.start_time };
       });
 
+      // Mapear cuántas horas de cada materia ya están blindadas por el usuario
+      const lockedHoursMap: Record<string, number> = {};
+      const lockedDailyMap: Record<string, Record<string, Record<string, number>>> = {};
+      strictlyLockedEntries.forEach((e) => {
+        const cId = String(e.course_id || e.courseId);
+        const sId = String(e.subject_id);
+        const key = `${cId}_${sId}`;
+        lockedHoursMap[key] = (lockedHoursMap[key] || 0) + 1;
+
+        if (!lockedDailyMap[cId]) lockedDailyMap[cId] = {};
+        if (!lockedDailyMap[cId][e.day]) lockedDailyMap[cId][e.day] = {};
+        lockedDailyMap[cId][e.day][sId] =
+          (lockedDailyMap[cId][e.day][sId] || 0) + 1;
+      });
+
       const allTasksFlexible: any[] = [];
       filteredAssignments.forEach((a) => {
         const course = courses.find((c) => c.id === (a.course_id || a.courseId));
         if (!course) return;
-        let remaining = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+        const totalRequired = Number(a.hours_per_week || a.hoursPerWeek) || 0;
+        const cId = String(course.id);
+        const sId = String(a.subject_id);
+        const lockedAlready = lockedHoursMap[`${cId}_${sId}`] || 0;
+        let remaining = Math.max(0, totalRequired - lockedAlready);
         const subObj = state.subjects?.find((s: any) => s.id === a.subject_id);
         const sName = subObj?.name?.toLowerCase() || '';
         const distType = subObj?.distributionType || subObj?.distribution_type;
@@ -2109,8 +2137,15 @@ export const scheduleService = {
 
       const runFlexibleAttemptCustom = (taskListFlexible: any[]) => {
         const currentTasks = sortTasksPriority(taskListFlexible);
-        const finalEntries: any[] = [];
+        // INVIOLABLE: Toda tentativa flexible inicia CONSERVANDO AL 100% las entradas con candado
+        const finalEntries: any[] = strictlyLockedEntries.map((e) => ({ ...e, is_locked: true }));
         const dailyCount: Record<string, Record<string, Record<string, number>>> = {};
+        for (const cId in lockedDailyMap) {
+          dailyCount[cId] = {};
+          for (const day in lockedDailyMap[cId]) {
+            dailyCount[cId][day] = { ...lockedDailyMap[cId][day] };
+          }
+        }
 
         const placeTask = (task: any, relaxedRules = false, superRelaxed = false) => {
           const { course, assign, isDouble } = task;
@@ -2201,6 +2236,8 @@ export const scheduleService = {
           }
 
           for (const toUse of combinations) {
+            // REGLA ESTRICTA Y ABSOLUTA: JAMÁS PERMITIR 4 O MÁS HORAS DE LA MISMA MATERIA EL MISMO DÍA
+            if (dayCount + toUse.length >= 4) continue;
             const existingSameSubject = finalEntries.filter(
               (e) => e.course_id === course.id && e.subject_id === assign.subject_id && e.day === day
             );
@@ -2354,7 +2391,7 @@ export const scheduleService = {
       };
 
       let bestFlexibleResult = {
-        entries: [],
+        entries: strictlyLockedEntries.map((e) => ({ ...e, is_locked: true })),
         pendingTasks: allTasksFlexible,
         relaxedCount: Infinity,
         superRelaxedCount: Infinity
@@ -2395,7 +2432,7 @@ export const scheduleService = {
         });
 
         let bestFlexibleSplitResult = {
-          entries: [],
+          entries: strictlyLockedEntries.map((e) => ({ ...e, is_locked: true })),
           pendingTasks: allTasksFlexibleSplit,
           relaxedCount: Infinity,
           superRelaxedCount: Infinity
@@ -2482,12 +2519,14 @@ export const scheduleService = {
       const chunkSize = 500;
       for (let i = 0; i < entries.length; i += chunkSize) {
         const chunk = entries.slice(i, i + chunkSize).map((e: any) => {
-          const { id, created_at, ...rest } = e;
+          const { created_at, ...rest } = e;
           const isLocked = isEntryLocked(e, lockedKeys);
-          return {
+          const item: any = {
             ...rest,
             is_locked: isLocked
           };
+          if (!item.id && e.id) item.id = e.id;
+          return item;
         });
         let { error: insError } = await supabase.from('schedule_entries').insert(chunk);
         if (insError && (insError.message?.includes('is_locked') || insError.code === 'PGRST204')) {
