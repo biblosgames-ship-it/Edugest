@@ -160,9 +160,15 @@ export const useSchoolBell = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Determinar si hoy es día escolar (Lunes a Viernes)
+  const dayOfWeek = currentTime.getDay(); // 0 = Domingo, 6 = Sábado
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const isSchoolDay = !isWeekend;
+
   // Comprobar si corresponde timbrar en el minuto actual
   useEffect(() => {
-    if (!isBellEnabled) return;
+    // Si el timbre está desactivado o es fin de semana (Sábado/Domingo), NO timbrar
+    if (!isBellEnabled || !isSchoolDay) return;
 
     const hours = String(currentTime.getHours()).padStart(2, '0');
     const minutes = String(currentTime.getMinutes()).padStart(2, '0');
@@ -214,10 +220,30 @@ export const useSchoolBell = () => {
         { duration: 8000 }
       );
     }
-  }, [currentTime, isBellEnabled, bellSlots, soundStyle, volume]);
+  }, [currentTime, isBellEnabled, isSchoolDay, bellSlots, soundStyle, volume]);
 
   // Calcular la próxima rotación
   const nextRotation = useMemo(() => {
+    if (bellSlots.length === 0) return null;
+
+    const firstSlot = bellSlots[0];
+
+    // Si es fin de semana (Sábado o Domingo)
+    if (isWeekend) {
+      const dayName = dayOfWeek === 6 ? 'Sábado' : 'Domingo';
+      return {
+        isSchoolDay: false,
+        isWeekend: true,
+        slot: firstSlot,
+        diffSeconds: 0,
+        minsLeft: 0,
+        secsLeft: 0,
+        timeFormatted: `Lunes a las ${firstSlot.time}`,
+        statusText: `Fin de semana (${dayName}) • Sin clases hoy`
+      };
+    }
+
+    // Si es día de semana (Lunes a Viernes)
     const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
     const nowSecs = currentTime.getSeconds();
 
@@ -230,32 +256,36 @@ export const useSchoolBell = () => {
         const minsLeft = Math.floor(diffSeconds / 60);
         const secsLeft = diffSeconds % 60;
         return {
+          isSchoolDay: true,
+          isWeekend: false,
           slot,
           diffSeconds,
           minsLeft,
           secsLeft,
-          timeFormatted: `${minsLeft}m ${secsLeft < 10 ? '0' : ''}${secsLeft}s`
+          timeFormatted: `${minsLeft}m ${secsLeft < 10 ? '0' : ''}${secsLeft}s`,
+          statusText: `En curso hoy`
         };
       }
     }
 
-    // Si ya pasaron todas las de hoy, la primera de mañana
-    if (bellSlots.length > 0) {
-      const first = bellSlots[0];
-      return {
-        slot: first,
-        diffSeconds: 0,
-        minsLeft: 0,
-        secsLeft: 0,
-        timeFormatted: `Mañana a las ${first.time}`
-      };
-    }
-
-    return null;
-  }, [currentTime, bellSlots]);
+    // Si ya finalizaron todas las rotaciones del día de hoy
+    const isFriday = dayOfWeek === 5;
+    return {
+      isSchoolDay: false,
+      isWeekend: false,
+      slot: firstSlot,
+      diffSeconds: 0,
+      minsLeft: 0,
+      secsLeft: 0,
+      timeFormatted: isFriday ? `Lunes a las ${firstSlot.time}` : `Mañana a las ${firstSlot.time}`,
+      statusText: isFriday ? 'Fin de jornada semanal' : 'Jornada de hoy concluida'
+    };
+  }, [currentTime, isWeekend, dayOfWeek, bellSlots]);
 
   return {
     isBellEnabled,
+    isSchoolDay,
+    isWeekend,
     toggleBell,
     soundStyle,
     setSoundStyle,

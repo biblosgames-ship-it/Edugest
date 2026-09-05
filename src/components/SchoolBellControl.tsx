@@ -107,21 +107,42 @@ export const SchoolBellControl = () => {
 
           {/* Próximo Cambio de Hora en Tiempo Real */}
           {isBellEnabled && nextRotation && (
-            <div className="bg-gradient-to-r from-emerald-950/30 to-slate-900 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between gap-3">
+            <div
+              className={`p-4 rounded-2xl flex items-center justify-between gap-3 border ${
+                nextRotation.isWeekend
+                  ? 'bg-slate-800/60 border-slate-700 text-slate-300'
+                  : 'bg-gradient-to-r from-emerald-950/30 to-slate-900 border-emerald-500/30'
+              }`}
+            >
               <div className="flex items-center gap-2.5">
-                <Clock size={16} className="text-emerald-400 animate-pulse" />
+                <Clock
+                  size={16}
+                  className={nextRotation.isWeekend ? 'text-slate-400' : 'text-emerald-400 animate-pulse'}
+                />
                 <div>
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
-                    Próxima Rotación
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider block ${
+                      nextRotation.isWeekend ? 'text-amber-400' : 'text-emerald-400'
+                    }`}
+                  >
+                    {nextRotation.isWeekend ? 'Fin de Semana (Sin Clases Hoy)' : 'Próxima Rotación'}
                   </span>
                   <span className="text-xs font-bold text-white">
-                    {nextRotation.slot.label} ({nextRotation.slot.time})
+                    {nextRotation.isWeekend
+                      ? `Próxima jornada escolar: ${nextRotation.timeFormatted}`
+                      : `${nextRotation.slot.label} (${nextRotation.slot.time})`}
                   </span>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-xs font-mono font-black text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                  en {nextRotation.timeFormatted}
+                <span
+                  className={`text-xs font-mono font-black px-2.5 py-1 rounded-lg border ${
+                    nextRotation.isWeekend
+                      ? 'text-slate-300 bg-slate-800 border-slate-700'
+                      : 'text-emerald-400 bg-emerald-950/80 border-emerald-500/30'
+                  }`}
+                >
+                  {nextRotation.isWeekend ? 'Lunes' : `en ${nextRotation.timeFormatted}`}
                 </span>
               </div>
             </div>
@@ -281,9 +302,13 @@ export const SchoolBellControl = () => {
                 )}
               </div>
               <p className="text-[9px] font-medium text-slate-400 truncate">
-                {isBellEnabled && nextRotation
-                  ? `Próx: ${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
-                  : 'Desactivado (Silencio)'}
+                {!isBellEnabled
+                  ? 'Desactivado (Silencio)'
+                  : nextRotation?.isWeekend
+                    ? 'Sin clases hoy (Fin de sem.)'
+                    : nextRotation?.isSchoolDay
+                      ? `Próx: ${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
+                      : `Próx: ${nextRotation?.timeFormatted || 'Lunes'}`}
               </p>
             </div>
           </button>
