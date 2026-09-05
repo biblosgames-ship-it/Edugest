@@ -452,7 +452,7 @@ function AppContent() {
               {isStudentOrParent ? (
                 <StudentDashboard userData={profile} />
               ) : profile?.role === 'teacher' ? (
-                <TeacherDashboard userData={profile} />
+                <TeacherDashboard userData={profile} onViewChange={setActiveView} />
               ) : (
                 <Dashboard />
               )}

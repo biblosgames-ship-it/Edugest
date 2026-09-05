@@ -27,13 +27,20 @@ import {
   CalendarDays,
   Pencil,
   Trash2,
-  Building2
+  Building2,
+  UserCheck
 } from 'lucide-react';
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 import { useNotifications } from '../hooks/useNotifications';
 
-export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
+export const TeacherDashboard = ({
+  userData: profile,
+  onViewChange
+}: {
+  userData: any;
+  onViewChange?: (view: string) => void;
+}) => {
   const { state, selectedYear, center } = useApp();
   const { unreadCount } = useNotifications();
 
@@ -1145,7 +1152,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             </button>
           )}
 
-          {/* Fila del Botón Ver Horario y Campanita a la derecha */}
+          {/* Fila del Botón Ver Horario y Mi Aula a la derecha */}
           <div className="flex items-center gap-2.5 w-full md:w-auto">
             {selectedTeacherId && (
               <button
@@ -1157,27 +1164,17 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               </button>
             )}
 
-            {/* ICONO DE NOTIFICACIONES A LA DERECHA */}
-            <div className="relative inline-flex items-center shrink-0">
+            {/* ACCESO DIRECTO A MI AULA */}
+            {onViewChange && (
               <button
-                onClick={() => {
-                  const el = document.getElementById('excuse-alert-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="relative p-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-300 rounded-2xl text-slate-700 hover:text-indigo-600 transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center"
-                title={unreadCount > 0 ? `Tienes ${unreadCount} avisos pendientes` : 'Sin notificaciones pendientes'}
+                onClick={() => onViewChange('classroom')}
+                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Ir al módulo Mi Aula"
               >
-                <Bell
-                  size={16}
-                  className={unreadCount > 0 ? 'text-indigo-600 animate-bounce' : 'text-slate-400'}
-                />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-white">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
+                <UserCheck size={13} />
+                Mi Aula
               </button>
-            </div>
+            )}
           </div>
 
           {hidePeriodAlert && (
