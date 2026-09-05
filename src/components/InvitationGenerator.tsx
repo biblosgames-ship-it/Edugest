@@ -54,8 +54,8 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'schedule',
-    label: 'Mi Horario de Clases',
-    desc: 'Visualización de distribución de horas y recreos.'
+    label: 'Horarios de Clases (Generador y Matriz)',
+    desc: 'Visualización de matriz semanal de clases y motor generador de horarios.'
   },
   {
     id: 'digital-register',
