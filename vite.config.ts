@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'Edugest2.png'],
+        includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'Edugest2.png'],
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // Aumenta el límite a 5 MB
           skipWaiting: true,
@@ -23,17 +23,29 @@ export default defineConfig(({mode}) => {
           name: 'Edugest',
           short_name: 'Edugest',
           description: 'Plataforma Digital de Gestión Escolar para Centros Educativos',
-          theme_color: '#3b82f6', // Color azul de Tailwind por defecto
+          theme_color: '#3b82f6',
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'portrait',
           start_url: '/',
           icons: [
             {
-              src: '/Edugest2.png',
-              sizes: '192x192 512x512',
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         }
