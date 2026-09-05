@@ -1161,36 +1161,39 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             </button>
           )}
 
-          {selectedTeacherId && (
-            <button
-              onClick={() => setShowWeeklyScheduleModal(true)}
-              className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <CalendarDays size={12} />
-              Ver Mi Horario Completo
-            </button>
-          )}
+          {/* Fila del Botón Ver Horario y Campanita a la derecha */}
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
+            {selectedTeacherId && (
+              <button
+                onClick={() => setShowWeeklyScheduleModal(true)}
+                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <CalendarDays size={12} />
+                Ver Mi Horario Completo
+              </button>
+            )}
 
-          {/* ICONO DE NOTIFICACIONES */}
-          <div className="relative inline-flex items-center">
-            <button
-              onClick={() => {
-                const el = document.getElementById('excuse-alert-section');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="relative p-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-300 rounded-2xl text-slate-700 hover:text-indigo-600 transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center"
-              title={unreadCount > 0 ? `Tienes ${unreadCount} avisos pendientes` : 'Sin notificaciones pendientes'}
-            >
-              <Bell
-                size={16}
-                className={unreadCount > 0 ? 'text-indigo-600 animate-bounce' : 'text-slate-400'}
-              />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-white">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
+            {/* ICONO DE NOTIFICACIONES A LA DERECHA */}
+            <div className="relative inline-flex items-center shrink-0">
+              <button
+                onClick={() => {
+                  const el = document.getElementById('excuse-alert-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="relative p-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-300 rounded-2xl text-slate-700 hover:text-indigo-600 transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center"
+                title={unreadCount > 0 ? `Tienes ${unreadCount} avisos pendientes` : 'Sin notificaciones pendientes'}
+              >
+                <Bell
+                  size={16}
+                  className={unreadCount > 0 ? 'text-indigo-600 animate-bounce' : 'text-slate-400'}
+                />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {hidePeriodAlert && (
@@ -2138,14 +2141,6 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                   >
                     <Printer size={12} />
                     Imprimir
-                  </button>
-                  <button
-                    onClick={() => setShowWeeklyScheduleModal(false)}
-                    className="w-10 h-10 bg-white/20 hover:bg-rose-600 text-white rounded-2xl flex items-center justify-center transition-all shadow-md shrink-0 cursor-pointer active:scale-95 ml-1"
-                    title="Cerrar Horario (Esc)"
-                    aria-label="Cerrar"
-                  >
-                    <X size={22} className="stroke-[2.5]" />
                   </button>
                 </div>
               </div>
