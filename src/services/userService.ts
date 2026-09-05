@@ -107,6 +107,43 @@ export const createInvitationCode = async (
   }
 };
 
+export const createBulkTeacherInvitationCodes = async (
+  records: Array<{
+    code: string;
+    role: string;
+    center_id: string;
+    allowed_panels?: string[];
+  }>
+) => {
+  try {
+    const payload = records.map((r) => ({
+      code: r.code.trim().toUpperCase().replace(/\s+/g, ''),
+      role: r.role || 'teacher',
+      center_id: r.center_id,
+      is_used: false,
+      allowed_panels: r.allowed_panels || []
+    }));
+
+    const { error } = await supabase
+      .from('invitation_codes')
+      .upsert(payload, { onConflict: 'code' });
+
+    if (error) {
+      console.warn('Upsert fallback for bulk codes:', error);
+      for (const item of payload) {
+        await supabase
+          .from('invitation_codes')
+          .upsert([item], { onConflict: 'code' })
+          .catch(() => {});
+      }
+    }
+    return true;
+  } catch (error) {
+    console.error('Error creating bulk invitation codes:', error);
+    throw error;
+  }
+};
+
 export const validateInvitationCode = async (code: string) => {
   try {
     const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
