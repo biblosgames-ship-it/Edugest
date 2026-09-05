@@ -51,31 +51,45 @@ export const Sidebar = ({
     }
   };
 
+  // Cerrar menú con la tecla Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   return (
     <>
-      {/* Backdrop overlay for mobile screens */}
+      {/* Fondo oscuro difuminado que cierra el menú al hacer clic */}
       {isOpen && (
         <div
           onClick={onClose}
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-40 transition-opacity duration-300 cursor-pointer"
+          title="Toca aquí para cerrar el menú"
         />
       )}
 
       <aside
         className={
           isOpen
-            ? 'fixed inset-y-0 left-0 w-[280px] p-6 h-screen z-50 bg-brand-bg transition-transform duration-300 translate-x-0 block'
+            ? 'fixed inset-y-0 left-0 w-[290px] p-4 sm:p-6 h-screen z-50 bg-brand-bg transition-transform duration-300 translate-x-0 block shadow-2xl'
             : 'hidden md:block md:sticky md:top-0 w-[280px] p-6 h-screen flex-shrink-0 bg-brand-bg transition-colors duration-300'
         }
       >
-        <div className="bg-[#0f172a] rounded-[2rem] h-full flex flex-col p-6 shadow-xl shadow-slate-900/10 border border-slate-800/50 text-white relative overflow-hidden">
-          {/* Close button for mobile screens */}
-          {onClose && (
+        <div className="bg-[#0f172a] rounded-[2rem] h-full flex flex-col p-5 sm:p-6 shadow-xl shadow-slate-900/10 border border-slate-800/50 text-white relative overflow-hidden">
+          {/* Botón X grande y visible para cerrar el menú */}
+          {isOpen && onClose && (
             <button
               onClick={onClose}
-              className="md:hidden absolute top-4 right-4 z-20 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+              aria-label="Cerrar menú"
+              className="absolute top-4 right-4 z-30 text-white bg-slate-800 hover:bg-slate-700 active:scale-95 p-2.5 rounded-2xl transition-all shadow-lg border border-slate-700 cursor-pointer flex items-center justify-center group"
+              title="Cerrar Menú (Esc)"
             >
-              <X size={16} />
+              <X size={18} className="text-white group-hover:scale-110 transition-transform" />
             </button>
           )}
 
@@ -218,6 +232,15 @@ export const Sidebar = ({
               />
               <span className="font-semibold text-xs">Cerrar Sesión</span>
             </button>
+
+            {isOpen && onClose && (
+              <button
+                onClick={onClose}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl transition-all text-slate-200 bg-white/10 hover:bg-white/20 hover:text-white border border-white/10 text-xs font-black uppercase tracking-wider cursor-pointer shadow-md"
+              >
+                <X size={15} /> Cerrar Menú
+              </button>
+            )}
           </div>
         </div>
       </aside>
