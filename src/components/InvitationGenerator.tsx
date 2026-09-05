@@ -53,11 +53,6 @@ const AVAILABLE_PANELS = [
     desc: 'Toma de lista diaria MINERD, anecdotario y parciales.'
   },
   {
-    id: 'schedule',
-    label: 'Horarios de Clases (Generador y Matriz)',
-    desc: 'Visualización de matriz semanal de clases y motor generador de horarios.'
-  },
-  {
     id: 'digital-register',
     label: 'Registro Digital de Calificaciones',
     desc: 'Calificaciones de períodos oficiales P1-P4 y recuperación.'
@@ -76,6 +71,11 @@ const AVAILABLE_PANELS = [
     id: 'communications',
     label: 'Comunicaciones y Excusas',
     desc: 'Recepción de avisos de dirección y justificación de faltas.'
+  },
+  {
+    id: 'schedule',
+    label: 'Generador de Horarios',
+    desc: 'Diseño y generación de horarios del centro (Coordinación y Dirección).'
   },
   {
     id: 'students',
@@ -151,7 +151,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     'control',
     'general-reports'
   ],
-  teacher: ['dashboard', 'classroom', 'schedule', 'agenda', 'digital-register', 'tasks', 'communications'],
+  teacher: ['dashboard', 'classroom', 'digital-register', 'agenda', 'tasks', 'communications'],
   conserje: ['dashboard', 'agenda'],
   support: ['dashboard', 'agenda']
 };
