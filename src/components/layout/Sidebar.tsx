@@ -3,6 +3,7 @@ import { Logo } from '../Logo';
 import { LogOut, Sun, Moon, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
+import { SchoolBellControl } from '../SchoolBellControl';
 
 export const Sidebar = ({
   navItems,
@@ -103,8 +104,9 @@ export const Sidebar = ({
             </div>
           </div>
 
-          <div className="relative z-10 mb-2">
+          <div className="relative z-10 mb-2 space-y-2">
             <SchoolYearSelector />
+            <SchoolBellControl />
           </div>
 
           <nav className="space-y-2 flex-1 overflow-y-auto relative z-10 pr-2 custom-scrollbar">
