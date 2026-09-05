@@ -921,13 +921,26 @@ export const TeacherDashboard = ({
 
       slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
 
-      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo)
+      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo filtrados por ciclo y nivel)
       let currTimePost = bEnd;
+      const levelNorm = (primaryCourse?.level || '').toLowerCase();
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
         const feStartMins = toMins(fe.start_time);
-        return !isActo && feStartMins >= bStart - 5 && feStartMins < endT;
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          feCycle.includes('todo') ||
+          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
       });
 
       postFixedEvents.forEach((fe: any) => {

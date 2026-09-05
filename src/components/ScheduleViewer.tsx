@@ -752,10 +752,11 @@ export const ScheduleViewer = () => {
     const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
       if (totalMins <= 0 || preferredCount <= 0) return [];
       let count = preferredCount;
-      while (count > 1 && totalMins / count < 28) {
+      // Regla: Cada bloque debe durar entre 30 y 45 minutos.
+      while (count > 1 && totalMins / count < 30) {
         count--;
       }
-      while (totalMins / count > 55 && count < 6) {
+      while (totalMins / count > 45 && count < 6) {
         count++;
       }
       const base = Math.floor(totalMins / count);
@@ -771,6 +772,9 @@ export const ScheduleViewer = () => {
     // CÁLCULO DINÁMICO ANTES DEL RECREO
     const preWindow = Math.max(0, bStart - classStart);
     let preCountLocal = targetTotalLocal === 6 ? 3 : (preWindow >= 115 ? 3 : 2);
+    if (preWindow / preCountLocal < 30) {
+      preCountLocal = Math.max(1, Math.floor(preWindow / 30));
+    }
     const preDurs = calculateSlotDurations(preWindow, preCountLocal);
     preCountLocal = preDurs.length;
 
@@ -792,11 +796,52 @@ export const ScheduleViewer = () => {
     // EL RECREO
     slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
-    // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
+    // Eventos Fijos Post-Recreo (ej. Pausa / Merienda / Juego de 15 min u otros eventos específicos por ciclo y nivel)
     let currTimePost = bEnd;
+    const levelNorm = (course?.level || '').toLowerCase();
+    const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
+      const feName = (fe.name || '').toLowerCase();
+      const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      let feStartMins = toMins(fe.start_time);
+      if (!courseIsMorning && feStartMins < 720 && feStartMins > 0) feStartMins += 720;
+      if (isActo || feStartMins < bStart - 5 || feStartMins >= courseEndT) return false;
+
+      const feLevel = (fe.level || '').toLowerCase();
+      const feCycle = (fe.cycle || '').toLowerCase();
+      const levelMatch =
+        !feLevel ||
+        feLevel.includes('gen') ||
+        feLevel.includes('todo') ||
+        feLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+        levelNorm.includes(feLevel.substring(0, 3));
+      const cycleMatch =
+        !feCycle ||
+        feCycle.includes('gen') ||
+        feCycle.includes('todo') ||
+        (isC1 && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+        (isC2 && (feCycle.includes('segundo') || feCycle.includes('2')));
+      return levelMatch && cycleMatch;
+    });
+
+    postFixedEvents.forEach((fe: any) => {
+      let feEndMins = toMins(fe.end_time);
+      if (!courseIsMorning && feEndMins < 720 && feEndMins > 0) feEndMins += 720;
+      if (feEndMins > currTimePost) {
+        slots.push({
+          start: fe.start_time,
+          end: fe.end_time,
+          isBreak: true,
+          label: fe.name
+        });
+        currTimePost = Math.max(currTimePost, feEndMins);
+      }
+    });
+
+    // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
     const postWindow = Math.max(0, courseEndT - currTimePost);
     let postCountLocal = targetTotalLocal === 6 ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
     const postDurs = calculateSlotDurations(postWindow, postCountLocal);
+    postCountLocal = postDurs.length;
     for (let i = 0; i < postDurs.length; i++) {
       let dur = postDurs[i];
       let sTime = currTimePost;

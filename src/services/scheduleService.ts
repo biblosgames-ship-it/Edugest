@@ -530,9 +530,9 @@ export const scheduleService = {
         if (totalMins <= 0 || preferredCount <= 0) return [];
         let count = preferredCount;
 
-        // Regla estricta: Cada bloque debe durar entre 33 y 45 minutos.
-        // Si el conteo preferido hace que las clases duren menos de 33 min, reducir el número de bloques.
-        while (count > 1 && totalMins / count < 33) {
+        // Regla: Cada bloque debe durar entre 30 y 45 minutos.
+        // Si el conteo preferido hace que las clases duren menos de 30 min, reducir el número de bloques.
+        while (count > 1 && totalMins / count < 30) {
           count--;
         }
         // Si el conteo hace que las clases duren más de 45 min, aumentar el número de bloques.
@@ -550,11 +550,11 @@ export const scheduleService = {
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 33 y 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 30 y 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = targetTotal === 5 ? 2 : 3;
-      if (preWindow / preCount < 33) {
-        preCount = Math.max(1, Math.floor(preWindow / 33));
+      if (preWindow / preCount < 30) {
+        preCount = Math.max(1, Math.floor(preWindow / 30));
       }
 
       const preDurs = calculateSlotDurations(preWindow, preCount);
@@ -589,10 +589,11 @@ export const scheduleService = {
         const feLevel = (fe.level || '').toLowerCase();
         const feCycle = (fe.cycle || '').toLowerCase();
         const levelMatch =
-          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNorm.substring(0, 3);
+          !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
         const cycleMatch =
           !feCycle ||
           feCycle.includes('gen') ||
+          feCycle.includes('todo') ||
           (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
           (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
         return levelMatch && cycleMatch;
@@ -611,10 +612,11 @@ export const scheduleService = {
         }
       });
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE (30 a 45 min por clase)
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = Math.max(1, targetTotal - preCount);
       const postDurs = calculateSlotDurations(postWindow, postCount);
+      postCount = postDurs.length;
 
       for (let i = 0; i < postCount; i++) {
         let dur = postDurs[i];
@@ -1415,7 +1417,8 @@ export const scheduleService = {
       const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
         if (totalMins <= 0 || preferredCount <= 0) return [];
         let count = preferredCount;
-        while (count > 1 && totalMins / count < 33) {
+        // Regla: Cada bloque debe durar entre 30 y 45 minutos.
+        while (count > 1 && totalMins / count < 30) {
           count--;
         }
         while (totalMins / count > 45 && count < 6) {
@@ -1433,8 +1436,8 @@ export const scheduleService = {
 
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = targetTotal === 5 ? 2 : 3;
-      if (preWindow / preCount < 33) {
-        preCount = Math.max(1, Math.floor(preWindow / 33));
+      if (preWindow / preCount < 30) {
+        preCount = Math.max(1, Math.floor(preWindow / 30));
       }
 
       const preDurs = calculateSlotDurations(preWindow, preCount);
@@ -1466,10 +1469,11 @@ export const scheduleService = {
         const feLevel = (fe.level || '').toLowerCase();
         const feCycle = (fe.cycle || '').toLowerCase();
         const levelMatch =
-          !feLevel || feLevel.includes('gen') || feLevel.substring(0, 3) === levelNorm.substring(0, 3);
+          !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
         const cycleMatch =
           !feCycle ||
           feCycle.includes('gen') ||
+          feCycle.includes('todo') ||
           (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
           (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
         return levelMatch && cycleMatch;
@@ -1493,8 +1497,9 @@ export const scheduleService = {
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = Math.max(1, targetTotal - preCount);
       const postDurs = calculateSlotDurations(postWindow, postCount);
+      postCount = postDurs.length;
 
-      for (let i = 0; i < postDurs.length; i++) {
+      for (let i = 0; i < postCount; i++) {
         let dur = postDurs[i];
         let sTime = currTimePost;
         let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
