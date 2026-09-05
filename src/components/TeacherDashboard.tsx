@@ -494,31 +494,139 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     const hasMorningClasses = teacherEntries.some((e) => e.startMinutes < 780);
     const hasAfternoonClasses = teacherEntries.some((e) => e.startMinutes >= 780);
 
-    // Generar exactamente los 6 bloques canónicos por tanda con su recreo en el medio
+    const teacherCourseIds = new Set<string>();
+    teacherEntries.forEach((e) => {
+      const cId = e.courseId || e.course_id;
+      if (cId) teacherCourseIds.add(cId);
+    });
+    const teacherCourses = state.courses.filter((c) => teacherCourseIds.has(c.id));
+
+    // Función que calcula dinámicamente los 6 bloques canónicos usando el horario oficial y preferencias de recreo registradas para este centro
+    const buildSlotsForShift = (isMorn: boolean, repCourse?: any) => {
+      const shiftName = isMorn ? 'Matutina' : 'Vespertina';
+      const official =
+        (state.levelSchedules || []).find(
+          (ls: any) =>
+            (!repCourse ||
+              !repCourse.level ||
+              ls.level === repCourse.level ||
+              ls.level?.toLowerCase().includes((repCourse.level || '').toLowerCase().substring(0, 3))) &&
+            (ls.shift === shiftName || !ls.shift)
+        ) || (state.levelSchedules || []).find((ls: any) => ls.shift === shiftName);
+
+      const isSecundaria = repCourse ? (repCourse.level || '').toLowerCase().includes('secun') : true;
+
+      let startT = isMorn ? 480 : 840; // 08:00 o 14:00 por defecto
+      let endT = isMorn ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050); // 12:30 o 18:15 por defecto
+
+      if (official?.start_time) {
+        let s = toMins(official.start_time);
+        if (!isMorn && s < 720 && s > 0) s += 720;
+        startT = s;
+      }
+      if (official?.end_time) {
+        let e = toMins(official.end_time);
+        if (!isMorn && e < 720 && e > 0) e += 720;
+        endT = e;
+      }
+
+      // Recreo oficial registrado para este centro
+      const bPref = (state.breakPreferences || []).find((bp: any) => {
+        let bpMins = toMins(bp.startTime || bp.start_time);
+        if (!isMorn && bpMins < 720) bpMins += 720;
+        const isBpMorning = bpMins < 780;
+        return isMorn === isBpMorning;
+      });
+
+      let bStart = bPref ? toMins(bPref.startTime || bPref.start_time) : isMorn ? 600 : 960;
+      if (!isMorn && bStart < 720 && bStart > 0) bStart += 720;
+      if (!isMorn && (bStart <= startT || bStart >= endT)) bStart = 960;
+      const bDuration =
+        Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorn ? 30 : 15);
+      const bEnd = bStart + bDuration;
+
+      const calculateSlotDurations = (totalMins: number, count: number) => {
+        if (totalMins <= 0 || count <= 0) return [];
+        const base = Math.floor(totalMins / count);
+        let rem = totalMins - base * count;
+        const durs = new Array(count).fill(base);
+        for (let idx = 0; idx < count && rem > 0; idx++) {
+          durs[idx] += 1;
+          rem -= 1;
+        }
+        return durs;
+      };
+
+      const slots: any[] = [];
+      // 3 horas antes del recreo
+      const preWindow = Math.max(0, bStart - startT);
+      const preDurs = calculateSlotDurations(preWindow, 3);
+      let currPre = startT;
+      for (let i = 0; i < preDurs.length; i++) {
+        let dur = preDurs[i];
+        let e = i === preDurs.length - 1 ? bStart : currPre + dur;
+        slots.push({
+          start: fromMins(currPre) + ':00',
+          end: fromMins(e) + ':00',
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
+        currPre = e;
+      }
+
+      // Recreo
+      slots.push({
+        start: fromMins(bStart) + ':00',
+        end: fromMins(bEnd) + ':00',
+        isBreak: true,
+        label: 'RECREO'
+      });
+
+      // 3 horas después del recreo
+      const postWindow = Math.max(0, endT - bEnd);
+      const postDurs = calculateSlotDurations(postWindow, 3);
+      let currPost = bEnd;
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
+        let e = i === postDurs.length - 1 ? endT : currPost + dur;
+        slots.push({
+          start: fromMins(currPost) + ':00',
+          end: fromMins(e) + ':00',
+          isBreak: false,
+          label: `${preDurs.length + i + 1}ra Hora`
+        });
+        currPost = e;
+      }
+
+      return slots;
+    };
+
     const standardSlots: any[] = [];
 
     if (hasMorningClasses || (!hasAfternoonClasses && !hasMorningClasses)) {
-      standardSlots.push(
-        { start: '08:00:00', end: '08:40:00', isBreak: false, label: '1ra Hora' },
-        { start: '08:40:00', end: '09:20:00', isBreak: false, label: '2da Hora' },
-        { start: '09:20:00', end: '10:00:00', isBreak: false, label: '3ra Hora' },
-        { start: '10:00:00', end: '10:30:00', isBreak: true, label: 'RECREO' },
-        { start: '10:30:00', end: '11:10:00', isBreak: false, label: '4ta Hora' },
-        { start: '11:10:00', end: '11:50:00', isBreak: false, label: '5ta Hora' },
-        { start: '11:50:00', end: '12:30:00', isBreak: false, label: '6ta Hora' }
-      );
+      const mornCourse =
+        teacherCourses.find((c) => {
+          const t = (c.tanda || '').toLowerCase();
+          return (
+            t.includes('mat') ||
+            t.includes('mañ') ||
+            (t === '' && !(c.level || '').toLowerCase().includes('secun'))
+          );
+        }) || teacherCourses[0];
+      standardSlots.push(...buildSlotsForShift(true, mornCourse));
     }
 
     if (hasAfternoonClasses) {
-      standardSlots.push(
-        { start: '14:00:00', end: '14:40:00', isBreak: false, label: '1ra Hora' },
-        { start: '14:40:00', end: '15:20:00', isBreak: false, label: '2da Hora' },
-        { start: '15:20:00', end: '16:00:00', isBreak: false, label: '3ra Hora' },
-        { start: '16:00:00', end: '16:15:00', isBreak: true, label: 'RECREO' },
-        { start: '16:15:00', end: '16:55:00', isBreak: false, label: '4ta Hora' },
-        { start: '16:55:00', end: '17:35:00', isBreak: false, label: '5ta Hora' },
-        { start: '17:35:00', end: '18:15:00', isBreak: false, label: '6ta Hora' }
-      );
+      const vespCourse =
+        teacherCourses.find((c) => {
+          const t = (c.tanda || '').toLowerCase();
+          return (
+            t.includes('ves') ||
+            t.includes('tar') ||
+            (t === '' && (c.level || '').toLowerCase().includes('secun'))
+          );
+        }) || teacherCourses[0];
+      standardSlots.push(...buildSlotsForShift(false, vespCourse));
     }
 
     const sortedSlots = standardSlots.sort((a, b) => toMins(a.start) - toMins(b.start));
