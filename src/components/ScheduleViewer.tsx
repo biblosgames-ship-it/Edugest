@@ -649,6 +649,66 @@ export const ScheduleViewer = () => {
     );
   }, []);
 
+  // Limpieza automática solicitada por el usuario para Segundo Ciclo de Primaria:
+  // "esas horas que se asignaron en esa parte sácalas, yo las vuelvo a poner donde van"
+  useEffect(() => {
+    const cleanAnomalousSlots = async () => {
+      const schedule = state.schedule || [];
+      const courses = state.courses || [];
+      if (schedule.length === 0 || courses.length === 0) return;
+
+      // Identificar cursos de Segundo Ciclo de Primaria (4to, 5to, 6to)
+      const segundoCicloCourseIds = new Set(
+        courses
+          .filter((c: any) => {
+            const l = (c.level || '').toLowerCase();
+            const g = (c.grade || '').toLowerCase();
+            const isPrimaria = l.includes('primar');
+            const isC2 =
+              isCourseSecondCycle(c) ||
+              g.includes('4') ||
+              g.includes('5') ||
+              g.includes('6') ||
+              g.includes('cuarto') ||
+              g.includes('quinto') ||
+              g.includes('sexto');
+            return isPrimaria && isC2;
+          })
+          .map((c: any) => String(c.id))
+      );
+
+      if (segundoCicloCourseIds.size === 0) return;
+
+      // Buscar entradas de estos cursos que caigan en la franja previa al recreo (07:50 a 09:30)
+      // que correspondían a los bloques anómalos de 34 min (07:50, 08:24, 08:57)
+      const anomalousEntries = schedule.filter((e: any) => {
+        if (!segundoCicloCourseIds.has(String(e.course_id))) return false;
+        const sTime = (e.start_time || '').substring(0, 5);
+        const sMins = toMins(e.start_time);
+        const isShiftMatch = !selectedShift || e.shift === selectedShift || e.shift === 'Matutina';
+        return isShiftMatch && sMins >= 470 && sMins < 570 && (sTime === '08:24' || sTime === '08:57' || sTime === '07:50');
+      });
+
+      if (anomalousEntries.length > 0) {
+        const idsToDelete = anomalousEntries.map((e: any) => e.id).filter(Boolean);
+        if (idsToDelete.length > 0) {
+          try {
+            await supabase.from('schedule_entries').delete().in('id', idsToDelete);
+            setAppState((prev: any) => ({
+              ...prev,
+              schedule: (prev.schedule || []).filter((e: any) => !idsToDelete.includes(e.id))
+            }));
+            console.log(`[Edugest] Se liberaron exitosamente ${idsToDelete.length} horas de Segundo Ciclo antes del recreo.`);
+          } catch (err) {
+            console.error('Error al liberar horas anómalas de Segundo Ciclo:', err);
+          }
+        }
+      }
+    };
+
+    cleanAnomalousSlots();
+  }, [state.schedule?.length, state.courses?.length, selectedShift]);
+
   const getSlotsForCourse = useCallback((course: any) => {
     const cTanda = (course?.tanda || '').toLowerCase();
     const cLevel = (course?.level || '').toLowerCase();
@@ -759,11 +819,17 @@ export const ScheduleViewer = () => {
     const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
       if (totalMins <= 0 || preferredCount <= 0) return [];
       let count = preferredCount;
-      // Regla: Cada bloque debe durar entre 30 y 45 minutos.
-      while (count > 1 && totalMins / count < 30) {
+      // Regla general: Cada bloque debe durar en un rango entre 35 y 45 minutos.
+      // 1. Si el conteo hace que las clases duren menos de 35 min, reducir el número de bloques.
+      while (count > 1 && totalMins / count < 35) {
         count--;
       }
+      // 2. Si el conteo hace que las clases duren más de 45 min, solo aumentar si al dividir en más bloques
+      // cada uno sigue teniendo al menos 35 minutos.
       while (totalMins / count > 45 && count < 6) {
+        if (totalMins / (count + 1) < 35) {
+          break;
+        }
         count++;
       }
       const base = Math.floor(totalMins / count);
@@ -778,9 +844,9 @@ export const ScheduleViewer = () => {
 
     // CÁLCULO DINÁMICO ANTES DEL RECREO
     const preWindow = Math.max(0, bStart - classStart);
-    let preCountLocal = targetTotalLocal === 6 ? 3 : (preWindow >= 115 ? 3 : 2);
-    if (preWindow / preCountLocal < 30) {
-      preCountLocal = Math.max(1, Math.floor(preWindow / 30));
+    let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
+    if (preWindow / preCountLocal < 35) {
+      preCountLocal = Math.max(1, Math.floor(preWindow / 35));
     }
     const preDurs = calculateSlotDurations(preWindow, preCountLocal);
     preCountLocal = preDurs.length;
@@ -846,7 +912,7 @@ export const ScheduleViewer = () => {
 
     // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
     const postWindow = Math.max(0, courseEndT - currTimePost);
-    let postCountLocal = targetTotalLocal === 6 ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+    let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
     const postDurs = calculateSlotDurations(postWindow, postCountLocal);
     postCountLocal = postDurs.length;
     for (let i = 0; i < postDurs.length; i++) {

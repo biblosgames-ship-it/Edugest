@@ -882,12 +882,21 @@ export const TeacherDashboard = ({
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, count: number) => {
-        if (count <= 0) return [];
-        if (totalMins === 110 && count === 3) return [40, 35, 35];
-        if (totalMins === 120 && count === 3) return [40, 40, 40];
-        if (totalMins === 135 && count === 3) return [45, 45, 45];
-        if (totalMins === 90 && count === 3) return [30, 30, 30];
+      const isSecundaria = (course.level || '').toLowerCase().includes('secun');
+      const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
+
+      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+        if (totalMins <= 0 || preferredCount <= 0) return [];
+        let count = preferredCount;
+        while (count > 1 && totalMins / count < 35) {
+          count--;
+        }
+        while (totalMins / count > 45 && count < 6) {
+          if (totalMins / (count + 1) < 35) {
+            break;
+          }
+          count++;
+        }
 
         const base = Math.floor(totalMins / count);
         let rem = totalMins - base * count;
@@ -899,10 +908,14 @@ export const TeacherDashboard = ({
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (30 a 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 45 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
-      let preCountLocal = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
+      let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
+      if (preWindow / preCountLocal < 35) {
+        preCountLocal = Math.max(1, Math.floor(preWindow / 35));
+      }
       const preDurs = calculateSlotDurations(preWindow, preCountLocal);
+      preCountLocal = preDurs.length;
 
       let currTimePre = classStart;
       for (let i = 0; i < preCountLocal; i++) {
@@ -960,8 +973,12 @@ export const TeacherDashboard = ({
 
       // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCountLocal = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
+      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+      if (postWindow / postCountLocal < 35) {
+        postCountLocal = Math.max(1, Math.floor(postWindow / 35));
+      }
       const postDurs = calculateSlotDurations(postWindow, postCountLocal);
+      postCountLocal = postDurs.length;
 
       for (let i = 0; i < postCountLocal; i++) {
         let dur = postDurs[i];
