@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from '../context/AppContext';
 import { dataService } from '../services/dataService';
+import { supabase } from '../lib/supabase';
 
 export const getDismissedCommIds = (userId?: string): Set<string> => {
   const dismissed = new Set<string>();
@@ -61,12 +62,13 @@ export const useNotifications = () => {
 
   const userId = user?.id || profile?.id;
   const role = profile?.role || 'teacher';
+  const centerId = profile?.center_id;
 
   const fetchComms = useCallback(async () => {
     if (!userId) return;
     try {
       setLoading(true);
-      const data = await dataService.getCommunications(userId, role);
+      const data = await dataService.getCommunications(userId, role, centerId);
       const dismissed = getDismissedCommIds(userId);
       const active = (data || []).filter((c: any) => c?.id && !dismissed.has(String(c.id)));
       setCommunications(active);
@@ -75,19 +77,39 @@ export const useNotifications = () => {
     } finally {
       setLoading(false);
     }
-  }, [userId, role]);
+  }, [userId, role, centerId]);
 
   useEffect(() => {
     fetchComms();
 
     const handleUpdate = () => {
-      const dismissed = getDismissedCommIds(userId);
-      setCommunications((prev) => prev.filter((c) => c?.id && !dismissed.has(String(c.id))));
+      fetchComms();
     };
 
     window.addEventListener('edugens_notifications_updated', handleUpdate);
+
+    // Suscripción Realtime en vivo para avisos y excusas instantáneas
+    const channel = supabase
+      .channel(`public:live_notifications_${userId || 'guest'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'communications' },
+        () => {
+          fetchComms();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'announcements' },
+        () => {
+          fetchComms();
+        }
+      )
+      .subscribe();
+
     return () => {
       window.removeEventListener('edugens_notifications_updated', handleUpdate);
+      supabase.removeChannel(channel);
     };
   }, [fetchComms, userId]);
 

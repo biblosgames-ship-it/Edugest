@@ -308,6 +308,7 @@ export const dataService = {
     try {
       const { error } = await supabase.from('communications').insert([data]);
       if (error) throw error;
+      window.dispatchEvent(new CustomEvent('edugens_notifications_updated'));
     } catch (err: any) {
       const isMissingTable =
         err.code === '42P01' ||
@@ -349,19 +350,26 @@ export const dataService = {
           .from('announcements')
           .insert([fallbackData]);
         if (fallbackError) throw fallbackError;
+        window.dispatchEvent(new CustomEvent('edugens_notifications_updated'));
       } else {
         throw err;
       }
     }
   },
 
-  async getCommunications(userId: string, role: string) {
+  async getCommunications(userId: string, role: string, centerId?: string) {
     let rawComms: any[] = [];
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('communications')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (centerId) {
+        query = query.eq('center_id', centerId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       rawComms = data || [];
     } catch (err: any) {
@@ -376,10 +384,16 @@ export const dataService = {
         console.warn(
           '[dataService] La tabla "communications" no existe. Cargando fallback de "announcements".'
         );
-        const { data, error: announcementsError } = await supabase
+        let annQuery = supabase
           .from('announcements')
           .select('*')
           .order('created_at', { ascending: false });
+
+        if (centerId) {
+          annQuery = annQuery.eq('center_id', centerId);
+        }
+
+        const { data, error: announcementsError } = await annQuery;
 
         if (announcementsError) {
           console.error('[dataService] Error al cargar fallback de anuncios:', announcementsError);
@@ -422,23 +436,26 @@ export const dataService = {
 
     if (role === 'teacher') {
       let teacherCourseIds: string[] = [];
+      let effectiveTeacherId = userId;
       try {
         const { data: prof } = await supabase
           .from('profiles')
           .select('teacher_id')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
-        const tId = prof?.teacher_id || userId;
+        effectiveTeacherId = prof?.teacher_id || localStorage.getItem('selected_teacher_id') || userId;
 
-        const [assigns, scheds] = await Promise.all([
-          supabase.from('assignments').select('course_id').eq('teacher_id', tId),
-          supabase.from('schedule_entries').select('course_id').eq('teacher_id', tId)
+        const [assigns, scheds, titularCourses] = await Promise.all([
+          supabase.from('assignments').select('course_id').eq('teacher_id', effectiveTeacherId),
+          supabase.from('schedule_entries').select('course_id').eq('teacher_id', effectiveTeacherId),
+          supabase.from('courses').select('id').eq('titular_teacher_id', effectiveTeacherId)
         ]);
 
         const ids = new Set<string>();
         (assigns.data || []).forEach((a) => { if (a.course_id) ids.add(a.course_id); });
         (scheds.data || []).forEach((s) => { if (s.course_id) ids.add(s.course_id); });
+        (titularCourses.data || []).forEach((c) => { if (c.id) ids.add(c.id); });
         teacherCourseIds = Array.from(ids);
       } catch (err) {
         console.error('Error fetching teacher courses for communications:', err);
@@ -449,7 +466,7 @@ export const dataService = {
           c.sender_id === userId ||
           (c.target_roles || []).includes('Docentes') ||
           (c.target_teachers || []).includes(userId) ||
-          (tId && (c.target_teachers || []).includes(tId)) ||
+          (effectiveTeacherId && (c.target_teachers || []).includes(effectiveTeacherId)) ||
           (c.target_roles || []).includes('Toda la comunidad') ||
           (c.target_courses || []).some((courseId: string) => teacherCourseIds.includes(courseId))
       );
