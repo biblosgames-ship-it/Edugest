@@ -151,7 +151,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     'control',
     'general-reports'
   ],
-  teacher: ['dashboard', 'classroom', 'digital-register', 'agenda', 'tasks', 'communications'],
+  teacher: ['dashboard', 'classroom', 'digital-register', 'tasks'],
   conserje: ['dashboard', 'agenda'],
   support: ['dashboard', 'agenda']
 };

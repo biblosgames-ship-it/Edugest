@@ -118,7 +118,7 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'general-reports',
     'facility'
   ],
-  teacher: ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications'],
+  teacher: ['dashboard', 'classroom', 'digital-register', 'tasks'],
   student: ['dashboard'],
   parent: ['dashboard'],
   padre: ['dashboard'],
