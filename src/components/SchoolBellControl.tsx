@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, BellOff, Volume2, Play, Sparkles, Clock, Check, Settings2, X, ShieldAlert } from 'lucide-react';
 import { useSchoolBell } from '../hooks/useSchoolBell';
