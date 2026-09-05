@@ -449,6 +449,7 @@ export const dataService = {
           c.sender_id === userId ||
           (c.target_roles || []).includes('Docentes') ||
           (c.target_teachers || []).includes(userId) ||
+          (tId && (c.target_teachers || []).includes(tId)) ||
           (c.target_roles || []).includes('Toda la comunidad') ||
           (c.target_courses || []).some((courseId: string) => teacherCourseIds.includes(courseId))
       );
@@ -460,6 +461,18 @@ export const dataService = {
         (c.target_roles || []).includes('Padres') ||
         (c.target_roles || []).includes('Toda la comunidad')
     );
+  },
+
+  async dismissCommunication(id: string, userId: string) {
+    try {
+      // Try to mark in communications table if column is_read or read_by exists
+      await supabase
+        .from('communications')
+        .update({ is_read: true, status: 'leido' })
+        .eq('id', id);
+    } catch (e) {
+      // Gracefully ignore DB schema differences as client maintains unified persistent dismissal
+    }
   },
 
   async deleteCommunication(id: string) {

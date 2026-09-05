@@ -29,9 +29,11 @@ import {
 } from 'lucide-react';
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
+import { useNotifications } from '../hooks/useNotifications';
 
 export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const { state, selectedYear, center } = useApp();
+  const { unreadCount } = useNotifications();
 
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
@@ -1129,6 +1131,30 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             </button>
           )}
 
+          {/* BADGE DE NOTIFICACIONES */}
+          <div
+            className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest border transition-all shrink-0 ${
+              unreadCount > 0
+                ? 'bg-amber-50 border-amber-200 text-amber-900 shadow-xs'
+                : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}
+          >
+            <Bell
+              size={14}
+              className={unreadCount > 0 ? 'text-amber-600 animate-bounce' : 'text-slate-400'}
+            />
+            <span>Avisos</span>
+            {unreadCount > 0 ? (
+              <span className="bg-rose-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
+                {unreadCount}
+              </span>
+            ) : (
+              <span className="bg-slate-200 text-slate-500 text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                0
+              </span>
+            )}
+          </div>
+
           {hidePeriodAlert && (
             <button
               onClick={() => {
@@ -1329,7 +1355,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             {[
               { id: 'horario', label: 'Horario del Curso', icon: CalendarIcon },
               { id: 'tareas', label: 'Tareas del Curso', icon: ClipboardList },
-              { id: 'comunicados', label: 'Anuncios', icon: Bell },
+              { id: 'comunicados', label: 'Anuncios', icon: Bell, badge: unreadCount > 0 ? unreadCount : undefined },
               { id: 'excusas', label: 'Excusas y Reportes', icon: AlertCircle }
             ].map((tab: any) => {
               const Icon = tab.icon;
@@ -1344,6 +1370,11 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                   }`}
                 >
                   <Icon size={14} /> {tab.label}
+                  {tab.badge !== undefined && (
+                    <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                      {tab.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}

@@ -57,6 +57,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
+import { useNotifications } from './hooks/useNotifications';
 
 const ROLE_FALLBACKS: Record<string, string[]> = {
   admin: [
@@ -139,6 +140,7 @@ function AppContent() {
   const [dataView, setDataView] = useState('course');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
+  const { unreadCount } = useNotifications();
   const [isFinancesUnlocked, setIsFinancesUnlocked] = useState(false);
   const [pinError, setPinError] = useState('');
   const [activationMode, setActivationMode] = useState<'invitation' | 'registration'>('invitation');
@@ -379,7 +381,12 @@ function AppContent() {
     { id: 'schedule', label: 'Generador de Horarios', icon: CalendarDays },
     { id: 'agenda', label: 'Calendario Escolar', icon: Calendar },
     { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
-    { id: 'communications', label: 'Excusas y Comunicados', icon: MessageSquare },
+    {
+      id: 'communications',
+      label: 'Excusas y Comunicados',
+      icon: MessageSquare,
+      badge: unreadCount > 0 ? unreadCount : undefined
+    },
     { id: 'facility', label: 'Gestión de Plantel', icon: Wrench },
     { id: 'control', label: 'Modo Control', icon: Monitor },
     { id: 'general-reports', label: 'Reportes', icon: FileBarChart },

@@ -35,7 +35,17 @@ export const Sidebar = ({
     try {
       await supabase.auth.signOut();
     } finally {
+      // Preserve dismissed communication IDs across logouts
+      const dismissedKeys: { key: string; val: string }[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('edugens_dismissed_comms_') || k.startsWith('edugens_hide_'))) {
+          const val = localStorage.getItem(k);
+          if (val) dismissedKeys.push({ key: k, val });
+        }
+      }
       localStorage.clear();
+      dismissedKeys.forEach((item) => localStorage.setItem(item.key, item.val));
       window.location.href = '/';
     }
   };
@@ -101,7 +111,7 @@ export const Sidebar = ({
                   }}
                   aria-label={item.label}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl transition-all duration-300 group ${
                     isActive
                       ? 'bg-white/10 text-white shadow-inner border border-white/10 backdrop-blur-md'
                       : 'text-slate-300 hover:bg-white/5 hover:text-slate-200'
@@ -113,10 +123,15 @@ export const Sidebar = ({
                     <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
                   </div>
                   <span
-                    className={`font-semibold text-sm tracking-wide ${isActive ? 'opacity-100' : 'opacity-80'}`}
+                    className={`font-semibold text-sm tracking-wide flex-1 text-left truncate ${isActive ? 'opacity-100' : 'opacity-80'}`}
                   >
                     {item.label}
                   </span>
+                  {item.badge !== undefined && Number(item.badge) > 0 && (
+                    <span className="ml-auto bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md animate-pulse shrink-0">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
