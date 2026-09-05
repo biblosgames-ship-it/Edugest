@@ -35,7 +35,7 @@ type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
 
 export const ClassroomManager = () => {
-  const { state, selectedYear } = useApp();
+  const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
   const { courses: allCourses } = useCourses();
   const { subjects: allSubjects } = useSubjects();
@@ -384,7 +384,7 @@ export const ClassroomManager = () => {
     setIsSavingAttendance(true);
     try {
       const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
-      const centerId = profile?.center_id || targetCourse?.center_id || (state.teachers?.[0]?.center_id);
+      const centerId = center?.id || profile?.center_id || targetCourse?.center_id || (state.teachers?.[0]?.center_id) || '29bd105f-af7f-48b1-a9e9-a76ddf1e9ab1';
 
       // 1. Mapear estado de asistencia para TODOS los estudiantes del curso
       const fullStateMap: Record<string, { status: AttendanceStatus; note: string }> = {};
@@ -397,17 +397,15 @@ export const ClassroomManager = () => {
 
         fullStateMap[s.id] = { status, note };
 
-        if (centerId) {
-          recordsToSave.push({
-            center_id: centerId,
-            student_id: s.id,
-            course_id: selectedCourseId,
-            date: selectedDate,
-            status: status,
-            notes: note,
-            recorded_by: profile?.id || null
-          });
-        }
+        recordsToSave.push({
+          center_id: centerId,
+          student_id: s.id,
+          course_id: selectedCourseId,
+          date: selectedDate,
+          status: status,
+          notes: note,
+          recorded_by: profile?.id || null
+        });
       });
 
       // 2. Guardar en localStorage

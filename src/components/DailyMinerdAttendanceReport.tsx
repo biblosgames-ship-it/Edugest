@@ -43,55 +43,48 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
     if (!selectedDate) return;
     setIsLoading(true);
     try {
-      // 1. Consultar de Supabase ordenados por created_at ASC (para asegurar el PRIMER pase de lista del día)
+      // 1. Consultar de Supabase para la fecha seleccionada
       const { data, error } = await supabase
         .from('attendance_records')
         .select('*')
         .eq('date', selectedDate)
         .order('created_at', { ascending: true });
 
-      let records: any[] = [];
-      if (!error && data) {
-        const courseIdSet = new Set((state.courses || []).map((c: any) => String(c.id)));
-        records = data.filter((r: any) =>
-          (!center?.id || r.center_id === center.id) ||
-          (r.course_id && courseIdSet.has(String(r.course_id)))
-        );
-      }
+      let records: any[] = (!error && data) ? [...data] : [];
 
-      // 2. Consolidar registros desde localStorage para todos los cursos del centro
-      const courses = state.courses || [];
-      courses.forEach((c: any) => {
-        const localKey = `attendance_${c.id}_${selectedDate}`;
-        const localData = localStorage.getItem(localKey);
-        if (localData) {
-          try {
-            const parsed = JSON.parse(localData);
-            Object.entries(parsed).forEach(([sId, val]: [string, any]) => {
-              const status = typeof val === 'string' ? val : val?.status || 'presente';
-              const notes = typeof val === 'object' ? val?.note || '' : '';
-              const existingIdx = records.findIndex(
-                (r) => String(r.student_id) === String(sId) && String(r.course_id) === String(c.id)
-              );
-              if (existingIdx >= 0) {
-                // Actualizar con datos locales si existen
-                if (!records[existingIdx].status && status) {
-                  records[existingIdx].status = status;
+      // 2. Consolidar registros desde localStorage para todos los cursos
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('attendance_') && k.endsWith(`_${selectedDate}`)) {
+          const parts = k.split('_');
+          const cId = parts.slice(1, -1).join('_');
+          const localData = localStorage.getItem(k);
+          if (localData) {
+            try {
+              const parsed = JSON.parse(localData);
+              Object.entries(parsed).forEach(([sId, val]: [string, any]) => {
+                const status = typeof val === 'string' ? val : val?.status || 'presente';
+                const notes = typeof val === 'object' ? val?.note || '' : '';
+                const existingIdx = records.findIndex(
+                  (r) => String(r.student_id) === String(sId) && String(r.course_id) === String(cId)
+                );
+                if (existingIdx >= 0) {
+                  if (status) records[existingIdx].status = status;
+                } else {
+                  records.push({
+                    student_id: sId,
+                    course_id: cId,
+                    date: selectedDate,
+                    status,
+                    notes,
+                    created_at: new Date().toISOString()
+                  });
                 }
-              } else {
-                records.push({
-                  student_id: sId,
-                  course_id: c.id,
-                  date: selectedDate,
-                  status,
-                  notes,
-                  created_at: new Date().toISOString()
-                });
-              }
-            });
-          } catch (e) {}
+              });
+            } catch (e) {}
+          }
         }
-      });
+      }
 
       setAttendanceRecords(records);
     } catch (err: any) {
@@ -202,7 +195,10 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
         (s: any) => String(s.course_id || s.courseId) === String(c.id)
       );
 
-      const courseRecords = attendanceRecords.filter((r) => String(r.course_id) === String(c.id));
+      const studentIdSet = new Set(courseStudents.map((s: any) => String(s.id)));
+      const courseRecords = attendanceRecords.filter(
+        (r) => String(r.course_id) === String(c.id) || studentIdSet.has(String(r.student_id))
+      );
       const hasCourseRecords = courseRecords.length > 0;
 
       let enrolledM = 0;
@@ -220,8 +216,8 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
 
         const sId = String(s.id);
         const rec = courseRecords.find((r) => String(r.student_id) === sId);
-        const status = rec
-          ? (rec.status || 'presente').toLowerCase().trim()
+        const status = rec && rec.status
+          ? String(rec.status).toLowerCase().trim()
           : firstAttendanceByStudent.get(sId);
 
         if (status) {
