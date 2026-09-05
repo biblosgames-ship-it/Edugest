@@ -923,7 +923,7 @@ export const TeacherDashboard = ({
 
       // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo filtrados por ciclo y nivel)
       let currTimePost = bEnd;
-      const levelNorm = (primaryCourse?.level || '').toLowerCase();
+      const levelNorm = (course?.level || '').toLowerCase();
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
