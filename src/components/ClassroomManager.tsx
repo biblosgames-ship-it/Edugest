@@ -146,6 +146,82 @@ export const ClassroomManager = () => {
     }
   }, [availableCourses, selectedCourseId]);
 
+  // Helper para obtener el nombre completo del estudiante (sin duplicar apellidos)
+  const getStudentFullName = (s: any) => {
+    if (!s) return 'Estudiante';
+
+    if (s.first_surname || s.second_surname) {
+      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
+      const names = (s.names || s.first_name || s.nombre || '').trim();
+      if (names && surname) return `${names} ${surname}`.trim();
+      if (names) return names;
+      if (surname) return surname;
+    }
+
+    if (s.names && String(s.names).trim()) {
+      const names = String(s.names).trim();
+      const surname = (s.apellidos || s.last_name || s.apellido || '').trim();
+      if (surname && !names.toLowerCase().includes(surname.toLowerCase())) {
+        return `${names} ${surname}`.trim();
+      }
+      return names;
+    }
+
+    if (s.first_name || s.last_name) {
+      const fn = (s.first_name || '').trim();
+      const ln = (s.last_name || '').trim();
+      if (fn && ln && !fn.toLowerCase().includes(ln.toLowerCase())) return `${fn} ${ln}`.trim();
+      return fn || ln;
+    }
+
+    if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
+    if (s.nombre_completo && String(s.nombre_completo).trim()) return String(s.nombre_completo).trim();
+    if (s.name && String(s.name).trim()) return String(s.name).trim();
+    if (s.nombre) {
+      const n = String(s.nombre).trim();
+      const ap = (s.apellido || s.apellidos || '').trim();
+      if (ap && !n.toLowerCase().includes(ap.toLowerCase())) return `${n} ${ap}`.trim();
+      return n;
+    }
+
+    return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
+  };
+
+  // Helper para clave de ordenamiento por Apellido Primero
+  const getSortKeyBySurname = (s: any) => {
+    if (!s) return 'zzz';
+    if (s.first_surname || s.second_surname) {
+      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
+      const names = s.names || s.first_name || s.name || '';
+      return `${surname} ${names}`.trim().toLowerCase();
+    }
+    if (s.last_name || s.apellidos) {
+      const surname = (s.last_name || s.apellidos || '').trim();
+      const names = s.names || s.first_name || s.name || '';
+      return `${surname} ${names}`.trim().toLowerCase();
+    }
+    return getStudentFullName(s).toLowerCase();
+  };
+
+  // Estudiantes del curso seleccionado
+  const courseStudents = useMemo(() => {
+    if (!selectedCourseId) return [];
+    return (allStudents || [])
+      .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
+      .sort((a: any, b: any) => {
+        const numA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : null;
+        const numB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : null;
+
+        if (numA !== null && numB !== null) {
+          return numA - numB;
+        }
+        if (numA !== null) return -1;
+        if (numB !== null) return 1;
+
+        return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
+      });
+  }, [allStudents, selectedCourseId]);
+
   // 1. CARGAR ASISTENCIA (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
     if (!selectedCourseId || !selectedDate) return;
@@ -280,82 +356,6 @@ export const ClassroomManager = () => {
   const [newActivityName, setNewActivityName] = useState<string>('');
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
   const [folderStudentId, setFolderStudentId] = useState<string>('');
-
-  // Helper para obtener el nombre completo del estudiante (sin duplicar apellidos)
-  const getStudentFullName = (s: any) => {
-    if (!s) return 'Estudiante';
-
-    if (s.first_surname || s.second_surname) {
-      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
-      const names = (s.names || s.first_name || s.nombre || '').trim();
-      if (names && surname) return `${names} ${surname}`.trim();
-      if (names) return names;
-      if (surname) return surname;
-    }
-
-    if (s.names && String(s.names).trim()) {
-      const names = String(s.names).trim();
-      const surname = (s.apellidos || s.last_name || s.apellido || '').trim();
-      if (surname && !names.toLowerCase().includes(surname.toLowerCase())) {
-        return `${names} ${surname}`.trim();
-      }
-      return names;
-    }
-
-    if (s.first_name || s.last_name) {
-      const fn = (s.first_name || '').trim();
-      const ln = (s.last_name || '').trim();
-      if (fn && ln && !fn.toLowerCase().includes(ln.toLowerCase())) return `${fn} ${ln}`.trim();
-      return fn || ln;
-    }
-
-    if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
-    if (s.nombre_completo && String(s.nombre_completo).trim()) return String(s.nombre_completo).trim();
-    if (s.name && String(s.name).trim()) return String(s.name).trim();
-    if (s.nombre) {
-      const n = String(s.nombre).trim();
-      const ap = (s.apellido || s.apellidos || '').trim();
-      if (ap && !n.toLowerCase().includes(ap.toLowerCase())) return `${n} ${ap}`.trim();
-      return n;
-    }
-
-    return s.student_code || s.rne || (s.order_number ? `Estudiante #${s.order_number}` : 'Estudiante');
-  };
-
-  // Helper para clave de ordenamiento por Apellido Primero
-  const getSortKeyBySurname = (s: any) => {
-    if (!s) return 'zzz';
-    if (s.first_surname || s.second_surname) {
-      const surname = `${s.first_surname || ''} ${s.second_surname || ''}`.trim();
-      const names = s.names || s.first_name || s.name || '';
-      return `${surname} ${names}`.trim().toLowerCase();
-    }
-    if (s.last_name || s.apellidos) {
-      const surname = (s.last_name || s.apellidos || '').trim();
-      const names = s.names || s.first_name || s.name || '';
-      return `${surname} ${names}`.trim().toLowerCase();
-    }
-    return getStudentFullName(s).toLowerCase();
-  };
-
-  // Estudiantes del curso seleccionado
-  const courseStudents = useMemo(() => {
-    if (!selectedCourseId) return [];
-    return (allStudents || [])
-      .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
-      .sort((a: any, b: any) => {
-        const numA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : null;
-        const numB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : null;
-
-        if (numA !== null && numB !== null) {
-          return numA - numB;
-        }
-        if (numA !== null) return -1;
-        if (numB !== null) return 1;
-
-        return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
-      });
-  }, [allStudents, selectedCourseId]);
 
   // Filtrar estudiantes por búsqueda
   const filteredStudents = useMemo(() => {
