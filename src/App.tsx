@@ -413,37 +413,33 @@ function AppContent() {
         onClose={() => setSidebarOpen(false)}
       />
       <main className="flex-1 h-screen overflow-hidden relative">
-        {/* Mobile top bar with menu trigger and Center Info */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-white/10 px-4 py-3 flex items-center justify-between gap-3 shadow-xl">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="bg-white/10 text-white p-2.5 rounded-xl border border-white/10 hover:bg-white/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center relative shrink-0"
-              title="Abrir Menú"
-            >
-              <Menu size={20} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-slate-900">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-            <div className="flex items-center gap-2 overflow-hidden">
-              {center?.logo_url ? (
-                <img
-                  src={center.logo_url}
-                  alt="Centro"
-                  className="w-7 h-7 rounded-lg object-contain bg-white/10 p-0.5 shrink-0 border border-white/10"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
-                  <Building2 size={13} className="text-indigo-400" />
-                </div>
-              )}
-              <span className="text-xs font-black text-white uppercase tracking-wider truncate">
-                {center?.name || profile?.center_name || 'Edugest'}
+        {/* Mobile menu trigger + Center Name Pill */}
+        <div className="md:hidden fixed top-4 left-4 z-40 flex items-center gap-2.5 max-w-[calc(100vw-2rem)] pointer-events-none">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="pointer-events-auto bg-slate-900/80 backdrop-blur-md text-white p-3.5 rounded-2xl border border-white/10 shadow-xl hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center relative shrink-0"
+            title="Abrir Menú"
+          >
+            <Menu size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-slate-900">
+                {unreadCount > 9 ? '9+' : unreadCount}
               </span>
-            </div>
+            )}
+          </button>
+          <div className="pointer-events-auto bg-slate-900/80 backdrop-blur-md text-white px-3.5 py-3 rounded-2xl border border-white/10 shadow-xl flex items-center gap-2 overflow-hidden">
+            {center?.logo_url ? (
+              <img
+                src={center.logo_url}
+                alt="Centro"
+                className="w-5 h-5 rounded-md object-contain bg-white/10 p-0.5 shrink-0"
+              />
+            ) : (
+              <Building2 size={15} className="text-indigo-400 shrink-0" />
+            )}
+            <span className="text-[11px] font-black uppercase tracking-wider text-white truncate max-w-[170px] sm:max-w-xs">
+              {center?.name || profile?.center_name || 'Edugest'}
+            </span>
           </div>
         </div>
 

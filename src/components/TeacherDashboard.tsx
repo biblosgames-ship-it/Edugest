@@ -1095,22 +1095,6 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             <User size={24} />
           </div>
           <div>
-            {/* Encabezado del Centro Educativo */}
-            <div className="flex items-center gap-1.5 mb-1 text-slate-500">
-              {center?.logo_url ? (
-                <img
-                  src={center.logo_url}
-                  alt="Centro"
-                  className="w-4 h-4 rounded object-contain"
-                />
-              ) : (
-                <Building2 size={13} className="text-indigo-600 shrink-0" />
-              )}
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 truncate max-w-[240px] sm:max-w-xs md:max-w-md">
-                {center?.name || (profile as any)?.center_name || 'Centro Educativo'}
-              </span>
-            </div>
-
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black text-slate-900 uppercase">
                 {currentTeacher ? `Hola, ${currentTeacher.name}` : 'Acceso Docente'}
