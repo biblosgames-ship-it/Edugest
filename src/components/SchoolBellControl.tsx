@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell, BellOff, Volume2, Play, Sparkles, Clock, Check, Settings2, X, ShieldAlert } from 'lucide-react';
 import { useSchoolBell } from '../hooks/useSchoolBell';
 import { SoundStyle } from '../utils/schoolBellAudio';
@@ -18,75 +19,15 @@ export const SchoolBellControl = () => {
 
   const [isOpenModal, setIsOpenModal] = useState<boolean>(false);
 
-  return (
-    <>
-      {/* Botón Principal en el Menú / Sidebar */}
-      <div className="relative">
-        <div
-          className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all duration-300 ${
-            isBellEnabled
-              ? 'bg-gradient-to-r from-indigo-900/50 to-indigo-800/40 border-indigo-500/50 text-white shadow-lg shadow-indigo-950/40'
-              : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10'
-          }`}
-        >
-          {/* Lado Izquierdo: Clic abre modal de configuración */}
-          <button
-            onClick={() => setIsOpenModal(true)}
-            className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
-            title="Configurar Timbre Escolar y Horarios"
-          >
-            <div
-              className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
-                isBellEnabled
-                  ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/40 animate-pulse'
-                  : 'bg-white/10 text-slate-400 group-hover:text-white'
-              }`}
-            >
-              {isBellEnabled ? <Bell size={14} /> : <BellOff size={14} />}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black uppercase tracking-tight">
-                  {isBellEnabled ? 'Timbre Escolar' : 'Timbre'}
-                </span>
-                {isBellEnabled && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                )}
-              </div>
-              <p className="text-[9px] font-medium text-slate-400 truncate">
-                {isBellEnabled && nextRotation
-                  ? `Próx: ${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
-                  : 'Desactivado (Silencio)'}
-              </p>
-            </div>
-          </button>
-
-          {/* Lado Derecho: Toggle Switch Directo */}
-          <button
-            onClick={toggleBell}
-            aria-label={isBellEnabled ? 'Desactivar timbre' : 'Activar timbre'}
-            className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer flex items-center shrink-0 ml-2 ${
-              isBellEnabled ? 'bg-indigo-500' : 'bg-slate-700'
-            }`}
-            title={isBellEnabled ? 'Desactivar Alarma' : 'Activar Alarma de Rotación'}
-          >
-            <div
-              className={`w-4 h-4 bg-white rounded-full transition-transform shadow-md ${
-                isBellEnabled ? 'translate-x-4' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-
-      {/* Modal de Configuración del Timbre Escolar */}
-      {isOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div
-            className="bg-slate-900 border border-slate-800 text-white rounded-[2.5rem] max-w-lg w-full p-6 md:p-8 space-y-6 shadow-2xl relative overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
+  const modalContent = isOpenModal && (
+    <div
+      className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={() => setIsOpenModal(false)}
+    >
+      <div
+        className="bg-slate-900 border border-slate-800 text-white rounded-[2.5rem] max-w-lg w-full p-6 md:p-8 space-y-6 shadow-2xl relative overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
             {/* Header del Modal */}
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
               <div className="flex items-center gap-3">
@@ -287,7 +228,71 @@ export const SchoolBellControl = () => {
             </div>
           </div>
         </div>
-      )}
+      );
+
+  return (
+    <>
+      {/* Botón Principal en el Menú / Sidebar */}
+      <div className="relative">
+        <div
+          className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all duration-300 ${
+            isBellEnabled
+              ? 'bg-gradient-to-r from-indigo-900/50 to-indigo-800/40 border-indigo-500/50 text-white shadow-lg shadow-indigo-950/40'
+              : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10'
+          }`}
+        >
+          {/* Lado Izquierdo: Clic abre modal de configuración */}
+          <button
+            onClick={() => setIsOpenModal(true)}
+            className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
+            title="Configurar Timbre Escolar y Horarios"
+          >
+            <div
+              className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
+                isBellEnabled
+                  ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/40 animate-pulse'
+                  : 'bg-white/10 text-slate-400 group-hover:text-white'
+              }`}
+            >
+              {isBellEnabled ? <Bell size={14} /> : <BellOff size={14} />}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black uppercase tracking-tight">
+                  {isBellEnabled ? 'Timbre Escolar' : 'Timbre'}
+                </span>
+                {isBellEnabled && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                )}
+              </div>
+              <p className="text-[9px] font-medium text-slate-400 truncate">
+                {isBellEnabled && nextRotation
+                  ? `Próx: ${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
+                  : 'Desactivado (Silencio)'}
+              </p>
+            </div>
+          </button>
+
+          {/* Lado Derecho: Toggle Switch Directo */}
+          <button
+            onClick={toggleBell}
+            aria-label={isBellEnabled ? 'Desactivar timbre' : 'Activar timbre'}
+            className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer flex items-center shrink-0 ml-2 ${
+              isBellEnabled ? 'bg-indigo-500' : 'bg-slate-700'
+            }`}
+            title={isBellEnabled ? 'Desactivar Alarma' : 'Activar Alarma de Rotación'}
+          >
+            <div
+              className={`w-4 h-4 bg-white rounded-full transition-transform shadow-md ${
+                isBellEnabled ? 'translate-x-4' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {typeof document !== 'undefined' && modalContent && createPortal(modalContent, document.body)}
     </>
   );
 };
