@@ -655,7 +655,7 @@ export const ScheduleViewer = () => {
     const targetTotalLocal = isSecundaria ? 6 : 5;
 
     let courseStartT = courseIsMorning ? 480 : 840;
-    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1080 : 1050);
+    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050);
     if (courseOfficial?.start_time) {
       let s = toMins(courseOfficial.start_time);
       if (!courseIsMorning && s < 720 && s > 0) s += 720;
@@ -813,7 +813,7 @@ export const ScheduleViewer = () => {
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
-    let endT = isMorning ? (profile?.center_id ? 750 : 720) : 1080; // 12:30 o 18:00 default
+    let endT = isMorning ? (profile?.center_id ? 750 : 720) : 1095; // 12:30 o 18:15 default
 
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
