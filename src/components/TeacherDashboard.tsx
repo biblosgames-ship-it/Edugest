@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
@@ -25,7 +26,8 @@ import {
   Download,
   CalendarDays,
   Pencil,
-  Trash2
+  Trash2,
+  Building2
 } from 'lucide-react';
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
@@ -92,6 +94,22 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
   const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
   const [initialFormType, setInitialFormType] = useState<'task' | 'announcement'>('task');
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowWeeklyScheduleModal(false);
+      }
+    };
+    if (showWeeklyScheduleModal) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showWeeklyScheduleModal]);
 
   const handleDeleteTask = async (taskId: string) => {
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarea publicada?')) return;
@@ -1073,14 +1091,38 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       {/* SELECCIONAR O CAMBIAR DOCENTE */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0">
             <User size={24} />
           </div>
           <div>
-            <h2 className="text-xl font-black text-slate-900 uppercase">
-              {currentTeacher ? `Hola, ${currentTeacher.name}` : 'Acceso Docente'}
-            </h2>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            {/* Encabezado del Centro Educativo */}
+            <div className="flex items-center gap-1.5 mb-1 text-slate-500">
+              {center?.logo_url ? (
+                <img
+                  src={center.logo_url}
+                  alt="Centro"
+                  className="w-4 h-4 rounded object-contain"
+                />
+              ) : (
+                <Building2 size={13} className="text-indigo-600 shrink-0" />
+              )}
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 truncate max-w-[240px] sm:max-w-xs md:max-w-md">
+                {center?.name || (profile as any)?.center_name || 'Centro Educativo'}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-black text-slate-900 uppercase">
+                {currentTeacher ? `Hola, ${currentTeacher.name}` : 'Acceso Docente'}
+              </h2>
+              {profile?.teacher_id && (
+                <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  <CheckCircle2 size={10} className="text-emerald-600" />
+                  Vínculo Activo
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">
               {currentTeacher
                 ? 'Área Académica: ' + (currentTeacher.area || 'General')
                 : 'Selecciona tu cuenta docente'}
@@ -1089,23 +1131,25 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="w-full md:w-64">
-            <select
-              value={selectedTeacherId}
-              onChange={(e) => handleTeacherChange(e.target.value)}
-              className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-black text-xs uppercase tracking-wider"
-              disabled={!!profile?.teacher_id}
-            >
-              <option value="">-- SELECCIONAR MI PERFIL --</option>
-              {state.teachers
-                .filter((t) => t.role === 'teacher' || t.role === 'management_teacher')
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name.toUpperCase()}
-                  </option>
-                ))}
-            </select>
-          </div>
+          {!profile?.teacher_id && (
+            <div className="w-full md:w-64">
+              <select
+                value={selectedTeacherId}
+                onChange={(e) => handleTeacherChange(e.target.value)}
+                className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-black text-xs uppercase tracking-wider"
+              >
+                <option value="">-- SELECCIONAR MI PERFIL --</option>
+                {state.teachers
+                  .filter((t) => t.role === 'teacher' || t.role === 'management_teacher')
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name.toUpperCase()}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           {selectedTeacherId && profile?.teacher_id !== selectedTeacherId && (
             <button
               onClick={() => handleLinkTeacher(selectedTeacherId)}
@@ -1116,11 +1160,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               {isLinking ? 'Vinculando...' : 'Vincular Cuenta'}
             </button>
           )}
-          {profile?.teacher_id && (
-            <span className="text-[8px] font-black text-indigo-700 bg-indigo-50 border border-indigo-150 px-3 py-2.5 rounded-xl uppercase tracking-widest shrink-0">
-              ✓ Vínculo Activo
-            </span>
-          )}
+
           {selectedTeacherId && (
             <button
               onClick={() => setShowWeeklyScheduleModal(true)}
@@ -1886,352 +1926,384 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       )}
 
       {/* MODAL HORARIO SEMANAL COMPLETO DEL DOCENTE */}
-      {showWeeklyScheduleModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
-          {/* Estilos especiales de impresión embebidos */}
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-            @media print {
-              body * {
-                visibility: hidden !important;
+      {showWeeklyScheduleModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[999999] overflow-y-auto bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200"
+            onClick={() => setShowWeeklyScheduleModal(false)}
+          >
+            {/* Estilos especiales de impresión embebidos */}
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #teacher-weekly-schedule-print-area, #teacher-weekly-schedule-print-area * {
+                  visibility: visible !important;
+                }
+                #teacher-weekly-schedule-print-area {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  background: white !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
               }
-              #teacher-weekly-schedule-print-area, #teacher-weekly-schedule-print-area * {
-                visibility: visible !important;
-              }
-              #teacher-weekly-schedule-print-area {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                background: white !important;
-                box-shadow: none !important;
-                border: none !important;
-              }
-              .no-print {
-                display: none !important;
-              }
-            }
-          `
-            }}
-          />
+            `
+              }}
+            />
 
-          <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 max-w-6xl w-full overflow-hidden relative animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
-            {/* Cabecera del Modal con controles */}
-            <div className="bg-indigo-600 p-6 md:p-8 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-indigo-700 shrink-0 no-print">
-              <div>
-                <span className="px-3 py-1 bg-white/25 text-white rounded-full text-[9px] font-black uppercase tracking-widest">
-                  Mi Agenda Completa
-                </span>
-                <h3 className="text-2xl font-black uppercase tracking-tight mt-2 flex items-center gap-2">
-                  <CalendarIcon size={22} className="text-indigo-200" /> Horario Semanal Completo
-                </h3>
-                <p className="text-xs font-bold text-indigo-200 mt-1 uppercase tracking-wide">
-                  Docente: {currentTeacher?.name} • Área: {currentTeacher?.area || 'General'}
-                </p>
-              </div>
+            <div
+              className="bg-white rounded-[2.5rem] md:rounded-[3rem] shadow-2xl border border-slate-100 max-w-6xl w-full overflow-hidden relative animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] my-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Cabecera del Modal con controles */}
+              <div className="bg-indigo-600 p-5 md:p-7 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-indigo-700 shrink-0 no-print">
+                <div>
+                  <span className="px-3 py-1 bg-white/25 text-white rounded-full text-[9px] font-black uppercase tracking-widest">
+                    Mi Agenda Completa
+                  </span>
+                  <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight mt-1.5 flex items-center gap-2">
+                    <CalendarIcon size={22} className="text-indigo-200" /> Horario Semanal Completo
+                  </h3>
+                  <p className="text-xs font-bold text-indigo-200 mt-0.5 uppercase tracking-wide">
+                    Docente: {currentTeacher?.name} • Área: {currentTeacher?.area || 'General'}
+                  </p>
+                </div>
 
-              {/* Botones de acción del Modal */}
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <button
-                  onClick={() => {
-                    if (!currentTeacher) return;
-                    try {
-                      const doc = new jsPDF({
-                        orientation: 'landscape',
-                        unit: 'mm',
-                        format: 'a4'
-                      });
-
-                      const centerName = center?.name || (profile as any)?.center_name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
-
-                      // Header Superior Elegante
-                      doc.setFillColor(30, 41, 59); // slate-800
-                      doc.rect(0, 0, 297, 18, 'F');
-
-                      doc.setTextColor(255, 255, 255);
-                      doc.setFontSize(11);
-                      doc.setFont('helvetica', 'bold');
-                      doc.text(centerName.toUpperCase(), 14, 11);
-
-                      doc.setFontSize(9);
-                      doc.setFont('helvetica', 'normal');
-                      doc.text(`AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
-
-                      // Título del Docente
-                      doc.setTextColor(15, 23, 42); // slate-900
-                      doc.setFontSize(13);
-                      doc.setFont('helvetica', 'bold');
-                      const teacherTitle = `HORARIO DOCENTE: ${currentTeacher.name} - ${currentTeacher.area || 'GENERAL'}`;
-                      doc.text(teacherTitle.toUpperCase(), 14, 28);
-
-                      doc.setFontSize(8);
-                      doc.setFont('helvetica', 'normal');
-                      doc.setTextColor(100, 116, 139);
-                      doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
-
-                      const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-                      const tableBody = teacherWeeklyScheduleMatrix.slots.map((slot) => {
-                        const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
-
-                        if (slot.isBreak) {
-                          return [
-                            timeLabel,
-                            {
-                              content: `🔔 ${slot.label || 'RECREO'}`,
-                              colSpan: 5,
-                              styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
-                            }
-                          ];
-                        }
-
-                        const dayCols = tableDays.map((day) => {
-                          const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
-                          if (!cell || cell.isFree) return '';
-                          if (cell.isBreak) return `🔔 ${cell.label || 'RECREO'}`;
-                          const courseName = cell.course ? `${cell.course.grade} "${cell.course.section || ''}"` : 'Curso';
-                          const subName = (cell.sub?.name || 'Materia').toUpperCase();
-                          return `${subName}\n(${courseName})`;
+                {/* Botones de acción del Modal */}
+                <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                  <button
+                    onClick={() => {
+                      if (!currentTeacher) return;
+                      try {
+                        const doc = new jsPDF({
+                          orientation: 'landscape',
+                          unit: 'mm',
+                          format: 'a4'
                         });
 
-                        return [timeLabel, ...dayCols];
-                      });
+                        const centerName =
+                          center?.name ||
+                          (profile as any)?.center_name ||
+                          'CENTRO EDUCATIVO JUAN PABLO DUARTE';
 
-                      autoTable(doc, {
-                        startY: 37,
-                        head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
-                        body: tableBody,
-                        theme: 'grid',
-                        headStyles: {
-                          fillColor: [79, 70, 229],
-                          textColor: [255, 255, 255],
-                          fontStyle: 'bold',
-                          halign: 'center',
-                          fontSize: 9,
-                          cellPadding: 3
-                        },
-                        bodyStyles: {
-                          fontSize: 8,
-                          cellPadding: 3,
-                          valign: 'middle',
-                          textColor: [30, 41, 59]
-                        },
-                        columnStyles: {
-                          0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
-                          1: { cellWidth: 48, halign: 'center' },
-                          2: { cellWidth: 48, halign: 'center' },
-                          3: { cellWidth: 48, halign: 'center' },
-                          4: { cellWidth: 48, halign: 'center' },
-                          5: { cellWidth: 48, halign: 'center' }
-                        },
-                        margin: { left: 14, right: 14 }
-                      });
+                        // Header Superior Elegante
+                        doc.setFillColor(30, 41, 59); // slate-800
+                        doc.rect(0, 0, 297, 18, 'F');
 
-                      doc.save(`Horario_Docente_${currentTeacher.name.replace(/\s+/g, '_')}.pdf`);
-                    } catch (err: any) {
-                      alert('Error al generar PDF: ' + err.message);
-                    }
-                  }}
-                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <FileText size={12} />
-                  Descargar PDF
-                </button>
-                <button
-                  onClick={() => {
-                    const element = document.getElementById('teacher-weekly-schedule-print-area');
-                    if (!element) return;
-                    html2canvas(element, {
-                      scale: 2.5,
-                      useCORS: true,
-                      backgroundColor: '#ffffff',
-                      windowWidth: 1400,
-                      onclone: (clonedDoc) => {
-                        const el = clonedDoc.getElementById('teacher-weekly-schedule-print-area');
-                        if (el) {
-                          el.style.width = '1200px';
-                          el.style.maxWidth = 'none';
-                          el.style.overflow = 'visible';
-                        }
+                        doc.setTextColor(255, 255, 255);
+                        doc.setFontSize(11);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(centerName.toUpperCase(), 14, 11);
+
+                        doc.setFontSize(9);
+                        doc.setFont('helvetica', 'normal');
+                        doc.text(`AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, {
+                          align: 'right'
+                        });
+
+                        // Título del Docente
+                        doc.setTextColor(15, 23, 42); // slate-900
+                        doc.setFontSize(13);
+                        doc.setFont('helvetica', 'bold');
+                        const teacherTitle = `HORARIO DOCENTE: ${currentTeacher.name} - ${currentTeacher.area || 'GENERAL'}`;
+                        doc.text(teacherTitle.toUpperCase(), 14, 28);
+
+                        doc.setFontSize(8);
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(100, 116, 139);
+                        doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
+
+                        const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+                        const tableBody = teacherWeeklyScheduleMatrix.slots.map((slot) => {
+                          const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+
+                          if (slot.isBreak) {
+                            return [
+                              timeLabel,
+                              {
+                                content: `🔔 ${slot.label || 'RECREO'}`,
+                                colSpan: 5,
+                                styles: {
+                                  halign: 'center',
+                                  fillColor: [254, 243, 199],
+                                  textColor: [180, 83, 9],
+                                  fontStyle: 'bold'
+                                }
+                              }
+                            ];
+                          }
+
+                          const dayCols = tableDays.map((day) => {
+                            const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
+                            if (!cell || cell.isFree) return '';
+                            if (cell.isBreak) return `🔔 ${cell.label || 'RECREO'}`;
+                            const courseName = cell.course
+                              ? `${cell.course.grade} "${cell.course.section || ''}"`
+                              : 'Curso';
+                            const subName = (cell.sub?.name || 'Materia').toUpperCase();
+                            return `${subName}\n(${courseName})`;
+                          });
+
+                          return [timeLabel, ...dayCols];
+                        });
+
+                        autoTable(doc, {
+                          startY: 37,
+                          head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
+                          body: tableBody,
+                          theme: 'grid',
+                          headStyles: {
+                            fillColor: [79, 70, 229],
+                            textColor: [255, 255, 255],
+                            fontStyle: 'bold',
+                            halign: 'center',
+                            fontSize: 9,
+                            cellPadding: 3
+                          },
+                          bodyStyles: {
+                            fontSize: 8,
+                            cellPadding: 3,
+                            valign: 'middle',
+                            textColor: [30, 41, 59]
+                          },
+                          columnStyles: {
+                            0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
+                            1: { cellWidth: 48, halign: 'center' },
+                            2: { cellWidth: 48, halign: 'center' },
+                            3: { cellWidth: 48, halign: 'center' },
+                            4: { cellWidth: 48, halign: 'center' },
+                            5: { cellWidth: 48, halign: 'center' }
+                          },
+                          margin: { left: 14, right: 14 }
+                        });
+
+                        doc.save(`Horario_Docente_${currentTeacher.name.replace(/\s+/g, '_')}.pdf`);
+                      } catch (err: any) {
+                        alert('Error al generar PDF: ' + err.message);
                       }
-                    })
-                      .then((canvas) => {
-                        const link = document.createElement('a');
-                        link.download = `Horario_Docente_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
+                    }}
+                    className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <FileText size={12} />
+                    PDF
+                  </button>
+                  <button
+                    onClick={() => {
+                      const element = document.getElementById('teacher-weekly-schedule-print-area');
+                      if (!element) return;
+                      html2canvas(element, {
+                        scale: 2.5,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        windowWidth: 1400,
+                        onclone: (clonedDoc) => {
+                          const el = clonedDoc.getElementById('teacher-weekly-schedule-print-area');
+                          if (el) {
+                            el.style.width = '1200px';
+                            el.style.maxWidth = 'none';
+                            el.style.overflow = 'visible';
+                          }
+                        }
                       })
-                      .catch((err) => {
-                        console.error('Error exporting schedule image:', err);
-                      });
-                  }}
-                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                        .then((canvas) => {
+                          const link = document.createElement('a');
+                          link.download = `Horario_Docente_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
+                          link.href = canvas.toDataURL('image/png');
+                          link.click();
+                        })
+                        .catch((err) => {
+                          console.error('Error exporting schedule image:', err);
+                        });
+                    }}
+                    className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <Download size={12} />
+                    Imagen
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <Printer size={12} />
+                    Imprimir
+                  </button>
+                  <button
+                    onClick={() => setShowWeeklyScheduleModal(false)}
+                    className="w-10 h-10 bg-white/20 hover:bg-rose-600 text-white rounded-2xl flex items-center justify-center transition-all shadow-md shrink-0 cursor-pointer active:scale-95 ml-1"
+                    title="Cerrar Horario (Esc)"
+                    aria-label="Cerrar"
+                  >
+                    <X size={22} className="stroke-[2.5]" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Contenido / Cuadrícula del Horario */}
+              <div className="overflow-y-auto p-4 md:p-8 flex-1 bg-slate-50/50">
+                <div
+                  id="teacher-weekly-schedule-print-area"
+                  className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden"
                 >
-                  <Download size={12} />
-                  Descargar Imagen
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-750 hover:bg-indigo-800 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Printer size={12} />
-                  Imprimir Horario
-                </button>
+                  {/* Decoración del fondo premium */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/20 blur-3xl rounded-full pointer-events-none"></div>
+
+                  {/* Cabecera del reporte impreso */}
+                  <div className="mb-6 pb-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
+                    <div>
+                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5">
+                        <Building2 size={12} />
+                        {center?.name || (profile as any)?.center_name || 'CENTRO EDUCATIVO'}
+                      </span>
+                      <h2 className="text-lg md:text-xl font-black text-indigo-950 uppercase tracking-tight mt-2">
+                        HORARIO SEMANAL DEL DOCENTE
+                      </h2>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
+                        Profesor(a):{' '}
+                        <span className="text-slate-900 font-black">{currentTeacher?.name}</span> • Área:{' '}
+                        <span className="text-indigo-600 font-black">{currentTeacher?.area || 'General'}</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-black text-slate-600 uppercase bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg tracking-wider">
+                        Año Escolar: {selectedYear || '2026-2027'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tabla de Horario Semanal */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse min-w-[650px]">
+                      <thead>
+                        <tr>
+                          <th className="p-3 text-left font-black text-[9px] uppercase tracking-widest text-slate-400 bg-slate-50 rounded-l-xl w-28">
+                            Hora / Bloque
+                          </th>
+                          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
+                            <th
+                              key={day}
+                              className="p-3 text-center font-black text-[9px] uppercase tracking-widest text-slate-500 bg-slate-50"
+                            >
+                              {day}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {teacherWeeklyScheduleMatrix.slots.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="py-20 text-center text-slate-400 italic font-bold text-xs bg-slate-50/50 rounded-b-xl"
+                            >
+                              No tienes ninguna clase o recreo asignado en el sistema escolar semanal.
+                            </td>
+                          </tr>
+                        ) : (
+                          teacherWeeklyScheduleMatrix.slots.map((slot) => (
+                            <tr key={slot.start} className="hover:bg-slate-50/30 transition-all">
+                              {/* Celda de Hora */}
+                              <td className="p-3.5 align-middle">
+                                <span className="flex flex-col">
+                                  <span className="text-xs font-black text-slate-900 tracking-tight">
+                                    {format12h(slot.start)} - {format12h(slot.end)}
+                                  </span>
+                                  <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
+                                    {slot.label}
+                                  </span>
+                                </span>
+                              </td>
+
+                              {/* Celdas de Días */}
+                              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => {
+                                const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
+
+                                if (!cell) {
+                                  return <td key={day} className="p-2 align-middle"></td>;
+                                }
+
+                                if (cell.isBreak) {
+                                  return (
+                                    <td key={day} className="p-2 align-middle">
+                                      <div className="bg-amber-50 border-2 border-amber-200 text-amber-800 rounded-2xl p-2.5 text-center hover:scale-[1.01] transition-all">
+                                        <p className="text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1">
+                                          🔔 {cell.label}
+                                        </p>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+
+                                if (cell.isFree) {
+                                  return (
+                                    <td key={day} className="p-2 align-middle">
+                                      <div className="bg-slate-50/60 border border-dashed border-slate-200 rounded-2xl p-2.5 text-center text-slate-400 hover:bg-slate-50 transition-all">
+                                        <p className="text-[9px] font-black uppercase tracking-widest italic opacity-60">
+                                          Hora Libre
+                                        </p>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+
+                                // Celda de clase activa
+                                return (
+                                  <td key={day} className="p-2 align-middle">
+                                    <div className="bg-indigo-50/80 border-2 border-indigo-150 rounded-2xl p-3 text-left relative overflow-hidden group hover:border-indigo-400 hover:shadow-lg transition-all duration-300">
+                                      <div className="absolute top-0 right-0 w-12 h-12 bg-indigo-500/5 blur-md rounded-full"></div>
+                                      <h5 className="text-xs font-black text-indigo-950 uppercase tracking-tight leading-tight">
+                                        {cell.sub?.name}
+                                      </h5>
+                                      <p className="text-[9px] font-black text-indigo-600 mt-1 uppercase tracking-tight">
+                                        Curso: {cell.course?.grade} {cell.course?.section}
+                                      </p>
+                                      {cell.room && (
+                                        <p className="text-[8px] font-bold text-slate-400 mt-1 flex items-center gap-1.5 uppercase">
+                                          <MapPin size={8} className="text-indigo-500" />{' '}
+                                          {cell.room.name}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pie de página del Modal con botón grande de cerrar */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-4 shrink-0 no-print">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:inline">
+                  Edugest • Horario Escolar
+                </span>
                 <button
                   onClick={() => setShowWeeklyScheduleModal(false)}
-                  className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-all shadow-md shrink-0 cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ml-auto"
                 >
-                  <X size={20} />
+                  <X size={16} />
+                  Cerrar Horario
                 </button>
               </div>
             </div>
-
-            {/* Contenido / Cuadrícula del Horario */}
-            <div className="overflow-y-auto p-6 md:p-8 flex-1 bg-slate-50/50">
-              <div
-                id="teacher-weekly-schedule-print-area"
-                className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden"
-              >
-                {/* Decoración del fondo premium */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/20 blur-3xl rounded-full pointer-events-none"></div>
-
-                {/* Cabecera del reporte impreso */}
-                <div className="mb-6 pb-6 border-b border-slate-100 flex justify-between items-end">
-                  <div>
-                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-md">
-                      {center?.name || (profile as any)?.center_name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE'}
-                    </span>
-                    <h2 className="text-xl font-black text-indigo-950 uppercase tracking-tight mt-1.5">
-                      HORARIO SEMANAL DEL DOCENTE
-                    </h2>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
-                      Profesor(a):{' '}
-                      <span className="text-slate-900 font-black">{currentTeacher?.name}</span> • Área:{' '}
-                      <span className="text-indigo-600 font-black">{currentTeacher?.area || 'General'}</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] font-black text-slate-600 uppercase bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg tracking-wider">
-                      Año Escolar: {selectedYear || '2026-2027'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tabla de Horario Semanal */}
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="p-3 text-left font-black text-[9px] uppercase tracking-widest text-slate-400 bg-slate-50 rounded-l-xl w-32">
-                          Hora / Bloque
-                        </th>
-                        {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
-                          <th
-                            key={day}
-                            className="p-3 text-center font-black text-[9px] uppercase tracking-widest text-slate-500 bg-slate-50"
-                          >
-                            {day}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {teacherWeeklyScheduleMatrix.slots.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            className="py-20 text-center text-slate-400 italic font-bold text-xs bg-slate-50/50 rounded-b-xl"
-                          >
-                            No tienes ninguna clase o recreo asignado en el sistema escolar semanal.
-                          </td>
-                        </tr>
-                      ) : (
-                        teacherWeeklyScheduleMatrix.slots.map((slot) => (
-                          <tr key={slot.start} className="hover:bg-slate-50/30 transition-all">
-                            {/* Celda de Hora */}
-                            <td className="p-4 align-middle">
-                              <span className="flex flex-col">
-                                <span className="text-xs font-black text-slate-900 tracking-tight">
-                                  {format12h(slot.start)} - {format12h(slot.end)}
-                                </span>
-                                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
-                                  {slot.label}
-                                </span>
-                              </span>
-                            </td>
-
-                            {/* Celdas de Días */}
-                            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => {
-                              const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
-
-                              if (!cell) {
-                                return <td key={day} className="p-2 align-middle"></td>;
-                              }
-
-                              if (cell.isBreak) {
-                                return (
-                                  <td key={day} className="p-2 align-middle">
-                                    <div className="bg-amber-50 border-2 border-amber-200 text-amber-800 rounded-2xl p-3 text-center hover:scale-[1.01] transition-all">
-                                      <p className="text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1">
-                                        🔔 {cell.label}
-                                      </p>
-                                    </div>
-                                  </td>
-                                );
-                              }
-
-                              if (cell.isFree) {
-                                return (
-                                  <td key={day} className="p-2 align-middle">
-                                    <div className="bg-slate-50/60 border border-dashed border-slate-200 rounded-2xl p-3 text-center text-slate-400 hover:bg-slate-50 transition-all">
-                                      <p className="text-[9px] font-black uppercase tracking-widest italic opacity-60">
-                                        Hora Libre
-                                      </p>
-                                    </div>
-                                  </td>
-                                );
-                              }
-
-                              // Celda de clase activa
-                              return (
-                                <td key={day} className="p-2 align-middle">
-                                  <div className="bg-indigo-50/80 border-2 border-indigo-150 rounded-2xl p-3.5 text-left relative overflow-hidden group hover:border-indigo-400 hover:shadow-lg transition-all duration-300">
-                                    <div className="absolute top-0 right-0 w-12 h-12 bg-indigo-500/5 blur-md rounded-full"></div>
-                                    <h5 className="text-xs font-black text-indigo-950 uppercase tracking-tight leading-tight">
-                                      {cell.sub?.name}
-                                    </h5>
-                                    <p className="text-[9px] font-black text-indigo-600 mt-1 uppercase tracking-tight">
-                                      Curso: {cell.course?.grade} {cell.course?.section}
-                                    </p>
-                                    {cell.room && (
-                                      <p className="text-[8px] font-bold text-slate-400 mt-1 flex items-center gap-1.5 uppercase">
-                                        <MapPin size={8} className="text-indigo-500" />{' '}
-                                        {cell.room.name}
-                                      </p>
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Pie de página del Modal */}
-            <div className="p-4 bg-slate-50 border-t border-slate-100 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0 no-print">
-              Edugest • Sistema de Gestión Académica Multi-Tenant
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
