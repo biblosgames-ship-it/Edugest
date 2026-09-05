@@ -175,9 +175,11 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
     // Mapear el PRIMER pase de lista por estudiante en el día
     const firstAttendanceByStudent = new Map<string, string>();
     attendanceRecords.forEach((r) => {
-      const sId = String(r.student_id);
-      if (!firstAttendanceByStudent.has(sId)) {
-        firstAttendanceByStudent.set(sId, (r.status || 'presente').toLowerCase().trim());
+      if (r.student_id) {
+        const sId = String(r.student_id);
+        if (!firstAttendanceByStudent.has(sId)) {
+          firstAttendanceByStudent.set(sId, (r.status || 'presente').toLowerCase().trim());
+        }
       }
     });
 
