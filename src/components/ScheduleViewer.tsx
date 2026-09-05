@@ -33,12 +33,15 @@ export const ScheduleViewer = () => {
   const {
     state,
     profile,
+    center,
     refreshData,
     selectedYear,
     setAvoidDeporteDuringAnyBreak,
     deleteAssignment,
     setAppState
   } = useApp();
+
+  const centerName = center?.name || (profile as any)?.center_name || profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
 
   const isAdminOrStaff =
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);

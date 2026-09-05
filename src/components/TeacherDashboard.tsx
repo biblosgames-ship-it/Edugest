@@ -31,7 +31,7 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 
 export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
-  const { state, selectedYear } = useApp();
+  const { state, selectedYear, center } = useApp();
 
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
