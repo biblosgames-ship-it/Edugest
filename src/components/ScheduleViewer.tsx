@@ -655,7 +655,7 @@ export const ScheduleViewer = () => {
     const targetTotalLocal = isSecundaria ? 6 : 5;
 
     let courseStartT = courseIsMorning ? 480 : 840;
-    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : 1095;
+    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1080 : 1050);
     if (courseOfficial?.start_time) {
       let s = toMins(courseOfficial.start_time);
       if (!courseIsMorning && s < 720 && s > 0) s += 720;
@@ -813,7 +813,7 @@ export const ScheduleViewer = () => {
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00
-    let endT = isMorning ? 720 : 1095; // 12:00 o 18:15 default
+    let endT = isMorning ? (profile?.center_id ? 750 : 720) : 1080; // 12:30 o 18:00 default
 
     // Si estamos filtrando por un curso específico, intentar obtener SU horario oficial
     if (filterType === 'course' && filterId) {
@@ -1465,10 +1465,17 @@ export const ScheduleViewer = () => {
                 if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
                 if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
 
-                return Math.abs(sM - eM) <= 25;
+                return Math.abs(sM - eM) < 15;
               });
               if (entries.length === 0) return '';
-              return entries.map((e: any) => {
+              const seenEntries = new Set<string>();
+              const uniqueEntries = entries.filter((e: any) => {
+                const k = `${e.course_id}_${e.subject_id}`;
+                if (seenEntries.has(k)) return false;
+                seenEntries.add(k);
+                return true;
+              });
+              return uniqueEntries.map((e: any) => {
                 const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
                 const course = state.courses.find((c: any) => String(c.id) === String(e.course_id || e.courseId));
                 const courseName = course ? `${course.grade} "${course.section || ''}"` : 'Curso';
@@ -1596,12 +1603,20 @@ export const ScheduleViewer = () => {
               if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
               if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
 
-              return Math.abs(sM - eM) <= 35;
+              return Math.abs(sM - eM) < 15;
             });
 
             if (entries.length === 0) return '';
 
-            return entries.map((e: any) => {
+            const seenEntries = new Set<string>();
+            const uniqueEntries = entries.filter((e: any) => {
+              const k = `${e.subject_id}_${e.teacher_id}`;
+              if (seenEntries.has(k)) return false;
+              seenEntries.add(k);
+              return true;
+            });
+
+            return uniqueEntries.map((e: any) => {
               const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
               const teacher = state.teachers.find((t: any) => isSameTeacher(t.id, e.teacher_id) || String(t.id) === String(e.teacher_id));
               return `${(sub?.name || 'Materia').toUpperCase()}\n${teacher?.name || 'Docente'}`;
@@ -1736,20 +1751,24 @@ export const ScheduleViewer = () => {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
         <div className="flex flex-wrap items-center gap-4">
           {(() => {
-            const matCount = (state.schedule || []).filter((s: any) => {
-              if (filterType === 'teacher' && filterId && !isSameTeacher(s.teacher_id, filterId)) return false;
+            const matSet = new Set<string>();
+            const vesSet = new Set<string>();
+            (state.schedule || []).forEach((s: any) => {
+              if (selectedYear && s.school_year && s.school_year !== selectedYear) return;
+              if (filterType === 'teacher' && filterId && !isSameTeacher(s.teacher_id, filterId)) return;
               const sh = (s.shift || '').toLowerCase();
               const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
               const cTanda = (course?.tanda || '').toLowerCase();
-              return sh.includes('mat') || sh.includes('mañ') || cTanda.includes('mat') || cTanda.includes('mañ') || (!sh.includes('ves') && !sh.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
-            }).length;
-            const vesCount = (state.schedule || []).filter((s: any) => {
-              if (filterType === 'teacher' && filterId && !isSameTeacher(s.teacher_id, filterId)) return false;
-              const sh = (s.shift || '').toLowerCase();
-              const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
-              const cTanda = (course?.tanda || '').toLowerCase();
-              return sh.includes('ves') || sh.includes('tar') || cTanda.includes('ves') || cTanda.includes('tar');
-            }).length;
+              const isVesp = sh.includes('ves') || sh.includes('tar') || cTanda.includes('ves') || cTanda.includes('tar');
+              const key = `${s.course_id || s.courseId}_${(s.day || '').trim().toLowerCase()}_${(s.start_time || '').trim().substring(0, 5)}`;
+              if (isVesp) {
+                vesSet.add(key);
+              } else {
+                matSet.add(key);
+              }
+            });
+            const matCount = matSet.size;
+            const vesCount = vesSet.size;
 
             const handleShiftChange = (shift: 'Matutina' | 'Vespertina') => {
               setSelectedShift(shift);
