@@ -3,6 +3,8 @@ import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
 import html2canvas from 'html2canvas-pro';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Bell,
   Clock,
@@ -398,11 +400,36 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     const seenSlotKeys = new Set<string>();
 
     const toMins = (val: string) => {
-      const [h, m] = (val || '')
-        .replace(/[^0-9:]/g, '')
-        .split(':')
-        .map(Number);
-      return (h || 0) * 60 + (m || 0);
+      const clean = (val || '').replace(/[^0-9:APMapm]/g, '').trim();
+      const isPM = clean.toUpperCase().includes('PM');
+      const isAM = clean.toUpperCase().includes('AM');
+      const parts = clean.replace(/[APMapm]/g, '').split(':').map(Number);
+      let h = parts[0] || 0;
+      const m = parts[1] || 0;
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      return h * 60 + m;
+    };
+
+    const getEntryMins = (val: string, s?: any, c?: any) => {
+      if (!val) return 0;
+      const clean = (val || '').replace(/[^0-9:APMapm]/g, '').trim();
+      const isPM = clean.toUpperCase().includes('PM');
+      const isAM = clean.toUpperCase().includes('AM');
+      const parts = clean.replace(/[APMapm]/g, '').split(':').map(Number);
+      let h = parts[0] || 0;
+      const m = parts[1] || 0;
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      if (!isPM && !isAM) {
+        const cTanda = (s?.shift || c?.tanda || '').toLowerCase();
+        const isVesp =
+          cTanda.includes('ves') ||
+          cTanda.includes('tar') ||
+          ((c?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
+        if (isVesp && h < 7 && h > 0) h += 12;
+      }
+      return h * 60 + m;
     };
 
     const fromMins = (mins: number) => {
@@ -459,7 +486,7 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
           sub,
           course,
           room,
-          startMinutes: getMinutes(sTime)
+          startMinutes: getEntryMins(sTime, s, course)
         };
       });
 
@@ -481,44 +508,25 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
     const mergedSlotsMap = new Map<string, any>();
 
     const getSlotsForCourse = (course: any) => {
+      const cTanda = (course?.tanda || '').toLowerCase();
       const isMorning =
-        (course.tanda || '').toLowerCase().includes('mat') ||
-        (course.tanda || '').toLowerCase().includes('mañ') ||
-        ((course.tanda || '') === '' && !(course.level || '').toLowerCase().includes('secun'));
-      const official = (state.levelSchedules || []).find(
-        (ls: any) =>
-          ls.level === course.level &&
-          (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
-      );
-      let startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
-      if (!isMorning && startT < 720 && startT > 0) startT += 720;
-      let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
-      if (!isMorning && endT < 720 && endT > 0) endT += 720;
+        cTanda.includes('mat') ||
+        cTanda.includes('mañ') ||
+        (cTanda === '' && !(course?.level || '').toLowerCase().includes('secun'));
+      const isSecundaria = (course?.level || '').toLowerCase().includes('secun');
 
-      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return isMorning === isBpMorning;
-      });
+      let startT = isMorning ? 480 : 840; // 8:00 AM o 2:00 PM
+      let endT = isMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050); // 12:30 o 6:15 PM
 
-      const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
-      let masterStartMins = toMins(rawMasterStart);
-      if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
-
-      const bStart = masterStartMins;
-      const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : isMorning ? 30 : 15;
-      const bEnd = bStart + bDuration;
+      const bStart = isMorning ? 600 : 960; // 10:00 AM o 4:00 PM
+      const bEnd = isMorning ? 630 : 975; // 10:30 AM o 4:15 PM
 
       const slots: any[] = [];
-      const preWindow = Math.max(0, bStart - startT);
-      let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
-      const preDur = Math.floor(preWindow / preCount);
-
+      const preDurs = [40, 40, 40];
       let currPre = startT;
-      for (let i = 0; i < preCount; i++) {
-        let e = i === preCount - 1 ? bStart : currPre + preDur;
+      for (let i = 0; i < preDurs.length; i++) {
+        let dur = preDurs[i];
+        let e = i === preDurs.length - 1 ? bStart : currPre + dur;
         slots.push({
           start: fromMins(currPre) + ':00',
           end: fromMins(e) + ':00',
@@ -535,18 +543,18 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         label: 'RECREO'
       });
 
-      const postWindow = Math.max(0, endT - bEnd);
-      let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
-      const postDur = Math.floor(postWindow / postCount);
-
+      const postDurs = isMorning
+        ? isSecundaria ? [40, 40, 40] : [45, 45]
+        : isSecundaria ? [40, 40, 40] : [35, 35, 35];
       let currPost = bEnd;
-      for (let i = 0; i < postCount; i++) {
-        let e = i === postCount - 1 ? endT : currPost + postDur;
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
+        let e = i === postDurs.length - 1 ? endT : currPost + dur;
         slots.push({
           start: fromMins(currPost) + ':00',
           end: fromMins(e) + ':00',
           isBreak: false,
-          label: `${preCount + i + 1}ra Hora`
+          label: `${preDurs.length + i + 1}ra Hora`
         });
         currPost = e;
       }
@@ -603,33 +611,36 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
       });
     });
 
-    // 4. Mapear cada clase del docente A UNA SOLA casilla (la más cercana única)
-    teacherEntries.forEach((entry) => {
-      if (!entry.day) return;
-      const normDay = normalize(entry.day);
-      const matchedDay = weekDays.find((d) => normalize(d) === normDay);
-      if (!matchedDay) return;
+    // 4. Mapear cada clase del docente asegurando que los bloques dobles asignen casillas independientes
+    weekDays.forEach((day) => {
+      const dayEntries = teacherEntries
+        .filter((e) => normalize(e.day || '') === normalize(day))
+        .sort((a, b) => a.startMinutes - b.startMinutes);
 
-      const eStartMins = entry.startMinutes;
-      let closestSlot: any = null;
-      let minDiff = Infinity;
+      dayEntries.forEach((entry) => {
+        const eStartMins = entry.startMinutes;
+        let bestSlot: any = null;
+        let minDiff = Infinity;
 
-      sortedSlots.forEach((slot) => {
-        const slotMins = toMins(slot.start);
-        const diff = Math.abs(eStartMins - slotMins);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestSlot = slot;
+        sortedSlots.forEach((slot) => {
+          if (slot.isBreak) return;
+          const slotMins = toMins(slot.start);
+          const diff = Math.abs(eStartMins - slotMins);
+          const currentCell = matrix[slot.start]?.[day];
+          if (diff < minDiff && (currentCell?.isFree || diff < 10)) {
+            minDiff = diff;
+            bestSlot = slot;
+          }
+        });
+
+        if (bestSlot && minDiff <= 35) {
+          matrix[bestSlot.start][day] = {
+            isBreak: false,
+            isFree: false,
+            ...entry
+          };
         }
       });
-
-      if (closestSlot && minDiff <= 35) {
-        matrix[closestSlot.start][matchedDay] = {
-          isBreak: false,
-          isFree: false,
-          ...entry
-        };
-      }
     });
 
     // 5. Filtrar slots para mostrar solo aquellos que tienen clases programadas o recreos entre clases
@@ -1868,16 +1879,129 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <button
                   onClick={() => {
+                    if (!currentTeacher) return;
+                    try {
+                      const doc = new jsPDF({
+                        orientation: 'landscape',
+                        unit: 'mm',
+                        format: 'a4'
+                      });
+
+                      const centerName = center?.name || (profile as any)?.center_name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+
+                      // Header Superior Elegante
+                      doc.setFillColor(30, 41, 59); // slate-800
+                      doc.rect(0, 0, 297, 18, 'F');
+
+                      doc.setTextColor(255, 255, 255);
+                      doc.setFontSize(11);
+                      doc.setFont('helvetica', 'bold');
+                      doc.text(centerName.toUpperCase(), 14, 11);
+
+                      doc.setFontSize(9);
+                      doc.setFont('helvetica', 'normal');
+                      doc.text(`AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
+
+                      // Título del Docente
+                      doc.setTextColor(15, 23, 42); // slate-900
+                      doc.setFontSize(13);
+                      doc.setFont('helvetica', 'bold');
+                      const teacherTitle = `HORARIO DOCENTE: ${currentTeacher.name} - ${currentTeacher.area || 'GENERAL'}`;
+                      doc.text(teacherTitle.toUpperCase(), 14, 28);
+
+                      doc.setFontSize(8);
+                      doc.setFont('helvetica', 'normal');
+                      doc.setTextColor(100, 116, 139);
+                      doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
+
+                      const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+                      const tableBody = teacherWeeklyScheduleMatrix.slots.map((slot) => {
+                        const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
+
+                        if (slot.isBreak) {
+                          return [
+                            timeLabel,
+                            {
+                              content: `🔔 ${slot.label || 'RECREO'}`,
+                              colSpan: 5,
+                              styles: { halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9], fontStyle: 'bold' }
+                            }
+                          ];
+                        }
+
+                        const dayCols = tableDays.map((day) => {
+                          const cell = teacherWeeklyScheduleMatrix.matrix[slot.start]?.[day];
+                          if (!cell || cell.isFree) return '';
+                          if (cell.isBreak) return `🔔 ${cell.label || 'RECREO'}`;
+                          const courseName = cell.course ? `${cell.course.grade} "${cell.course.section || ''}"` : 'Curso';
+                          const subName = (cell.sub?.name || 'Materia').toUpperCase();
+                          return `${subName}\n(${courseName})`;
+                        });
+
+                        return [timeLabel, ...dayCols];
+                      });
+
+                      autoTable(doc, {
+                        startY: 37,
+                        head: [['BLOQUE / HORA', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES']],
+                        body: tableBody,
+                        theme: 'grid',
+                        headStyles: {
+                          fillColor: [79, 70, 229],
+                          textColor: [255, 255, 255],
+                          fontStyle: 'bold',
+                          halign: 'center',
+                          fontSize: 9,
+                          cellPadding: 3
+                        },
+                        bodyStyles: {
+                          fontSize: 8,
+                          cellPadding: 3,
+                          valign: 'middle',
+                          textColor: [30, 41, 59]
+                        },
+                        columnStyles: {
+                          0: { halign: 'center', fontStyle: 'bold', cellWidth: 26, fillColor: [248, 250, 252] },
+                          1: { cellWidth: 48, halign: 'center' },
+                          2: { cellWidth: 48, halign: 'center' },
+                          3: { cellWidth: 48, halign: 'center' },
+                          4: { cellWidth: 48, halign: 'center' },
+                          5: { cellWidth: 48, halign: 'center' }
+                        },
+                        margin: { left: 14, right: 14 }
+                      });
+
+                      doc.save(`Horario_Docente_${currentTeacher.name.replace(/\s+/g, '_')}.pdf`);
+                    } catch (err: any) {
+                      alert('Error al generar PDF: ' + err.message);
+                    }
+                  }}
+                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <FileText size={12} />
+                  Descargar PDF
+                </button>
+                <button
+                  onClick={() => {
                     const element = document.getElementById('teacher-weekly-schedule-print-area');
                     if (!element) return;
                     html2canvas(element, {
                       scale: 2.5,
                       useCORS: true,
-                      backgroundColor: '#ffffff'
+                      backgroundColor: '#ffffff',
+                      windowWidth: 1400,
+                      onclone: (clonedDoc) => {
+                        const el = clonedDoc.getElementById('teacher-weekly-schedule-print-area');
+                        if (el) {
+                          el.style.width = '1200px';
+                          el.style.maxWidth = 'none';
+                          el.style.overflow = 'visible';
+                        }
+                      }
                     })
                       .then((canvas) => {
                         const link = document.createElement('a');
-                        link.download = `Horario_Semanal_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
+                        link.download = `Horario_Docente_${(currentTeacher?.name || 'Docente').replace(/\s+/g, '_')}.png`;
                         link.href = canvas.toDataURL('image/png');
                         link.click();
                       })
@@ -1918,17 +2042,21 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
                 {/* Cabecera del reporte impreso */}
                 <div className="mb-6 pb-6 border-b border-slate-100 flex justify-between items-end">
                   <div>
-                    <h2 className="text-xl font-black text-indigo-950 uppercase tracking-tight">
-                      EDUGEST • HORARIO DE DOCENTE
+                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-md">
+                      {center?.name || (profile as any)?.center_name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE'}
+                    </span>
+                    <h2 className="text-xl font-black text-indigo-950 uppercase tracking-tight mt-1.5">
+                      HORARIO SEMANAL DEL DOCENTE
                     </h2>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
                       Profesor(a):{' '}
-                      <span className="text-slate-805 font-black">{currentTeacher?.name}</span>
+                      <span className="text-slate-900 font-black">{currentTeacher?.name}</span> • Área:{' '}
+                      <span className="text-indigo-600 font-black">{currentTeacher?.area || 'General'}</span>
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] font-black text-slate-400 uppercase bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg tracking-wider">
-                      Tanda Escolar Semanal
+                    <span className="text-[10px] font-black text-slate-600 uppercase bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg tracking-wider">
+                      Año Escolar: {selectedYear || '2026-2027'}
                     </span>
                   </div>
                 </div>

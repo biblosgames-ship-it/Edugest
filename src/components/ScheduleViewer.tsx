@@ -1032,7 +1032,7 @@ export const ScheduleViewer = () => {
 
       slots.forEach((slot) => {
         let slotMins = toMins(slot.start);
-        if (filterType !== 'teacher' && !isMorning && slotMins < 720 && slotMins > 0) {
+        if (!isMorning && slotMins < 720 && slotMins > 0) {
           slotMins += 720;
         }
         const diff = Math.abs(eMins - slotMins);
@@ -1042,8 +1042,8 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // Asociar si la entrada corresponde al slot más cercano
-      if (closestSlot && minDiff <= 35) {
+      // Asociar si la entrada corresponde al slot más cercano (< 20 min)
+      if (closestSlot && minDiff < 20) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
@@ -1270,9 +1270,23 @@ export const ScheduleViewer = () => {
       }
 
       const canvas = await html2canvas(tableRef.current, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: 1400,
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.querySelector('.print-container') as HTMLElement;
+          if (el) {
+            el.style.width = '1250px';
+            el.style.maxWidth = 'none';
+            el.style.overflow = 'visible';
+            el.style.padding = '30px';
+          }
+          const pOnly = clonedDoc.querySelector('.print-only') as HTMLElement;
+          if (pOnly) {
+            pOnly.style.display = 'block';
+          }
+        }
       });
 
       if (printOnlyEl) {
@@ -2352,25 +2366,36 @@ export const ScheduleViewer = () => {
       >
         {/* Título de Impresión (Solo visible al imprimir o exportar) */}
         <div className="print-only mb-6 border-b pb-4">
-          <h1 className="text-xl font-black uppercase text-indigo-900 tracking-wider">
-            Horario de Clases - Tanda {selectedShift}
-          </h1>
-          <p className="text-sm font-bold text-slate-600 mt-1 uppercase">
-            {filterType === 'course' &&
-              filterId &&
-              (() => {
-                const course = state.courses.find((c: any) => String(c.id) === String(filterId));
-                return `Curso: ${course?.grade || ''} ${course?.section || ''}`;
-              })()}
-            {filterType === 'teacher' &&
-              filterId &&
-              (() => {
-                const teacher = state.teachers.find((t: any) => String(t.id) === String(filterId));
-                return `Docente: ${teacher?.name || ''}`;
-              })()}
-            {filterType === 'all' && 'Vista General (Todos los Cursos)'}
-            {` | Año Escolar: ${selectedYear}`}
-          </p>
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">
+                {centerName.toUpperCase()}
+              </p>
+              <h1 className="text-xl font-black uppercase text-slate-900 tracking-tight mt-1">
+                {filterType === 'course' &&
+                  filterId &&
+                  (() => {
+                    const course = state.courses.find((c: any) => String(c.id) === String(filterId));
+                    return `HORARIO DE CURSO: ${course?.grade || ''} "${course?.section || ''}" - NIVEL ${course?.level || ''}`;
+                  })()}
+                {filterType === 'teacher' &&
+                  filterId &&
+                  (() => {
+                    const teacher = state.teachers.find((t: any) => String(t.id) === String(filterId));
+                    return `HORARIO DEL DOCENTE: ${teacher?.name || ''} - ${teacher?.area || 'GENERAL'}`;
+                  })()}
+                {filterType === 'all' && `HORARIO GENERAL DE CLASES - TANDA ${selectedShift.toUpperCase()}`}
+              </h1>
+              <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
+                Generado oficialmente a través de Edugest
+              </p>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-black text-slate-700 uppercase bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg tracking-wider">
+                TANDA {selectedShift.toUpperCase()} | AÑO ESCOLAR: {selectedYear || '2026-2027'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
