@@ -305,6 +305,7 @@ export const InvitationGenerator = ({
         ...t,
         displayName: tName,
         generatedCode: matchingActive?.code || expectedCode,
+        isCreatedInDb: !!matchingActive,
         isRegistered: matchingActive ? matchingActive.is_used : false,
         activeRecord: matchingActive,
         coursesSummary: coursesSummary || 'Sin asignaciones'
@@ -715,6 +716,23 @@ export const InvitationGenerator = ({
               </div>
             </div>
 
+            {/* Aviso informativo de estado */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-600">
+              <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles size={14} />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-bold text-slate-800">
+                  ¿Cómo funciona la configuración de accesos?
+                </p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Los códigos que ves abajo son una <b>vista previa calculada</b> según el patrón oficial.
+                  Para aplicar los permisos seleccionados arriba y guardarlos en la base de datos, pulsa el botón{' '}
+                  <span className="text-indigo-600 font-bold">"Generar Códigos para Todos"</span>. Los códigos generados pasarán al estado <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">Activo en BD</span>.
+                </p>
+              </div>
+            </div>
+
             {/* Tabla de Docentes y Códigos */}
             <div className="overflow-x-auto border border-slate-200 rounded-2xl">
               <table className="w-full text-left border-collapse">
@@ -770,9 +788,19 @@ export const InvitationGenerator = ({
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <span
-                            className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${t.isRegistered ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}
+                            className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                              t.isRegistered
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : t.isCreatedInDb
+                                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                  : 'bg-amber-50 text-amber-700 border border-dashed border-amber-300'
+                            }`}
                           >
-                            {t.isRegistered ? 'Vinculado' : 'Disponible'}
+                            {t.isRegistered
+                              ? 'Vinculado'
+                              : t.isCreatedInDb
+                                ? 'Activo en BD'
+                                : 'Vista Previa'}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
