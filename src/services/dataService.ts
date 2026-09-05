@@ -472,12 +472,43 @@ export const dataService = {
       );
     }
 
-    return rawComms.filter(
-      (c: any) =>
-        (c.target_roles || []).includes('Alumnos') ||
-        (c.target_roles || []).includes('Padres') ||
-        (c.target_roles || []).includes('Toda la comunidad')
-    );
+    const isParent = ['parent', 'padre', 'madre', 'tutor', 'familiar'].includes((role || '').toLowerCase());
+    const isStudent = (role || '').toLowerCase() === 'student';
+
+    let userCourseIds: string[] = [];
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('course_code, student_id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const ids = new Set<string>();
+      if (prof?.course_code) ids.add(prof.course_code);
+      if (prof?.student_id) {
+        const { data: st } = await supabase
+          .from('students')
+          .select('course_id')
+          .eq('id', prof.student_id)
+          .maybeSingle();
+        if (st?.course_id) ids.add(st.course_id);
+      }
+      userCourseIds = Array.from(ids);
+    } catch (e) {}
+
+    return rawComms.filter((c: any) => {
+      if (c.sender_id === userId) return true;
+      if ((c.target_roles || []).includes('Toda la comunidad')) return true;
+      if (isParent && (c.target_roles || []).includes('Padres')) return true;
+      if (isStudent && (c.target_roles || []).includes('Alumnos')) return true;
+      if (
+        (c.target_courses || []).length > 0 &&
+        (c.target_courses || []).some((cid: string) => userCourseIds.includes(cid))
+      ) {
+        return true;
+      }
+      return false;
+    });
   },
 
   async dismissCommunication(id: string, userId: string) {
