@@ -885,13 +885,14 @@ export const TeacherDashboard = ({
       const isSecundaria = (course.level || '').toLowerCase().includes('secun');
       const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
         if (totalMins <= 0 || preferredCount <= 0) return [];
         let count = preferredCount;
+        const limit = maxCount || 6;
         while (count > 1 && totalMins / count < 35) {
           count--;
         }
-        while (totalMins / count > 45 && count < 6) {
+        while (totalMins / count > 50 && count < limit) {
           if (totalMins / (count + 1) < 35) {
             break;
           }
@@ -908,13 +909,14 @@ export const TeacherDashboard = ({
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 50 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
       let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
       if (preWindow / preCountLocal < 35) {
         preCountLocal = Math.max(1, Math.floor(preWindow / 35));
       }
-      const preDurs = calculateSlotDurations(preWindow, preCountLocal);
+      const maxPre = isSecundaria ? 3 : 6;
+      const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPre);
       preCountLocal = preDurs.length;
 
       let currTimePre = classStart;
@@ -977,7 +979,8 @@ export const TeacherDashboard = ({
       if (postWindow / postCountLocal < 35) {
         postCountLocal = Math.max(1, Math.floor(postWindow / 35));
       }
-      const postDurs = calculateSlotDurations(postWindow, postCountLocal);
+      const maxPost = isSecundaria ? 3 : 6;
+      const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPost);
       postCountLocal = postDurs.length;
 
       for (let i = 0; i < postCountLocal; i++) {

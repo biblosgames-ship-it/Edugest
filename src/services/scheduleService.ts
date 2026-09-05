@@ -527,18 +527,19 @@ export const scheduleService = {
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
         if (totalMins <= 0 || preferredCount <= 0) return [];
         let count = preferredCount;
+        const limit = maxCount || 6;
 
-        // Regla general: Cada bloque debe durar en un rango entre 35 y 45 minutos.
+        // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
         // 1. Si el conteo hace que las clases duren menos de 35 min, reducir el número de bloques.
         while (count > 1 && totalMins / count < 35) {
           count--;
         }
-        // 2. Si el conteo hace que las clases duren más de 45 min, solo aumentar si al dividir en más bloques
-        // cada uno sigue teniendo al menos 35 minutos.
-        while (totalMins / count > 45 && count < 6) {
+        // 2. Si el conteo hace que las clases duren más de 50 min, solo aumentar si no supera el límite
+        // y si al dividir en más bloques cada uno sigue teniendo al menos 35 minutos.
+        while (totalMins / count > 50 && count < limit) {
           if (totalMins / (count + 1) < 35) {
             break;
           }
@@ -555,14 +556,15 @@ export const scheduleService = {
         return durs;
       };
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 35 y 45 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 35 y 50 minutos por clase)
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
       if (preWindow / preCount < 35) {
         preCount = Math.max(1, Math.floor(preWindow / 35));
       }
 
-      const preDurs = calculateSlotDurations(preWindow, preCount);
+      const maxPre = isSecundaria ? 3 : 6;
+      const preDurs = calculateSlotDurations(preWindow, preCount, maxPre);
       preCount = preDurs.length;
 
       let currTimePre = classStart;
@@ -617,10 +619,14 @@ export const scheduleService = {
         }
       });
 
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE (35 a 45 min por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE (35 a 50 min por clase)
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = isSecundaria ? 3 : Math.max(1, targetTotal - preCount);
-      const postDurs = calculateSlotDurations(postWindow, postCount);
+      if (postWindow / postCount < 35) {
+        postCount = Math.max(1, Math.floor(postWindow / 35));
+      }
+      const maxPost = isSecundaria ? 3 : 6;
+      const postDurs = calculateSlotDurations(postWindow, postCount, maxPost);
       postCount = postDurs.length;
 
       for (let i = 0; i < postCount; i++) {
@@ -1417,14 +1423,15 @@ export const scheduleService = {
       const isSecundaria = levelNorm.includes('secun');
       const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
         if (totalMins <= 0 || preferredCount <= 0) return [];
         let count = preferredCount;
-        // Regla general: Cada bloque debe durar en un rango entre 35 y 45 minutos.
+        const limit = maxCount || 6;
+        // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
         while (count > 1 && totalMins / count < 35) {
           count--;
         }
-        while (totalMins / count > 45 && count < 6) {
+        while (totalMins / count > 50 && count < limit) {
           if (totalMins / (count + 1) < 35) {
             break;
           }
@@ -1446,7 +1453,8 @@ export const scheduleService = {
         preCount = Math.max(1, Math.floor(preWindow / 35));
       }
 
-      const preDurs = calculateSlotDurations(preWindow, preCount);
+      const maxPre = isSecundaria ? 3 : 6;
+      const preDurs = calculateSlotDurations(preWindow, preCount, maxPre);
       preCount = preDurs.length;
 
       let currTimePre = classStart;
@@ -1502,7 +1510,11 @@ export const scheduleService = {
 
       const postWindow = Math.max(0, endT - currTimePost);
       let postCount = isSecundaria ? 3 : Math.max(1, targetTotal - preCount);
-      const postDurs = calculateSlotDurations(postWindow, postCount);
+      if (postWindow / postCount < 35) {
+        postCount = Math.max(1, Math.floor(postWindow / 35));
+      }
+      const maxPost = isSecundaria ? 3 : 6;
+      const postDurs = calculateSlotDurations(postWindow, postCount, maxPost);
       postCount = postDurs.length;
 
       for (let i = 0; i < postCount; i++) {
@@ -2717,11 +2729,12 @@ export const scheduleService = {
       preCount = Math.max(1, Math.floor(preWindow / 35));
     }
 
-    const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+    const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
       if (totalMins <= 0 || preferredCount <= 0) return [];
       let count = preferredCount;
+      const limit = maxCount || 6;
       while (count > 1 && totalMins / count < 35) count--;
-      while (totalMins / count > 45 && count < 6) {
+      while (totalMins / count > 50 && count < limit) {
         if (totalMins / (count + 1) < 35) break;
         count++;
       }
@@ -2758,7 +2771,7 @@ export const scheduleService = {
       const preW = Math.max(0, bStartM - cStart);
       let preC = isSec ? 3 : (preW >= 115 ? 3 : 2);
       if (preW / preC < 35) preC = Math.max(1, Math.floor(preW / 35));
-      const preDurs = calculateSlotDurations(preW, preC);
+      const preDurs = calculateSlotDurations(preW, preC, isSec ? 3 : 6);
       preC = preDurs.length;
 
       const sList: any[] = [];
@@ -2771,8 +2784,9 @@ export const scheduleService = {
       }
       cur = bEndM;
       const postW = Math.max(0, eT - cur);
-      let postC = Math.max(1, totalT - preC);
-      const postDurs = calculateSlotDurations(postW, postC);
+      let postC = isSec ? 3 : Math.max(1, totalT - preC);
+      if (postW / postC < 35) postC = Math.max(1, Math.floor(postW / 35));
+      const postDurs = calculateSlotDurations(postW, postC, isSec ? 3 : 6);
       for (let i = 0; i < postDurs.length; i++) {
         let dur = postDurs[i];
         let e = i === postDurs.length - 1 ? eT : cur + dur;

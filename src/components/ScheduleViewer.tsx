@@ -756,17 +756,18 @@ export const ScheduleViewer = () => {
       });
     }
 
-    const calculateSlotDurations = (totalMins: number, preferredCount: number) => {
+    const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
       if (totalMins <= 0 || preferredCount <= 0) return [];
       let count = preferredCount;
-      // Regla general: Cada bloque debe durar en un rango entre 35 y 45 minutos.
+      const limit = maxCount || 6;
+      // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
       // 1. Si el conteo hace que las clases duren menos de 35 min, reducir el número de bloques.
       while (count > 1 && totalMins / count < 35) {
         count--;
       }
-      // 2. Si el conteo hace que las clases duren más de 45 min, solo aumentar si al dividir en más bloques
-      // cada uno sigue teniendo al menos 35 minutos.
-      while (totalMins / count > 45 && count < 6) {
+      // 2. Si el conteo hace que las clases duren más de 50 min, solo aumentar si no supera el límite
+      // y si al dividir en más bloques cada uno sigue teniendo al menos 35 minutos.
+      while (totalMins / count > 50 && count < limit) {
         if (totalMins / (count + 1) < 35) {
           break;
         }
@@ -788,7 +789,8 @@ export const ScheduleViewer = () => {
     if (preWindow / preCountLocal < 35) {
       preCountLocal = Math.max(1, Math.floor(preWindow / 35));
     }
-    const preDurs = calculateSlotDurations(preWindow, preCountLocal);
+    const maxPreCount = isSecundaria ? 3 : 6;
+    const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPreCount);
     preCountLocal = preDurs.length;
 
     let currTimePre = classStart;
@@ -853,7 +855,11 @@ export const ScheduleViewer = () => {
     // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
     const postWindow = Math.max(0, courseEndT - currTimePost);
     let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
-    const postDurs = calculateSlotDurations(postWindow, postCountLocal);
+    if (postWindow / postCountLocal < 35) {
+      postCountLocal = Math.max(1, Math.floor(postWindow / 35));
+    }
+    const maxPostCount = isSecundaria ? 3 : 6;
+    const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPostCount);
     postCountLocal = postDurs.length;
     for (let i = 0; i < postDurs.length; i++) {
       let dur = postDurs[i];
@@ -1103,8 +1109,8 @@ export const ScheduleViewer = () => {
         }
       });
 
-      // Asociar si la entrada corresponde al slot más cercano (< 20 min)
-      if (closestSlot && minDiff < 20) {
+      // Asociar si la entrada corresponde al slot más cercano (< 32 min)
+      if (closestSlot && minDiff < 32) {
         const key = `${matchedDay}-${closestSlot.start}`;
         if (!map.has(key)) map.set(key, []);
         const listInSlot = map.get(key)!;
