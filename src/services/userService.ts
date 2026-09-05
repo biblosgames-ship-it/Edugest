@@ -120,7 +120,6 @@ export const createBulkTeacherInvitationCodes = async (
       code: r.code.trim().toUpperCase().replace(/\s+/g, ''),
       role: r.role || 'teacher',
       center_id: r.center_id,
-      is_used: false,
       allowed_panels: r.allowed_panels || []
     }));
 
@@ -137,6 +136,16 @@ export const createBulkTeacherInvitationCodes = async (
           .catch(() => {});
       }
     }
+
+    // Sincronizar perfiles existentes que ya se hayan registrado con estos códigos
+    for (const item of payload) {
+      await supabase
+        .from('profiles')
+        .update({ allowed_panels: item.allowed_panels })
+        .eq('invitation_code', item.code)
+        .catch(() => {});
+    }
+
     return true;
   } catch (error) {
     console.error('Error creating bulk invitation codes:', error);
