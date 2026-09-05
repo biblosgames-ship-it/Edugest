@@ -649,66 +649,6 @@ export const ScheduleViewer = () => {
     );
   }, []);
 
-  // Limpieza automática solicitada por el usuario para Segundo Ciclo de Primaria:
-  // "esas horas que se asignaron en esa parte sácalas, yo las vuelvo a poner donde van"
-  useEffect(() => {
-    const cleanAnomalousSlots = async () => {
-      const schedule = state.schedule || [];
-      const courses = state.courses || [];
-      if (schedule.length === 0 || courses.length === 0) return;
-
-      // Identificar cursos de Segundo Ciclo de Primaria (4to, 5to, 6to)
-      const segundoCicloCourseIds = new Set(
-        courses
-          .filter((c: any) => {
-            const l = (c.level || '').toLowerCase();
-            const g = (c.grade || '').toLowerCase();
-            const isPrimaria = l.includes('primar');
-            const isC2 =
-              isCourseSecondCycle(c) ||
-              g.includes('4') ||
-              g.includes('5') ||
-              g.includes('6') ||
-              g.includes('cuarto') ||
-              g.includes('quinto') ||
-              g.includes('sexto');
-            return isPrimaria && isC2;
-          })
-          .map((c: any) => String(c.id))
-      );
-
-      if (segundoCicloCourseIds.size === 0) return;
-
-      // Buscar entradas de estos cursos que caigan en la franja previa al recreo (07:50 a 09:30)
-      // que correspondían a los bloques anómalos de 34 min (07:50, 08:24, 08:57)
-      const anomalousEntries = schedule.filter((e: any) => {
-        if (!segundoCicloCourseIds.has(String(e.course_id))) return false;
-        const sTime = (e.start_time || '').substring(0, 5);
-        const sMins = toMins(e.start_time);
-        const isShiftMatch = !selectedShift || e.shift === selectedShift || e.shift === 'Matutina';
-        return isShiftMatch && sMins >= 470 && sMins < 570 && (sTime === '08:24' || sTime === '08:57' || sTime === '07:50');
-      });
-
-      if (anomalousEntries.length > 0) {
-        const idsToDelete = anomalousEntries.map((e: any) => e.id).filter(Boolean);
-        if (idsToDelete.length > 0) {
-          try {
-            await supabase.from('schedule_entries').delete().in('id', idsToDelete);
-            setAppState((prev: any) => ({
-              ...prev,
-              schedule: (prev.schedule || []).filter((e: any) => !idsToDelete.includes(e.id))
-            }));
-            console.log(`[Edugest] Se liberaron exitosamente ${idsToDelete.length} horas de Segundo Ciclo antes del recreo.`);
-          } catch (err) {
-            console.error('Error al liberar horas anómalas de Segundo Ciclo:', err);
-          }
-        }
-      }
-    };
-
-    cleanAnomalousSlots();
-  }, [state.schedule?.length, state.courses?.length, selectedShift]);
-
   const getSlotsForCourse = useCallback((course: any) => {
     const cTanda = (course?.tanda || '').toLowerCase();
     const cLevel = (course?.level || '').toLowerCase();
