@@ -21,31 +21,41 @@ import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 
 export const DailyMinerdAttendanceReport: React.FC = () => {
   const { state, center, selectedYear } = useApp();
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
+
+  const getTodayDateString = () => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Cargar registros de asistencia para la fecha seleccionada
   const fetchAttendance = async () => {
-    if (!center?.id || !selectedDate) return;
+    if (!selectedDate) return;
     setIsLoading(true);
     try {
       // 1. Consultar de Supabase ordenados por created_at ASC (para asegurar el PRIMER pase de lista del día)
       const { data, error } = await supabase
         .from('attendance_records')
         .select('*')
-        .eq('center_id', center.id)
         .eq('date', selectedDate)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      let records: any[] = [];
+      if (!error && data) {
+        const courseIdSet = new Set((state.courses || []).map((c: any) => String(c.id)));
+        records = data.filter((r: any) =>
+          (!center?.id || r.center_id === center.id) ||
+          (r.course_id && courseIdSet.has(String(r.course_id)))
+        );
+      }
 
-      let records = data || [];
-
-      // 2. Si no hay registros en la BD para algún curso, buscar en localStorage como respaldo
+      // 2. Consolidar registros desde localStorage para todos los cursos del centro
       const courses = state.courses || [];
       courses.forEach((c: any) => {
         const localKey = `attendance_${c.id}_${selectedDate}`;
@@ -54,13 +64,23 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
           try {
             const parsed = JSON.parse(localData);
             Object.entries(parsed).forEach(([sId, val]: [string, any]) => {
-              if (!records.some((r) => r.student_id === sId && r.course_id === c.id)) {
+              const status = typeof val === 'string' ? val : val?.status || 'presente';
+              const notes = typeof val === 'object' ? val?.note || '' : '';
+              const existingIdx = records.findIndex(
+                (r) => String(r.student_id) === String(sId) && String(r.course_id) === String(c.id)
+              );
+              if (existingIdx >= 0) {
+                // Actualizar con datos locales si existen
+                if (!records[existingIdx].status && status) {
+                  records[existingIdx].status = status;
+                }
+              } else {
                 records.push({
                   student_id: sId,
                   course_id: c.id,
                   date: selectedDate,
-                  status: typeof val === 'string' ? val : val.status,
-                  notes: typeof val === 'object' ? val.note : '',
+                  status,
+                  notes,
                   created_at: new Date().toISOString()
                 });
               }
@@ -80,7 +100,16 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
 
   useEffect(() => {
     fetchAttendance();
-  }, [selectedDate, center?.id]);
+
+    const handleAttendanceUpdated = () => {
+      fetchAttendance();
+    };
+
+    window.addEventListener('edugens_attendance_updated', handleAttendanceUpdated);
+    return () => {
+      window.removeEventListener('edugens_attendance_updated', handleAttendanceUpdated);
+    };
+  }, [selectedDate, center?.id, state.courses]);
 
   // Helper para clasificar sexo del estudiante
   const isStudentMale = (s: any) => {
@@ -166,8 +195,11 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
       if (!levelGroups[normLvl]) levelGroups[normLvl] = [];
 
       const courseStudents = students.filter(
-        (s: any) => String(s.course_id) === String(c.id)
+        (s: any) => String(s.course_id || s.courseId) === String(c.id)
       );
+
+      const courseRecords = attendanceRecords.filter((r) => String(r.course_id) === String(c.id));
+      const hasCourseRecords = courseRecords.length > 0;
 
       let enrolledM = 0;
       let enrolledF = 0;
@@ -175,7 +207,7 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
       let presentF = 0;
       let absentM = 0;
       let absentF = 0;
-      let hasTakenAttendance = false;
+      let hasTakenAttendance = hasCourseRecords;
 
       courseStudents.forEach((s: any) => {
         const isMale = isStudentMale(s);
@@ -183,9 +215,13 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
         else enrolledF++;
 
         const sId = String(s.id);
-        if (firstAttendanceByStudent.has(sId)) {
+        const rec = courseRecords.find((r) => String(r.student_id) === sId);
+        const status = rec
+          ? (rec.status || 'presente').toLowerCase().trim()
+          : firstAttendanceByStudent.get(sId);
+
+        if (status) {
           hasTakenAttendance = true;
-          const status = firstAttendanceByStudent.get(sId);
           if (status === 'presente' || status === 'tardanza' || status === 'present') {
             if (isMale) presentM++;
             else presentF++;
@@ -194,6 +230,10 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
             if (isMale) absentM++;
             else absentF++;
           }
+        } else if (hasCourseRecords) {
+          // Si se pasó lista en el curso y este estudiante no fue marcado ausente, cuenta como presente
+          if (isMale) presentM++;
+          else presentF++;
         }
       });
 

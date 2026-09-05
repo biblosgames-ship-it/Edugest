@@ -42,11 +42,20 @@ export const ClassroomManager = () => {
   const { assignments: allAssignments } = useAssignments();
   const { students: allStudents, isLoading: studentsLoading } = useStudents();
 
+  // Fecha local YYYY-MM-DD
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Estados de vista
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'folder'>('attendance');
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(false);
 
@@ -374,43 +383,73 @@ export const ClassroomManager = () => {
     if (!selectedCourseId) return;
     setIsSavingAttendance(true);
     try {
-      const key = `attendance_${selectedCourseId}_${selectedDate}`;
-      localStorage.setItem(key, JSON.stringify(attendanceState));
-
       const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
-      const centerId = profile?.center_id || targetCourse?.center_id;
+      const centerId = profile?.center_id || targetCourse?.center_id || (state.teachers?.[0]?.center_id);
 
-      if (centerId) {
-        const recordsToSave = Object.entries(attendanceState).map(([sId, data]) => ({
-          center_id: centerId,
-          student_id: sId,
-          course_id: selectedCourseId,
-          date: selectedDate,
-          status: data.status,
-          notes: data.note || '',
-          recorded_by: profile?.id || null
-        }));
+      // 1. Mapear estado de asistencia para TODOS los estudiantes del curso
+      const fullStateMap: Record<string, { status: AttendanceStatus; note: string }> = {};
+      const recordsToSave: any[] = [];
 
-        if (recordsToSave.length > 0) {
-          try {
-            const { error: upsertErr } = await supabase
-              .from('attendance_records')
-              .upsert(recordsToSave, { onConflict: 'center_id,student_id,course_id,date' });
+      courseStudents.forEach((s: any) => {
+        const current = attendanceState[s.id];
+        const status: AttendanceStatus = current?.status || 'presente';
+        const note: string = current?.note || '';
 
-            if (upsertErr) {
-              for (const rec of recordsToSave) {
-                await dataService.saveAttendance(rec).catch(() => {});
-              }
+        fullStateMap[s.id] = { status, note };
+
+        if (centerId) {
+          recordsToSave.push({
+            center_id: centerId,
+            student_id: s.id,
+            course_id: selectedCourseId,
+            date: selectedDate,
+            status: status,
+            notes: note,
+            recorded_by: profile?.id || null
+          });
+        }
+      });
+
+      // 2. Guardar en localStorage
+      const key = `attendance_${selectedCourseId}_${selectedDate}`;
+      localStorage.setItem(key, JSON.stringify(fullStateMap));
+      setAttendanceState(fullStateMap);
+
+      // 3. Guardar en Supabase (limpiar previo del curso/fecha e insertar registros consolidados)
+      if (recordsToSave.length > 0) {
+        try {
+          await supabase
+            .from('attendance_records')
+            .delete()
+            .eq('course_id', selectedCourseId)
+            .eq('date', selectedDate);
+
+          const { error: insertErr } = await supabase
+            .from('attendance_records')
+            .insert(recordsToSave);
+
+          if (insertErr) {
+            console.warn('Supabase batch insert fallback:', insertErr);
+            for (const rec of recordsToSave) {
+              await supabase.from('attendance_records').insert([rec]).catch(() => {});
             }
-          } catch (e) {
-            console.warn('Supabase attendance save fallback:', e);
           }
+        } catch (e) {
+          console.warn('Supabase attendance save error:', e);
         }
       }
+
+      // 4. Notificar a toda la app que la asistencia fue actualizada
+      window.dispatchEvent(
+        new CustomEvent('edugens_attendance_updated', {
+          detail: { courseId: selectedCourseId, date: selectedDate }
+        })
+      );
 
       setAttendanceSuccess(true);
       setTimeout(() => setAttendanceSuccess(false), 3000);
     } catch (error) {
+      console.error('Error al guardar asistencia:', error);
       alert('Error al guardar asistencia');
     } finally {
       setIsSavingAttendance(false);
