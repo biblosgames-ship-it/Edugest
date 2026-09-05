@@ -110,9 +110,20 @@ class ErrorBoundary extends Component<
             {this.state.info?.componentStack}
           </pre>
           <button
-            onClick={() => {
+            onClick={async () => {
+              try {
+                if ('caches' in window) {
+                  const names = await caches.keys();
+                  await Promise.all(names.map((name) => caches.delete(name)));
+                }
+                if ('serviceWorker' in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map((reg) => reg.unregister()));
+                }
+              } catch (e) {}
               localStorage.clear();
-              window.location.reload();
+              sessionStorage.clear();
+              window.location.href = window.location.origin + '?v=' + Date.now();
             }}
             style={{
               marginTop: '2rem',
