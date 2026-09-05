@@ -1152,27 +1152,38 @@ export const TeacherDashboard = ({
             </button>
           )}
 
-          {/* Fila del Botón Ver Horario y Mi Aula a la derecha */}
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
+          {/* Fila de los 3 Botones de Acceso Rápido: Mi Horario, Mi Aula, Mis Tareas */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full md:w-auto">
             {selectedTeacherId && (
               <button
                 onClick={() => setShowWeeklyScheduleModal(true)}
-                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Ver Mi Horario Semanal"
               >
-                <CalendarDays size={12} />
-                Ver Mi Horario Completo
+                <CalendarDays size={13} />
+                Mi Horario
               </button>
             )}
 
-            {/* ACCESO DIRECTO A MI AULA */}
             {onViewChange && (
               <button
                 onClick={() => onViewChange('classroom')}
-                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                title="Ir al módulo Mi Aula"
+                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Ir a Mi Aula"
               >
                 <UserCheck size={13} />
                 Mi Aula
+              </button>
+            )}
+
+            {onViewChange && (
+              <button
+                onClick={() => onViewChange('tasks')}
+                className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-4 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Ir a Asignar Tareas"
+              >
+                <BookOpen size={13} />
+                Mis Tareas
               </button>
             )}
           </div>
