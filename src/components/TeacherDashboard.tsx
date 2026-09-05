@@ -1131,28 +1131,26 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
             </button>
           )}
 
-          {/* BADGE DE NOTIFICACIONES */}
-          <div
-            className={`w-full md:w-auto flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-black text-[9px] uppercase tracking-widest border transition-all shrink-0 ${
-              unreadCount > 0
-                ? 'bg-amber-50 border-amber-200 text-amber-900 shadow-xs'
-                : 'bg-slate-50 border-slate-200 text-slate-400'
-            }`}
-          >
-            <Bell
-              size={14}
-              className={unreadCount > 0 ? 'text-amber-600 animate-bounce' : 'text-slate-400'}
-            />
-            <span>Avisos</span>
-            {unreadCount > 0 ? (
-              <span className="bg-rose-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
-                {unreadCount}
-              </span>
-            ) : (
-              <span className="bg-slate-200 text-slate-500 text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                0
-              </span>
-            )}
+          {/* ICONO DE NOTIFICACIONES */}
+          <div className="relative inline-flex items-center">
+            <button
+              onClick={() => {
+                const el = document.getElementById('excuse-alert-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="relative p-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-300 rounded-2xl text-slate-700 hover:text-indigo-600 transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center"
+              title={unreadCount > 0 ? `Tienes ${unreadCount} avisos pendientes` : 'Sin notificaciones pendientes'}
+            >
+              <Bell
+                size={16}
+                className={unreadCount > 0 ? 'text-indigo-600 animate-bounce' : 'text-slate-400'}
+              />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {hidePeriodAlert && (
@@ -1664,7 +1662,9 @@ export const TeacherDashboard = ({ userData: profile }: { userData: any }) => {
         // DASHBOARD GENERAL DOCENTE
         <div className="space-y-8">
           {/* MODO ALARMA Y NOTIFICACIONES */}
-          <ExcuseAlert />
+          <div id="excuse-alert-section">
+            <ExcuseAlert />
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* HOY Y CLASES EN VIVO */}

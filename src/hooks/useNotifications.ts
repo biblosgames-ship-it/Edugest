@@ -111,6 +111,24 @@ export const useNotifications = () => {
     } catch (e) {}
   }, [communications, userId]);
 
+  // Sincronizar Badge en el Icono de la App PWA y el título de la pestaña
+  useEffect(() => {
+    try {
+      if ('setAppBadge' in navigator) {
+        if (communications.length > 0) {
+          (navigator as any).setAppBadge(communications.length).catch(() => {});
+        } else {
+          (navigator as any).clearAppBadge().catch(() => {});
+        }
+      }
+      if (communications.length > 0) {
+        document.title = `(${communications.length}) EduGest - Gestión Educativa`;
+      } else {
+        document.title = `EduGest - Gestión Educativa`;
+      }
+    } catch (e) {}
+  }, [communications.length]);
+
   return {
     communications,
     unreadCount: communications.length,

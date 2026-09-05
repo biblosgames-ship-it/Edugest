@@ -82,8 +82,16 @@ export const Sidebar = ({
           <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-brand-accent/20 to-transparent blur-2xl pointer-events-none rounded-t-[2rem]"></div>
 
           <div className="flex items-center gap-3 mb-3 relative z-10 px-2 mt-2">
-            <div className="bg-gradient-to-br from-brand-blue to-brand-accent p-1.5 rounded-lg shadow-lg shadow-brand-blue/30 flex-shrink-0">
+            <div className="relative bg-gradient-to-br from-brand-blue to-brand-accent p-1.5 rounded-lg shadow-lg shadow-brand-blue/30 flex-shrink-0">
               <Logo className="w-6 h-6 text-white" />
+              {navItems.some((i) => i.badge && Number(i.badge) > 0) && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse border border-slate-900">
+                  {(() => {
+                    const total = navItems.reduce((acc, i) => acc + (Number(i.badge) || 0), 0);
+                    return total > 9 ? '9+' : total;
+                  })()}
+                </span>
+              )}
             </div>
             <div className="flex flex-col min-w-0">
               <h1 className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300 leading-none">
@@ -102,6 +110,7 @@ export const Sidebar = ({
           <nav className="space-y-2 flex-1 overflow-y-auto relative z-10 pr-2 custom-scrollbar">
             {navItems.map((item) => {
               const isActive = activeView === item.id;
+              const hasBadge = item.badge !== undefined && Number(item.badge) > 0;
               return (
                 <button
                   key={item.id}
@@ -118,20 +127,20 @@ export const Sidebar = ({
                   }`}
                 >
                   <div
-                    className={`transition-transform duration-300 ${isActive ? 'scale-110 text-brand-accent' : 'group-hover:scale-110 group-hover:text-white'}`}
+                    className={`relative transition-transform duration-300 ${isActive ? 'scale-110 text-brand-accent' : 'group-hover:scale-110 group-hover:text-white'}`}
                   >
                     <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                    {hasBadge && (
+                      <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse border border-slate-900">
+                        {item.badge > 9 ? '9+' : item.badge}
+                      </span>
+                    )}
                   </div>
                   <span
                     className={`font-semibold text-sm tracking-wide flex-1 text-left truncate ${isActive ? 'opacity-100' : 'opacity-80'}`}
                   >
                     {item.label}
                   </span>
-                  {item.badge !== undefined && Number(item.badge) > 0 && (
-                    <span className="ml-auto bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md animate-pulse shrink-0">
-                      {item.badge}
-                    </span>
-                  )}
                 </button>
               );
             })}

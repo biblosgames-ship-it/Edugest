@@ -415,9 +415,14 @@ function AppContent() {
         {/* Mobile menu trigger */}
         <button
           onClick={() => setSidebarOpen(true)}
-          className="md:hidden fixed top-4 left-4 z-40 bg-slate-900/80 backdrop-blur-md text-white p-3.5 rounded-2xl border border-white/10 shadow-xl hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+          className="md:hidden fixed top-4 left-4 z-40 bg-slate-900/80 backdrop-blur-md text-white p-3.5 rounded-2xl border border-white/10 shadow-xl hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center relative"
         >
           <Menu size={20} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse border border-slate-900">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </button>
 
         {/* VISTAS PERSISTENTES (KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}

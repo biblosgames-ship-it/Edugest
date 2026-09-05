@@ -18,9 +18,13 @@ import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
+import { useStudents } from '../hooks/useStudents';
+import { useCourses } from '../hooks/useCourses';
 
 export const DailyMinerdAttendanceReport: React.FC = () => {
   const { state, center, selectedYear } = useApp();
+  const { students: hookStudents } = useStudents();
+  const { courses: hookCourses } = useCourses();
 
   const getTodayDateString = () => {
     const today = new Date();
@@ -172,8 +176,8 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
 
   // Cómputo consolidado de asistencia MINERD
   const consolidatedReport = useMemo(() => {
-    const courses = state.courses || [];
-    const students = state.students || [];
+    const courses = (hookCourses && hookCourses.length > 0) ? hookCourses : (state.courses || []);
+    const students = (hookStudents && hookStudents.length > 0) ? hookStudents : (state.students || []);
 
     // Mapear el PRIMER pase de lista por estudiante en el día
     const firstAttendanceByStudent = new Map<string, string>();
