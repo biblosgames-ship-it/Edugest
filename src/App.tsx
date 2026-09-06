@@ -171,9 +171,9 @@ function AppContent() {
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
 
-    // Para padres y alumnos: acceso exclusivo a su grado/aula virtual
+    // Para padres y alumnos: acceso a su aula virtual y horario de clases
     if (isStudentOrParent) {
-      return ['dashboard'];
+      return ['dashboard', 'schedule'];
     }
 
     let panels = [...rawAllowed];
@@ -379,7 +379,11 @@ function AppContent() {
     { id: 'students', label: 'Gestión de Alumnos', icon: Users },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
     { id: 'data', label: 'Gestión de Datos', icon: PlusCircle },
-    { id: 'schedule', label: 'Generador de Horarios', icon: CalendarDays },
+    {
+      id: 'schedule',
+      label: isStudentOrParent ? 'Horario de Clases' : 'Generador de Horarios',
+      icon: CalendarDays
+    },
     { id: 'agenda', label: 'Calendario Escolar', icon: Calendar },
     { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
     {
@@ -450,7 +454,7 @@ function AppContent() {
           >
             <div className="max-w-7xl mx-auto">
               {isStudentOrParent ? (
-                <StudentDashboard userData={profile} />
+                <StudentDashboard userData={profile} onViewChange={setActiveView} />
               ) : profile?.role === 'teacher' ? (
                 <TeacherDashboard userData={profile} onViewChange={setActiveView} />
               ) : (

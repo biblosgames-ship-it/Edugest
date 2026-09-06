@@ -18,9 +18,17 @@ import {
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
 
-export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
+export const StudentDashboard = ({
+  userData: profile,
+  onViewChange
+}: {
+  userData: any;
+  onViewChange?: (view: string) => void;
+}) => {
   const { state, selectedYear } = useApp();
   const isParent = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
+  const [scheduleViewMode, setScheduleViewMode] = useState<'today' | 'weekly'>('today');
+  const [selectedWeeklyDay, setSelectedWeeklyDay] = useState<string>('Todos');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(() => {
     // Si es padre y tiene cursos vinculados, por defecto cargar el primero
     if (isParent) {
@@ -463,6 +471,366 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
     return todaySchedule.find((c) => c.startMinutes > currentTimeMinutes);
   }, [todaySchedule, currentTimeMinutes]);
 
+  const format12h = (time: string) => {
+    if (!time) return '';
+    const clean = time.substring(0, 5);
+    const [hStr, mStr] = clean.split(':');
+    let h = parseInt(hStr, 10);
+    const m = mStr || '00';
+    if (isNaN(h)) return time;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${m} ${ampm}`;
+  };
+
+  const toMinsLocal = (val: string) => {
+    const [h, m] = (val || '')
+      .replace(/[^0-9:]/g, '')
+      .split(':')
+      .map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const fromMinsLocal = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  // Horario semanal completo del curso activo (Lunes a Viernes con recesos y materias)
+  const weeklyCourseSchedule = useMemo(() => {
+    if (!course) return [];
+
+    const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+    const isMorning =
+      (course.tanda || '').toLowerCase().includes('mat') ||
+      (course.tanda || '').toLowerCase().includes('mañ') ||
+      ((course.tanda || '') === '' && !(course.level || '').toLowerCase().includes('secun'));
+
+    const official = (state.levelSchedules || []).find(
+      (ls: any) =>
+        ls.level === course.level &&
+        (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
+    );
+
+    let startT = official?.start_time ? toMinsLocal(official.start_time) : isMorning ? 480 : 840;
+    if (!isMorning && startT < 720 && startT > 0) startT += 720;
+    let endT = official?.end_time ? toMinsLocal(official.end_time) : isMorning ? 720 : 1095;
+    if (!isMorning && endT < 720 && endT > 0) endT += 720;
+
+    const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
+      let bpMins = toMinsLocal(bp.startTime);
+      if (!isMorning && bpMins < 720) bpMins += 720;
+      const isBpMorning = bpMins < 780;
+      return isMorning === isBpMorning;
+    });
+
+    const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
+    let masterStartMins = toMinsLocal(rawMasterStart);
+    if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+    if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
+    const masterBPref = {
+      startTime: fromMinsLocal(masterStartMins),
+      durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
+    };
+
+    const grade = course.grade?.toLowerCase() || '';
+    const isFirstCycle =
+      /^[1-3]/.test(grade) ||
+      grade.includes('1') ||
+      grade.includes('2') ||
+      grade.includes('3') ||
+      grade.includes('primer') ||
+      (grade.includes('segundo') && !grade.includes('ciclo')) ||
+      grade.includes('tercer');
+    const isSecondCycle =
+      /^[4-6]/.test(grade) ||
+      grade.includes('4') ||
+      grade.includes('5') ||
+      grade.includes('6') ||
+      grade.includes('cuarto') ||
+      grade.includes('quinto') ||
+      grade.includes('sexto');
+
+    const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
+      let bpMins = toMinsLocal(bp.startTime);
+      if (!isMorning && bpMins < 720) bpMins += 720;
+      const isBpMorning = bpMins < 780;
+      if (isMorning !== isBpMorning) return false;
+
+      const levelNormBP = (bp.level || '').toLowerCase();
+      const levelNormCourse = (course.level || '').toLowerCase();
+      if (!levelNormBP || levelNormBP.includes('gen') || levelNormBP.includes('todo')) return true;
+      return (
+        levelNormBP.substring(0, 3) === levelNormCourse.substring(0, 3) ||
+        levelNormCourse.includes(levelNormBP.substring(0, 3))
+      );
+    });
+
+    let bPref = applicableBPs.find((bp: any) => {
+      const cNorm = (bp.cycle || '').toLowerCase();
+      if (isFirstCycle && (cNorm.includes('primer') || cNorm.includes('1er') || cNorm.includes('1'))) return true;
+      if (isSecondCycle && (cNorm.includes('segundo') || cNorm.includes('2do') || cNorm.includes('2'))) return true;
+      return false;
+    });
+
+    if (!bPref) {
+      bPref = applicableBPs.find((bp: any) => {
+        const cNorm = (bp.cycle || '').toLowerCase();
+        return !cNorm || cNorm === 'general' || cNorm === 'gen';
+      });
+    }
+
+    bPref = bPref || masterBPref;
+
+    let bStart = toMinsLocal(bPref.startTime);
+    if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
+    if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
+    const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
+
+    const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
+      const feName = (fe.name || '').toLowerCase();
+      return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+    });
+
+    let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
+    const slots: any[] = [];
+
+    if (isMorning && dbActoEvent) {
+      const feEndMins = toMinsLocal(dbActoEvent.end_time);
+      if (feEndMins > 0) classStart = feEndMins;
+
+      slots.push({
+        start: dbActoEvent.start_time,
+        end: dbActoEvent.end_time,
+        isBreak: true,
+        label: dbActoEvent.name
+      });
+    }
+
+    const isSecundaria = (course.level || '').toLowerCase().includes('secun');
+    const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
+
+    const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
+      if (totalMins <= 0 || preferredCount <= 0) return [];
+      let count = preferredCount;
+      const limit = maxCount || 6;
+      while (count > 1 && totalMins / count < 35) {
+        count--;
+      }
+      while (totalMins / count > 50 && count < limit) {
+        if (totalMins / (count + 1) < 35) {
+          break;
+        }
+        count++;
+      }
+      const base = Math.floor(totalMins / count);
+      let rem = totalMins - base * count;
+      const durs = new Array(count).fill(base);
+      for (let idx = 0; idx < count && rem > 0; idx++) {
+        durs[idx] += 1;
+        rem -= 1;
+      }
+      return durs;
+    };
+
+    const preWindow = Math.max(0, bStart - classStart);
+    let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
+    if (preWindow / preCountLocal < 35) {
+      preCountLocal = Math.max(1, Math.floor(preWindow / 35));
+    }
+    const maxPre = isSecundaria ? 3 : 6;
+    const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPre);
+    preCountLocal = preDurs.length;
+
+    let currTimePre = classStart;
+    for (let i = 0; i < preCountLocal; i++) {
+      let dur = preDurs[i];
+      let sTime = currTimePre;
+      let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
+      currTimePre = eTime;
+
+      slots.push({
+        start: fromMinsLocal(sTime) + ':00',
+        end: fromMinsLocal(eTime) + ':00',
+        isBreak: false,
+        label: `${i + 1}ra Hora`
+      });
+    }
+
+    slots.push({ start: fromMinsLocal(bStart) + ':00', end: fromMinsLocal(bEnd) + ':00', isBreak: true, label: 'RECREO' });
+
+    let currTimePost = bEnd;
+    const levelNorm = (course?.level || '').toLowerCase();
+    const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
+      const feName = (fe.name || '').toLowerCase();
+      const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+      const feStartMins = toMinsLocal(fe.start_time);
+      if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
+
+      const feLevel = (fe.level || '').toLowerCase();
+      const feCycle = (fe.cycle || '').toLowerCase();
+      const levelMatch =
+        !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
+      const cycleMatch =
+        !feCycle ||
+        feCycle.includes('gen') ||
+        feCycle.includes('todo') ||
+        (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+        (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+      return levelMatch && cycleMatch;
+    });
+
+    postFixedEvents.forEach((fe: any) => {
+      const feEndMins = toMinsLocal(fe.end_time);
+      if (feEndMins > currTimePost) {
+        const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
+        const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
+        slots.push({
+          start: sFormatted,
+          end: eFormatted,
+          isBreak: true,
+          label: fe.name
+        });
+        currTimePost = Math.max(currTimePost, feEndMins);
+      }
+    });
+
+    const postWindow = Math.max(0, endT - currTimePost);
+    let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+    if (postWindow / postCountLocal < 35) {
+      postCountLocal = Math.max(1, Math.floor(postWindow / 35));
+    }
+    const maxPost = isSecundaria ? 3 : 6;
+    const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPost);
+    postCountLocal = postDurs.length;
+
+    for (let i = 0; i < postCountLocal; i++) {
+      let dur = postDurs[i];
+      let sTime = currTimePost;
+      let eTime = i === postCountLocal - 1 ? endT : sTime + dur;
+      currTimePost = eTime;
+
+      slots.push({
+        start: fromMinsLocal(sTime) + ':00',
+        end: fromMinsLocal(eTime) + ':00',
+        isBreak: false,
+        label: `${preCountLocal + i + 1}ra Hora`
+      });
+    }
+
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+
+    return weekDays.map((day) => {
+      const dayEntries = state.schedule.filter((s: any) => {
+        if (selectedYear) {
+          if (hasExplicitYearEntries) {
+            if (s.school_year !== selectedYear) return false;
+          } else {
+            if (s.school_year && s.school_year !== selectedYear) return false;
+          }
+        }
+
+        const cId = s.courseId || s.course_id;
+        if (cId !== course.id) return false;
+
+        const sDay = s.day || '';
+        if (sDay && normalize(sDay) === normalize(day)) return true;
+
+        const tb = state.timeBlocks.find((b) => b.id === (s.timeBlockId || s.time_block_id));
+        return tb && normalize(tb.day) === normalize(day);
+      });
+
+      const entries = slots.map((slot) => {
+        if (slot.isBreak) {
+          return {
+            isBreak: true,
+            isFree: false,
+            label: slot.label,
+            sTime: slot.start,
+            eTime: slot.end,
+            startMinutes: getMinutes(slot.start)
+          };
+        }
+
+        const slotMins = getMinutes(slot.start);
+        const matchingEntry = dayEntries.find((e: any) => {
+          const eTime = e.start_time || e.startTime;
+          if (eTime) {
+            return Math.abs(getMinutes(eTime) - slotMins) <= 30;
+          }
+          const tb = state.timeBlocks.find((b) => b.id === (e.timeBlockId || e.time_block_id));
+          const tbTime = tb?.startTime || tb?.start_time;
+          return tbTime && Math.abs(getMinutes(tbTime) - slotMins) <= 30;
+        });
+
+        if (matchingEntry) {
+          const tb = state.timeBlocks.find(
+            (b) => b.id === (matchingEntry.timeBlockId || matchingEntry.time_block_id)
+          );
+          const sub = state.subjects.find(
+            (sub) => sub.id === (matchingEntry.subjectId || matchingEntry.subject_id)
+          );
+          const tea = state.teachers.find(
+            (t) => t.id === (matchingEntry.teacherId || matchingEntry.teacher_id)
+          );
+          const room = state.rooms.find(
+            (r) => r.id === (matchingEntry.roomId || matchingEntry.room_id)
+          );
+          const sTime =
+            matchingEntry.start_time ||
+            matchingEntry.startTime ||
+            tb?.startTime ||
+            tb?.start_time ||
+            slot.start;
+          const eTime =
+            matchingEntry.end_time ||
+            matchingEntry.endTime ||
+            tb?.endTime ||
+            tb?.end_time ||
+            slot.end;
+
+          return {
+            ...matchingEntry,
+            isBreak: false,
+            isFree: false,
+            label: slot.label,
+            sTime,
+            eTime,
+            sub,
+            tea,
+            room,
+            startMinutes: getMinutes(sTime)
+          };
+        }
+
+        return {
+          isBreak: false,
+          isFree: true,
+          label: slot.label,
+          sTime: slot.start,
+          eTime: slot.end,
+          startMinutes: slotMins
+        };
+      });
+
+      return { day, entries };
+    });
+  }, [
+    course,
+    state.schedule,
+    state.timeBlocks,
+    state.subjects,
+    state.teachers,
+    state.rooms,
+    state.levelSchedules,
+    state.breakPreferences,
+    state.fixedEvents,
+    selectedYear
+  ]);
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4">
@@ -724,8 +1092,18 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
             </form>
           )}
 
+          <button
+            type="button"
+            onClick={() => setScheduleViewMode('weekly')}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-indigo-150 shadow-xs transition-all cursor-pointer shrink-0"
+            title="Ver Horario de Clases Semanal"
+          >
+            <CalendarIcon size={13} className="text-indigo-600" />
+            <span>Horario Semanal</span>
+          </button>
+
           {profile?.role !== 'parent' && profile?.course_id && (
-            <span className="text-[8px] font-black text-indigo-700 bg-indigo-50 border border-indigo-150 px-3 py-2.5 rounded-xl uppercase tracking-widest shrink-0">
+            <span className="text-[8px] font-black text-emerald-700 bg-emerald-50 border border-emerald-150 px-3 py-2.5 rounded-xl uppercase tracking-widest shrink-0">
               ✓ Curso Vinculado
             </span>
           )}
@@ -739,94 +1117,279 @@ export const StudentDashboard = ({ userData: profile }: { userData: any }) => {
           <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-200 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-4 h-full bg-indigo-600"></div>
 
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
-              <h3 className="text-base font-black uppercase tracking-widest text-slate-900 flex items-center gap-3">
-                <Activity className="text-indigo-600 animate-pulse" size={20} /> Mi Jornada de Hoy (
-                {currentDay})
-              </h3>
-              <span className="text-[10px] font-black text-slate-500 flex items-center gap-2">
-                <Clock size={12} className="text-indigo-600" />{' '}
-                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+            {/* ENCABEZADO CON SELECTOR DE MODO (HOY / SEMANAL) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit">
+                <button
+                  type="button"
+                  onClick={() => setScheduleViewMode('today')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    scheduleViewMode === 'today'
+                      ? 'bg-white text-indigo-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Clock size={14} /> Clases de Hoy ({currentDay})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleViewMode('weekly')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    scheduleViewMode === 'weekly'
+                      ? 'bg-white text-indigo-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <CalendarIcon size={14} /> Horario Semanal
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                {onViewChange && (
+                  <button
+                    type="button"
+                    onClick={() => onViewChange('schedule')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all cursor-pointer shadow-sm"
+                    title="Abrir Horario en Pantalla Completa"
+                  >
+                    <span>Visor Completo</span>
+                    <ArrowRight size={12} />
+                  </button>
+                )}
+                <span className="text-[10px] font-black text-slate-500 flex items-center gap-1.5 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                  <Clock size={12} className="text-indigo-600" />{' '}
+                  {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
             </div>
 
-            {/* CLASE ACTUAL EN VIVO */}
-            {activeClassNow ? (
-              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-[2rem] p-6 mb-6 relative overflow-hidden animate-in zoom-in-95 duration-300">
-                <div className="absolute -top-3 right-6 px-4 py-1 bg-emerald-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">
-                  CLASE EN VIVO
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center font-black text-base shadow-md">
-                    {activeClassNow.room?.name || 'A'}
-                  </div>
-                  <div>
-                    <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
-                      AHORA MISMO
-                    </span>
-                    <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
-                      {activeClassNow.sub?.name}
-                    </h4>
-                    <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
-                      <User size={12} /> Prof. {activeClassNow.tea?.name}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-center text-slate-500 font-bold text-xs italic">
-                {todaySchedule.length > 0 &&
-                currentTimeMinutes > todaySchedule[todaySchedule.length - 1].startMinutes
-                  ? '🔔 Jornada de clases finalizada por hoy.'
-                  : '☕ Sin clases programadas en este momento.'}
-              </div>
-            )}
-
-            {/* TIMELINE DE HOY */}
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">
-              Cronograma de Clases
-            </h4>
-            <div className="space-y-3">
-              {todaySchedule.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 font-bold italic bg-slate-50 rounded-2xl text-[10px]">
-                  No tienes clases presenciales programadas para hoy.
-                </div>
-              ) : (
-                todaySchedule.map((c) => (
-                  <div
-                    key={c.id}
-                    className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
-                      c.isNow
-                        ? 'bg-emerald-50 border-emerald-400 shadow-sm'
-                        : 'bg-white border-slate-100 hover:border-slate-300'
-                    }`}
-                  >
+            {/* VISTA 1: CRONOGRAMA DE HOY */}
+            {scheduleViewMode === 'today' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* CLASE ACTUAL EN VIVO */}
+                {activeClassNow ? (
+                  <div className="bg-emerald-50 border-2 border-emerald-300 rounded-[2rem] p-6 mb-6 relative overflow-hidden animate-in zoom-in-95 duration-300">
+                    <div className="absolute -top-3 right-6 px-4 py-1 bg-emerald-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">
+                      CLASE EN VIVO
+                    </div>
                     <div className="flex items-center gap-4">
-                      <div
-                        className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
-                      >
-                        {c.sTime}
+                      <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center font-black text-base shadow-md">
+                        {activeClassNow.room?.name || 'A'}
                       </div>
                       <div>
-                        <p
-                          className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
-                        >
-                          {c.sub?.name}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
-                          <User size={10} /> {c.tea?.name}
+                        <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
+                          AHORA MISMO
+                        </span>
+                        <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
+                          {activeClassNow.sub?.name}
+                        </h4>
+                        <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
+                          <User size={12} /> Prof. {activeClassNow.tea?.name}
                         </p>
                       </div>
                     </div>
-                    {c.room && (
-                      <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase">
-                        <MapPin size={10} className="text-indigo-600" /> {c.room.name}
-                      </span>
-                    )}
                   </div>
-                ))
-              )}
-            </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-center text-slate-500 font-bold text-xs italic">
+                    {todaySchedule.length > 0 &&
+                    currentTimeMinutes > todaySchedule[todaySchedule.length - 1].startMinutes
+                      ? '🔔 Jornada de clases finalizada por hoy.'
+                      : '☕ Sin clases programadas en este momento.'}
+                  </div>
+                )}
+
+                {/* TIMELINE DE HOY */}
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">
+                  Cronograma de Clases
+                </h4>
+                <div className="space-y-3">
+                  {todaySchedule.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 font-bold italic bg-slate-50 rounded-2xl text-[10px]">
+                      No tienes clases presenciales programadas para hoy.
+                    </div>
+                  ) : (
+                    todaySchedule.map((c) => (
+                      <div
+                        key={c.id}
+                        className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+                          c.isNow
+                            ? 'bg-emerald-50 border-emerald-400 shadow-sm'
+                            : 'bg-white border-slate-100 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
+                          >
+                            {format12h(c.sTime)}
+                          </div>
+                          <div>
+                            <p
+                              className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
+                            >
+                              {c.sub?.name}
+                            </p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
+                              <User size={10} /> {c.tea?.name}
+                            </p>
+                          </div>
+                        </div>
+                        {c.room && (
+                          <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase">
+                            <MapPin size={10} className="text-indigo-600" /> {c.room.name}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* VISTA 2: HORARIO SEMANAL COMPLETO */}
+            {scheduleViewMode === 'weekly' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* SELECTOR DE DÍAS (MÓVIL / TABLET) + BOTÓN IMPRIMIR */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full custom-scrollbar">
+                    {['Todos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setSelectedWeeklyDay(d)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                          selectedWeeklyDay === d
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all cursor-pointer no-print ml-auto shadow-xs"
+                    title="Imprimir Horario Semanal"
+                  >
+                    <FileSpreadsheet size={13} className="text-indigo-600" />
+                    <span>Imprimir</span>
+                  </button>
+                </div>
+
+                {/* CUADRÍCULA SEMANAL DE CLASES */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-2">
+                  {weeklyCourseSchedule
+                    .filter((d: any) => selectedWeeklyDay === 'Todos' || d.day === selectedWeeklyDay)
+                    .map((d: any) => (
+                      <div
+                        key={d.day}
+                        className={`bg-slate-50/80 p-3.5 rounded-2xl border flex flex-col min-h-[350px] transition-all ${
+                          d.day === currentDay
+                            ? 'border-indigo-300 ring-2 ring-indigo-100 bg-indigo-50/30'
+                            : 'border-slate-200/80'
+                        }`}
+                      >
+                        <div
+                          className={`text-center font-black text-[10px] uppercase py-2 rounded-xl mb-3 tracking-widest flex items-center justify-center gap-1.5 ${
+                            d.day === currentDay
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'bg-white text-indigo-700 border border-slate-150'
+                          }`}
+                        >
+                          <span>{d.day}</span>
+                          {d.day === currentDay && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 flex-1">
+                          {d.entries.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold italic text-[9px] py-10">
+                              Sin clases programadas
+                            </div>
+                          ) : (
+                            d.entries.map((c: any, index: number) => {
+                              if (c.isBreak) {
+                                return (
+                                  <div
+                                    key={index}
+                                    className="bg-amber-50/90 p-2.5 rounded-xl border border-amber-250 shadow-xs flex flex-col justify-between"
+                                  >
+                                    <div>
+                                      <p className="text-[10px] font-black text-amber-900 leading-tight uppercase flex items-center gap-1">
+                                        <span>🔔</span>
+                                        <span className="truncate">{c.label}</span>
+                                      </p>
+                                    </div>
+                                    <span className="text-[8px] font-black text-amber-700 mt-1.5 block bg-amber-100/60 w-fit px-2 py-0.5 rounded-md">
+                                      {format12h(c.sTime)} - {format12h(c.eTime)}
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              if (c.isFree) {
+                                return (
+                                  <div
+                                    key={index}
+                                    className="bg-white/60 p-2.5 rounded-xl border border-dashed border-slate-250 flex flex-col justify-between opacity-60"
+                                  >
+                                    <div>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase">
+                                        {c.label}
+                                      </p>
+                                      <p className="text-[9px] font-semibold text-slate-400 mt-0.5">
+                                        Hora Libre
+                                      </p>
+                                    </div>
+                                    <span className="text-[8px] font-semibold text-slate-400 mt-1.5 block bg-slate-100/60 w-fit px-1.5 py-0.5 rounded">
+                                      {format12h(c.sTime)} - {format12h(c.eTime)}
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between group"
+                                >
+                                  <div>
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                                        {c.label}
+                                      </span>
+                                      {c.room && (
+                                        <span className="text-[7px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                                          {c.room.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] font-black text-slate-900 leading-tight uppercase line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                                      {c.sub?.name}
+                                    </p>
+                                    {c.tea && (
+                                      <p className="text-[8px] font-bold text-slate-400 uppercase mt-1 truncate">
+                                        Prof. {c.tea.name}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="text-[8px] font-black text-indigo-600 mt-2 block bg-indigo-50/70 w-fit px-2 py-0.5 rounded-md">
+                                    {format12h(c.sTime)} - {format12h(c.eTime)}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

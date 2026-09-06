@@ -45,7 +45,8 @@ export const ScheduleViewer = () => {
 
   const isAdminOrStaff =
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
-  const isStudentOrParent = profile?.role === 'student' || profile?.role === 'parent';
+  const isParentRole = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
+  const isStudentOrParent = profile?.role === 'student' || isParentRole;
 
   const [selectedShift, setSelectedShift] = useState<'Matutina' | 'Vespertina'>(() => {
     try {
@@ -55,7 +56,7 @@ export const ScheduleViewer = () => {
     return 'Matutina';
   });
   const [filterType, setFilterType] = useState<'all' | 'course' | 'teacher'>(() => {
-    if (profile?.role === 'student' || profile?.role === 'parent') return 'course';
+    if (profile?.role === 'student' || isParentRole) return 'course';
     return 'all';
   });
   const [filterId, setFilterId] = useState(() => {
@@ -1983,6 +1984,38 @@ export const ScheduleViewer = () => {
             </>
           ) : (
             (() => {
+              let linkedIds: string[] = profile?.parent_course_ids || [];
+              try {
+                const local = localStorage.getItem('parent_course_ids');
+                if (local && (!linkedIds || linkedIds.length === 0)) linkedIds = JSON.parse(local);
+              } catch {}
+
+              const parentCourses = isParentRole
+                ? state.courses.filter((c) => linkedIds.includes(c.id))
+                : [];
+
+              if (parentCourses.length > 1) {
+                return (
+                  <select
+                    value={filterId}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setFilterId(newId);
+                      try {
+                        localStorage.setItem('selected_course_id', newId);
+                      } catch {}
+                    }}
+                    className="px-6 py-2.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm cursor-pointer"
+                  >
+                    {parentCourses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Hijo: {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                      </option>
+                    ))}
+                  </select>
+                );
+              }
+
               const activeCourse = state.courses.find((c) => c.id === filterId);
               return activeCourse ? (
                 <div className="px-6 py-2.5 rounded-2xl bg-indigo-50 border border-indigo-150 text-indigo-700 text-[10px] font-black uppercase tracking-widest">
