@@ -24,6 +24,7 @@ import { useStudents } from '../../hooks/useStudents';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { PaymentModal } from './PaymentModal';
+import { generateAccountStatementPDF } from '../../utils/accountStatementPdf';
 
 interface Props {
   studentId: string;
@@ -82,7 +83,7 @@ export const normalizeInvoiceKey = (inv: any, planStartMonth: number = 8) => {
 };
 
 export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props) => {
-  const { state, profile, selectedYear } = useApp();
+  const { state, profile, center, selectedYear } = useApp();
   const { students: allStudents } = useStudents();
   const {
     invoices,
@@ -694,7 +695,25 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           >
             <Trash2 size={14} /> Limpiar Duplicados
           </button>
-          <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 shadow-sm">
+          <button
+            onClick={() => {
+              try {
+                generateAccountStatementPDF({
+                  student,
+                  course,
+                  center,
+                  invoices: studentInvoices,
+                  transactions: studentTransactions,
+                  stats
+                });
+                toast.success('Estado de cuenta PDF generado con éxito');
+              } catch (err: any) {
+                console.error('Error generando estado de cuenta:', err);
+                toast.error('Error al generar el PDF del estado de cuenta');
+              }
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 shadow-sm"
+          >
             <FileText size={16} /> Estado de Cuenta PDF
           </button>
           <button

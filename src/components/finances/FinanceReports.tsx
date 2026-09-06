@@ -284,6 +284,66 @@ export const FinanceReports = () => {
     );
   }
 
+  const handleExportGeneralMorosidadExcel = () => {
+    const students = state.students || [];
+    const courses = state.courses || [];
+
+    // Hoja 1: Resumen por Grado
+    const summaryData = reportData.courseStats.map((cs, idx) => ({
+      '#': idx + 1,
+      'GRADO / CURSO': cs.name,
+      'TOTAL ALUMNOS': cs.totalStudents,
+      'AL DÍA': cs.alDiaCount,
+      'EN MORA': cs.moraCount,
+      'TOTAL COBRADO (RD$)': cs.paid,
+      'TOTAL PENDIENTE (RD$)': cs.debt,
+      'TASA COBRO (%)': cs.totalStudents > 0 ? ((cs.paid / (cs.paid + cs.debt || 1)) * 100).toFixed(1) + '%' : '0%'
+    }));
+
+    // Hoja 2: Detalle Alumnos con Deuda o en Mora
+    const moraStudents: any[] = [];
+    courses.forEach((c) => {
+      const courseStudents = students.filter((s) => s.course_id === c.id);
+      courseStudents.forEach((student) => {
+        const studentInvoices = invoices.filter((i) => i.student_id === student.id);
+        const sDebt = studentInvoices.reduce((acc, i) => acc + Number(i.amount_final), 0);
+        const sPaid = studentInvoices
+          .filter((i) => i.status === 'paid')
+          .reduce((acc, i) => acc + Number(i.amount_final), 0);
+        const sBalance = sDebt - sPaid;
+        const hasMora = studentInvoices.some(
+          (i) =>
+            !String(i.concept).toLowerCase().includes('inscrib') &&
+            !String(i.concept).toLowerCase().includes('inscrip') &&
+            (i.status === 'overdue' || (i.status === 'pending' && new Date(i.due_date) < new Date()))
+        );
+
+        if (hasMora || sBalance > 0) {
+          moraStudents.push({
+            'CURSO': `${c.level} ${c.grade} "${c.section}"`,
+            'MATRÍCULA': student.matricula || student.id?.substring(0, 8) || '',
+            'APELLIDOS': student.first_surname + (student.second_surname ? ' ' + student.second_surname : ''),
+            'NOMBRES': student.names,
+            'ESTADO': hasMora ? 'EN MORA' : 'PENDIENTE',
+            'PENDIENTE (RD$)': sBalance,
+            'CONDICIÓN': student.student_condition === 'new' ? 'Nuevo Ingreso' : 'Antiguo'
+          });
+        }
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen_Por_Grado');
+
+    if (moraStudents.length > 0) {
+      const wsMora = XLSX.utils.json_to_sheet(moraStudents);
+      XLSX.utils.book_append_sheet(wb, wsMora, 'Alumnos_Con_Deuda');
+    }
+
+    XLSX.writeFile(wb, `Reporte_Morosidad_General_${center?.name ? center.name.replace(/ /g, '_') : 'Edugest'}.xlsx`);
+  };
+
   return (
     <div className="space-y-8">
       {/* ... rest of the main view ... */}
@@ -345,7 +405,10 @@ export const FinanceReports = () => {
               Desglose detallado de deudas y estados
             </p>
           </div>
-          <button className="bg-slate-50 text-slate-400 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all flex items-center gap-2">
+          <button
+            onClick={handleExportGeneralMorosidadExcel}
+            className="bg-slate-50 text-slate-400 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all flex items-center gap-2 cursor-pointer"
+          >
             <Download size={16} /> Exportar Reporte
           </button>
         </div>

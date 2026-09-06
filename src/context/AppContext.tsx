@@ -1084,6 +1084,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .insert([{ ...c, center_id: profile.center_id, school_year: c.school_year || selectedYear }]);
     await refreshData(undefined, true);
   };
+  const updateCourse = async (id: string, updates: any) => {
+    await supabase.from('courses').update(updates).eq('id', id);
+    await refreshData(undefined, true);
+  };
   const deleteCourse = async (id: string) => {
     await supabase.from('courses').delete().eq('id', id);
     await refreshData(undefined, true);
@@ -1091,6 +1095,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addSubject = async (s: any) => {
     if (!profile?.center_id) return;
     await supabase.from('subjects').insert([{ ...s, center_id: profile.center_id }]);
+    await refreshData(undefined, true);
+  };
+  const updateSubject = async (id: string, updates: any) => {
+    await supabase.from('subjects').update(updates).eq('id', id);
     await refreshData(undefined, true);
   };
   const deleteSubject = async (id: string) => {
@@ -1307,10 +1315,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteSchoolYear,
         updateSchoolYear,
         addCourse,
-        updateCourse: async () => {},
+        updateCourse,
         deleteCourse,
         addSubject,
-        updateSubject: async () => {},
+        updateSubject,
         deleteSubject,
         addAssignment,
         deleteAssignment,

@@ -6,9 +6,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useApp } from '../context/AppContext';
 import { exportStudentsToExcel } from '../utils/listPdfGenerator';
+import { toast } from 'react-hot-toast';
 
 export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
-  const { state, center, selectedYear } = useApp();
+  const { state, center, selectedYear, refreshData } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -101,6 +102,23 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
     doc.save(`Listado_${course.grade}_${course.section}_${course.tanda || 'Matutina'}.pdf`);
   };
 
+  const handleDeleteStudent = async (student: any) => {
+    const studentName = `${student.first_surname || student.lastName || ''} ${student.names || student.firstName || ''}`.trim();
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar al estudiante "${studentName}"? Esta acción eliminará permanentemente su registro.`)) {
+      return;
+    }
+
+    try {
+      await dataService.deleteStudent(student.id);
+      setStudents((prev) => prev.filter((s) => s.id !== student.id));
+      await refreshData(undefined, true);
+      toast.success(`Estudiante "${studentName}" eliminado correctamente`);
+    } catch (err: any) {
+      console.error('Error al eliminar estudiante:', err);
+      toast.error('Error al eliminar estudiante: ' + (err.message || 'Error desconocido'));
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mx-1">
       <div className="flex justify-between items-center p-2 bg-slate-50 border-b border-slate-100">
@@ -174,7 +192,11 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
                       >
                         <Pencil size={12} />
                       </button>
-                      <button className="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                      <button
+                        onClick={() => handleDeleteStudent(s)}
+                        title="Eliminar estudiante"
+                        className="p-1 text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                      >
                         <Trash2 size={12} />
                       </button>
                     </div>

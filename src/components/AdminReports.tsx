@@ -1,13 +1,82 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { FileText, Download, TrendingUp, AlertTriangle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { toast } from 'react-hot-toast';
 
 export const AdminReports = () => {
-  const { state } = useApp();
+  const { state, center, selectedYear } = useApp();
 
   // BLINDAJE v3.0: Protección total contra nulos para evitar Pantalla Blanca
   const alerts = state.performanceAlerts || [];
   const teachers = state.teachers || [];
+  const courses = state.courses || [];
+  const students = state.students || [];
+
+  const handleExportAll = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // 1. Hoja Resumen Institucional
+      const summaryData = [
+        { CONCEPTO: 'Centro Educativo', VALOR: center?.name || 'Edugest School' },
+        { CONCEPTO: 'Año Escolar Activo', VALOR: selectedYear || '2026-2027' },
+        { CONCEPTO: 'Total de Docentes', VALOR: teachers.length },
+        { CONCEPTO: 'Total de Cursos / Grados', VALOR: courses.length },
+        { CONCEPTO: 'Total Estudiantes Registrados', VALOR: students.length },
+        { CONCEPTO: 'Alertas de Desempeño Activas', VALOR: alerts.length },
+        { CONCEPTO: 'Fecha de Exportación', VALOR: new Date().toLocaleDateString('es-DO') }
+      ];
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen_Institucional');
+
+      // 2. Hoja Cursos
+      if (courses.length > 0) {
+        const coursesData = courses.map((c, idx) => ({
+          '#': idx + 1,
+          'GRADO': c.grade,
+          'SECCIÓN': c.section,
+          'NIVEL': c.level,
+          'TANDA': c.tanda,
+          'CANTIDAD ESTUDIANTES': c.student_count || c.studentCount || 0
+        }));
+        const wsCourses = XLSX.utils.json_to_sheet(coursesData);
+        XLSX.utils.book_append_sheet(wb, wsCourses, 'Cursos_Y_Secciones');
+      }
+
+      // 3. Hoja Docentes
+      if (teachers.length > 0) {
+        const teachersData = teachers.map((t, idx) => ({
+          '#': idx + 1,
+          'NOMBRE COMPLETO': `${t.name || ''} ${t.lastName || ''}`.trim(),
+          'EMAIL': t.email || '',
+          'TELÉFONO': t.phone || '',
+          'ESPECIALIDAD': t.specialty || t.subject || ''
+        }));
+        const wsTeachers = XLSX.utils.json_to_sheet(teachersData);
+        XLSX.utils.book_append_sheet(wb, wsTeachers, 'Docentes');
+      }
+
+      // 4. Hoja Alertas
+      if (alerts.length > 0) {
+        const alertsData = alerts.map((a: any, idx: number) => ({
+          '#': idx + 1,
+          'MENSAJE': a.message || 'Alerta de sistema',
+          'TIPO': a.type || 'Aviso',
+          'FECHA': a.created_at ? new Date(a.created_at).toLocaleDateString('es-DO') : 'N/A'
+        }));
+        const wsAlerts = XLSX.utils.json_to_sheet(alertsData);
+        XLSX.utils.book_append_sheet(wb, wsAlerts, 'Alertas_Desempeño');
+      }
+
+      const fileName = `Reporte_Institucional_${(center?.name || 'Edugest').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success('Reporte institucional descargado con éxito');
+    } catch (err: any) {
+      console.error('Error al exportar reporte institucional:', err);
+      toast.error('Error al exportar reporte: ' + (err.message || 'Error desconocido'));
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -20,7 +89,10 @@ export const AdminReports = () => {
             Análisis detallado del rendimiento institucional
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-indigo-700 transition-all">
+        <button
+          onClick={handleExportAll}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-xl hover:bg-indigo-700 transition-all cursor-pointer"
+        >
           <Download size={16} /> Exportar Todo
         </button>
       </div>
