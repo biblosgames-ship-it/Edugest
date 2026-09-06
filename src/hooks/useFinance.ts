@@ -2,14 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppContext';
 import { toast } from 'react-hot-toast';
-
-const getLocalDateString = () => {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+import { getLocalDateString } from '../utils/dateUtils';
 
 export const useFinance = (options?: {
   paymentPlans?: boolean;
@@ -691,9 +684,9 @@ export const useFinance = (options?: {
         concept: item.concept,
         amount_original: item.amount,
         amount_final: item.amount,
-        due_date: new Date().toISOString().split('T')[0],
+        due_date: getLocalDateString(),
         status: invoiceData.payment_method ? 'paid' : 'pending',
-        period: '2026-2027',
+        period: selectedYear || '2026-2027',
         description: `Venta de Producto x${item.quantity}`
       }));
 
@@ -881,7 +874,7 @@ export const useFinance = (options?: {
         if (updates.payment_method) ledgerUpdates.method = updates.payment_method;
         if (updates.amount_paid !== undefined) ledgerUpdates.amount = Number(updates.amount_paid);
         if (updates.created_at) {
-          ledgerUpdates.date = new Date(updates.created_at).toISOString().split('T')[0];
+          ledgerUpdates.date = getLocalDateString(new Date(updates.created_at));
         }
         
         await supabase

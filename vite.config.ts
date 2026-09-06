@@ -65,5 +65,19 @@ export default defineConfig(({mode}) => {
       // Do not modifyâ€”file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
+            'vendor-xlsx': ['xlsx'],
+            'vendor-icons': ['lucide-react'],
+            'vendor-supabase': ['@supabase/supabase-js']
+          }
+        }
+      }
+    }
   };
 });

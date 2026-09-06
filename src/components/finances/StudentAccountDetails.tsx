@@ -25,6 +25,7 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { PaymentModal } from './PaymentModal';
 import { generateAccountStatementPDF } from '../../utils/accountStatementPdf';
+import { getLocalDateString } from '../../utils/dateUtils';
 
 interface Props {
   studentId: string;
@@ -489,7 +490,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           amount_original: enrollmentOriginal,
           amount_final: enrollmentFinal,
           discount_applied: enrollmentDiscount,
-          due_date: new Date().toISOString().split('T')[0],
+          due_date: getLocalDateString(),
           status: 'pending'
         });
       }
@@ -554,7 +555,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           amount_original: monthlyOriginal,
           amount_final: monthlyFinal,
           discount_applied: monthlyDiscount,
-          due_date: dueDate.toISOString().split('T')[0],
+          due_date: getLocalDateString(dueDate),
           status: 'pending'
         });
       }

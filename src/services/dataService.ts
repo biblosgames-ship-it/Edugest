@@ -1147,7 +1147,8 @@ export const dataService = {
         second_surname: studentData.second_surname ? String(studentData.second_surname).trim().replace(/\s+/g, ' ') : null,
         school_year: targetYear,
         course_id: targetCourseId,
-        status: 'Active'
+        status: 'Active',
+        student_type: 'antiguo'
       })
       .select()
       .single();

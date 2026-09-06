@@ -17,6 +17,7 @@ import { useFinance } from '../../hooks/useFinance';
 import { toast } from 'react-hot-toast';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
+import { getLocalDateString } from '../../utils/dateUtils';
 
 interface Props {
   student: any;
@@ -85,7 +86,7 @@ export const PaymentModal = ({
     payment_method: 'cash',
     reference_number: '',
     notes: '',
-    payment_date: new Date().toISOString().split('T')[0]
+    payment_date: getLocalDateString()
   });
 
   const [paymentMethods, setPaymentMethods] = useState<Array<{

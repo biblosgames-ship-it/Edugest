@@ -19,6 +19,7 @@ import { useStudents } from '../../hooks/useStudents';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
+import { getLocalDateString } from '../../utils/dateUtils';
 
 const normalizeInvoiceKey = (inv: any, planStartMonth: number = 8) => {
   if (!inv) return 'UNKNOWN';
@@ -192,7 +193,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
             amount_original: enrollmentOriginal,
             amount_final: enrollmentFinal,
             discount_applied: enrollmentDiscount,
-            due_date: new Date().toISOString().split('T')[0],
+            due_date: getLocalDateString(),
             status: 'pending'
           });
         }
@@ -267,7 +268,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
             amount_original: monthlyOriginal,
             amount_final: monthlyFinal,
             discount_applied: monthlyDiscount,
-            due_date: dueDate.toISOString().split('T')[0],
+            due_date: getLocalDateString(dueDate),
             status: 'pending'
           });
         }
