@@ -44,20 +44,28 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
     setIsLoading(true);
     try {
       // 1. Consultar de Supabase para la fecha seleccionada
-      const { data, error } = await supabase
+      const targetCid = center?.id || state.center?.id || state.courses?.[0]?.center_id;
+      let query = supabase
         .from('attendance_records')
         .select('*')
-        .eq('date', selectedDate)
-        .order('created_at', { ascending: true });
+        .eq('date', selectedDate);
+
+      if (targetCid) {
+        query = query.eq('center_id', targetCid);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: true });
 
       let records: any[] = (!error && data) ? [...data] : [];
 
-      // 2. Consolidar registros desde localStorage para todos los cursos
+      // 2. Consolidar registros desde localStorage para todos los cursos del centro
+      const validCourseIds = new Set((hookCourses || state.courses || []).map((c: any) => String(c.id)));
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('attendance_') && k.endsWith(`_${selectedDate}`)) {
           const parts = k.split('_');
           const cId = parts.slice(1, -1).join('_');
+          if (cId && !validCourseIds.has(String(cId))) continue;
           const localData = localStorage.getItem(k);
           if (localData) {
             try {

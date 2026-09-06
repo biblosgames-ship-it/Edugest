@@ -30,7 +30,7 @@ interface Props {
   onBack: () => void;
   onTabChange?: (tab: string) => void;
 }
-export const normalizeInvoiceKey = (inv: any) => {
+export const normalizeInvoiceKey = (inv: any, planStartMonth: number = 8) => {
   if (!inv) return 'UNKNOWN';
 
   if (inv.product_id) {
@@ -38,42 +38,42 @@ export const normalizeInvoiceKey = (inv: any) => {
   }
 
   const c = (inv.concept || '').trim().toLowerCase();
+  const desc = (inv.description || '').trim().toLowerCase();
 
-  if (c.includes('inscrip') || c.includes('inscrib')) {
+  // 1. Inscripción
+  if (c.includes('inscrip') || c.includes('inscrib') || desc.includes('inscrip') || desc.includes('inscrib')) {
     return 'INSCRIPCION';
   }
 
-  if (typeof inv.month_number === 'number' && inv.month_number > 0) {
-    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
+  // 2. Número de mes explícito si existe
+  const mNum = Number(inv.month_number);
+  if (!isNaN(mNum) && mNum > 0) {
+    return `CUOTA_${String(mNum).padStart(2, '0')}`;
   }
 
-  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
-  if (cuotaMatch) {
-    return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
+  // 3. Patrón 'Cuota 01', 'Cuota 1', 'Cuota #3', 'Cuota-03' en concepto o descripción
+  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i) || desc.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
+  if (cuotaMatch && cuotaMatch[1]) {
+    const parsed = parseInt(cuotaMatch[1], 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return `CUOTA_${String(parsed).padStart(2, '0')}`;
+    }
   }
 
-  const desc = (inv.description || '').trim().toLowerCase();
+  // 4. Mapeo dinámico de meses relativo al mes de inicio del ciclo escolar (por defecto Agosto = 8)
+  if (c.includes('colegiatura') || c.includes('mensualidad') || c.includes('cuota') || c.includes('mes')) {
+    const monthOrder = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    const startIdx = (planStartMonth || 8) - 1;
 
-  if (c.includes('colegiatura') || c.includes('mensualidad') || c.includes('cuota')) {
-    const monthMap: Record<string, string> = {
-      septiembre: 'CUOTA_01', sept: 'CUOTA_01',
-      octubre: 'CUOTA_02', oct: 'CUOTA_02',
-      noviembre: 'CUOTA_03', nov: 'CUOTA_03',
-      diciembre: 'CUOTA_04', dic: 'CUOTA_04',
-      enero: 'CUOTA_05', ene: 'CUOTA_05',
-      febrero: 'CUOTA_06', feb: 'CUOTA_06',
-      marzo: 'CUOTA_07', mar: 'CUOTA_07',
-      abril: 'CUOTA_08', abr: 'CUOTA_08',
-      mayo: 'CUOTA_09',
-      junio: 'CUOTA_10', jun: 'CUOTA_10',
-      julio: 'CUOTA_11', jul: 'CUOTA_11',
-      agosto: 'CUOTA_12', ago: 'CUOTA_12'
-    };
-
-    for (const [mName, key] of Object.entries(monthMap)) {
+    for (let mIdx = 0; mIdx < 12; mIdx++) {
+      const mName = monthOrder[mIdx];
       const regex = new RegExp(`\\b${mName}\\b`, 'i');
       if (regex.test(c) || regex.test(desc)) {
-        return key;
+        const cuotaIndex = ((mIdx - startIdx + 12) % 12) + 1;
+        return `CUOTA_${String(cuotaIndex).padStart(2, '0')}`;
       }
     }
   }
@@ -254,11 +254,22 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
   const currentYear = selectedYear || '2026-2027';
   const student = (allStudents || []).find((s) => s.id === studentId) || state.students?.find((s) => s.id === studentId);
+
+  const course = student ? state.courses?.find((c) => c.id === student.course_id) : null;
+  const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
+  let plan = student ? paymentPlans.find((p) => p.course_id === student.course_id) : null;
+  if (student && !plan && cleanLevel) {
+    plan = paymentPlans.find((p) => {
+      const c = state.courses?.find((x) => x.id === p.course_id);
+      return c?.level?.trim() === cleanLevel;
+    }) || null;
+  }
+
   const studentInvoices = invoices
     .filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear)
     .sort((a, b) => {
       const getNum = (inv: any) => {
-        const key = normalizeInvoiceKey(inv);
+        const key = normalizeInvoiceKey(inv, plan?.start_month || 8);
         if (key === 'INSCRIPCION') return -1;
         if (key.startsWith('CUOTA_')) return parseInt(key.replace('CUOTA_', ''), 10);
         return 999;
@@ -271,16 +282,6 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
   const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id && i.period === currentYear);
   // Use local full history instead of global limited history
   const studentTransactions = localStudentTransactions;
-
-  const course = student ? state.courses?.find((c) => c.id === student.course_id) : null;
-  const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
-  let plan = student ? paymentPlans.find((p) => p.course_id === student.course_id) : null;
-  if (student && !plan && cleanLevel) {
-    plan = paymentPlans.find((p) => {
-      const c = state.courses?.find((x) => x.id === p.course_id);
-      return c?.level?.trim() === cleanLevel;
-    }) || null;
-  }
 
   const getInvoiceBalance = (inv: any) => {
     const paid = studentTransactions
@@ -396,7 +397,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
     try {
       const currentCenterId = profile?.center_id || student.center_id;
-      const currentYear = selectedYear || '2025-2026';
+      const currentYear = selectedYear || '2026-2027';
       
       // FETCH FRESCO PARA EVITAR DUPLICADOS POR RACE CONDITIONS
       const { data: existingInvoices } = await supabase
@@ -414,8 +415,13 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       // Buscar si el alumno tiene beca
       const studentScholarship = scholarships.find((s) => s.student_id === studentId);
 
+      const isNewStudent = (student.student_type || '').toLowerCase() === 'nuevo';
+
       // Calcular Inscripción con beca si corresponde
-      let enrollmentOriginal = Number(plan.enrollment_fee);
+      const rawEnrollment = (isNewStudent && plan.has_dual_pricing && plan.enrollment_fee_new != null && Number(plan.enrollment_fee_new) > 0)
+        ? Number(plan.enrollment_fee_new)
+        : Number(plan.enrollment_fee);
+      let enrollmentOriginal = rawEnrollment;
       let enrollmentFinal = enrollmentOriginal;
       let enrollmentDiscount = 0;
 
@@ -433,7 +439,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       // Inscripción (solo si no existe)
       const hasEnrollment = freshStudentInvoices.some(
-        (inv) => normalizeInvoiceKey(inv) === 'INSCRIPCION'
+        (inv) => normalizeInvoiceKey(inv, plan.start_month || 8) === 'INSCRIPCION'
       );
       if (!hasEnrollment) {
         newInvoices.push({
@@ -454,7 +460,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
         'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
       ];
-      const startMonthIdx = (plan.start_month || 9) - 1; // 1-12 a 0-11
+      const startMonthIdx = (plan.start_month || 8) - 1; // 1-12 a 0-11
       const paymentEndDay = plan.payment_end_day || 10;
       
       const monthsCount = Number(plan.months_count) || 10;
@@ -463,7 +469,12 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
         const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
         const targetCuotaKey = `CUOTA_${(i + 1).toString().padStart(2, '0')}`;
         const cuotaNum = i + 1;
-        const exists = freshStudentInvoices.some((inv) => inv.month_number === cuotaNum || normalizeInvoiceKey(inv) === targetCuotaKey);
+        const exists = freshStudentInvoices.some((inv) => {
+          if (inv.product_id) return false;
+          const mNum = Number(inv.month_number);
+          if (!isNaN(mNum) && mNum === cuotaNum) return true;
+          return normalizeInvoiceKey(inv, plan.start_month || 8) === targetCuotaKey;
+        });
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
         const currentMonthIdx = (startMonthIdx + i) % 12;
@@ -471,7 +482,10 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
         const dueDate = new Date(currentYearNum, currentMonthIdx, paymentEndDay);
 
         // Calcular Mensualidad con beca si corresponde
-        let monthlyOriginal = Number(plan.monthly_fee);
+        const rawMonthly = (isNewStudent && plan.has_dual_pricing && plan.monthly_fee_new != null && Number(plan.monthly_fee_new) > 0)
+          ? Number(plan.monthly_fee_new)
+          : Number(plan.monthly_fee);
+        let monthlyOriginal = rawMonthly;
         let monthlyFinal = monthlyOriginal;
         let monthlyDiscount = 0;
 
@@ -531,7 +545,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       const conceptGroups: { [key: string]: any[] } = {};
       studentInvoices.forEach((inv) => {
         if (inv.product_id) return;
-        const normKey = normalizeInvoiceKey(inv);
+        const normKey = normalizeInvoiceKey(inv, plan?.start_month || 8);
         if (normKey === 'UNKNOWN' || (!normKey.startsWith('CUOTA_') && normKey !== 'INSCRIPCION')) return;
         if (!conceptGroups[normKey]) {
           conceptGroups[normKey] = [];
@@ -684,6 +698,13 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
               <Receipt size={12} /> ID:{' '}
               <span className="text-indigo-600">{student.id_number || 'S/N'}</span>
             </span>
+            <span className={`text-[9px] font-black uppercase tracking-wider flex items-center px-2.5 py-0.5 rounded-lg border ${
+              (student.student_type || 'antiguo') === 'nuevo'
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>
+              {(student.student_type || 'antiguo') === 'nuevo' ? '🔵 Nuevo Ingreso' : '🟢 Antiguo'}
+            </span>
           </div>
         </div>
         <div className="flex gap-6">
@@ -742,13 +763,17 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
                   <CheckCircle2 size={14} /> Pagar {selectedInvoices.length} Seleccionadas
                 </button>
               )}
-              {studentInvoices.length === 0 && (
+              {plan && (studentInvoices.length === 0 || studentInvoices.length < Number(plan.months_count) + 1) && (
                 <button
                   onClick={handleGenerateInvoices}
                   disabled={isGenerating}
                   className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg"
                 >
-                  {isGenerating ? 'Generando...' : 'Generar Facturas Ahora'}
+                  {isGenerating
+                    ? 'Generando...'
+                    : studentInvoices.length === 0
+                      ? 'Generar Facturas Ahora'
+                      : 'Completar Cuotas Faltantes'}
                 </button>
               )}
             </div>

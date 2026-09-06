@@ -22,6 +22,7 @@ export interface Student {
   orderNumber?: number;
   parents: ParentGuardian[];
   created_at?: string;
+  student_type?: 'antiguo' | 'nuevo';
 }
 
 export interface Grade {

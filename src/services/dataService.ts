@@ -878,7 +878,8 @@ export const dataService = {
         address_sector: s.address_sector || null,
         sigerd_code: s.sigerd_code || null,
         course_id: courseId,
-        status: 'Active'
+        status: 'Active',
+        student_type: s.student_type || (match ? (match.student_type || 'antiguo') : 'antiguo')
       };
 
       let studentId = '';

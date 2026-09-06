@@ -88,7 +88,8 @@ export const StudentForm = ({
     authorizedPerson: initialData?.authorized_person || '',
     legalRestrictions: initialData?.legal_restrictions || '',
     familyId: initialData?.family_id || '',
-    created_at: initialData?.created_at || ''
+    created_at: initialData?.created_at || '',
+    student_type: initialData?.student_type || 'antiguo'
   });
 
   const [family, setFamily] = useState({
@@ -146,10 +147,17 @@ export const StudentForm = ({
         return;
       }
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('students')
           .select('id, names, first_surname, second_surname, school_year, course_id')
           .eq('family_id', student.familyId);
+
+        const targetCid = profile?.center_id || selectedCourse?.center_id;
+        if (targetCid) {
+          query = query.eq('center_id', targetCid);
+        }
+
+        const { data, error } = await query;
         
         if (error) throw error;
         
@@ -248,7 +256,8 @@ export const StudentForm = ({
             authorizedPerson: full.authorized_person || prev.authorizedPerson,
             legalRestrictions: full.legal_restrictions || prev.legalRestrictions,
             familyId: full.family_id || prev.familyId,
-            created_at: full.created_at || prev.created_at
+            created_at: full.created_at || prev.created_at,
+            student_type: full.student_type || prev.student_type || 'antiguo'
           }));
           if (full.course_id) setSelectedGradeId(full.course_id);
         } else {
@@ -404,7 +413,8 @@ export const StudentForm = ({
         parents_civil_status: student.parentsCivilStatus,
         authorized_person: student.authorizedPerson,
         legal_restrictions: student.legalRestrictions,
-        family_id: student.familyId || undefined
+        family_id: student.familyId || undefined,
+        student_type: student.student_type || 'antiguo'
       };
 
       const extraData = {
@@ -824,6 +834,42 @@ export const StudentForm = ({
                   </div>
                 </div>
               )}
+
+              {/* CONDICIÓN DEL ALUMNO (ANTIGUO vs NUEVO) */}
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <label className="text-[11px] font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                    Condición del Alumno
+                  </label>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                    Define la tarifa aplicable (Inscripción y Mensualidad) en centros con precios diferenciados.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setStudent({ ...student, student_type: 'antiguo' })}
+                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      (student.student_type || 'antiguo') === 'antiguo'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    🟢 Antiguo / Reinscripción
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudent({ ...student, student_type: 'nuevo' })}
+                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      student.student_type === 'nuevo'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    🔵 Nuevo Ingreso
+                  </button>
+                </div>
+              </div>
 
               <div className="grid md:grid-cols-3 gap-6">
                 <div>

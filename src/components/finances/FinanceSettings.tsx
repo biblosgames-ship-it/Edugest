@@ -61,6 +61,9 @@ export const FinanceSettings = () => {
   const [formData, setFormData] = useState({
     enrollment_fee: 0,
     monthly_fee: 0,
+    has_dual_pricing: false,
+    enrollment_fee_new: 0,
+    monthly_fee_new: 0,
     months_count: 10,
     payment_start_day: 1,
     payment_end_day: 10,
@@ -85,6 +88,9 @@ export const FinanceSettings = () => {
       setFormData({
         enrollment_fee: Number(existingPlan.enrollment_fee),
         monthly_fee: Number(existingPlan.monthly_fee),
+        has_dual_pricing: Boolean(existingPlan.has_dual_pricing),
+        enrollment_fee_new: existingPlan.enrollment_fee_new != null ? Number(existingPlan.enrollment_fee_new) : 0,
+        monthly_fee_new: existingPlan.monthly_fee_new != null ? Number(existingPlan.monthly_fee_new) : 0,
         months_count: existingPlan.months_count,
         payment_start_day: existingPlan.payment_start_day || 1,
         payment_end_day: existingPlan.payment_end_day || 10,
@@ -96,6 +102,9 @@ export const FinanceSettings = () => {
       setFormData({
         enrollment_fee: 0,
         monthly_fee: 0,
+        has_dual_pricing: false,
+        enrollment_fee_new: 0,
+        monthly_fee_new: 0,
         months_count: 10,
         payment_start_day: 1,
         payment_end_day: 10,
@@ -135,6 +144,9 @@ export const FinanceSettings = () => {
         course_id: course.id,
         enrollment_fee: Number(formData.enrollment_fee),
         monthly_fee: Number(formData.monthly_fee),
+        has_dual_pricing: Boolean(formData.has_dual_pricing),
+        enrollment_fee_new: formData.has_dual_pricing ? Number(formData.enrollment_fee_new) : null,
+        monthly_fee_new: formData.has_dual_pricing ? Number(formData.monthly_fee_new) : null,
         months_count: Number(formData.months_count),
         payment_start_day: Number(formData.payment_start_day),
         payment_end_day: Number(formData.payment_end_day),
@@ -208,11 +220,21 @@ export const FinanceSettings = () => {
                     <h4 className="text-sm font-black text-slate-900 uppercase tracking-tighter">
                       {level}
                     </h4>
-                    <p
-                      className={`text-[8px] font-black uppercase mt-1 ${hasConfig ? 'text-emerald-600' : 'text-slate-400'}`}
-                    >
-                      {hasConfig ? 'Configurado' : 'Pendiente'}
-                    </p>
+                    <div className="flex items-center justify-center gap-1.5 mt-1">
+                      <p
+                        className={`text-[8px] font-black uppercase ${hasConfig ? 'text-emerald-600' : 'text-slate-400'}`}
+                      >
+                        {hasConfig ? 'Configurado' : 'Pendiente'}
+                      </p>
+                      {hasConfig && paymentPlans.some((p) => {
+                        const course = courses.find((c) => c.id === p.course_id);
+                        return (course?.level || '').toString().trim() === level.trim() && p.has_dual_pricing;
+                      }) && (
+                        <span className="text-[7px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md uppercase">
+                          Dual
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -308,9 +330,35 @@ export const FinanceSettings = () => {
                     </p>
                   </div>
                 )}
+
+                {/* SWITCH TARIFAS DIFERENCIADAS */}
+                <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between gap-4">
+                  <div>
+                    <label className="text-xs font-black uppercase text-white tracking-wider block">
+                      Tarifas Diferenciadas
+                    </label>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                      Precios distintos para Nuevos vs Antiguos
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, has_dual_pricing: !formData.has_dual_pricing })}
+                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer border-none outline-none ${
+                      formData.has_dual_pricing ? 'bg-indigo-500' : 'bg-white/20'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all shadow-md ${
+                        formData.has_dual_pricing ? 'right-0.5' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] px-2">
-                    Inscripción (DOP)
+                    {formData.has_dual_pricing ? 'Inscripción - Antiguos / Reinscripción (DOP)' : 'Inscripción (DOP)'}
                   </label>
                   <div className="relative">
                     <span className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-400 font-black">
@@ -330,7 +378,7 @@ export const FinanceSettings = () => {
 
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] px-2">
-                    Cuota Mensual (DOP)
+                    {formData.has_dual_pricing ? 'Cuota Mensual - Antiguos (DOP)' : 'Cuota Mensual (DOP)'}
                   </label>
                   <div className="relative">
                     <span className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-400 font-black">
@@ -347,6 +395,58 @@ export const FinanceSettings = () => {
                     />
                   </div>
                 </div>
+
+                {/* TARIFAS NUEVO INGRESO */}
+                {formData.has_dual_pricing && (
+                  <div className="p-5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl space-y-5 animate-in fade-in duration-300">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                      <h4 className="text-xs font-black text-indigo-300 uppercase tracking-wider">
+                        Tarifa para Nuevos Ingresos
+                      </h4>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] px-2">
+                        Inscripción - Alumnos Nuevos (DOP)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-400 font-black">
+                          RD$
+                        </span>
+                        <input
+                          type="number"
+                          required={formData.has_dual_pricing}
+                          value={formData.enrollment_fee_new}
+                          onChange={(e) =>
+                            setFormData({ ...formData, enrollment_fee_new: Number(e.target.value) })
+                          }
+                          className="w-full bg-white/5 border border-indigo-400/30 rounded-2xl py-5 pl-16 pr-6 text-2xl font-black focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all shadow-inner text-indigo-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] px-2">
+                        Cuota Mensual - Alumnos Nuevos (DOP)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-400 font-black">
+                          RD$
+                        </span>
+                        <input
+                          type="number"
+                          required={formData.has_dual_pricing}
+                          value={formData.monthly_fee_new}
+                          onChange={(e) =>
+                            setFormData({ ...formData, monthly_fee_new: Number(e.target.value) })
+                          }
+                          className="w-full bg-white/5 border border-indigo-400/30 rounded-2xl py-5 pl-16 pr-6 text-2xl font-black focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all shadow-inner text-indigo-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] px-2">
                     Cantidad de Meses

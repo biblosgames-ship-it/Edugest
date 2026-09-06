@@ -445,7 +445,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               tutor_parentesco: findVal(['parentesco', 'relation']),
               tutor_telefono: findVal(['telefono', 'phone']),
               address_street: findVal(['calle', 'street', 'direccion']),
-              address_sector: findVal(['sector', 'barrio'])
+              address_sector: findVal(['sector', 'barrio']),
+              student_type: findVal(['tipo', 'condicion', 'ingreso']).toLowerCase().includes('nuevo') ? 'nuevo' : 'antiguo'
             };
           })
           .filter((s) => s.names && s.first_surname); // Filtro estricto: requiere nombre y apellido

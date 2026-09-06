@@ -20,7 +20,7 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
 
-const normalizeInvoiceKey = (inv: any) => {
+const normalizeInvoiceKey = (inv: any, planStartMonth: number = 8) => {
   if (!inv) return 'UNKNOWN';
 
   if (inv.product_id) {
@@ -28,42 +28,42 @@ const normalizeInvoiceKey = (inv: any) => {
   }
 
   const c = (inv.concept || '').trim().toLowerCase();
+  const desc = (inv.description || '').trim().toLowerCase();
 
-  if (c.includes('inscrip') || c.includes('inscrib')) {
+  // 1. Inscripción
+  if (c.includes('inscrip') || c.includes('inscrib') || desc.includes('inscrip') || desc.includes('inscrib')) {
     return 'INSCRIPCION';
   }
 
-  if (typeof inv.month_number === 'number' && inv.month_number > 0) {
-    return `CUOTA_${String(inv.month_number).padStart(2, '0')}`;
+  // 2. Número de mes explícito si existe
+  const mNum = Number(inv.month_number);
+  if (!isNaN(mNum) && mNum > 0) {
+    return `CUOTA_${String(mNum).padStart(2, '0')}`;
   }
 
-  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
-  if (cuotaMatch) {
-    return `CUOTA_${cuotaMatch[1].padStart(2, '0')}`;
+  // 3. Patrón 'Cuota 01', 'Cuota 1', 'Cuota #3', 'Cuota-03' en concepto o descripción
+  const cuotaMatch = c.match(/cuota\s*#?\s*-?\s*0*(\d+)/i) || desc.match(/cuota\s*#?\s*-?\s*0*(\d+)/i);
+  if (cuotaMatch && cuotaMatch[1]) {
+    const parsed = parseInt(cuotaMatch[1], 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return `CUOTA_${String(parsed).padStart(2, '0')}`;
+    }
   }
 
-  const desc = (inv.description || '').trim().toLowerCase();
+  // 4. Mapeo dinámico de meses relativo al mes de inicio del ciclo escolar (por defecto Agosto = 8)
+  if (c.includes('colegiatura') || c.includes('mensualidad') || c.includes('cuota') || c.includes('mes')) {
+    const monthOrder = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    const startIdx = (planStartMonth || 8) - 1;
 
-  if (c.includes('colegiatura') || c.includes('mensualidad') || c.includes('cuota')) {
-    const monthMap: Record<string, string> = {
-      septiembre: 'CUOTA_01', sept: 'CUOTA_01',
-      octubre: 'CUOTA_02', oct: 'CUOTA_02',
-      noviembre: 'CUOTA_03', nov: 'CUOTA_03',
-      diciembre: 'CUOTA_04', dic: 'CUOTA_04',
-      enero: 'CUOTA_05', ene: 'CUOTA_05',
-      febrero: 'CUOTA_06', feb: 'CUOTA_06',
-      marzo: 'CUOTA_07', mar: 'CUOTA_07',
-      abril: 'CUOTA_08', abr: 'CUOTA_08',
-      mayo: 'CUOTA_09',
-      junio: 'CUOTA_10', jun: 'CUOTA_10',
-      julio: 'CUOTA_11', jul: 'CUOTA_11',
-      agosto: 'CUOTA_12', ago: 'CUOTA_12'
-    };
-
-    for (const [mName, key] of Object.entries(monthMap)) {
+    for (let mIdx = 0; mIdx < 12; mIdx++) {
+      const mName = monthOrder[mIdx];
       const regex = new RegExp(`\\b${mName}\\b`, 'i');
       if (regex.test(c) || regex.test(desc)) {
-        return key;
+        const cuotaIndex = ((mIdx - startIdx + 12) % 12) + 1;
+        return `CUOTA_${String(cuotaIndex).padStart(2, '0')}`;
       }
     }
   }
@@ -102,7 +102,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
       }
       if (!plan) return false;
 
-      const currentYear = selectedYear || '2025-2026';
+      const currentYear = selectedYear || '2026-2027';
       const studentInvoices = invoices.filter((i) => i.student_id === s.id && !i.product_id && i.period === currentYear);
       const targetCount = Number(plan.months_count) + 1; // 1 inscripción + cuotas
       return studentInvoices.length < targetCount;
@@ -127,7 +127,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
     try {
       let createdCount = 0;
-      const currentYear = selectedYear || '2025-2026';
+      const currentYear = selectedYear || '2026-2027';
       const periodYearMatch = currentYear.match(/^(\d{4})/);
       const baseYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
       const errorList: string[] = [];
@@ -148,18 +148,20 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
         if (!plan) continue;
 
         const studentExistingInvoices = invoices.filter(
-          (i) => i.student_id === student.id && !i.product_id
+          (i) => i.student_id === student.id && !i.product_id && i.period === currentYear
         );
 
         // 2. Generar Pack de Facturas
         const newInvoices = [];
         const currentCenterId = profile?.center_id || student.center_id;
 
-        // Buscar si el alumno tiene beca
-        const studentScholarship = scholarships.find((s) => s.student_id === student.id);
+        const isNewStudent = (student.student_type || '').toLowerCase() === 'nuevo';
 
         // Calcular Inscripción con beca si corresponde
-        let enrollmentOriginal = Number(plan.enrollment_fee);
+        const rawEnrollment = (isNewStudent && plan.has_dual_pricing && plan.enrollment_fee_new != null && Number(plan.enrollment_fee_new) > 0)
+          ? Number(plan.enrollment_fee_new)
+          : Number(plan.enrollment_fee);
+        let enrollmentOriginal = rawEnrollment;
         let enrollmentFinal = enrollmentOriginal;
         let enrollmentDiscount = 0;
 
@@ -178,7 +180,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
 
         // Inscripción (solo si no existe ya)
         const hasEnrollment = studentExistingInvoices.some(
-          (inv) => normalizeInvoiceKey(inv) === 'INSCRIPCION'
+          (inv) => normalizeInvoiceKey(inv, plan.start_month || 8) === 'INSCRIPCION'
         );
         if (!hasEnrollment) {
           newInvoices.push({
@@ -210,14 +212,19 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
           'Noviembre',
           'Diciembre'
         ];
-        const startMonthIdx = (plan.start_month || 9) - 1;
+        const startMonthIdx = (plan.start_month || 8) - 1;
         const paymentEndDay = plan.payment_end_day || 10;
 
         for (let i = 0; i < Number(plan.months_count); i++) {
           const conceptName = `Cuota ${(i + 1).toString().padStart(2, '0')}`;
           const targetCuotaKey = `CUOTA_${(i + 1).toString().padStart(2, '0')}`;
           const cuotaNum = i + 1;
-          const exists = studentExistingInvoices.some((inv) => inv.month_number === cuotaNum || normalizeInvoiceKey(inv) === targetCuotaKey);
+          const exists = studentExistingInvoices.some((inv) => {
+            if (inv.product_id) return false;
+            const mNum = Number(inv.month_number);
+            if (!isNaN(mNum) && mNum === cuotaNum) return true;
+            return normalizeInvoiceKey(inv, plan.start_month || 8) === targetCuotaKey;
+          });
           if (exists) continue; // Saltar si ya existe esta mensualidad
 
           const mIdx = (startMonthIdx + i) % 12;
@@ -225,7 +232,10 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
           const dueDate = new Date(yOffset, mIdx, paymentEndDay);
 
           // Calcular Mensualidad con beca si corresponde
-          let monthlyOriginal = Number(plan.monthly_fee);
+          const rawMonthly = (isNewStudent && plan.has_dual_pricing && plan.monthly_fee_new != null && Number(plan.monthly_fee_new) > 0)
+            ? Number(plan.monthly_fee_new)
+            : Number(plan.monthly_fee);
+          let monthlyOriginal = rawMonthly;
           let monthlyFinal = monthlyOriginal;
           let monthlyDiscount = 0;
 
@@ -328,8 +338,18 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
         if (!plan) continue;
 
         // 2. Determinar nuevo precio
+        const targetStudent = students.find((s: any) => s.id === inv.student_id);
+        const isNewStudent = (targetStudent?.student_type || '').toLowerCase() === 'nuevo';
         const isEnrollment = inv.concept.toLowerCase().includes('inscripción');
-        const newPrice = isEnrollment ? Number(plan.enrollment_fee) : Number(plan.monthly_fee);
+        let newPrice = isEnrollment ? Number(plan.enrollment_fee) : Number(plan.monthly_fee);
+
+        if (isNewStudent && plan.has_dual_pricing) {
+          if (isEnrollment && plan.enrollment_fee_new != null && Number(plan.enrollment_fee_new) > 0) {
+            newPrice = Number(plan.enrollment_fee_new);
+          } else if (!isEnrollment && plan.monthly_fee_new != null && Number(plan.monthly_fee_new) > 0) {
+            newPrice = Number(plan.monthly_fee_new);
+          }
+        }
 
         // 3. Solo actualizar si el precio cambió
         if (Number(inv.amount_original) !== newPrice) {
@@ -374,12 +394,14 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
     const loadingToast = toast.loading('Escaneando facturas duplicadas...');
 
     try {
-      const currentYear = selectedYear || '2025-2026';
+      const currentYear = selectedYear || '2026-2027';
       // Agrupar facturas por student_id y concepto unificado
       const studentConceptGroups: { [key: string]: any[] } = {};
       invoices.forEach((inv) => {
         if (inv.product_id || inv.period !== currentYear) return;
-        const normKey = normalizeInvoiceKey(inv);
+        const studentObj = students.find((s) => s.id === inv.student_id);
+        const plan = paymentPlans.find((p) => p.course_id === studentObj?.course_id);
+        const normKey = normalizeInvoiceKey(inv, plan?.start_month || 8);
         if (normKey === 'UNKNOWN' || (!normKey.startsWith('CUOTA_') && normKey !== 'INSCRIPCION')) return;
         const key = `${inv.student_id}_${normKey}`;
         if (!studentConceptGroups[key]) {
@@ -702,11 +724,18 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
                                   {student.names?.[0]}
                                   {student.first_surname?.[0]}
                                 </div>
-                                <span className="text-xs font-black text-slate-700">
-                                  {`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()
-                                    ? `${`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()}, ${student.names || student.first_name || ''}`
-                                    : student.names || student.first_name || 'Estudiante'}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-slate-700">
+                                    {`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()
+                                      ? `${`${student.first_surname || student.last_name || ''} ${student.second_surname || ''}`.trim()}, ${student.names || student.first_name || ''}`
+                                      : student.names || student.first_name || 'Estudiante'}
+                                  </span>
+                                  {student.student_type === 'nuevo' && (
+                                    <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8px] font-black uppercase tracking-wider">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="px-8 py-4">
