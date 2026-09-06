@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
   Plus,
@@ -219,6 +219,8 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       const { error } = await supabase.from('finance_invoices').delete().eq('id', invoiceId);
       if (error) throw error;
       toast.success('Factura eliminada correctamente.');
+      setLocalStudentInvoices((prev) => (prev ? prev.filter((i) => i.id !== invoiceId) : []));
+      await fetchStudentInvoices();
       refresh();
     } catch (e: any) {
       toast.error('Error al eliminar la factura: ' + e.message);
@@ -231,6 +233,25 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const hasAttempted = useRef(false);
   const [localStudentTransactions, setLocalStudentTransactions] = useState<any[]>([]);
+  const [localStudentInvoices, setLocalStudentInvoices] = useState<any[] | null>(null);
+
+  const fetchStudentInvoices = useCallback(async () => {
+    if (!studentId) return;
+    try {
+      const { data, error } = await supabase
+        .from('finance_invoices')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('due_date', { ascending: true });
+      if (error) {
+        console.error('Error fetching student invoices:', error);
+      } else if (data) {
+        setLocalStudentInvoices(data);
+      }
+    } catch (err) {
+      console.error('Error fetching student invoices:', err);
+    }
+  }, [studentId]);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -249,12 +270,11 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     };
     if (studentId) {
       fetchTransactions();
+      fetchStudentInvoices();
     }
-  }, [studentId, transactions]); // Depend on transactions so it re-fetches when a new global transaction happens
+  }, [studentId, transactions, invoices, fetchStudentInvoices]);
 
-  const currentYear = selectedYear || '2026-2027';
   const student = (allStudents || []).find((s) => s.id === studentId) || state.students?.find((s) => s.id === studentId);
-
   const course = student ? state.courses?.find((c) => c.id === student.course_id) : null;
   const cleanLevel = course?.level?.split(' ')?.[0]?.trim();
   let plan = student ? paymentPlans.find((p) => p.course_id === student.course_id) : null;
@@ -265,8 +285,19 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
     }) || null;
   }
 
-  const studentInvoices = invoices
-    .filter((i) => i.student_id === studentId && !i.product_id && i.period === currentYear)
+  const rawStudentInvoices = localStudentInvoices !== null 
+    ? localStudentInvoices 
+    : invoices.filter((i) => i.student_id === studentId);
+
+  // Determinar el año escolar efectivo para no ocultar facturas si el centro o alumno están en 2025-2026 o 2026-2027
+  const currentYear = selectedYear || student?.school_year || course?.school_year || '2026-2027';
+  const hasInvoicesInCurrentYear = rawStudentInvoices.some((i) => !i.product_id && i.period === currentYear);
+  const effectiveYear = hasInvoicesInCurrentYear 
+    ? currentYear 
+    : (rawStudentInvoices.find((i) => !i.product_id && i.period)?.period || currentYear);
+
+  const studentInvoices = rawStudentInvoices
+    .filter((i) => !i.product_id && (i.period === effectiveYear || !i.period))
     .sort((a, b) => {
       const getNum = (inv: any) => {
         const key = normalizeInvoiceKey(inv, plan?.start_month || 8);
@@ -279,7 +310,10 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
       if (numA !== numB) return numA - numB;
       return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
     });
-  const studentProductInvoices = invoices.filter((i) => i.student_id === studentId && i.product_id && i.period === currentYear);
+
+  const studentProductInvoices = rawStudentInvoices.filter(
+    (i) => i.product_id && (i.period === effectiveYear || !i.period)
+  );
   // Use local full history instead of global limited history
   const studentTransactions = localStudentTransactions;
 
@@ -397,19 +431,22 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
     try {
       const currentCenterId = profile?.center_id || student.center_id;
-      const currentYear = selectedYear || '2026-2027';
+      const targetPeriod = effectiveYear;
       
-      // FETCH FRESCO PARA EVITAR DUPLICADOS POR RACE CONDITIONS
-      const { data: existingInvoices } = await supabase
+      // FETCH FRESCO DIRECTO DE SUPABASE PARA ESTE ALUMNO
+      const { data: existingInvoices, error: fetchErr } = await supabase
         .from('finance_invoices')
-        .select('concept, product_id, description, month_number')
-        .eq('student_id', studentId)
-        .eq('period', currentYear);
+        .select('*')
+        .eq('student_id', studentId);
+
+      if (fetchErr) throw fetchErr;
       
-      const freshStudentInvoices = (existingInvoices || []).filter(inv => !inv.product_id);
+      const freshStudentInvoices = (existingInvoices || []).filter(
+        (inv) => !inv.product_id && (inv.period === targetPeriod || !inv.period)
+      );
 
       const newInvoices = [];
-      const periodYearMatch = currentYear.match(/^(\d{4})/);
+      const periodYearMatch = targetPeriod.match(/^(\d{4})/);
       const baseYear = periodYearMatch ? Number(periodYearMatch[1]) : new Date().getFullYear();
 
       // Buscar si el alumno tiene beca
@@ -446,7 +483,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           center_id: currentCenterId,
           student_id: studentId,
           course_id: student.course_id,
-          period: currentYear,
+          period: targetPeriod,
           concept: 'Inscripción',
           amount_original: enrollmentOriginal,
           amount_final: enrollmentFinal,
@@ -473,7 +510,11 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           if (inv.product_id) return false;
           const mNum = Number(inv.month_number);
           if (!isNaN(mNum) && mNum === cuotaNum) return true;
-          return normalizeInvoiceKey(inv, plan.start_month || 8) === targetCuotaKey;
+          const key = normalizeInvoiceKey(inv, plan.start_month || 8);
+          if (key === targetCuotaKey) return true;
+          const c = (inv.concept || '').toLowerCase();
+          if (c.includes(`cuota ${cuotaNum}`) || c.includes(`cuota 0${cuotaNum}`)) return true;
+          return false;
         });
         if (exists) continue; // Saltar si ya existe esta mensualidad
 
@@ -505,7 +546,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           center_id: currentCenterId,
           student_id: studentId,
           course_id: student.course_id,
-          period: currentYear,
+          period: targetPeriod,
           concept: conceptName,
           month_number: i + 1,
           description: monthNames[currentMonthIdx],
@@ -519,12 +560,20 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
 
       if (newInvoices.length > 0) {
         // Insert en batch atómico
-        const { error } = await supabase.from('finance_invoices').insert(newInvoices);
-        if (error) throw error;
+        const { data: insertedData, error: insertErr } = await supabase
+          .from('finance_invoices')
+          .insert(newInvoices)
+          .select();
+        if (insertErr) throw insertErr;
         toast.success(`¡Generadas ${newInvoices.length} facturas con éxito!`, { id: loadingToast });
+        if (insertedData && insertedData.length > 0) {
+          setLocalStudentInvoices((prev) => [...(prev || []), ...insertedData]);
+        }
+        await fetchStudentInvoices();
         refresh();
       } else {
         toast.success('Todas las cuotas de este periodo ya estaban generadas.', { id: loadingToast });
+        await fetchStudentInvoices();
       }
 
     } catch (error: any) {
@@ -598,6 +647,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
         console.error('Error correcting ledger entries:', e);
       }
 
+      await fetchStudentInvoices();
       refresh();
     } catch (err: any) {
       console.error('Error cleaning duplicates:', err);
@@ -1164,6 +1214,7 @@ export const StudentAccountDetails = ({ studentId, onBack, onTabChange }: Props)
           onClose={() => setSelectedInvoice(null)}
           onSuccess={() => {
             setSelectedInvoice(null);
+            fetchStudentInvoices();
             refresh();
           }}
         />

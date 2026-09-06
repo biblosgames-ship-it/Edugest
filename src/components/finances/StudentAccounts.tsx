@@ -223,7 +223,11 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
             if (inv.product_id) return false;
             const mNum = Number(inv.month_number);
             if (!isNaN(mNum) && mNum === cuotaNum) return true;
-            return normalizeInvoiceKey(inv, plan.start_month || 8) === targetCuotaKey;
+            const key = normalizeInvoiceKey(inv, plan.start_month || 8);
+            if (key === targetCuotaKey) return true;
+            const c = (inv.concept || '').toLowerCase();
+            if (c.includes(`cuota ${cuotaNum}`) || c.includes(`cuota 0${cuotaNum}`)) return true;
+            return false;
           });
           if (exists) continue; // Saltar si ya existe esta mensualidad
 
