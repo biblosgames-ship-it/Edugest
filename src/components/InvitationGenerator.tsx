@@ -74,12 +74,12 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'schedule',
-    label: 'Generador de Horarios',
+    label: 'Horarios',
     desc: 'Diseño y generación de horarios del centro (Coordinación y Dirección).'
   },
   {
     id: 'students',
-    label: 'Gestión de Alumnos',
+    label: 'Alumnos',
     desc: 'Matrícula de alumnos, expedientes y certificados.'
   },
   {
@@ -89,7 +89,7 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'data',
-    label: 'Gestión de Datos y Asignaciones',
+    label: 'Datos',
     desc: 'Configuración de cursos, asignaturas y ciclo escolar.'
   },
   {
@@ -99,7 +99,7 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'finances',
-    label: 'Gestión Financiera',
+    label: 'Finanzas',
     desc: 'Control de nómina, gastos, becas y pagos.'
   },
   {

@@ -41,7 +41,7 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'students',
-    label: 'Gestión de Alumnos',
+    label: 'Alumnos',
     desc: 'Matrícula de alumnos, expedientes y certificados.'
   },
   {
@@ -51,7 +51,7 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'data',
-    label: 'Gestión de Datos',
+    label: 'Datos',
     desc: 'Configuración de cursos, asignaturas y ciclo escolar.'
   },
   {
@@ -61,7 +61,7 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'agenda',
-    label: 'Calendario Escolar',
+    label: 'Calendario',
     desc: 'Planificador de eventos y efemérides.'
   },
   {
@@ -86,12 +86,12 @@ const AVAILABLE_PANELS = [
   },
   {
     id: 'finances',
-    label: 'Gestión Financiera',
+    label: 'Finanzas',
     desc: 'Control de nómina, gastos, becas y cuentas de estudiantes.'
   },
   {
     id: 'facility',
-    label: 'Planta Física / Mantenimiento',
+    label: 'Plantel',
     desc: 'Gestión de instalaciones, inventario y solicitudes.'
   },
   {

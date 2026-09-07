@@ -22,12 +22,12 @@ export const MainLayout = () => {
 
   const navItems = [
     { id: 'dashboard', label: 'Panel Principal', icon: LayoutDashboard, path: '/' },
-    { id: 'students', label: 'Gestión de Alumnos', icon: Users, path: '/students' },
+    { id: 'students', label: 'Alumnos', icon: Users, path: '/students' },
     { id: 'general-reports', label: 'Reportes Generales', icon: FileBarChart, path: '/reports' },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet, path: '/register' },
-    { id: 'schedule', label: 'Generador de Horarios', icon: CalendarDays, path: '/schedule' },
+    { id: 'schedule', label: 'Horarios', icon: CalendarDays, path: '/schedule' },
     { id: 'control', label: 'Modo Control', icon: Monitor, path: '/control' },
-    { id: 'data', label: 'Gestión de Datos', icon: PlusCircle, path: '/data' },
+    { id: 'data', label: 'Datos', icon: PlusCircle, path: '/data' },
     {
       id: 'teacher-performance',
       label: 'Seguimiento Docente',
@@ -35,7 +35,7 @@ export const MainLayout = () => {
       path: '/teacher-performance'
     },
     { id: 'compliance', label: 'Monitor Cumplimiento', icon: ClipboardCheck, path: '/compliance' },
-    { id: 'agenda', label: 'Agenda Escolar', icon: Calendar, path: '/agenda' },
+    { id: 'agenda', label: 'Calendario', icon: Calendar, path: '/agenda' },
     {
       id: 'communications',
       label: 'Excusas y Reportes',

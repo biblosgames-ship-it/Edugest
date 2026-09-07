@@ -376,15 +376,15 @@ function AppContent() {
       icon: LayoutDashboard
     },
     { id: 'classroom', label: 'Mi Aula', icon: UserCheck },
-    { id: 'students', label: 'Gestión de Alumnos', icon: Users },
+    { id: 'students', label: 'Alumnos', icon: Users },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
-    { id: 'data', label: 'Gestión de Datos', icon: PlusCircle },
+    { id: 'data', label: 'Datos', icon: PlusCircle },
     {
       id: 'schedule',
-      label: isStudentOrParent ? 'Horario de Clases' : 'Generador de Horarios',
+      label: isStudentOrParent ? 'Horario de Clases' : 'Horarios',
       icon: CalendarDays
     },
-    { id: 'agenda', label: 'Calendario Escolar', icon: Calendar },
+    { id: 'agenda', label: 'Calendario', icon: Calendar },
     { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
     {
       id: 'communications',
@@ -392,10 +392,10 @@ function AppContent() {
       icon: MessageSquare,
       badge: unreadCount > 0 ? unreadCount : undefined
     },
-    { id: 'facility', label: 'Gestión de Plantel', icon: Wrench },
+    { id: 'facility', label: 'Plantel', icon: Wrench },
     { id: 'control', label: 'Modo Control', icon: Monitor },
     { id: 'general-reports', label: 'Reportes', icon: FileBarChart },
-    { id: 'finances', label: 'Gestión Financiera', icon: DollarSign },
+    { id: 'finances', label: 'Finanzas', icon: DollarSign },
     { id: 'admin', label: 'Administración', icon: ShieldCheck },
     ...(isSuperAdmin ? [{ id: 'saas', label: 'Gestión SaaS', icon: Globe }] : [])
   ];
