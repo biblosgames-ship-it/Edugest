@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
-  const { state } = useApp();
+  const { state, center } = useApp();
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
   const [history, setHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -34,10 +34,11 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
   const [isSending, setIsSending] = useState(false);
 
   const fetchHistory = async () => {
-    if (!profile?.id) return;
+    const targetCid = profile?.center_id || center?.id;
+    if (!profile?.id || !targetCid) return;
     try {
       setIsLoadingHistory(true);
-      const data = await dataService.getCommunications(profile.id, 'admin'); // Pass admin to see all center comms
+      const data = await dataService.getCommunications(profile.id, 'admin', targetCid);
       setHistory(data || []);
     } catch (error) {
       console.error('Error fetching communications history:', error);
@@ -48,7 +49,7 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
 
   useEffect(() => {
     fetchHistory();
-  }, [profile?.id]);
+  }, [profile?.id, profile?.center_id, center?.id]);
 
   const addMotive = () => {
     if (newMotive && !motives.includes(newMotive)) {

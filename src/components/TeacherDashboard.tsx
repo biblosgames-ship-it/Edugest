@@ -210,10 +210,11 @@ export const TeacherDashboard = ({
 
     const loadCourseData = async () => {
       try {
+        const targetCid = selectedCourse?.center_id || profile?.center_id || center?.id;
         const [tasksData, annData, commsData] = await Promise.all([
           dataService.getTasks(selectedCourse.id),
           dataService.getAnnouncements(selectedCourse.id),
-          dataService.getCommunications(profile?.id || '', profile?.role || 'teacher')
+          dataService.getCommunications(profile?.id || '', profile?.role || 'teacher', targetCid)
         ]);
 
         setCourseTasks(tasksData);

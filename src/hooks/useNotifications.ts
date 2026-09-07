@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSupabase } from '../context/AppContext';
+import { useSupabase, useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 
@@ -57,15 +57,19 @@ export const saveDismissedCommIds = (commIds: string[], userId?: string) => {
 
 export const useNotifications = () => {
   const { user, profile } = useSupabase();
+  const { center } = useApp();
   const [communications, setCommunications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const userId = user?.id || profile?.id;
   const role = profile?.role || 'teacher';
-  const centerId = profile?.center_id;
+  const centerId = profile?.center_id || center?.id;
 
   const fetchComms = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !centerId) {
+      setCommunications([]);
+      return;
+    }
     try {
       setLoading(true);
       const data = await dataService.getCommunications(userId, role, centerId);
@@ -88,8 +92,10 @@ export const useNotifications = () => {
 
     window.addEventListener('edugens_notifications_updated', handleUpdate);
 
-    // Suscripción Realtime en vivo para avisos y excusas instantáneas
-    const channelName = `public:live_notifications_${userId || 'guest'}_${Math.random().toString(36).substring(2, 9)}`;
+    if (!centerId) return;
+
+    // Suscripción Realtime en vivo para avisos y excusas instantáneas del centro activo
+    const channelName = `public:live_notifications_${userId || 'guest'}_${centerId}_${Math.random().toString(36).substring(2, 9)}`;
     let channel: any = null;
 
     try {
@@ -97,14 +103,14 @@ export const useNotifications = () => {
         .channel(channelName)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'communications' },
+          { event: '*', schema: 'public', table: 'communications', filter: `center_id=eq.${centerId}` },
           () => {
             fetchComms();
           }
         )
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'announcements' },
+          { event: '*', schema: 'public', table: 'announcements', filter: `center_id=eq.${centerId}` },
           () => {
             fetchComms();
           }

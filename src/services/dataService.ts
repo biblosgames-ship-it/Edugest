@@ -305,6 +305,9 @@ export const dataService = {
   },
 
   async saveCommunication(data: any) {
+    if (!data.center_id) {
+      throw new Error('center_id es requerido para guardar una comunicación');
+    }
     try {
       const { error } = await supabase.from('communications').insert([data]);
       if (error) throw error;
@@ -358,18 +361,18 @@ export const dataService = {
   },
 
   async getCommunications(userId: string, role: string, centerId?: string) {
+    if (!centerId) {
+      return [];
+    }
+
     let rawComms: any[] = [];
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('communications')
         .select('*')
+        .eq('center_id', centerId)
         .order('created_at', { ascending: false });
 
-      if (centerId) {
-        query = query.eq('center_id', centerId);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
       rawComms = data || [];
     } catch (err: any) {
@@ -384,16 +387,11 @@ export const dataService = {
         console.warn(
           '[dataService] La tabla "communications" no existe. Cargando fallback de "announcements".'
         );
-        let annQuery = supabase
+        const { data, error: announcementsError } = await supabase
           .from('announcements')
           .select('*')
+          .eq('center_id', centerId)
           .order('created_at', { ascending: false });
-
-        if (centerId) {
-          annQuery = annQuery.eq('center_id', centerId);
-        }
-
-        const { data, error: announcementsError } = await annQuery;
 
         if (announcementsError) {
           console.error('[dataService] Error al cargar fallback de anuncios:', announcementsError);
