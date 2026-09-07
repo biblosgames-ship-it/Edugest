@@ -34,6 +34,13 @@ import { dataService } from '../services/dataService';
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
 
+const getDefaultActivities = (): Record<string, Array<{ id: string; name: string; maxScore: number }>> => ({
+  'c1': [{ id: 'act_c1_1', name: 'Actividad 1', maxScore: 100 }],
+  'c2': [{ id: 'act_c2_1', name: 'Actividad 1', maxScore: 100 }],
+  'c3': [{ id: 'act_c3_1', name: 'Actividad 1', maxScore: 100 }],
+  'c4': [{ id: 'act_c4_1', name: 'Actividad 1', maxScore: 100 }],
+});
+
 export const ClassroomManager = () => {
   const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
@@ -82,42 +89,60 @@ export const ClassroomManager = () => {
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
 
-  // Asignaturas del curso seleccionado
+  // Asignaturas del curso seleccionado (personalizadas por docente y curso)
   const availableSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
-    let subs = (allAssignments || [])
-      .filter((a: any) => (a.course_id || a.courseId) === selectedCourseId)
+    
+    let teacherAssignments = (allAssignments || []).filter(
+      (a: any) => (a.course_id || a.courseId) === selectedCourseId
+    );
+
+    // Si el usuario es docente, filtrar solo las asignaturas que él imparte en este curso
+    if (profile?.role === 'teacher' && profile?.teacher_id) {
+      const myAssignments = teacherAssignments.filter(
+        (a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id
+      );
+      if (myAssignments.length > 0) {
+        teacherAssignments = myAssignments;
+      }
+    }
+
+    let subs = teacherAssignments
       .map((a: any) => (allSubjects || []).find((s: any) => s.id === (a.subject_id || a.subjectId)))
       .filter(Boolean);
-    if (subs.length === 0) subs = allSubjects || [];
-    return subs;
-  }, [selectedCourseId, allAssignments, allSubjects]);
 
-  // Autoseleccionar primera asignatura
+    // Eliminar duplicados si hay múltiples bloques asignados de la misma materia
+    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
+
+    if (uniqueSubs.length === 0) return allSubjects || [];
+    return uniqueSubs;
+  }, [selectedCourseId, allAssignments, allSubjects, profile]);
+
+  // Autoseleccionar primera asignatura válida al cambiar curso o asignaturas
   useEffect(() => {
-    if (availableSubjects.length > 0 && !selectedSubjectId) {
-      setSelectedSubjectId(availableSubjects[0].id);
+    if (availableSubjects.length > 0) {
+      const isValid = availableSubjects.some((s: any) => s.id === selectedSubjectId);
+      if (!isValid) {
+        setSelectedSubjectId(availableSubjects[0].id);
+      }
+    } else {
+      setSelectedSubjectId('');
     }
   }, [availableSubjects, selectedSubjectId]);
 
   // Clave de scope estricto: centro_año_docente_curso_asignatura_periodo
   const storageScopeKey = useMemo(() => {
-    const centerId = profile?.center_id || 'default_center';
+    const centerId = profile?.center_id || center?.id || 'default_center';
     const year = selectedYear || '2026-2027';
     const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
     const courseId = selectedCourseId || 'nocourse';
     const subjectId = selectedSubjectId || 'nosubject';
     const period = selectedPeriod || 'P1';
     return `edugens_partials_${centerId}_${year}_${teacherId}_${courseId}_${subjectId}_${period}`;
-  }, [profile, selectedYear, selectedCourseId, selectedSubjectId, selectedPeriod]);
+  }, [profile, center?.id, selectedYear, selectedCourseId, selectedSubjectId, selectedPeriod]);
 
   // Estado de Calificaciones Parciales por Competencias
-  const [competencyActivities, setCompetencyActivities] = useState<Record<string, Array<{ id: string; name: string; maxScore: number }>>>({
-    'c1': [{ id: 'act_c1_1', name: 'Actividad 1', maxScore: 100 }],
-    'c2': [{ id: 'act_c2_1', name: 'Actividad 1', maxScore: 100 }],
-    'c3': [{ id: 'act_c3_1', name: 'Actividad 1', maxScore: 100 }],
-    'c4': [{ id: 'act_c4_1', name: 'Actividad 1', maxScore: 100 }],
-  });
+  const [competencyActivities, setCompetencyActivities] = useState<Record<string, Array<{ id: string; name: string; maxScore: number }>>>(getDefaultActivities);
 
   const [partialScores, setPartialScores] = useState<Record<string, Record<string, number>>>({});
   const [isSavingPartials, setIsSavingPartials] = useState<boolean>(false);
@@ -316,42 +341,89 @@ export const ClassroomManager = () => {
 
   // 3. CARGAR CALIFICACIONES PARCIALES (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
-    if (!selectedCourseId || !selectedSubjectId) return;
+    if (!selectedCourseId || !selectedSubjectId) {
+      setPartialScores({});
+      setCompetencyActivities(getDefaultActivities());
+      return;
+    }
     let isMounted = true;
 
-    const loadPartials = async () => {
-      const saved = localStorage.getItem(storageScopeKey);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (isMounted) {
-            setPartialScores(parsed.scores || {});
-            if (parsed.activities) setCompetencyActivities(parsed.activities);
-          }
-        } catch (e) {}
-      }
+    // 1. Carga inmediata desde localStorage o reset para evitar que persista en memoria el curso/periodo previo
+    const saved = localStorage.getItem(storageScopeKey);
+    let loadedFromLocal = false;
 
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          setPartialScores(parsed.scores || {});
+          setCompetencyActivities(parsed.activities || getDefaultActivities());
+          loadedFromLocal = true;
+        }
+      } catch (e) {
+        console.warn('Error al leer datos locales de parciales:', e);
+      }
+    }
+
+    if (!loadedFromLocal) {
+      // RESET INMEDIATO: asegura que el nuevo curso/periodo comience limpio
+      setPartialScores({});
+      setCompetencyActivities(getDefaultActivities());
+    }
+
+    // 2. Consulta asíncrona a la nube (Supabase)
+    const loadPartials = async () => {
       try {
         const year = selectedYear || '2026-2027';
-        const { data, error } = await supabase
+        const centerId = profile?.center_id || center?.id;
+
+        let query = supabase
           .from('student_partial_activities')
           .select('*')
           .eq('course_id', selectedCourseId)
           .eq('subject_id', selectedSubjectId)
           .eq('period', selectedPeriod)
-          .eq('school_year', year)
-          .maybeSingle();
+          .eq('school_year', year);
 
-        if (!error && data && data.scores && isMounted) {
-          if (data.scores.scores) setPartialScores(data.scores.scores);
-          if (data.scores.activities) setCompetencyActivities(data.scores.activities);
+        if (centerId) {
+          query = query.eq('center_id', centerId);
         }
-      } catch (e) {}
+
+        const { data, error } = await query.maybeSingle();
+
+        if (!isMounted) return;
+
+        if (!error && data && data.scores) {
+          const cloudScores = data.scores.scores || {};
+          const cloudActivities = data.scores.activities || getDefaultActivities();
+
+          setPartialScores(cloudScores);
+          setCompetencyActivities(cloudActivities);
+
+          // Sincronizar respaldo local para este scope exacto
+          localStorage.setItem(storageScopeKey, JSON.stringify({
+            scores: cloudScores,
+            activities: cloudActivities,
+            period: selectedPeriod,
+            subjectId: selectedSubjectId,
+            courseId: selectedCourseId,
+            teacherId: profile?.teacher_id || profile?.id,
+            centerId: centerId,
+            year: year
+          }));
+        } else if (!loadedFromLocal) {
+          // Si no hay datos en la nube ni en local para este curso/periodo, mantenerlo limpio
+          setPartialScores({});
+          setCompetencyActivities(getDefaultActivities());
+        }
+      } catch (e) {
+        console.warn('Error al cargar desglose de parciales de Supabase:', e);
+      }
     };
 
     loadPartials();
     return () => { isMounted = false; };
-  }, [storageScopeKey, selectedCourseId, selectedSubjectId, selectedPeriod, selectedYear]);
+  }, [storageScopeKey, selectedCourseId, selectedSubjectId, selectedPeriod, selectedYear, profile?.center_id, center?.id]);
 
   const [newActivityName, setNewActivityName] = useState<string>('');
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
@@ -547,24 +619,79 @@ export const ClassroomManager = () => {
     return list;
   }, [isSecondary]);
 
-  // Agregar nueva actividad parcial a una competencia específica
+  // Agregar nueva actividad parcial a una competencia específica (estrictamente personalizada por curso/periodo)
   const handleAddActivity = () => {
     if (!newActivityName.trim()) return;
+    if (!selectedCourseId || !selectedSubjectId) {
+      alert('Por favor selecciona un curso y una asignatura antes de añadir columnas.');
+      return;
+    }
     const compId = selectedCompetencyForNewAct || 'c1';
     const act = { id: `act_${compId}_${Date.now()}`, name: newActivityName.trim(), maxScore: 100 };
-    setCompetencyActivities((prev) => ({
-      ...prev,
-      [compId]: [...(prev[compId] || []), act]
-    }));
+
+    setCompetencyActivities((prev) => {
+      const updated = {
+        ...prev,
+        [compId]: [...(prev[compId] || []), act]
+      };
+
+      // Guardar inmediatamente en localStorage bajo el scope exclusivo de este curso/asignatura/periodo
+      const centerId = profile?.center_id || center?.id;
+      const year = selectedYear || '2026-2027';
+      localStorage.setItem(storageScopeKey, JSON.stringify({
+        scores: partialScores,
+        activities: updated,
+        period: selectedPeriod,
+        subjectId: selectedSubjectId,
+        courseId: selectedCourseId,
+        teacherId: profile?.teacher_id || profile?.id,
+        centerId: centerId,
+        year: year,
+        updatedAt: new Date().toISOString()
+      }));
+
+      return updated;
+    });
     setNewActivityName('');
   };
 
   // Eliminar actividad parcial
   const handleDeleteActivity = (compId: string, actId: string) => {
-    setCompetencyActivities((prev) => ({
-      ...prev,
-      [compId]: (prev[compId] || []).filter((a) => a.id !== actId)
-    }));
+    setCompetencyActivities((prev) => {
+      const updatedActs = {
+        ...prev,
+        [compId]: (prev[compId] || []).filter((a) => a.id !== actId)
+      };
+
+      // Limpiar también las notas de la actividad eliminada
+      setPartialScores((prevScores) => {
+        const cleanedScores: Record<string, Record<string, number>> = {};
+        Object.entries(prevScores).forEach(([studentId, sMap]) => {
+          const studentCopy = { ...sMap };
+          delete studentCopy[actId];
+          cleanedScores[studentId] = studentCopy;
+        });
+
+        // Guardar inmediatamente en localStorage para este scope exclusivo
+        const centerId = profile?.center_id || center?.id;
+        const year = selectedYear || '2026-2027';
+        localStorage.setItem(storageScopeKey, JSON.stringify({
+          scores: cleanedScores,
+          activities: updatedActs,
+          period: selectedPeriod,
+          subjectId: selectedSubjectId,
+          courseId: selectedCourseId,
+          teacherId: profile?.teacher_id || profile?.id,
+          centerId: centerId,
+          year: year,
+          updatedAt: new Date().toISOString()
+        }));
+
+        return cleanedScores;
+      });
+
+      return updatedActs;
+    });
   };
 
   // Cambiar nota parcial de alumno
@@ -585,8 +712,9 @@ export const ClassroomManager = () => {
         subjectId: selectedSubjectId,
         courseId: selectedCourseId,
         teacherId: profile?.teacher_id || profile?.id,
-        centerId: profile?.center_id,
-        year: selectedYear
+        centerId: profile?.center_id || center?.id,
+        year: selectedYear || '2026-2027',
+        updatedAt: new Date().toISOString()
       }));
       return updatedScores;
     });

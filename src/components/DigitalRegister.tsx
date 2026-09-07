@@ -290,7 +290,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       alert('Seleccione un curso y asignatura primero.');
       return;
     }
-    const centerId = profile?.center_id || 'default_center';
+    const centerId = profile?.center_id || center?.id || 'default_center';
     const year = selectedYear || '2026-2027';
     const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
 
