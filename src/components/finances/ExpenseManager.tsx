@@ -551,16 +551,42 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     });
   }, [entries, startDate, endDate, accountFilter, methodFilter, cashAccountFilter, searchTerm]);
 
-  // Computed balances per cash register (Caja Chica: period filtered; General & Banco: ALL-TIME)
+  // Computed balances per cash register (Period filtered & Accumulated up to selected date)
   const balances = useMemo(() => {
+    const isDateInPeriod = (dateStr: string) => {
+      const d = dateStr || '';
+      if (startDate && endDate) return d >= startDate && d <= endDate;
+      if (startDate) return d >= startDate;
+      if (endDate) return d <= endDate;
+      return true;
+    };
+
+    const isDateAccumulated = (dateStr: string) => {
+      const d = dateStr || '';
+      if (endDate) return d <= endDate;
+      return true;
+    };
+
+    // Period entries (según la fecha seleccionada)
     const cajaChicaEntries = entries.filter((e: any) =>
-      e.date >= startDate && e.date <= endDate && (e.cash_account || 'caja_chica') === 'caja_chica'
+      isDateInPeriod(e.date) && (e.cash_account || 'caja_chica') === 'caja_chica'
     );
     const cajaGeneralEntries = entries.filter((e: any) =>
-      (e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general'
+      isDateInPeriod(e.date) && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')
     );
     const cuentaBancoEntries = entries.filter((e: any) =>
-      e.cash_account === 'cuenta_banco'
+      isDateInPeriod(e.date) && e.cash_account === 'cuenta_banco'
+    );
+
+    // Accumulated entries (acumulado histórico hasta la fecha seleccionada)
+    const cajaChicaAccEntries = entries.filter((e: any) =>
+      isDateAccumulated(e.date) && (e.cash_account || 'caja_chica') === 'caja_chica'
+    );
+    const cajaGeneralAccEntries = entries.filter((e: any) =>
+      isDateAccumulated(e.date) && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')
+    );
+    const cuentaBancoAccEntries = entries.filter((e: any) =>
+      isDateAccumulated(e.date) && e.cash_account === 'cuenta_banco'
     );
 
     const sumNet = (list: any[]) =>
@@ -571,9 +597,24 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       list.filter((e) => e.type === 'expense').reduce((acc, e) => acc + Number(e.amount), 0);
 
     return {
-      cajaChica: { in: sumIn(cajaChicaEntries), out: sumOut(cajaChicaEntries), net: sumNet(cajaChicaEntries) },
-      cajaGeneral: { in: sumIn(cajaGeneralEntries), out: sumOut(cajaGeneralEntries), net: sumNet(cajaGeneralEntries) },
-      cuentaBanco: { in: sumIn(cuentaBancoEntries), out: sumOut(cuentaBancoEntries), net: sumNet(cuentaBancoEntries) }
+      cajaChica: {
+        in: sumIn(cajaChicaEntries),
+        out: sumOut(cajaChicaEntries),
+        net: sumNet(cajaChicaEntries),
+        accumulated: sumNet(cajaChicaAccEntries)
+      },
+      cajaGeneral: {
+        in: sumIn(cajaGeneralEntries),
+        out: sumOut(cajaGeneralEntries),
+        net: sumNet(cajaGeneralEntries),
+        accumulated: sumNet(cajaGeneralAccEntries)
+      },
+      cuentaBanco: {
+        in: sumIn(cuentaBancoEntries),
+        out: sumOut(cuentaBancoEntries),
+        net: sumNet(cuentaBancoEntries),
+        accumulated: sumNet(cuentaBancoAccEntries)
+      }
     };
   }, [entries, startDate, endDate]);
 
@@ -1098,6 +1139,16 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               <p className="text-xs font-black text-white">{balances.cajaChica.net.toLocaleString()}</p>
             </div>
           </div>
+          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/90 border border-emerald-100 shadow-sm mt-0.5">
+            <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">
+              Acumulado a la fecha
+            </span>
+            <span className={`text-xs font-black ${
+              balances.cajaChica.accumulated >= 0 ? 'text-emerald-600' : 'text-rose-600'
+            }`}>
+              RD$ {balances.cajaChica.accumulated.toLocaleString()}
+            </span>
+          </div>
         </div>
 
         {/* CAJA GENERAL */}
@@ -1122,7 +1173,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
             </button>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-1">
-            <div className="bg-white rounded-xl p-3 border border-emerald-100">
+            <div className="bg-white rounded-xl p-3 border border-amber-100">
               <p className="text-[8px] font-black uppercase text-slate-400">Entradas</p>
               <p className="text-xs font-black text-emerald-600">+{balances.cajaGeneral.in.toLocaleString()}</p>
             </div>
@@ -1136,6 +1187,16 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               <p className="text-[8px] font-black uppercase text-white/70">Saldo</p>
               <p className="text-xs font-black text-white">{balances.cajaGeneral.net.toLocaleString()}</p>
             </div>
+          </div>
+          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/90 border border-amber-100 shadow-sm mt-0.5">
+            <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">
+              Acumulado a la fecha
+            </span>
+            <span className={`text-xs font-black ${
+              balances.cajaGeneral.accumulated >= 0 ? 'text-amber-600' : 'text-rose-600'
+            }`}>
+              RD$ {balances.cajaGeneral.accumulated.toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -1161,7 +1222,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
             </button>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-1">
-            <div className="bg-white rounded-xl p-3 border border-emerald-100">
+            <div className="bg-white rounded-xl p-3 border border-indigo-100">
               <p className="text-[8px] font-black uppercase text-slate-400">Entradas</p>
               <p className="text-xs font-black text-emerald-600">+{balances.cuentaBanco.in.toLocaleString()}</p>
             </div>
@@ -1175,6 +1236,16 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               <p className="text-[8px] font-black uppercase text-white/70">Saldo</p>
               <p className="text-xs font-black text-white">{balances.cuentaBanco.net.toLocaleString()}</p>
             </div>
+          </div>
+          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/90 border border-indigo-100 shadow-sm mt-0.5">
+            <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">
+              Acumulado a la fecha
+            </span>
+            <span className={`text-xs font-black ${
+              balances.cuentaBanco.accumulated >= 0 ? 'text-indigo-600' : 'text-rose-600'
+            }`}>
+              RD$ {balances.cuentaBanco.accumulated.toLocaleString()}
+            </span>
           </div>
         </div>
       </div>

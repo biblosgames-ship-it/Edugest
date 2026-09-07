@@ -262,27 +262,48 @@ export const FinanceDashboard = () => {
     const outCajaChica = oldOutCC + newOutCC;
     const cajaChica = { in: inCajaChica, out: outCajaChica, net: inCajaChica - outCajaChica };
 
-    // Caja General (ACUMULADO HISTÓRICO COMPLETO)
+    // Caja General (Día seleccionado y acumulado)
     const isSpecialCat = (accName: string) => accName === 'INGRESOS: COLEGIATURAS' || accName === 'INGRESOS: INSCRIPCIONES';
-    const oldIncomeCG = expenses.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const ledgerIncomeCG = ledgerEntries.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const oldOutCG = expenses.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const ledgerOutCG = ledgerEntries.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const isDayMatch = (e: any) => e.date === dashboardDate || e.created_at?.startsWith(dashboardDate);
+    const isAccMatch = (e: any) => !dashboardDate || (e.date ? e.date <= dashboardDate : (e.created_at ? e.created_at.slice(0, 10) <= dashboardDate : true));
+
+    // Caja General - Día seleccionado
+    const oldIncomeCG = dailyOldExpenses.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerIncomeCG = dailyLedger.filter(e => e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldOutCG = dailyOldExpenses.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerOutCG = dailyLedger.filter(e => e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
 
     const inCajaGeneral = oldIncomeCG + ledgerIncomeCG;
     const outCajaGeneral = oldOutCG + ledgerOutCG;
-    const cajaGeneral = { in: inCajaGeneral, out: outCajaGeneral, net: inCajaGeneral - outCajaGeneral };
 
-    // Cuenta de Banco (ACUMULADO HISTÓRICO COMPLETO)
-    const txIncomeCB = transactions.filter(t => (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
-    const oldIncomeCB = expenses.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
-    const ledgerIncomeCB = ledgerEntries.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco' && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const oldOutCB = expenses.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
-    const ledgerOutCB = ledgerEntries.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    // Caja General - Acumulado a la fecha
+    const accOldInCG = expenses.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerInCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accOldOutCG = expenses.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerOutCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accCajaGeneral = (accOldInCG + accLedgerInCG) - (accOldOutCG + accLedgerOutCG);
+
+    const cajaGeneral = { in: inCajaGeneral, out: outCajaGeneral, net: inCajaGeneral - outCajaGeneral, accumulated: accCajaGeneral };
+
+    // Cuenta de Banco (Día seleccionado y acumulado)
+    const txIncomeCB = dailyTransactions.filter(t => (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const oldIncomeCB = dailyOldExpenses.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerIncomeCB = dailyLedger.filter(e => e.type === 'income' && e.cash_account === 'cuenta_banco' && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const oldOutCB = dailyOldExpenses.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const ledgerOutCB = dailyLedger.filter(e => e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
 
     const inCuentaBanco = txIncomeCB + oldIncomeCB + ledgerIncomeCB;
     const outCuentaBanco = oldOutCB + ledgerOutCB;
-    const cuentaBanco = { in: inCuentaBanco, out: outCuentaBanco, net: inCuentaBanco - outCuentaBanco };
+
+    // Cuenta de Banco - Acumulado a la fecha
+    const accTxInCB = transactions.filter(t => isAccMatch(t) && (t.payment_method === 'transfer' || t.payment_method === 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
+    const accOldInCB = expenses.filter(e => isAccMatch(e) && e.type === 'income' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerInCB = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'income' && e.cash_account === 'cuenta_banco' && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accOldOutCB = expenses.filter(e => isAccMatch(e) && e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerOutCB = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'expense' && e.cash_account === 'cuenta_banco').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accCuentaBanco = (accTxInCB + accOldInCB + accLedgerInCB) - (accOldOutCB + accLedgerOutCB);
+
+    const cuentaBanco = { in: inCuentaBanco, out: outCuentaBanco, net: inCuentaBanco - outCuentaBanco, accumulated: accCuentaBanco };
 
     // === FILTROS DE AÑO ACADÉMICO ===
     const currentYear = (state as any).selectedYear || '2025-2026';
