@@ -30,6 +30,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
+import { useTeacherIdentity } from '../utils/teacherUtils';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -44,6 +45,7 @@ const getDefaultActivities = (): Record<string, Array<{ id: string; name: string
 export const ClassroomManager = () => {
   const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
+  const { isSameTeacher } = useTeacherIdentity();
   const { courses: allCourses } = useCourses();
   const { subjects: allSubjects } = useSubjects();
   const { assignments: allAssignments } = useAssignments();
@@ -100,7 +102,7 @@ export const ClassroomManager = () => {
     // Si el usuario es docente, filtrar solo las asignaturas que él imparte en este curso
     if (profile?.role === 'teacher' && profile?.teacher_id) {
       const myAssignments = teacherAssignments.filter(
-        (a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id
+        (a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id
       );
       if (myAssignments.length > 0) {
         teacherAssignments = myAssignments;
@@ -154,7 +156,7 @@ export const ClassroomManager = () => {
     if (profile?.role === 'teacher' && profile?.teacher_id) {
       const assignedIds = new Set(
         (allAssignments || [])
-          .filter((a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id)
+          .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id)
           .map((a: any) => a.course_id || a.courseId)
       );
       if (assignedIds.size > 0) {
@@ -162,7 +164,7 @@ export const ClassroomManager = () => {
       }
     }
     return base;
-  }, [allCourses, profile, allAssignments]);
+  }, [allCourses, profile, allAssignments, isSameTeacher]);
 
   // Autoseleccionar primer curso disponible
   useEffect(() => {

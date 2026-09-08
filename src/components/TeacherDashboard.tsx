@@ -33,6 +33,7 @@ import {
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 import { useNotifications } from '../hooks/useNotifications';
+import { useTeacherIdentity } from '../utils/teacherUtils';
 
 export const TeacherDashboard = ({
   userData: profile,
@@ -43,6 +44,7 @@ export const TeacherDashboard = ({
 }) => {
   const { state, selectedYear, center } = useApp();
   const { unreadCount } = useNotifications();
+  const { isSameTeacher } = useTeacherIdentity();
 
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
@@ -201,8 +203,11 @@ export const TeacherDashboard = ({
   };
 
   const currentTeacher = useMemo(() => {
-    return state.teachers.find((t) => t.id === selectedTeacherId);
-  }, [state.teachers, selectedTeacherId]);
+    return (
+      state.teachers.find((t) => isSameTeacher(t.id, selectedTeacherId) || t.id === selectedTeacherId) ||
+      state.teachers.find((t) => t.id === selectedTeacherId)
+    );
+  }, [state.teachers, selectedTeacherId, isSameTeacher]);
 
   // Cargar datos al entrar a un curso
   useEffect(() => {
@@ -254,13 +259,14 @@ export const TeacherDashboard = ({
         }
 
         // Validación de pertenencia al docente (por ID directo o por asignación académica)
+        const entryTId = entry.teacherId || entry.teacher_id;
         const matchesTeacher =
-          entry.teacherId === selectedTeacherId ||
-          entry.teacher_id === selectedTeacherId ||
-          (!entry.teacher_id &&
+          isSameTeacher(entryTId, selectedTeacherId) ||
+          entryTId === selectedTeacherId ||
+          (!entryTId &&
             (state.assignments || []).some(
               (a: any) =>
-                (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
+                (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId) || a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
                 (a.course_id === entry.course_id || a.courseId === entry.course_id) &&
                 a.subject_id === entry.subject_id
             ));
@@ -477,13 +483,14 @@ export const TeacherDashboard = ({
           }
         }
 
+        const sTId = s.teacherId || s.teacher_id;
         const matchesTeacher =
-          s.teacherId === selectedTeacherId ||
-          s.teacher_id === selectedTeacherId ||
-          (!s.teacher_id &&
+          isSameTeacher(sTId, selectedTeacherId) ||
+          sTId === selectedTeacherId ||
+          (!sTId &&
             (state.assignments || []).some(
               (a: any) =>
-                (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
+                (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId) || a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
                 (a.course_id === s.course_id || a.courseId === s.course_id) &&
                 a.subject_id === s.subject_id
             ));
@@ -740,7 +747,7 @@ export const TeacherDashboard = ({
 
       const tId = s.teacherId || s.teacher_id;
       const cId = s.courseId || s.course_id;
-      if ((tId === selectedTeacherId || (!tId && (state.assignments || []).some((a: any) => (a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) && (a.course_id === cId || a.courseId === cId) && a.subject_id === s.subject_id))) && cId) {
+      if ((isSameTeacher(tId, selectedTeacherId) || tId === selectedTeacherId || (!tId && (state.assignments || []).some((a: any) => (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId) || a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) && (a.course_id === cId || a.courseId === cId) && a.subject_id === s.subject_id))) && cId) {
         courseIds.add(cId);
       }
     });
@@ -748,13 +755,13 @@ export const TeacherDashboard = ({
     state.assignments.forEach((a: any) => {
       const tId = a.teacherId || a.teacher_id;
       const cId = a.courseId || a.course_id;
-      if (tId === selectedTeacherId && cId) {
+      if ((isSameTeacher(tId, selectedTeacherId) || tId === selectedTeacherId) && cId) {
         courseIds.add(cId);
       }
     });
 
     return state.courses.filter((c) => courseIds.has(c.id));
-  }, [selectedTeacherId, selectedYear, state.schedule, state.assignments, state.courses]);
+  }, [selectedTeacherId, selectedYear, state.schedule, state.assignments, state.courses, isSameTeacher]);
 
   // Horario del curso que está inspeccionando el docente con recreos completos y horas libres
   const selectedCourseSchedule = useMemo(() => {
@@ -1043,11 +1050,11 @@ export const TeacherDashboard = ({
         const matchingEntry = dayEntries.find((e) => {
           const eTime = e.start_time || e.startTime;
           if (eTime) {
-            return Math.abs(getMinutes(eTime) - slotMins) <= 25;
+            return Math.abs(getMinutes(eTime) - slotMins) <= 45;
           }
           const tb = state.timeBlocks.find((b) => b.id === (e.timeBlockId || e.time_block_id));
           const tbTime = tb?.startTime || tb?.start_time;
-          return tbTime && Math.abs(getMinutes(tbTime) - slotMins) <= 25;
+          return tbTime && Math.abs(getMinutes(tbTime) - slotMins) <= 45;
         });
 
         if (matchingEntry) {
@@ -1057,8 +1064,9 @@ export const TeacherDashboard = ({
           const sub = state.subjects.find(
             (sub) => sub.id === (matchingEntry.subjectId || matchingEntry.subject_id)
           );
+          const matchingTId = matchingEntry.teacherId || matchingEntry.teacher_id;
           const tea = state.teachers.find(
-            (t) => t.id === (matchingEntry.teacherId || matchingEntry.teacher_id)
+            (t) => isSameTeacher(t.id, matchingTId) || t.id === matchingTId
           );
           const sTime =
             matchingEntry.start_time ||

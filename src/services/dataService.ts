@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { areTeacherNamesMatching } from '../utils/teacherUtils';
 
 const normalizeGrade = (grade: string) => {
   if (!grade) return '';
@@ -435,19 +436,51 @@ export const dataService = {
     if (role === 'teacher') {
       let teacherCourseIds: string[] = [];
       let effectiveTeacherId = userId;
+      const candidateTeacherIds = new Set<string>([userId]);
       try {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('teacher_id')
+          .select('teacher_id, full_name, center_id')
           .eq('id', userId)
           .maybeSingle();
 
         effectiveTeacherId = prof?.teacher_id || localStorage.getItem('selected_teacher_id') || userId;
+        if (effectiveTeacherId) candidateTeacherIds.add(effectiveTeacherId);
+
+        const activeCenterId = prof?.center_id || centerId;
+        if (activeCenterId) {
+          const { data: siblingTeachers } = await supabase
+            .from('teachers')
+            .select('id, name, full_name')
+            .eq('center_id', activeCenterId);
+
+          const teacherNames = new Set<string>();
+          if (prof?.full_name) teacherNames.add(prof.full_name);
+
+          (siblingTeachers || []).forEach((st: any) => {
+            if (candidateTeacherIds.has(st.id)) {
+              if (st.name) teacherNames.add(st.name);
+              if (st.full_name) teacherNames.add(st.full_name);
+            }
+          });
+
+          (siblingTeachers || []).forEach((st: any) => {
+            const sName = st.name || st.full_name;
+            for (const tName of teacherNames) {
+              if (areTeacherNamesMatching(sName, tName)) {
+                candidateTeacherIds.add(st.id);
+                break;
+              }
+            }
+          });
+        }
+
+        const candidateIdList = Array.from(candidateTeacherIds);
 
         const [assigns, scheds, titularCourses] = await Promise.all([
-          supabase.from('assignments').select('course_id').eq('teacher_id', effectiveTeacherId),
-          supabase.from('schedule_entries').select('course_id').eq('teacher_id', effectiveTeacherId),
-          supabase.from('courses').select('id').eq('titular_teacher_id', effectiveTeacherId)
+          supabase.from('assignments').select('course_id').in('teacher_id', candidateIdList),
+          supabase.from('schedule_entries').select('course_id').in('teacher_id', candidateIdList),
+          supabase.from('courses').select('id').in('titular_teacher_id', candidateIdList)
         ]);
 
         const ids = new Set<string>();
@@ -464,7 +497,7 @@ export const dataService = {
 
         const isDirectTeacher =
           (c.target_teachers || []).includes(userId) ||
-          (effectiveTeacherId && (c.target_teachers || []).includes(effectiveTeacherId));
+          (c.target_teachers || []).some((tid: string) => candidateTeacherIds.has(tid));
         if (isDirectTeacher) return true;
 
         const targetRoles = c.target_roles || [];

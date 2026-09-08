@@ -22,19 +22,21 @@ import { useStudents } from '../hooks/useStudents';
 import { useCourses } from '../hooks/useCourses';
 import { useSubjects } from '../hooks/useSubjects';
 import { useAssignments } from '../hooks/useAssignments';
+import { useTeacherIdentity } from '../utils/teacherUtils';
 
 export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, profile, selectedYear, center } = useApp();
+  const { isSameTeacher } = useTeacherIdentity();
 
   const currentTeacherRecord = useMemo(() => {
     if (
       (profile?.role === 'teacher' || profile?.role === 'management_teacher') &&
       profile?.teacher_id
     ) {
-      return (state.teachers || []).find((t: any) => t.id === profile.teacher_id);
+      return (state.teachers || []).find((t: any) => isSameTeacher(t.id, profile.teacher_id) || t.id === profile.teacher_id);
     }
     return null;
-  }, [profile, state.teachers]);
+  }, [profile, state.teachers, isSameTeacher]);
 
   const isEditable = useMemo(() => {
     if (profile?.role !== 'teacher' && profile?.role !== 'management_teacher') return true;
@@ -150,7 +152,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     if (profile?.role === 'teacher' && profile?.teacher_id) {
       const assignedCourseIds = new Set(
         (allAssignments || [])
-          .filter((a: any) => (a.teacher_id || a.teacherId) === profile.teacher_id)
+          .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id)
           .map((a: any) => a.course_id || a.courseId)
       );
       baseCourses = baseCourses.filter((c: any) => assignedCourseIds.has(c.id));
@@ -161,7 +163,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         selectedLevel === 'Todos' ||
         (c.level && c.level.toLowerCase().includes(selectedLevel.toLowerCase().substring(0, 5)))
     );
-  }, [allCourses, selectedLevel, profile, allAssignments]);
+  }, [allCourses, selectedLevel, profile, allAssignments, isSameTeacher]);
 
   const courseSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
@@ -171,7 +173,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       return (allAssignments || [])
         .filter(
           (a: any) =>
-            (a.teacher_id || a.teacherId) === profile.teacher_id &&
+            (isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id) &&
             (a.course_id || a.courseId) === selectedCourseId
         )
         .map((a: any) =>

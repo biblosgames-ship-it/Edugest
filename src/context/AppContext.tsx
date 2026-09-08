@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import graduatedList from '../data/graduated_2025_students.json';
+import { areTeacherNamesMatching } from '../utils/teacherUtils';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -515,26 +516,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const teacherId = p.teacher_id ? String(p.teacher_id) : '';
 
               const isDuplicate =
-                (n && n !== 'SIN NOMBRE' && seenNames.has(n)) ||
+                (n && n !== 'SIN NOMBRE' && (seenNames.has(n) || uniquePersonnel.some((u) => areTeacherNamesMatching(u.full_name, p.full_name)))) ||
                 (email && seenEmails.has(email)) ||
-                (teacherId && seenIds.has(teacherId));
+                (teacherId && seenIds.has(teacherId)) ||
+                (p.id && seenIds.has(String(p.id)));
 
               if (!isDuplicate && n && n !== 'SIN NOMBRE') {
                 seenNames.add(n);
                 if (email) seenEmails.add(email);
                 if (p.id) seenIds.add(String(p.id));
                 if (teacherId) seenIds.add(teacherId);
-                uniquePersonnel.push(p);
+
+                // El ID principal del docente debe ser su teacher_id persistente de DB si existe
+                const canonicalId = String(p.teacher_id || p.id);
+                uniquePersonnel.push({
+                  ...p,
+                  id: canonicalId,
+                  teacher_id: canonicalId,
+                  user_id: p.id
+                });
               }
             });
 
           // Mapa de traducción de IDs originales a IDs unificados
           const idMap: Record<string, string> = {};
           rawList.forEach((raw) => {
-            const n = normalizeNameString(raw.full_name);
-            const unified = uniquePersonnel.find((u) => normalizeNameString(u.full_name) === n);
+            const rawId = String(raw.id || '').trim();
+            const rawTeacherId = raw.teacher_id ? String(raw.teacher_id).trim() : '';
+
+            const unified = uniquePersonnel.find((u) => {
+              if (rawId && (u.id === rawId || u.teacher_id === rawId || u.user_id === rawId)) return true;
+              if (rawTeacherId && (u.id === rawTeacherId || u.teacher_id === rawTeacherId || u.user_id === rawTeacherId)) return true;
+              return areTeacherNamesMatching(u.full_name, raw.full_name);
+            });
+
             if (unified) {
-              idMap[raw.id] = unified.id;
+              const canonicalId = String(unified.id || unified.teacher_id);
+              if (rawId) idMap[rawId] = canonicalId;
+              if (rawTeacherId) idMap[rawTeacherId] = canonicalId;
             }
           });
 
