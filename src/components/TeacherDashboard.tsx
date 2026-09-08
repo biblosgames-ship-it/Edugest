@@ -1156,33 +1156,31 @@ export const TeacherDashboard = ({
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto shrink-0">
-          {!profile?.teacher_id && (
-            <div className="w-full md:w-64">
-              <select
-                value={selectedTeacherId}
-                onChange={(e) => handleTeacherChange(e.target.value)}
-                className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-black text-xs uppercase tracking-wider"
-              >
-                <option value="">-- SELECCIONAR MI PERFIL --</option>
-                {state.teachers
-                  .filter((t) => t.role === 'teacher' || t.role === 'management_teacher')
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name.toUpperCase()}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          )}
+          <div className="w-full md:w-64">
+            <select
+              value={selectedTeacherId}
+              onChange={(e) => handleTeacherChange(e.target.value)}
+              className="w-full p-2.5 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 font-bold text-xs uppercase"
+            >
+              <option value="">-- SELECCIONAR MI PERFIL --</option>
+              {[...(state.teachers || [])]
+                .sort((a, b) => (a.name || a.full_name || '').localeCompare(b.name || b.full_name || ''))
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {(t.name || t.full_name || 'Docente').toUpperCase()}
+                  </option>
+                ))}
+            </select>
+          </div>
 
           {selectedTeacherId && profile?.teacher_id !== selectedTeacherId && (
             <button
               onClick={() => handleLinkTeacher(selectedTeacherId)}
               disabled={isLinking}
-              className="w-full md:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer animate-pulse"
+              className="w-full md:w-auto flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer animate-pulse"
             >
               <CheckCircle2 size={12} />
-              {isLinking ? 'Vinculando...' : 'Vincular Cuenta'}
+              {isLinking ? 'Vinculando...' : 'Vincular este Perfil'}
             </button>
           )}
 
