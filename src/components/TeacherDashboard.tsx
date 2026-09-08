@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
@@ -34,6 +34,25 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTeacherIdentity } from '../utils/teacherUtils';
+
+const toMins = (val: string) => {
+  if (!val) return 0;
+  const clean = (val || '').replace(/[^0-9:APMapm]/g, '').trim();
+  const isPM = clean.toUpperCase().includes('PM');
+  const isAM = clean.toUpperCase().includes('AM');
+  const parts = clean.replace(/[APMapm]/g, '').split(':').map(Number);
+  let h = parts[0] || 0;
+  const m = parts[1] || 0;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return h * 60 + m;
+};
+
+const fromMins = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
 
 export const TeacherDashboard = ({
   userData: profile,
@@ -238,13 +257,332 @@ export const TeacherDashboard = ({
     loadCourseData();
   }, [selectedCourse, showCreateForm, profile]);
 
+  const findOfficialSchedule = useCallback((schedules: any[], levelName: string, shiftName: string) => {
+    if (!schedules || schedules.length === 0) return null;
+    const lNorm = (levelName || '').toLowerCase().substring(0, 3);
+    const sNorm = (shiftName || '').toLowerCase().substring(0, 3);
+
+    let match = schedules.find((ls: any) => {
+      const lsLvl = (ls.level || '').toLowerCase();
+      const lsShift = (ls.shift || '').toLowerCase();
+      const lvlMatch = !lNorm || lsLvl.substring(0, 3) === lNorm || lNorm.includes(lsLvl.substring(0, 3));
+      const shiftMatch =
+        lsShift.substring(0, 3) === sNorm ||
+        (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+        (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')));
+      return lvlMatch && shiftMatch;
+    });
+
+    if (!match) {
+      match = schedules.find((ls: any) => {
+        const lsShift = (ls.shift || '').toLowerCase();
+        return (
+          lsShift.substring(0, 3) === sNorm ||
+          (sNorm === 'mat' && (lsShift.includes('mañ') || lsShift.includes('ext') || lsShift.includes('com'))) ||
+          (sNorm === 'ves' && (lsShift.includes('tar') || lsShift.includes('ves')))
+        );
+      });
+    }
+    return match || null;
+  }, []);
+
+  const isCourseFirstCycle = useCallback((course: any) => {
+    const cGrade = (course?.grade || '').toLowerCase();
+    const cCycle = (course?.cycle || '').toLowerCase();
+    if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+
+    return (
+      /^[1-3]/.test(cGrade) ||
+      cGrade.includes('1ro') ||
+      cGrade.includes('2do') ||
+      cGrade.includes('3ro') ||
+      cGrade.includes('1°') ||
+      cGrade.includes('2°') ||
+      cGrade.includes('3°') ||
+      cGrade.includes('primer') ||
+      cGrade.includes('segundo') ||
+      cGrade.includes('tercer') ||
+      cGrade.includes('7mo') ||
+      cGrade.includes('8vo') ||
+      cGrade.includes('9no')
+    );
+  }, []);
+
+  const isCourseSecondCycle = useCallback((course: any) => {
+    const cGrade = (course?.grade || '').toLowerCase();
+    const cCycle = (course?.cycle || '').toLowerCase();
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
+    if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+    return (
+      /^[4-6]/.test(cGrade) ||
+      cGrade.includes('4to') ||
+      cGrade.includes('5to') ||
+      cGrade.includes('6to') ||
+      cGrade.includes('4°') ||
+      cGrade.includes('5°') ||
+      cGrade.includes('6°') ||
+      cGrade.includes('cuarto') ||
+      cGrade.includes('quinto') ||
+      cGrade.includes('sexto') ||
+      cGrade.includes('10mo') ||
+      cGrade.includes('11mo') ||
+      cGrade.includes('12mo') ||
+      cGrade.includes('decimo') ||
+      cGrade.includes('décimo')
+    );
+  }, []);
+
+  const getSlotsForCourse = useCallback(
+    (course: any) => {
+      if (!course) return [];
+      const cTanda = (course?.tanda || '').toLowerCase();
+      const cLevel = (course?.level || '').toLowerCase();
+      const courseIsMorning = cTanda
+        ? !cTanda.includes('ves') && !cTanda.includes('tar')
+        : !cLevel.includes('secun');
+      const courseShiftName = courseIsMorning ? 'Matutina' : 'Vespertina';
+      const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, courseShiftName);
+
+      const levelNormCourse = (course?.level || '').toLowerCase();
+      const isSecundaria = levelNormCourse.includes('secun');
+      const targetTotalLocal = isSecundaria ? 6 : (courseOfficial?.periods_per_day || 5);
+
+      let courseStartT = courseIsMorning ? 480 : 840;
+      let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050);
+      if (courseOfficial?.start_time) {
+        let s = toMins(courseOfficial.start_time);
+        if (!courseIsMorning && s < 720 && s > 0) s += 720;
+        courseStartT = s;
+      }
+      if (courseOfficial?.end_time) {
+        let e = toMins(courseOfficial.end_time);
+        if (!courseIsMorning && e < 720 && e > 0) e += 720;
+        courseEndT = e;
+      }
+
+      const isC1 = isCourseFirstCycle(course);
+      const isC2 = isCourseSecondCycle(course);
+
+      const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
+        let bpMins = toMins(bp.startTime || bp.start_time);
+        if (!courseIsMorning && bpMins < 720) bpMins += 720;
+        const isBpMorning = bpMins < 780;
+        if (courseIsMorning !== isBpMorning) return false;
+
+        const bpLevel = (bp.level || '').toLowerCase();
+        const bpCycle = (bp.cycle || '').toLowerCase();
+        const levelNorm = (course?.level || '').toLowerCase();
+
+        // 1. Validar Nivel
+        const levelMatch =
+          !bpLevel ||
+          bpLevel.includes('gen') ||
+          bpLevel.includes('todo') ||
+          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(bpLevel.substring(0, 3));
+        if (!levelMatch) return false;
+
+        // 2. Validar Ciclo (Primer Ciclo vs Segundo Ciclo)
+        if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
+          if (isC1 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return false;
+          if (isC2 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return false;
+        }
+
+        return true;
+      });
+
+      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
+        let bpMins = toMins(bp.startTime || bp.start_time);
+        if (!courseIsMorning && bpMins < 720) bpMins += 720;
+        const isBpMorning = bpMins < 780;
+        return courseIsMorning === isBpMorning;
+      });
+
+      const rawMasterStart =
+        firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '16:00:00');
+      let masterStartMins = toMins(rawMasterStart);
+      if (!courseIsMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
+      if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 960;
+      const masterBPref = {
+        startTime: fromMins(masterStartMins),
+        durationMinutes:
+          Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) ||
+          (courseIsMorning ? 30 : 15)
+      };
+
+      const effectiveBPref = cycleBPref || masterBPref;
+      let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
+      if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
+      if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
+      const bDuration =
+        Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) ||
+        (courseIsMorning ? 30 : 15);
+      const bEnd = bStart + bDuration;
+
+      // Evento de Acto Cívico/Apertura
+      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        if (!isActo) return false;
+        const feLevel = (fe.level || '').toLowerCase();
+        const levelNorm = (course?.level || '').toLowerCase();
+        return !feLevel || feLevel.includes('gen') || feLevel.includes(levelNorm.substring(0, 3));
+      });
+
+      let classStart = courseOfficial?.start_time
+        ? courseStartT
+        : courseIsMorning && courseStartT <= 480
+        ? 480
+        : courseStartT;
+      const slots: any[] = [];
+
+      if (courseIsMorning && dbActoEvent) {
+        const feEndMins = toMins(dbActoEvent.end_time);
+        if (feEndMins > 0) classStart = feEndMins;
+
+        slots.push({
+          start: fromMins(toMins(dbActoEvent.start_time)),
+          end: fromMins(toMins(dbActoEvent.end_time)),
+          isBreak: true,
+          label: dbActoEvent.name
+        });
+      }
+
+      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
+        if (totalMins <= 0 || preferredCount <= 0) return [];
+        let count = preferredCount;
+        const limit = maxCount || 6;
+        while (count > 1 && totalMins / count < 35) {
+          count--;
+        }
+        while (totalMins / count > 50 && count < limit) {
+          if (totalMins / (count + 1) < 35) {
+            break;
+          }
+          count++;
+        }
+        const base = Math.floor(totalMins / count);
+        let rem = totalMins - base * count;
+        const durs = new Array(count).fill(base);
+        for (let idx = 0; idx < count && rem > 0; idx++) {
+          durs[idx] += 1;
+          rem -= 1;
+        }
+        return durs;
+      };
+
+      // CÁLCULO DINÁMICO ANTES DEL RECREO
+      const preWindow = Math.max(0, bStart - classStart);
+      let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : preWindow >= 115 ? 3 : 2;
+      if (preWindow / preCountLocal < 35) {
+        preCountLocal = Math.max(1, Math.floor(preWindow / 35));
+      }
+      const maxPreCount = isSecundaria ? 3 : 6;
+      const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPreCount);
+      preCountLocal = preDurs.length;
+
+      let currTimePre = classStart;
+      for (let i = 0; i < preCountLocal; i++) {
+        let dur = preDurs[i];
+        let sTime = currTimePre;
+        let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
+      }
+
+      // EL RECREO
+      slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
+
+      // Eventos Fijos Post-Recreo
+      let currTimePost = bEnd;
+      const levelNorm = (course?.level || '').toLowerCase();
+      const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        let feStartMins = toMins(fe.start_time);
+        if (!courseIsMorning && feStartMins < 720 && feStartMins > 0) feStartMins += 720;
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= courseEndT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel ||
+          feLevel.includes('gen') ||
+          feLevel.includes('todo') ||
+          feLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(feLevel.substring(0, 3));
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          feCycle.includes('todo') ||
+          (isC1 && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isC2 && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
+      });
+
+      postFixedEvents.forEach((fe: any) => {
+        let feEndMins = toMins(fe.end_time);
+        if (!courseIsMorning && feEndMins < 720 && feEndMins > 0) feEndMins += 720;
+        if (feEndMins > currTimePost) {
+          slots.push({
+            start: fromMins(toMins(fe.start_time)),
+            end: fromMins(toMins(fe.end_time)),
+            isBreak: true,
+            label: fe.name
+          });
+          currTimePost = Math.max(currTimePost, feEndMins);
+        }
+      });
+
+      // CÁLCULO DINÁMICO DESPUÉS DEL RECREO
+      const postWindow = Math.max(0, courseEndT - currTimePost);
+      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+      if (postWindow / postCountLocal < 35) {
+        postCountLocal = Math.max(1, Math.floor(postWindow / 35));
+      }
+      const maxPostCount = isSecundaria ? 3 : 6;
+      const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPostCount);
+      postCountLocal = postDurs.length;
+      for (let i = 0; i < postCountLocal; i++) {
+        let dur = postDurs[i];
+        let sTime = currTimePost;
+        let eTime = i === postDurs.length - 1 ? courseEndT : sTime + dur;
+        currTimePost = eTime;
+
+        slots.push({
+          start: fromMins(sTime),
+          end: fromMins(eTime),
+          isBreak: false,
+          label: `${preCountLocal + i + 1}ra Hora`
+        });
+      }
+
+      return slots;
+    },
+    [
+      findOfficialSchedule,
+      isCourseFirstCycle,
+      isCourseSecondCycle,
+      state.levelSchedules,
+      state.breakPreferences,
+      state.fixedEvents
+    ]
+  );
+
   // Horario del docente para el día de hoy con recreos integrados
   const teacherTodaySchedule = useMemo(() => {
     if (!selectedTeacherId) return [];
     const normCurrentDay = normalize(currentDay);
 
     const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
-
     const seenSlotKeys = new Set<string>();
 
     const normTodayClasses = state.schedule
@@ -280,14 +618,7 @@ export const TeacherDashboard = ({
         const tb = state.timeBlocks.find((b) => b.id === tbId);
         return tb && normalize(tb.day) === normCurrentDay;
       })
-      .filter((entry: any) => {
-        // Deduplicación en tiempo real
-        const key = `${entry.course_id || entry.courseId}_${entry.subject_id}_${(entry.day || '').trim().toLowerCase()}_${entry.start_time}`;
-        if (seenSlotKeys.has(key)) return false;
-        seenSlotKeys.add(key);
-        return true;
-      })
-      .map((entry) => {
+      .map((entry: any) => {
         const tbId = entry.time_block_id || entry.timeBlockId;
         const subId = entry.subject_id || entry.subjectId;
         const courseId = entry.course_id || entry.courseId;
@@ -300,8 +631,8 @@ export const TeacherDashboard = ({
         const sTime = entry.start_time || entry.startTime || tb?.startTime || tb?.start_time || '';
         const eTime = entry.end_time || entry.endTime || tb?.endTime || tb?.end_time || '';
 
-        const start = getMinutes(sTime);
-        const end = getMinutes(eTime);
+        const start = toMins(sTime);
+        const end = toMins(eTime);
         const isNow = currentTimeMinutes >= start && currentTimeMinutes < end;
 
         return {
@@ -316,43 +647,39 @@ export const TeacherDashboard = ({
           sTime,
           eTime
         };
+      })
+      .filter((entry: any) => {
+        // Deduplicación en tiempo real evitando descartar periodos consecutivos
+        const key = entry.id
+          ? `id_${entry.id}`
+          : `${entry.course_id || entry.courseId}_${entry.subject_id || entry.subjectId}_${(entry.day || '').trim().toLowerCase()}_${entry.sTime || entry.time_block_id || ''}`;
+        if (seenSlotKeys.has(key)) return false;
+        seenSlotKeys.add(key);
+        return true;
       });
 
     // Si no hay clases hoy, retornar vacío
     if (normTodayClasses.length === 0) return [];
-
-    // Calcular el recreo correspondiente para la tanda del día
-    const toMins = (val: string) => {
-      const [h, m] = (val || '')
-        .replace(/[^0-9:]/g, '')
-        .split(':')
-        .map(Number);
-      return (h || 0) * 60 + (m || 0);
-    };
-
-    const fromMins = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
 
     // Determinar tanda
     const isMorning = normTodayClasses.some((c) => c.startMinutes < 780);
 
     // Buscar recreo en breakPreferences
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      let bpMins = toMins(bp.startTime);
+      let bpMins = toMins(bp.startTime || bp.start_time);
       if (!isMorning && bpMins < 420) bpMins += 720;
       const isBpMorning = bpMins < 780;
       return isMorning === isBpMorning;
     });
 
     const bStart = firstRelevantBreak
-      ? toMins(firstRelevantBreak.startTime)
+      ? toMins(firstRelevantBreak.startTime || firstRelevantBreak.start_time)
       : isMorning
         ? 600
         : 960; // 10:00 AM o 04:00 PM
-    const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : 30;
+    const bDuration = firstRelevantBreak
+      ? Number(firstRelevantBreak.durationMinutes || firstRelevantBreak.duration_minutes) || 30
+      : 30;
     const bEnd = bStart + bDuration;
 
     const breakItem = {
@@ -377,7 +704,9 @@ export const TeacherDashboard = ({
     state.rooms,
     currentDay,
     currentTimeMinutes,
-    state.breakPreferences
+    state.breakPreferences,
+    selectedYear,
+    isSameTeacher
   ]);
 
   const activeClassNow = useMemo(() => {
@@ -433,43 +762,21 @@ export const TeacherDashboard = ({
       selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
     const seenSlotKeys = new Set<string>();
 
-    const toMins = (val: string) => {
-      const clean = (val || '').replace(/[^0-9:APMapm]/g, '').trim();
-      const isPM = clean.toUpperCase().includes('PM');
-      const isAM = clean.toUpperCase().includes('AM');
-      const parts = clean.replace(/[APMapm]/g, '').split(':').map(Number);
-      let h = parts[0] || 0;
-      const m = parts[1] || 0;
-      if (isPM && h < 12) h += 12;
-      if (isAM && h === 12) h = 0;
-      return h * 60 + m;
-    };
-
     const getEntryMins = (val: string, s?: any, c?: any) => {
       if (!val) return 0;
+      let mins = toMins(val);
       const clean = (val || '').replace(/[^0-9:APMapm]/g, '').trim();
       const isPM = clean.toUpperCase().includes('PM');
       const isAM = clean.toUpperCase().includes('AM');
-      const parts = clean.replace(/[APMapm]/g, '').split(':').map(Number);
-      let h = parts[0] || 0;
-      const m = parts[1] || 0;
-      if (isPM && h < 12) h += 12;
-      if (isAM && h === 12) h = 0;
       if (!isPM && !isAM) {
         const cTanda = (s?.shift || c?.tanda || '').toLowerCase();
         const isVesp =
           cTanda.includes('ves') ||
           cTanda.includes('tar') ||
           ((c?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
-        if (isVesp && h < 7 && h > 0) h += 12;
+        if (isVesp && mins < 420 && mins > 0) mins += 720;
       }
-      return h * 60 + m;
-    };
-
-    const fromMins = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      return mins;
     };
 
     // 1. Obtener todas las clases asignadas al docente a lo largo de la semana con filtro estricto por año y deduplicación exacta
@@ -497,18 +804,11 @@ export const TeacherDashboard = ({
 
         return matchesTeacher;
       })
-      .filter((s: any) => {
-        // Deduplicación en tiempo real para evitar registros huérfanos repetidos en DB
-        const key = `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.start_time}`;
-        if (seenSlotKeys.has(key)) return false;
-        seenSlotKeys.add(key);
-        return true;
-      })
-      .map((s) => {
-        const tb = state.timeBlocks.find((b) => b.id === (s.timeBlockId || s.time_block_id));
-        const sub = state.subjects.find((sub) => sub.id === (s.subjectId || s.subject_id));
-        const course = state.courses.find((c) => c.id === (s.courseId || s.course_id));
-        const room = state.rooms.find((r) => r.id === (s.roomId || s.room_id));
+      .map((s: any) => {
+        const tb = state.timeBlocks.find((b: any) => b.id === (s.timeBlockId || s.time_block_id));
+        const sub = state.subjects.find((sub: any) => sub.id === (s.subjectId || s.subject_id));
+        const course = state.courses.find((c: any) => c.id === (s.courseId || s.course_id));
+        const room = state.rooms.find((r: any) => r.id === (s.roomId || s.room_id));
         const sTime = s.start_time || s.startTime || tb?.startTime || tb?.start_time || '';
         const eTime = s.end_time || s.endTime || tb?.endTime || tb?.end_time || '';
         const day = s.day || tb?.day || '';
@@ -523,148 +823,80 @@ export const TeacherDashboard = ({
           room,
           startMinutes: getEntryMins(sTime, s, course)
         };
+      })
+      .filter((s: any) => {
+        if (!s.day || !s.sTime) return false;
+        const key = s.id
+          ? `id_${s.id}`
+          : `${s.course_id || s.courseId}_${s.subject_id}_${(s.day || '').trim().toLowerCase()}_${s.sTime}_${s.time_block_id || s.timeBlockId || ''}`;
+        if (seenSlotKeys.has(key)) return false;
+        seenSlotKeys.add(key);
+        return true;
       });
 
     // 2. Determinar si el docente tiene clases en la mañana, en la tarde, o en ambas
-    const hasMorningClasses = teacherEntries.some((e) => e.startMinutes < 780);
-    const hasAfternoonClasses = teacherEntries.some((e) => e.startMinutes >= 780);
+    const hasMorningClasses = teacherEntries.some((e: any) => e.startMinutes < 780);
+    const hasAfternoonClasses = teacherEntries.some((e: any) => e.startMinutes >= 780);
 
     const teacherCourseIds = new Set<string>();
-    teacherEntries.forEach((e) => {
+    teacherEntries.forEach((e: any) => {
       const cId = e.courseId || e.course_id;
       if (cId) teacherCourseIds.add(cId);
     });
-    const teacherCourses = state.courses.filter((c) => teacherCourseIds.has(c.id));
-
-    // Función que calcula dinámicamente los 6 bloques canónicos usando el horario oficial y preferencias de recreo registradas para este centro
-    const buildSlotsForShift = (isMorn: boolean, repCourse?: any) => {
-      const shiftName = isMorn ? 'Matutina' : 'Vespertina';
-      const official =
-        (state.levelSchedules || []).find(
-          (ls: any) =>
-            (!repCourse ||
-              !repCourse.level ||
-              ls.level === repCourse.level ||
-              ls.level?.toLowerCase().includes((repCourse.level || '').toLowerCase().substring(0, 3))) &&
-            (ls.shift === shiftName || !ls.shift)
-        ) || (state.levelSchedules || []).find((ls: any) => ls.shift === shiftName);
-
-      const isSecundaria = repCourse ? (repCourse.level || '').toLowerCase().includes('secun') : true;
-
-      let startT = isMorn ? 480 : 840; // 08:00 o 14:00 por defecto
-      let endT = isMorn ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050); // 12:30 o 18:15 por defecto
-
-      if (official?.start_time) {
-        let s = toMins(official.start_time);
-        if (!isMorn && s < 720 && s > 0) s += 720;
-        startT = s;
+    (state.assignments || []).forEach((a: any) => {
+      if (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId)) {
+        const cId = a.courseId || a.course_id;
+        if (cId) teacherCourseIds.add(cId);
       }
-      if (official?.end_time) {
-        let e = toMins(official.end_time);
-        if (!isMorn && e < 720 && e > 0) e += 720;
-        endT = e;
-      }
+    });
+    const teacherCourses = state.courses.filter((c: any) => teacherCourseIds.has(c.id));
 
-      // Recreo oficial registrado para este centro
-      const bPref = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime || bp.start_time);
-        if (!isMorn && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return isMorn === isBpMorning;
-      });
+    const mornCourses = teacherCourses.filter((c: any) => {
+      const t = (c.tanda || '').toLowerCase();
+      return t.includes('mat') || t.includes('mañ') || (!t.includes('ves') && !t.includes('tar') && !(c.level || '').toLowerCase().includes('secun'));
+    });
+    const vespCourses = teacherCourses.filter((c: any) => {
+      const t = (c.tanda || '').toLowerCase();
+      return t.includes('ves') || t.includes('tar') || (!t.includes('mat') && !t.includes('mañ') && (c.level || '').toLowerCase().includes('secun'));
+    });
 
-      let bStart = bPref ? toMins(bPref.startTime || bPref.start_time) : isMorn ? 600 : 960;
-      if (!isMorn && bStart < 720 && bStart > 0) bStart += 720;
-      if (!isMorn && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bDuration =
-        Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorn ? 30 : 15);
-      const bEnd = bStart + bDuration;
-
-      const calculateSlotDurations = (totalMins: number, count: number) => {
-        if (totalMins <= 0 || count <= 0) return [];
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
+    const getPrimaryCourse = (list: any[]) => {
+      if (list.length === 0) return null;
+      let best = list[0];
+      let maxCount = 0;
+      list.forEach((c: any) => {
+        const count = teacherEntries.filter((e: any) => String(e.courseId || e.course_id) === String(c.id)).length;
+        if (count > maxCount) {
+          maxCount = count;
+          best = c;
         }
-        return durs;
-      };
-
-      const slots: any[] = [];
-      // 3 horas antes del recreo
-      const preWindow = Math.max(0, bStart - startT);
-      const preDurs = calculateSlotDurations(preWindow, 3);
-      let currPre = startT;
-      for (let i = 0; i < preDurs.length; i++) {
-        let dur = preDurs[i];
-        let e = i === preDurs.length - 1 ? bStart : currPre + dur;
-        slots.push({
-          start: fromMins(currPre) + ':00',
-          end: fromMins(e) + ':00',
-          isBreak: false,
-          label: `${i + 1}ra Hora`
-        });
-        currPre = e;
-      }
-
-      // Recreo
-      slots.push({
-        start: fromMins(bStart) + ':00',
-        end: fromMins(bEnd) + ':00',
-        isBreak: true,
-        label: 'RECREO'
       });
-
-      // 3 horas después del recreo
-      const postWindow = Math.max(0, endT - bEnd);
-      const postDurs = calculateSlotDurations(postWindow, 3);
-      let currPost = bEnd;
-      for (let i = 0; i < postDurs.length; i++) {
-        let dur = postDurs[i];
-        let e = i === postDurs.length - 1 ? endT : currPost + dur;
-        slots.push({
-          start: fromMins(currPost) + ':00',
-          end: fromMins(e) + ':00',
-          isBreak: false,
-          label: `${preDurs.length + i + 1}ra Hora`
-        });
-        currPost = e;
-      }
-
-      return slots;
+      return best;
     };
 
-    const standardSlots: any[] = [];
+    const primaryMornCourse = getPrimaryCourse(mornCourses) || getPrimaryCourse(teacherCourses) || state.courses[0];
+    const primaryVespCourse = getPrimaryCourse(vespCourses) || getPrimaryCourse(teacherCourses) || state.courses[0];
 
-    if (hasMorningClasses || (!hasAfternoonClasses && !hasMorningClasses)) {
-      const mornCourse =
-        teacherCourses.find((c) => {
-          const t = (c.tanda || '').toLowerCase();
-          return (
-            t.includes('mat') ||
-            t.includes('mañ') ||
-            (t === '' && !(c.level || '').toLowerCase().includes('secun'))
-          );
-        }) || teacherCourses[0];
-      standardSlots.push(...buildSlotsForShift(true, mornCourse));
+    let standardSlots: any[] = [];
+    if (hasMorningClasses && hasAfternoonClasses) {
+      const mSlots = primaryMornCourse ? getSlotsForCourse(primaryMornCourse).filter((s: any) => toMins(s.start) < 780) : [];
+      const vSlots = primaryVespCourse ? getSlotsForCourse(primaryVespCourse).filter((s: any) => toMins(s.start) >= 780) : [];
+      standardSlots = [...mSlots, ...vSlots];
+    } else if (hasAfternoonClasses) {
+      standardSlots = primaryVespCourse ? getSlotsForCourse(primaryVespCourse) : [];
+    } else {
+      standardSlots = primaryMornCourse ? getSlotsForCourse(primaryMornCourse) : [];
     }
 
-    if (hasAfternoonClasses) {
-      const vespCourse =
-        teacherCourses.find((c) => {
-          const t = (c.tanda || '').toLowerCase();
-          return (
-            t.includes('ves') ||
-            t.includes('tar') ||
-            (t === '' && (c.level || '').toLowerCase().includes('secun'))
-          );
-        }) || teacherCourses[0];
-      standardSlots.push(...buildSlotsForShift(false, vespCourse));
-    }
+    // Deduplicar slots por start
+    const seenStarts = new Set<string>();
+    const uniqueSlots = standardSlots.filter((slot: any) => {
+      if (seenStarts.has(slot.start)) return false;
+      seenStarts.add(slot.start);
+      return true;
+    });
 
-    const sortedSlots = standardSlots.sort((a, b) => toMins(a.start) - toMins(b.start));
+    const sortedSlots = uniqueSlots.sort((a, b) => toMins(a.start) - toMins(b.start));
 
     // 3. Inicializar matriz semanal
     const matrix: Record<string, Record<string, any>> = {};
@@ -682,29 +914,50 @@ export const TeacherDashboard = ({
       });
     });
 
+    const nonBreakSlots = sortedSlots.filter((s: any) => !s.isBreak);
+    const slotsToMatch = nonBreakSlots.length > 0 ? nonBreakSlots : sortedSlots;
+
     // 4. Mapear cada clase del docente A SU CORRESPONDIENTE HORA DE LAS 6
     weekDays.forEach((day) => {
+      const normDay = normalize(day);
       const dayEntries = teacherEntries
-        .filter((e) => normalize(e.day || '') === normalize(day))
-        .sort((a, b) => a.startMinutes - b.startMinutes);
+        .filter((e: any) => normalize(e.day || '') === normDay)
+        .sort((a: any, b: any) => a.startMinutes - b.startMinutes);
 
-      dayEntries.forEach((entry) => {
-        const eStartMins = entry.startMinutes;
-        let bestSlot: any = null;
-        let minDiff = Infinity;
+      dayEntries.forEach((entry: any) => {
+        const eMins = entry.startMinutes;
+        const entryTbId = entry.time_block_id || entry.timeBlockId;
 
-        sortedSlots.forEach((slot) => {
-          if (slot.isBreak) return;
-          const slotMins = toMins(slot.start);
-          const diff = Math.abs(eStartMins - slotMins);
-          const currentCell = matrix[slot.start]?.[day];
-          if (diff < minDiff && (currentCell?.isFree || diff < 15)) {
-            minDiff = diff;
-            bestSlot = slot;
+        // 1. Coincidencia directa por time_block_id si el slot tiene id
+        let bestSlot = slotsToMatch.find(
+          (s: any) => s.id && entryTbId && String(s.id) === String(entryTbId)
+        );
+
+        // 2. Si no coincide por ID, buscar por el slot no-recreo más cercano
+        if (!bestSlot) {
+          let minDiff = Infinity;
+          slotsToMatch.forEach((slot: any) => {
+            const slotMins = toMins(slot.start);
+            const diff = Math.abs(eMins - slotMins);
+            const currentCell = matrix[slot.start]?.[day];
+            if (diff < minDiff && (currentCell?.isFree || diff < 15)) {
+              minDiff = diff;
+              bestSlot = slot;
+            }
+          });
+
+          if (bestSlot) {
+            const bestSlotStartM = toMins(bestSlot.start);
+            const bestSlotEndM = toMins(bestSlot.end);
+            const diff = Math.abs(eMins - bestSlotStartM);
+            const inWindow = eMins >= bestSlotStartM - 15 && eMins < bestSlotEndM + 15;
+            if (diff > 50 && !inWindow) {
+              bestSlot = null;
+            }
           }
-        });
+        }
 
-        if (bestSlot && minDiff <= 45) {
+        if (bestSlot) {
           matrix[bestSlot.start][day] = {
             isBreak: false,
             isFree: false,
@@ -724,8 +977,8 @@ export const TeacherDashboard = ({
     state.courses,
     state.assignments,
     state.rooms,
-    state.breakPreferences,
-    state.levelSchedules
+    isSameTeacher,
+    getSlotsForCourse
   ]);
 
   // Obtener los cursos que dicta el docente
@@ -768,245 +1021,6 @@ export const TeacherDashboard = ({
     if (!selectedCourse) return [];
 
     const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-
-    const toMins = (val: string) => {
-      const [h, m] = (val || '')
-        .replace(/[^0-9:]/g, '')
-        .split(':')
-        .map(Number);
-      return (h || 0) * 60 + (m || 0);
-    };
-
-    const fromMins = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-
-    // 1. Obtener slots exactos del curso (igual al motor principal)
-    const getSlotsForCourse = (course: any) => {
-      const isMorning =
-        (course.tanda || '').toLowerCase().includes('mat') ||
-        (course.tanda || '').toLowerCase().includes('mañ') ||
-        ((course.tanda || '') === '' && !(course.level || '').toLowerCase().includes('secun'));
-      const official = (state.levelSchedules || []).find(
-        (ls: any) =>
-          ls.level === course.level &&
-          (ls.shift === (isMorning ? 'Matutina' : 'Vespertina') || !ls.shift)
-      );
-      let startT = official?.start_time ? toMins(official.start_time) : isMorning ? 480 : 840;
-      if (!isMorning && startT < 720 && startT > 0) startT += 720;
-      let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
-      if (!isMorning && endT < 720 && endT > 0) endT += 720;
-
-      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return isMorning === isBpMorning;
-      });
-
-      const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
-      let masterStartMins = toMins(rawMasterStart);
-      if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
-      const masterBPref = {
-        startTime: fromMins(masterStartMins),
-        durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
-      };
-
-      const grade = course.grade?.toLowerCase() || '';
-      const isFirstCycle =
-        /^[1-3]/.test(grade) ||
-        grade.includes('1') ||
-        grade.includes('2') ||
-        grade.includes('3') ||
-        grade.includes('primer') ||
-        (grade.includes('segundo') && !grade.includes('ciclo')) ||
-        grade.includes('tercer');
-      const isSecondCycle =
-        /^[4-6]/.test(grade) ||
-        grade.includes('4') ||
-        grade.includes('5') ||
-        grade.includes('6') ||
-        grade.includes('cuarto') ||
-        grade.includes('quinto') ||
-        grade.includes('sexto');
-
-      const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        if (isMorning !== isBpMorning) return false;
-
-        const levelNormBP = (bp.level || '').toLowerCase();
-        const levelNormCourse = (course.level || '').toLowerCase();
-        if (!levelNormBP || levelNormBP.includes('gen') || levelNormBP.includes('todo')) return true;
-        return (
-          levelNormBP.substring(0, 3) === levelNormCourse.substring(0, 3) ||
-          levelNormCourse.includes(levelNormBP.substring(0, 3))
-        );
-      });
-
-      let bPref = applicableBPs.find((bp: any) => {
-        const cNorm = (bp.cycle || '').toLowerCase();
-        if (isFirstCycle && (cNorm.includes('primer') || cNorm.includes('1er') || cNorm.includes('1'))) return true;
-        if (isSecondCycle && (cNorm.includes('segundo') || cNorm.includes('2do') || cNorm.includes('2'))) return true;
-        return false;
-      });
-
-      if (!bPref) {
-        bPref = applicableBPs.find((bp: any) => {
-          const cNorm = (bp.cycle || '').toLowerCase();
-          return !cNorm || cNorm === 'general' || cNorm === 'gen';
-        });
-      }
-
-      bPref = bPref || masterBPref;
-
-      let bStart = toMins(bPref.startTime);
-      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
-
-      // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
-      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
-        const feName = (fe.name || '').toLowerCase();
-        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-      });
-
-      let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
-      const slots = [];
-
-      if (isMorning && dbActoEvent) {
-        const feEndMins = toMins(dbActoEvent.end_time);
-        if (feEndMins > 0) classStart = feEndMins;
-
-        slots.push({
-          start: dbActoEvent.start_time,
-          end: dbActoEvent.end_time,
-          isBreak: true,
-          label: dbActoEvent.name
-        });
-      }
-
-      const isSecundaria = (course.level || '').toLowerCase().includes('secun');
-      const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
-
-      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-        if (totalMins <= 0 || preferredCount <= 0) return [];
-        let count = preferredCount;
-        const limit = maxCount || 6;
-        while (count > 1 && totalMins / count < 35) {
-          count--;
-        }
-        while (totalMins / count > 50 && count < limit) {
-          if (totalMins / (count + 1) < 35) {
-            break;
-          }
-          count++;
-        }
-
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
-        }
-        return durs;
-      };
-
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (35 a 50 minutos por clase)
-      const preWindow = Math.max(0, bStart - classStart);
-      let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
-      if (preWindow / preCountLocal < 35) {
-        preCountLocal = Math.max(1, Math.floor(preWindow / 35));
-      }
-      const maxPre = isSecundaria ? 3 : 6;
-      const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPre);
-      preCountLocal = preDurs.length;
-
-      let currTimePre = classStart;
-      for (let i = 0; i < preCountLocal; i++) {
-        let dur = preDurs[i];
-        let sTime = currTimePre;
-        let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
-        currTimePre = eTime;
-
-        slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
-          isBreak: false,
-          label: `${i + 1}ra Hora`
-        });
-      }
-
-      slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
-
-      // Eventos Fijos Post-Recreo (ej. Juego/Trabajo de 09:45 a 10:00 o Almuerzo filtrados por ciclo y nivel)
-      let currTimePost = bEnd;
-      const levelNorm = (course?.level || '').toLowerCase();
-      const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
-        const feName = (fe.name || '').toLowerCase();
-        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-        const feStartMins = toMins(fe.start_time);
-        if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
-
-        const feLevel = (fe.level || '').toLowerCase();
-        const feCycle = (fe.cycle || '').toLowerCase();
-        const levelMatch =
-          !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
-        const cycleMatch =
-          !feCycle ||
-          feCycle.includes('gen') ||
-          feCycle.includes('todo') ||
-          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
-          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
-        return levelMatch && cycleMatch;
-      });
-
-      postFixedEvents.forEach((fe: any) => {
-        const feEndMins = toMins(fe.end_time);
-        if (feEndMins > currTimePost) {
-          const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
-          const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
-          slots.push({
-            start: sFormatted,
-            end: eFormatted,
-            isBreak: true,
-            label: fe.name
-          });
-          currTimePost = Math.max(currTimePost, feEndMins);
-        }
-      });
-
-      // CÁLCULO FLEXIBLE Y DINÁMICO DESPUÉS DEL RECREO Y EVENTOS FIJOS HASTA LA HORA DE CIERRE
-      const postWindow = Math.max(0, endT - currTimePost);
-      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
-      if (postWindow / postCountLocal < 35) {
-        postCountLocal = Math.max(1, Math.floor(postWindow / 35));
-      }
-      const maxPost = isSecundaria ? 3 : 6;
-      const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPost);
-      postCountLocal = postDurs.length;
-
-      for (let i = 0; i < postCountLocal; i++) {
-        let dur = postDurs[i];
-        let sTime = currTimePost;
-        let eTime = i === postCountLocal - 1 ? endT : sTime + dur;
-        currTimePost = eTime;
-
-        slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
-          isBreak: false,
-          label: `${preCountLocal + i + 1}ra Hora`
-        });
-      }
-
-      return slots;
-    };
 
     const courseSlots = getSlotsForCourse(selectedCourse);
     const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
@@ -1108,11 +1122,13 @@ export const TeacherDashboard = ({
     });
   }, [
     selectedCourse,
+    selectedYear,
     state.schedule,
     state.timeBlocks,
     state.subjects,
     state.teachers,
-    state.breakPreferences
+    getSlotsForCourse,
+    isSameTeacher
   ]);
 
   // Próximas actividades del centro
