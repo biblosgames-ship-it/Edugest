@@ -83,7 +83,8 @@ export const createInvitationCode = async (
   role: string,
   courseId?: string,
   centerId?: string,
-  allowedPanels?: string[]
+  allowedPanels?: string[],
+  teacherId?: string
 ) => {
   try {
     const payload: any = {
@@ -97,10 +98,23 @@ export const createInvitationCode = async (
     if (centerId) {
       payload.center_id = centerId;
     }
+    if (teacherId) {
+      payload.teacher_id = teacherId;
+    }
 
     const { error } = await supabase.from('invitation_codes').insert(payload);
 
-    if (error) throw error;
+    if (error) {
+      // Fallback si la columna teacher_id no existe aún en la base de datos
+      if (payload.teacher_id) {
+        console.warn('Fallo al insertar con teacher_id, reintentando sin teacher_id:', error);
+        delete payload.teacher_id;
+        const { error: retryErr } = await supabase.from('invitation_codes').insert(payload);
+        if (retryErr) throw retryErr;
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
     console.error('Error creating invitation code:', error);
     throw error;
@@ -113,15 +127,22 @@ export const createBulkTeacherInvitationCodes = async (
     role: string;
     center_id: string;
     allowed_panels?: string[];
+    teacher_id?: string;
   }>
 ) => {
   try {
-    const payload = records.map((r) => ({
-      code: r.code.trim().toUpperCase().replace(/\s+/g, ''),
-      role: r.role || 'teacher',
-      center_id: r.center_id,
-      allowed_panels: r.allowed_panels || []
-    }));
+    const payload = records.map((r) => {
+      const item: any = {
+        code: r.code.trim().toUpperCase().replace(/\s+/g, ''),
+        role: r.role || 'teacher',
+        center_id: r.center_id,
+        allowed_panels: r.allowed_panels || []
+      };
+      if (r.teacher_id) {
+        item.teacher_id = r.teacher_id;
+      }
+      return item;
+    });
 
     const { error } = await supabase
       .from('invitation_codes')
@@ -131,9 +152,15 @@ export const createBulkTeacherInvitationCodes = async (
       console.warn('Upsert fallback for bulk codes:', error);
       for (const item of payload) {
         try {
-          await supabase
+          const { error: singleErr } = await supabase
             .from('invitation_codes')
             .upsert([item], { onConflict: 'code' });
+          if (singleErr && item.teacher_id) {
+            delete item.teacher_id;
+            await supabase
+              .from('invitation_codes')
+              .upsert([item], { onConflict: 'code' });
+          }
         } catch {}
       }
     }
@@ -141,9 +168,13 @@ export const createBulkTeacherInvitationCodes = async (
     // Sincronizar perfiles existentes que ya se hayan registrado con estos códigos
     for (const item of payload) {
       try {
+        const updateFields: any = { allowed_panels: item.allowed_panels };
+        if (item.teacher_id) {
+          updateFields.teacher_id = item.teacher_id;
+        }
         await supabase
           .from('profiles')
-          .update({ allowed_panels: item.allowed_panels })
+          .update(updateFields)
           .eq('invitation_code', item.code);
       } catch {}
     }
@@ -234,7 +265,8 @@ export const validateInvitationCode = async (code: string) => {
           role: invMatch.role || 'teacher',
           center_id: invMatch.center_id,
           allowed_panels: invMatch.allowed_panels || [],
-          course_id: invMatch.course_id
+          course_id: invMatch.course_id,
+          teacher_id: invMatch.teacher_id || null
         };
       }
     }

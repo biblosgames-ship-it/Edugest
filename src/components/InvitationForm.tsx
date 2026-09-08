@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Check, GraduationCap } from 'lucide-react';
 import { useSupabase } from '../context/AppContext';
 import {
   validateInvitationCode,
@@ -30,6 +31,8 @@ export const InvitationForm = () => {
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [manualStaffName, setManualStaffName] = useState('');
+  const [detectedTeacherId, setDetectedTeacherId] = useState<string | null>(null);
+  const [detectedTeacherName, setDetectedTeacherName] = useState<string | null>(null);
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,11 +162,54 @@ export const InvitationForm = () => {
       }
 
       if (codeData.type === 'invitation') {
-        const fetchedStaff = await getStaffForInvitation(sanitizedCode);
+        const [fetchedStaffRaw, centerTeachersRes] = await Promise.all([
+          getStaffForInvitation(sanitizedCode).catch(() => []),
+          codeData.center_id
+            ? supabase.from('teachers').select('*').eq('center_id', codeData.center_id)
+            : Promise.resolve({ data: [] })
+        ]);
 
-        const autoMatched = fetchedStaff.find(
-          (s: any) => s.email && s.email.trim().toLowerCase() === user.email?.trim().toLowerCase()
-        );
+        const fetchedStaff: any[] = [...(fetchedStaffRaw || [])];
+        const centerTeachers: any[] = centerTeachersRes.data || [];
+
+        // Incorporar a fetchedStaff los docentes de la tabla 'teachers' que no estén en staff
+        for (const ct of centerTeachers) {
+          const alreadyInStaff = fetchedStaff.some(
+            (s: any) =>
+              s.id === ct.id ||
+              (s.name && ct.name && s.name.trim().toLowerCase() === ct.name.trim().toLowerCase())
+          );
+          if (!alreadyInStaff) {
+            fetchedStaff.push({
+              id: ct.id,
+              center_id: ct.center_id,
+              name: ct.name || ct.full_name || 'Docente',
+              team: 'teacher',
+              position: ct.area || ct.position || 'Docente',
+              email: ct.email || null,
+              created_at: ct.created_at
+            });
+          }
+        }
+
+        // Si el código trae un teacher_id directamente asignado
+        let explicitTeacher: any = null;
+        if (codeData.teacher_id) {
+          explicitTeacher =
+            fetchedStaff.find((s: any) => s.id === codeData.teacher_id) ||
+            centerTeachers.find((ct: any) => ct.id === codeData.teacher_id);
+          if (explicitTeacher) {
+            setDetectedTeacherId(codeData.teacher_id);
+            setDetectedTeacherName(explicitTeacher.name || explicitTeacher.full_name || 'Docente');
+            setSelectedStaffId(explicitTeacher.id);
+          }
+        }
+
+        const autoMatched = (explicitTeacher && explicitTeacher.email && explicitTeacher.email.trim().toLowerCase() === user.email?.trim().toLowerCase())
+          ? explicitTeacher
+          : fetchedStaff.find(
+              (s: any) => s.email && s.email.trim().toLowerCase() === user.email?.trim().toLowerCase()
+            );
 
         if (autoMatched) {
           try {
@@ -190,12 +236,19 @@ export const InvitationForm = () => {
             allowed_panels: codeData.allowed_panels?.length ? codeData.allowed_panels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
           });
 
+          try {
+            await Promise.all([
+              supabase.from('staff').update({ email: user.email, user_id: user.id }).eq('id', autoMatched.id),
+              supabase.from('teachers').update({ email: user.email, user_id: user.id }).eq('id', autoMatched.id)
+            ]);
+          } catch {}
+
           window.location.reload();
           return;
         }
 
         // No auto-match: Prepare the selector dropdown
-        const normalizedRole = codeData.role.toLowerCase();
+        const normalizedRole = (codeData.role || '').toLowerCase();
         let targetTeam = '';
         if (normalizedRole.includes('support') || normalizedRole.includes('conserje')) {
           targetTeam = 'support';
@@ -210,6 +263,7 @@ export const InvitationForm = () => {
         }
 
         const filteredStaff = fetchedStaff.filter((s: any) => {
+          if (explicitTeacher && s.id === explicitTeacher.id) return true;
           // Exclude if already linked to another email
           if (s.email && s.email.trim().toLowerCase() !== user.email?.trim().toLowerCase()) {
             return false;
@@ -233,6 +287,10 @@ export const InvitationForm = () => {
           }
           return true;
         });
+
+        if (explicitTeacher && !filteredStaff.some((s: any) => s.id === explicitTeacher.id)) {
+          filteredStaff.unshift(explicitTeacher);
+        }
 
         setStaffList(filteredStaff);
         setDetectedStaffRole(codeData.role);
@@ -410,6 +468,9 @@ export const InvitationForm = () => {
         if (!finalName) throw new Error('Debes escribir un nombre válido.');
       } else {
         matchedStaffObj = staffList.find((s) => s.id === selectedStaffId);
+        if (!matchedStaffObj && detectedTeacherId) {
+          matchedStaffObj = { id: detectedTeacherId, name: detectedTeacherName || 'Docente', role: 'teacher' };
+        }
         if (!matchedStaffObj) throw new Error('El empleado seleccionado no es válido.');
         finalName = matchedStaffObj.name;
       }
@@ -445,6 +506,11 @@ export const InvitationForm = () => {
       }
 
       const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
+      const resolvedTeacherId =
+        (matchedStaffObj && matchedStaffObj.id) ||
+        (selectedStaffId !== 'manual' ? selectedStaffId : null) ||
+        detectedTeacherId ||
+        null;
 
       // 1. Ejecutar el RPC
       try {
@@ -453,7 +519,7 @@ export const InvitationForm = () => {
           finalName,
           undefined,
           undefined,
-          matchedStaffObj ? matchedStaffObj.id : undefined
+          resolvedTeacherId || undefined
         );
       } catch (rpcErr) {
         console.warn('RPC warning in handleActivateStaff, executing direct profile activation:', rpcErr);
@@ -468,17 +534,17 @@ export const InvitationForm = () => {
         role: roleToUse,
         center_id: detectedCenterId,
         invitation_code: sanitizedCode,
-        teacher_id: matchedStaffObj?.id || null,
+        teacher_id: resolvedTeacherId,
         is_active: true,
         allowed_panels: detectedAllowedPanels?.length ? detectedAllowedPanels : ['dashboard', 'classroom', 'agenda', 'digital-register', 'tasks', 'communications']
       });
 
       // 3. Vincular el correo y usuario en la ficha de personal existente para evitar duplicados
-      if (matchedStaffObj?.id) {
+      if (resolvedTeacherId) {
         try {
           await Promise.all([
-            supabase.from('staff').update({ email: user.email, user_id: user.id }).eq('id', matchedStaffObj.id),
-            supabase.from('teachers').update({ email: user.email, user_id: user.id }).eq('id', matchedStaffObj.id)
+            supabase.from('staff').update({ email: user.email, user_id: user.id }).eq('id', resolvedTeacherId),
+            supabase.from('teachers').update({ email: user.email, user_id: user.id }).eq('id', resolvedTeacherId)
           ]);
         } catch (linkErr) {
           console.warn('Error linking email to staff/teachers:', linkErr);
@@ -540,6 +606,26 @@ export const InvitationForm = () => {
             </p>
           </div>
 
+          {detectedTeacherName && (
+            <div className="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in duration-200">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                <Check size={16} strokeWidth={3} />
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
+                  <GraduationCap size={13} />
+                  Docente Vinculado por Invitación
+                </span>
+                <h4 className="text-sm font-black text-emerald-950 uppercase">
+                  {detectedTeacherName}
+                </h4>
+                <p className="text-[10px] text-emerald-700 font-medium leading-tight mt-0.5">
+                  Tu perfil se vinculará directamente a este docente con su horario y materias asignadas.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
               Selecciona tu Nombre Registrado
@@ -590,6 +676,8 @@ export const InvitationForm = () => {
                 setStaffList([]);
                 setSelectedStaffId('');
                 setManualStaffName('');
+                setDetectedTeacherId(null);
+                setDetectedTeacherName(null);
                 setError('');
               }}
               className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-4 rounded-[2rem] font-black text-[10px] uppercase tracking-widest transition-all"

@@ -178,6 +178,8 @@ export const InvitationGenerator = ({
   // Estados para invitaciones administrativas individuales
   const [code, setCode] = useState('');
   const [selectedRole, setSelectedRole] = useState(role || 'teacher');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [generatingTeacherId, setGeneratingTeacherId] = useState<string | null>(null);
   const [selectedPanels, setSelectedPanels] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [activeCodes, setActiveCodes] = useState<any[]>([]);
@@ -345,6 +347,7 @@ export const InvitationGenerator = ({
       // Buscar si ya tiene un código guardado en activeCodes que coincida
       const matchingActive = activeCodes.find(
         (c) =>
+          (c.teacher_id && c.teacher_id === t.id) ||
           c.code.toUpperCase() === expectedCode ||
           c.code.toUpperCase().endsWith(`-${uniqueSlug}`) ||
           ((c.role === 'teacher' || !c.role) && c.code.includes(baseSlug))
@@ -380,6 +383,12 @@ export const InvitationGenerator = ({
     });
   }, [state.teachers, state.assignments, state.courses, defaultPrefix, activeCodes, staffScope, assignedTeacherIds]);
 
+  const sortedTeachers = useMemo(() => {
+    return [...(state.teachers || [])].sort((a: any, b: any) =>
+      (a.name || a.full_name || '').localeCompare(b.name || b.full_name || '')
+    );
+  }, [state.teachers]);
+
   const filteredTeachers = useMemo(() => {
     if (!teacherSearch.trim()) return teachersWithCodes;
     const term = teacherSearch.toLowerCase();
@@ -411,17 +420,47 @@ export const InvitationGenerator = ({
         code: t.generatedCode,
         role: 'teacher',
         center_id: cId,
-        allowed_panels: teacherPanels
+        allowed_panels: teacherPanels,
+        teacher_id: t.id
       }));
 
       await createBulkTeacherInvitationCodes(recordsToCreate);
-      toast.success(`¡${recordsToCreate.length} Códigos de Docentes generados y configurados con éxito!`);
+      toast.success(`¡${recordsToCreate.length} Códigos de Docentes vinculados y guardados con éxito!`);
       await loadCodes();
     } catch (err) {
       console.error('Error generando códigos masivos:', err);
       toast.error('Error al guardar los códigos en la base de datos.');
     } finally {
       setIsGeneratingBulk(false);
+    }
+  };
+
+  // Generar o actualizar código individual para un docente específico
+  const handleGenerateSingleTeacherCode = async (t: any) => {
+    const cId = center?.id || profile?.center_id;
+    if (!cId) {
+      toast.error('No se pudo determinar el centro educativo.');
+      return;
+    }
+
+    setGeneratingTeacherId(t.id);
+    try {
+      await createBulkTeacherInvitationCodes([
+        {
+          code: t.generatedCode,
+          role: 'teacher',
+          center_id: cId,
+          allowed_panels: teacherPanels,
+          teacher_id: t.id
+        }
+      ]);
+      toast.success(`¡Código "${t.generatedCode}" vinculado a ${t.displayName} guardado exitosamente!`);
+      await loadCodes();
+    } catch (err) {
+      console.error('Error generando código individual para docente:', err);
+      toast.error('Error al guardar el código en la base de datos.');
+    } finally {
+      setGeneratingTeacherId(null);
     }
   };
 
@@ -438,11 +477,13 @@ export const InvitationGenerator = ({
         selectedRole,
         courseId,
         cId,
-        selectedPanels
+        selectedPanels,
+        selectedRole === 'teacher' && selectedTeacherId ? selectedTeacherId : undefined
       );
 
       toast.success(`Código de acceso "${sanitizedCode}" generado exitosamente.`);
       setCode('');
+      setSelectedTeacherId('');
       loadCodes();
     } catch (error) {
       console.error('Error creating code:', error);
@@ -911,13 +952,30 @@ export const InvitationGenerator = ({
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => handleCopyWhatsApp(t)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase transition-colors"
-                            title="Copiar mensaje personalizado para WhatsApp"
-                          >
-                            <Send size={11} /> WhatsApp
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateSingleTeacherCode(t)}
+                              disabled={generatingTeacherId === t.id}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                                t.isCreatedInDb
+                                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
+                              }`}
+                              title={t.isCreatedInDb ? 'Actualizar código y permisos en base de datos' : 'Generar y vincular código individual para este docente'}
+                            >
+                              <KeyRound size={11} />
+                              {generatingTeacherId === t.id ? '...' : t.isCreatedInDb ? 'Regenerar' : 'Generar'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyWhatsApp(t)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                              title="Copiar mensaje personalizado para WhatsApp"
+                            >
+                              <Send size={11} /> WhatsApp
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -969,7 +1027,10 @@ export const InvitationGenerator = ({
                   </label>
                   <select
                     value={selectedRole}
-                    onChange={(e) => setSelectedRole(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedRole(e.target.value);
+                      if (e.target.value !== 'teacher') setSelectedTeacherId('');
+                    }}
                     className="w-full bg-slate-50 border-2 border-slate-100 px-4 py-3 rounded-2xl outline-none focus:border-indigo-500 transition-all font-black text-xs text-slate-700 uppercase"
                   >
                     <option value="teacher">Docente</option>
@@ -981,6 +1042,77 @@ export const InvitationGenerator = ({
                 </div>
               )}
             </div>
+
+            {/* Selector de Docente Registrado con Horario */}
+            {selectedRole === 'teacher' && (
+              <div className="space-y-2 p-4 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-indigo-950 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                    <GraduationCap size={15} className="text-indigo-600" />
+                    Vincular con Docente Registrado (Horario y Cursos Creados)
+                  </label>
+                  {selectedTeacherId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTeacherId('')}
+                      className="text-[9px] font-bold text-rose-600 hover:text-rose-800 uppercase"
+                    >
+                      Desvincular
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={selectedTeacherId}
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    setSelectedTeacherId(tId);
+                    if (tId) {
+                      const tObj = (state.teachers || []).find((t: any) => t.id === tId);
+                      if (tObj) {
+                        const tName = tObj.name || tObj.full_name || 'DOC';
+                        const slug = getTeacherSlug(tName);
+                        setCode(`${defaultPrefix}${slug}`);
+                      }
+                    }
+                  }}
+                  className="w-full bg-white border-2 border-indigo-200 px-4 py-3 rounded-xl outline-none focus:border-indigo-600 transition-all font-bold text-xs text-indigo-950 uppercase shadow-sm"
+                >
+                  <option value="">-- Seleccionar Docente de la Nómina / Horario --</option>
+                  {sortedTeachers.map((t: any) => {
+                    const tAssignments = (state.assignments || []).filter(
+                      (a: any) => (a.teacher_id || a.teacherId) === t.id
+                    );
+                    const cSummary = Array.from(
+                      new Set(
+                        tAssignments.map((a: any) => {
+                          const course = (state.courses || []).find((c: any) => c.id === (a.course_id || a.courseId));
+                          return course ? `${course.grade} "${course.section}"` : '';
+                        }).filter(Boolean)
+                      )
+                    ).join(', ');
+                    const label = `${t.name || t.full_name} (${t.area || t.position || 'Docente'}${cSummary ? ' • ' + cSummary : ''})`;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {selectedTeacherId ? (
+                  <p className="text-[10px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center gap-2">
+                    <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
+                    <span>
+                      Este código quedará vinculado directamente al docente seleccionado. Al registrarse, heredará de inmediato su horario, materias y perfil.
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500 font-medium pl-1">
+                    💡 Selecciona al docente para autocompletar su código y enlazar directamente su horario y asignaciones.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Panel de Selección de Permisos */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
@@ -1108,6 +1240,20 @@ export const InvitationGenerator = ({
                         </span>
                       </div>
                     </div>
+
+                    {(() => {
+                      const linkedTeacher = (state.teachers || []).find(
+                        (t: any) =>
+                          t.id === c.teacher_id ||
+                          (c.role === 'teacher' && c.code.includes(getTeacherSlug(t.name || t.full_name || '')))
+                      );
+                      return linkedTeacher ? (
+                        <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 border border-indigo-100 p-1.5 rounded-lg flex items-center gap-1.5 mt-1">
+                          <GraduationCap size={13} className="text-indigo-600 shrink-0" />
+                          <span className="truncate">Docente: {linkedTeacher.name || linkedTeacher.full_name}</span>
+                        </div>
+                      ) : null;
+                    })()}
 
                     <button
                       onClick={() => handleDeleteCode(c.code)}
