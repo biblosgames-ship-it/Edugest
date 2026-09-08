@@ -1062,74 +1062,133 @@ export const ScheduleViewer = () => {
 
   const { slots, startT, endT, masterBPref } = timeSlots;
 
-  const entriesBySlotAndDay = useMemo(() => {
-    const map = new Map<string, any[]>();
+  const normStr = useCallback(
+    (str: string) =>
+      (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+    []
+  );
 
-    // Initialize map keys for all days and slots to ensure they are always arrays
-    days.forEach((day) => {
-      slots.forEach((slot) => {
-        map.set(`${day}-${slot.start}`, []);
-      });
-    });
-
-    const normStr = (str: string) =>
-      (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-    filteredSchedule.forEach((entry) => {
-      if (!entry.day || !entry.start_time) return;
-
-      const normDay = normStr(entry.day);
-      const matchedDay = days.find((d) => normStr(d) === normDay) || days[0];
-
-      let eMins = toMins(entry.start_time);
-      const entryCourse = state.courses.find((c: any) => String(c.id) === String(entry.course_id || entry.courseId));
-      const cTanda = (entry.shift || entryCourse?.tanda || '').toLowerCase();
-      const isEntryAfternoon =
-        cTanda.includes('ves') ||
-        cTanda.includes('tar') ||
-        ((entryCourse?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
-
-      if (isEntryAfternoon && eMins < 720 && eMins > 0) {
-        eMins += 720;
-      } else if (!isEntryAfternoon && !isMorning && eMins >= 420 && eMins < 780 && filterType !== 'teacher') {
-        eMins += 360;
+  const buildScheduleMap = useCallback(
+    (
+      entriesList: any[],
+      targetSlots: any[],
+      opts?: {
+        course?: any;
+        isTeacherView?: boolean;
+        shiftIsMorning?: boolean;
       }
+    ) => {
+      const map = new Map<string, any[]>();
+      const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
-      let closestSlot: any = null;
-      let minDiff = Infinity;
-
-      slots.forEach((slot) => {
-        let slotMins = toMins(slot.start);
-        if (!isMorning && slotMins < 720 && slotMins > 0) {
-          slotMins += 720;
-        }
-        const diff = Math.abs(eMins - slotMins);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestSlot = slot;
-        }
+      tableDays.forEach((day) => {
+        targetSlots.forEach((slot) => {
+          map.set(`${day}-${slot.start}`, []);
+        });
       });
 
-      // Asociar si la entrada corresponde al slot más cercano (< 32 min)
-      if (closestSlot && minDiff < 32) {
-        const key = `${matchedDay}-${closestSlot.start}`;
-        if (!map.has(key)) map.set(key, []);
-        const listInSlot = map.get(key)!;
+      const nonBreakSlots = targetSlots.filter((s: any) => !s.isBreak);
+      const slotsToMatch = nonBreakSlots.length > 0 ? nonBreakSlots : targetSlots;
+      const isMorn = opts?.shiftIsMorning !== undefined ? opts.shiftIsMorning : isMorning;
 
-        // Evitar duplicados exactos en la casilla
-        const isDup = listInSlot.some(
-          (existing: any) =>
-            (existing.id && entry.id && String(existing.id) === String(entry.id)) ||
-            (String(existing.course_id || existing.courseId) === String(entry.course_id || entry.courseId) &&
-              String(existing.subject_id) === String(entry.subject_id) &&
-              normStr(existing.day) === normDay)
+      entriesList.forEach((entry: any) => {
+        if (!entry.day) return;
+
+        const normDay = normStr(entry.day);
+        const matchedDay = tableDays.find((d) => normStr(d) === normDay);
+        if (!matchedDay) return;
+
+        let rawStartTime = entry.start_time;
+        if (!rawStartTime && (entry.time_block_id || entry.timeBlockId)) {
+          const tb = state.timeBlocks?.find((b: any) => b.id === (entry.time_block_id || entry.timeBlockId));
+          if (tb) rawStartTime = tb.start_time;
+        }
+        if (!rawStartTime) return;
+
+        let eMins = toMins(rawStartTime);
+        const entryCourse =
+          opts?.course ||
+          state.courses.find((c: any) => String(c.id) === String(entry.course_id || entry.courseId));
+        const cTanda = (entry.shift || entryCourse?.tanda || selectedShift || '').toLowerCase();
+        const isEntryAfternoon =
+          cTanda.includes('ves') ||
+          cTanda.includes('tar') ||
+          ((entryCourse?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
+
+        if (isEntryAfternoon && eMins < 720 && eMins > 0) {
+          eMins += 720;
+        } else if (!isEntryAfternoon && !isMorn && eMins >= 420 && eMins < 780 && !opts?.isTeacherView) {
+          eMins += 360;
+        }
+
+        // 1. Coincidencia directa por time_block_id si el slot tiene id
+        let bestSlot = slotsToMatch.find(
+          (s: any) =>
+            s.id &&
+            (entry.time_block_id || entry.timeBlockId) &&
+            s.id === (entry.time_block_id || entry.timeBlockId)
         );
-        if (!isDup) listInSlot.push(entry);
-      }
-    });
 
-    return map;
-  }, [filteredSchedule, slots, days, isMorning, filterType, state.courses]);
+        // 2. Si no coincide por ID, buscar por el slot no-recreo más cercano
+        if (!bestSlot) {
+          let minDiff = Infinity;
+          slotsToMatch.forEach((slot: any) => {
+            let slotMins = toMins(slot.start);
+            if (!isMorn && slotMins < 720 && slotMins > 0) {
+              slotMins += 720;
+            }
+            const diff = Math.abs(eMins - slotMins);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestSlot = slot;
+            }
+          });
+
+          if (minDiff > 50) {
+            let slotStartM = toMins(bestSlot?.start);
+            let slotEndM = toMins(bestSlot?.end);
+            if (!isMorn && slotStartM < 720 && slotStartM > 0) slotStartM += 720;
+            if (!isMorn && slotEndM < 720 && slotEndM > 0) slotEndM += 720;
+            const inWindow = eMins >= slotStartM - 15 && eMins < slotEndM + 15;
+            if (!inWindow && minDiff > 65) {
+              bestSlot = null;
+            }
+          }
+        }
+
+        if (bestSlot) {
+          const key = `${matchedDay}-${bestSlot.start}`;
+          if (!map.has(key)) map.set(key, []);
+          const listInSlot = map.get(key)!;
+
+          const isDup = listInSlot.some(
+            (existing: any) =>
+              (existing.id && entry.id && String(existing.id) === String(entry.id)) ||
+              (String(existing.course_id || existing.courseId) ===
+                String(entry.course_id || entry.courseId) &&
+                String(existing.subject_id) === String(entry.subject_id) &&
+                String(existing.teacher_id) === String(entry.teacher_id) &&
+                normStr(existing.day) === normDay)
+          );
+          if (!isDup) listInSlot.push(entry);
+        }
+      });
+
+      return map;
+    },
+    [state.courses, state.timeBlocks, selectedShift, isMorning, normStr]
+  );
+
+  const entriesBySlotAndDay = useMemo(() => {
+    return buildScheduleMap(filteredSchedule, slots, {
+      course:
+        filterType === 'course' && filterId
+          ? state.courses.find((c: any) => String(c.id) === String(filterId))
+          : undefined,
+      isTeacherView: filterType === 'teacher',
+      shiftIsMorning: isMorning
+    });
+  }, [buildScheduleMap, filteredSchedule, slots, filterType, filterId, state.courses, isMorning]);
 
   const conflicts = useMemo(() => {
     const conflictIds: string[] = [];
@@ -1521,6 +1580,26 @@ export const ScheduleViewer = () => {
           doc.text(`Generado oficialmente a través de Edugest`, 14, 33);
 
           const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+          const teacherEntries = (state.schedule || []).filter((s: any) => {
+            if (!isSameTeacher(s.teacher_id, teacher.id)) {
+              const assign = (state.assignments || []).some(
+                (a: any) =>
+                  isSameTeacher(a.teacher_id || a.teacherId, teacher.id) &&
+                  String(a.course_id || a.courseId) === String(s.course_id || s.courseId) &&
+                  String(a.subject_id) === String(s.subject_id)
+              );
+              if (!assign) return false;
+            }
+            if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+            return true;
+          });
+
+          const teacherScheduleMap = buildScheduleMap(teacherEntries, teacherSlots, {
+            isTeacherView: true,
+            shiftIsMorning: isMorning
+          });
+
           const tableBody = teacherSlots.map((slot: any) => {
             const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
 
@@ -1536,24 +1615,11 @@ export const ScheduleViewer = () => {
             }
 
             const dayCols = tableDays.map((day) => {
-              const entries = (state.schedule || []).filter((s: any) => {
-                if (!isSameTeacher(s.teacher_id, teacher.id)) return false;
-                if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-                if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
-
-                let sM = toMins(slot.start);
-                let eM = toMins(s.start_time);
-                const sShift = (s.shift || selectedShift || '').toLowerCase();
-                const isEntryAfternoon = sShift.includes('ves') || sShift.includes('tar');
-                if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
-                if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
-
-                return Math.abs(sM - eM) < 15;
-              });
+              const entries = teacherScheduleMap.get(`${day}-${slot.start}`) || [];
               if (entries.length === 0) return '';
               const seenEntries = new Set<string>();
               const uniqueEntries = entries.filter((e: any) => {
-                const k = `${e.course_id}_${e.subject_id}`;
+                const k = `${e.course_id || e.courseId}_${e.subject_id}`;
                 if (seenEntries.has(k)) return false;
                 seenEntries.add(k);
                 return true;
@@ -1617,9 +1683,12 @@ export const ScheduleViewer = () => {
         }
       });
 
-      const targetCourses = filterType === 'course' && filterId
-        ? shiftCourses.filter((c: any) => String(c.id) === String(filterId))
-        : shiftCourses;
+      const currentSelectedCourse =
+        filterType === 'course' && filterId
+          ? state.courses.find((c: any) => String(c.id) === String(filterId))
+          : null;
+
+      const targetCourses = currentSelectedCourse ? [currentSelectedCourse] : shiftCourses;
 
       if (targetCourses.length === 0) {
         alert('No hay cursos disponibles para exportar en esta tanda.');
@@ -1659,9 +1728,24 @@ export const ScheduleViewer = () => {
         const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
         const courseSlots = getSlotsForCourse(course);
 
+        const courseEntries = (state.schedule || []).filter((s: any) => {
+          if (String(s.course_id || s.courseId) !== String(course.id)) return false;
+          if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+          return true;
+        });
+
+        const courseScheduleMap =
+          filterType === 'course' && filterId && String(filterId) === String(course.id)
+            ? entriesBySlotAndDay
+            : buildScheduleMap(courseEntries, courseSlots, {
+                course,
+                isTeacherView: false,
+                shiftIsMorning: isMorning
+              });
+
         const tableBody = courseSlots.map((slot: any) => {
           const timeLabel = `${format12h(slot.start)}\n${format12h(slot.end)}`;
-          
+
           if (slot.isBreak) {
             return [
               timeLabel,
@@ -1674,20 +1758,7 @@ export const ScheduleViewer = () => {
           }
 
           const dayCols = tableDays.map((day) => {
-            const entries = (state.schedule || []).filter((s: any) => {
-              if (String(s.course_id || s.courseId) !== String(course.id)) return false;
-              if ((s.day || '').trim().toLowerCase() !== day.toLowerCase()) return false;
-              if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
-
-              let sM = toMins(slot.start);
-              let eM = toMins(s.start_time);
-              const cTanda = (s.shift || course?.tanda || selectedShift || '').toLowerCase();
-              const isEntryAfternoon = cTanda.includes('ves') || cTanda.includes('tar');
-              if (isEntryAfternoon && eM < 720 && eM > 0) eM += 720;
-              if (isEntryAfternoon && sM < 720 && sM > 0) sM += 720;
-
-              return Math.abs(sM - eM) < 15;
-            });
+            const entries = courseScheduleMap.get(`${day}-${slot.start}`) || [];
 
             if (entries.length === 0) return '';
 
@@ -1701,7 +1772,22 @@ export const ScheduleViewer = () => {
 
             return uniqueEntries.map((e: any) => {
               const sub = state.subjects.find((s: any) => String(s.id) === String(e.subject_id));
-              const teacher = state.teachers.find((t: any) => isSameTeacher(t.id, e.teacher_id) || String(t.id) === String(e.teacher_id));
+              let teacher = state.teachers.find(
+                (t: any) => isSameTeacher(t.id, e.teacher_id) || String(t.id) === String(e.teacher_id)
+              );
+              if (!teacher) {
+                const assign = (state.assignments || []).find(
+                  (a: any) =>
+                    String(a.course_id || a.courseId) === String(e.course_id || e.courseId) &&
+                    String(a.subject_id) === String(e.subject_id)
+                );
+                if (assign) {
+                  const tid = assign.teacher_id || assign.teacherId;
+                  teacher = state.teachers.find(
+                    (t: any) => isSameTeacher(t.id, tid) || String(t.id) === String(tid)
+                  );
+                }
+              }
               return `${(sub?.name || 'Materia').toUpperCase()}\n${teacher?.name || 'Docente'}`;
             }).join('\n---\n');
           });
