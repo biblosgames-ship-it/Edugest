@@ -75,11 +75,12 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
       { align: 'center' }
     );
 
-    const head = [['Nº', 'NOMBRES Y APELLIDOS', 'SEXO', 'CÉDULA']];
+    const head = [['Nº', 'CÓDIGO SIGERD', 'NOMBRES Y APELLIDOS', 'SEXO', 'CÉDULA']];
     const body = [...students]
       .sort((a: any, b: any) => (a.orderNumber || 99) - (b.orderNumber || 99))
       .map((s: any, idx) => [
         s.orderNumber || idx + 1,
+        s.sigerd_code || s.sigerdCode || '---',
         `${s.first_surname || s.lastName} ${s.second_surname || ''}, ${s.names || s.firstName}`.toUpperCase(),
         s.sex || '-',
         s.idCard || s.id_card || '---'
@@ -93,9 +94,10 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
       styles: { fontSize: 9, cellPadding: 1.5, valign: 'middle' },
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 15 },
-        2: { halign: 'center', cellWidth: 15 },
-        3: { cellWidth: 35 }
+        0: { halign: 'center', cellWidth: 12 },
+        1: { halign: 'center', cellWidth: 28 },
+        3: { halign: 'center', cellWidth: 15 },
+        4: { cellWidth: 35 }
       }
     });
 
@@ -148,6 +150,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
         <thead>
           <tr className="bg-slate-900 text-white">
             <th className="px-3 py-1 text-[9px] font-black uppercase w-8 text-center">#</th>
+            <th className="px-3 py-1 text-[9px] font-black uppercase w-28">Cód. SIGERD</th>
             <th className="px-3 py-1 text-[9px] font-black uppercase">Nombre</th>
             <th className="px-3 py-1 text-[9px] font-black uppercase text-center w-8">S</th>
             <th className="px-3 py-1 text-right text-[9px] font-black uppercase w-20">Acción</th>
@@ -157,7 +160,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
           {isLoading ? (
             <tr>
               <td
-                colSpan={4}
+                colSpan={5}
                 className="p-4 text-center text-[10px] font-black uppercase text-slate-400 animate-pulse"
               >
                 Cargando...
@@ -165,7 +168,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
             </tr>
           ) : students.length === 0 ? (
             <tr>
-              <td colSpan={4} className="p-4 text-center text-[10px] text-slate-300 italic">
+              <td colSpan={5} className="p-4 text-center text-[10px] text-slate-300 italic">
                 No hay alumnos.
               </td>
             </tr>
@@ -176,6 +179,9 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-3 py-0.5 text-center text-[10px] font-black text-indigo-600">
                     {s.orderNumber || '-'}
+                  </td>
+                  <td className="px-3 py-0.5 font-mono text-[9px] font-bold text-slate-600">
+                    {s.sigerd_code || s.sigerdCode || '---'}
                   </td>
                   <td className="px-3 py-0.5 font-bold text-slate-800 uppercase text-[10px] tracking-tighter">
                     {s.first_surname || s.lastName} {s.second_surname || ''},{' '}

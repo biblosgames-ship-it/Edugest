@@ -35,6 +35,7 @@ export const generateListPDF = (
     .sort((a, b) => (a.orderNumber || a.order_number || 99) - (b.orderNumber || b.order_number || 99))
     .map((s, index) => [
       s.orderNumber || s.order_number || index + 1,
+      s.sigerd_code || s.sigerdCode || '---',
       `${s.first_surname || s.lastName || ''} ${s.second_surname || ''}, ${s.names || s.firstName || ''}`.toUpperCase(),
       s.sex || '',
       '' // ESPACIO LIMPIO PARA OBSERVACIONES
@@ -42,7 +43,7 @@ export const generateListPDF = (
 
   autoTable(doc, {
     startY: 30,
-    head: [['#', 'APELLIDOS Y NOMBRES', 'SEXO', 'OBSERVACIONES']],
+    head: [['#', 'CÓDIGO SIGERD', 'APELLIDOS Y NOMBRES', 'SEXO', 'OBSERVACIONES']],
     body: tableData,
     theme: 'grid',
     styles: {
@@ -60,8 +61,9 @@ export const generateListPDF = (
     },
     columnStyles: {
       0: { halign: 'center', cellWidth: 8 },
-      2: { halign: 'center', cellWidth: 12 },
-      3: { cellWidth: 30 }
+      1: { halign: 'center', cellWidth: 26 },
+      3: { halign: 'center', cellWidth: 12 },
+      4: { cellWidth: 30 }
     },
     margin: { left: margin, right: margin }
   });
@@ -124,6 +126,7 @@ export const exportStudentsToExcel = ({
   // Cabeceras de tabla
   const headers = [
     'Nº',
+    'CÓDIGO SIGERD',
     ...(isSingleCourse ? [] : ['NIVEL', 'GRADO', 'SECCIÓN', 'TANDA']),
     'APELLIDOS',
     'NOMBRES',
@@ -154,6 +157,7 @@ export const exportStudentsToExcel = ({
 
     const row = [
       s.order_number || s.orderNumber || idx + 1,
+      s.sigerd_code || s.sigerdCode || '---',
       ...(isSingleCourse ? [] : [s.level || '', s.grade || '', s.section || '', s.tanda || 'Matutina']),
       surnames || '---',
       names || '---',

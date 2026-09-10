@@ -276,18 +276,208 @@ export const dataService = {
 
   // TAREAS Y COMUNICADOS
   async addTask(data: any) {
-    const { error } = await supabase.from('tasks').insert([data]);
-    if (error) throw error;
+    const period = data.period;
+    let payload = { ...data };
+    if (period && payload.description) {
+      if (!payload.description.includes('<!--period:')) {
+        payload.description = `<!--period:${period}-->\n${payload.description}`;
+      }
+    }
+    try {
+      const { error } = await supabase.from('tasks').insert([payload]);
+      if (error) {
+        if (error.message && (error.message.includes('period') || error.code === 'PGRST204')) {
+          delete payload.period;
+          const { error: retryError } = await supabase.from('tasks').insert([payload]);
+          if (retryError) throw retryError;
+          return;
+        }
+        throw error;
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('period') || err.code === 'PGRST204')) {
+        delete payload.period;
+        const { error: retryError } = await supabase.from('tasks').insert([payload]);
+        if (retryError) throw retryError;
+        return;
+      }
+      throw err;
+    }
   },
 
   async updateTask(id: string, updates: any) {
-    const { error } = await supabase.from('tasks').update(updates).eq('id', id);
-    if (error) throw error;
+    const period = updates.period;
+    let payload = { ...updates };
+    if (period && payload.description) {
+      const cleaned = payload.description.replace(/<!--period:P[1-4]-->\s*/gi, '');
+      payload.description = `<!--period:${period}-->\n${cleaned}`;
+    }
+    try {
+      const { error } = await supabase.from('tasks').update(payload).eq('id', id);
+      if (error) {
+        if (error.message && (error.message.includes('period') || error.code === 'PGRST204')) {
+          delete payload.period;
+          const { error: retryError } = await supabase.from('tasks').update(payload).eq('id', id);
+          if (retryError) throw retryError;
+          return;
+        }
+        throw error;
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('period') || err.code === 'PGRST204')) {
+        delete payload.period;
+        const { error: retryError } = await supabase.from('tasks').update(payload).eq('id', id);
+        if (retryError) throw retryError;
+        return;
+      }
+      throw err;
+    }
   },
 
   async deleteTask(id: string) {
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  async savePlatformLinks(params: {
+    center_id: string;
+    course_id: string;
+    subject_id?: string | null;
+    teacher_id: string;
+    classroom_url?: string;
+    meet_url?: string;
+    other_url?: string;
+    other_label?: string;
+  }) {
+    const key = `platform_links_${params.course_id}_${params.subject_id || 'all'}`;
+    const payload = {
+      classroom_url: params.classroom_url || '',
+      meet_url: params.meet_url || '',
+      other_url: params.other_url || '',
+      other_label: params.other_label || 'Plataforma Alterna',
+      updated_at: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(`edugens_${key}`, JSON.stringify(payload));
+    } catch (e) {}
+
+    // 1. Intentar en course_platform_links
+    try {
+      const { data: existing, error: selErr } = await supabase
+        .from('course_platform_links')
+        .select('id')
+        .eq('course_id', params.course_id)
+        .eq('teacher_id', params.teacher_id)
+        .limit(1);
+
+      if (!selErr && existing && existing.length > 0) {
+        await supabase
+          .from('course_platform_links')
+          .update({
+            ...payload,
+            subject_id: params.subject_id || null
+          })
+          .eq('id', existing[0].id);
+        return;
+      } else if (!selErr) {
+        const { error: insErr } = await supabase.from('course_platform_links').insert([{
+          center_id: params.center_id,
+          course_id: params.course_id,
+          subject_id: params.subject_id || null,
+          teacher_id: params.teacher_id,
+          ...payload
+        }]);
+        if (!insErr) return;
+      }
+    } catch (e) {}
+
+    // 2. Respaldo transparente en announcements
+    try {
+      const { data: existingAnn } = await supabase
+        .from('announcements')
+        .select('id')
+        .eq('course_id', params.course_id)
+        .eq('title', `__PLATFORM_LINKS__:${params.course_id}`)
+        .limit(1);
+
+      const content = `__PLATFORM_LINKS__:${JSON.stringify(payload)}`;
+      if (existingAnn && existingAnn.length > 0) {
+        await supabase
+          .from('announcements')
+          .update({
+            content,
+            subject_id: params.subject_id || null
+          })
+          .eq('id', existingAnn[0].id);
+      } else {
+        await supabase.from('announcements').insert([{
+          center_id: params.center_id,
+          course_id: params.course_id,
+          subject_id: params.subject_id || null,
+          sender_id: params.teacher_id,
+          sender_role: 'teacher',
+          title: `__PLATFORM_LINKS__:${params.course_id}`,
+          content
+        }]);
+      }
+    } catch (e) {
+      console.warn('[dataService] Error guardando enlaces en la nube:', e);
+    }
+  },
+
+  async getPlatformLinks(courseId: string, subjectId?: string | null) {
+    const key = `platform_links_${courseId}_${subjectId || 'all'}`;
+    let cached: any = null;
+    try {
+      const raw = localStorage.getItem(`edugens_${key}`) || localStorage.getItem(`edugens_platform_links_${courseId}_all`);
+      if (raw) cached = JSON.parse(raw);
+    } catch (e) {}
+
+    // Intentar desde course_platform_links
+    try {
+      let query = supabase.from('course_platform_links').select('*').eq('course_id', courseId);
+      if (subjectId) {
+        query = query.or(`subject_id.eq.${subjectId},subject_id.is.null`);
+      }
+      const { data, error } = await query.order('updated_at', { ascending: false }).limit(1);
+      if (!error && data && data.length > 0) {
+        const item = data[0];
+        const res = {
+          classroom_url: item.classroom_url || '',
+          meet_url: item.meet_url || '',
+          other_url: item.other_url || '',
+          other_label: item.other_label || 'Plataforma Alterna'
+        };
+        try {
+          localStorage.setItem(`edugens_${key}`, JSON.stringify(res));
+        } catch (e) {}
+        return res;
+      }
+    } catch (e) {}
+
+    // Intentar desde announcements
+    try {
+      const { data: annData } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('course_id', courseId)
+        .like('title', `__PLATFORM_LINKS__:%`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (annData && annData.length > 0) {
+        const ann = annData[0];
+        if (ann.content && ann.content.startsWith('__PLATFORM_LINKS__:')) {
+          const parsed = JSON.parse(ann.content.substring('__PLATFORM_LINKS__:'.length));
+          try {
+            localStorage.setItem(`edugens_${key}`, JSON.stringify(parsed));
+          } catch (e) {}
+          return parsed;
+        }
+      }
+    } catch (e) {}
+
+    return cached || { classroom_url: '', meet_url: '', other_url: '', other_label: 'Plataforma Alterna' };
   },
 
   async addAnnouncement(data: any) {
@@ -622,7 +812,17 @@ export const dataService = {
       console.error('Error getting tasks:', error);
       return [];
     }
-    return data || [];
+    return (data || []).map((t: any) => {
+      let p = t.period;
+      if (!p && t.description) {
+        const match = t.description.match(/<!--period:(P[1-4])-->/i);
+        if (match) p = match[1].toUpperCase();
+      }
+      return {
+        ...t,
+        period: p || 'P1'
+      };
+    });
   },
 
   async getAnnouncements(courseId: string) {
@@ -635,7 +835,7 @@ export const dataService = {
       console.error('Error getting announcements:', error);
       return [];
     }
-    return (data || []).filter((ann: any) => !ann.content?.startsWith('__COM_DATA__:'));
+    return (data || []).filter((ann: any) => !ann.content?.startsWith('__COM_DATA__:') && !ann.content?.startsWith('__PLATFORM_LINKS__:'));
   },
 
   async getAttendance() {

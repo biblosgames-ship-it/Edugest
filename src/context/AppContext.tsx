@@ -109,7 +109,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
-  const [center, setCenter] = useState<any | null>(null);
+  const [center, setCenter] = useState<any | null>(() => {
+    try {
+      const saved = localStorage.getItem('edugens_active_center');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [license, setLicense] = useState<any | null>(null);
   const [isSubscriptionExpired, setIsSubscriptionExpired] = useState<boolean>(false);
   const [selectedYear, setSelectedYear] = useState('');
@@ -305,7 +312,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase.from('priority_preferences').select('*').eq('center_id', targetCid)
           ]);
 
-          if (centRes.data) setCenter(centRes.data);
+          if (centRes.data) {
+            setCenter(centRes.data);
+            try {
+              localStorage.setItem('edugens_active_center', JSON.stringify(centRes.data));
+              if (centRes.data.name) {
+                localStorage.setItem('edugens_center_name', centRes.data.name);
+              }
+            } catch {}
+          }
 
           if (licRes && licRes.data) {
             setLicense(licRes.data);
@@ -1076,7 +1091,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .select('*')
             .eq('id', finalProfile.center_id)
             .single();
-          if (centData) setCenter(centData);
+          if (centData) {
+            setCenter(centData);
+            try {
+              localStorage.setItem('edugens_active_center', JSON.stringify(centData));
+              if (centData.name) {
+                localStorage.setItem('edugens_center_name', centData.name);
+              }
+            } catch {}
+          }
         } else {
           setState((prev) => ({ ...prev, loading: false }));
         }

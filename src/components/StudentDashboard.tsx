@@ -13,7 +13,14 @@ import {
   Activity,
   ArrowRight,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  ExternalLink,
+  Video,
+  Globe,
+  Link as LinkIcon
 } from 'lucide-react';
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
@@ -67,6 +74,18 @@ export const StudentDashboard = ({
   const hasCheckedSiblings = React.useRef(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [coursePlatformLinks, setCoursePlatformLinks] = useState<{
+    classroom_url?: string;
+    meet_url?: string;
+    other_url?: string;
+    other_label?: string;
+  } | null>(null);
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('ALL');
+  const [collapsedPeriods, setCollapsedPeriods] = useState<Record<string, boolean>>({
+    P2: true,
+    P3: true,
+    P4: true
+  });
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -230,12 +249,14 @@ export const StudentDashboard = ({
 
         if (currentCourse) {
           setCourse(currentCourse);
-          const [tasksData, annData] = await Promise.all([
+          const [tasksData, annData, linksData] = await Promise.all([
             dataService.getTasks(currentCourse.id),
-            dataService.getAnnouncements(currentCourse.id)
+            dataService.getAnnouncements(currentCourse.id),
+            dataService.getPlatformLinks(currentCourse.id)
           ]);
           setTasks(tasksData);
           setAnnouncements(annData);
+          setCoursePlatformLinks(linksData);
         }
       } catch (error) {
         console.error('Error loading active course data:', error);
@@ -250,6 +271,66 @@ export const StudentDashboard = ({
       setLoading(false);
     }
   }, [selectedCourseId, allCourses, selectedYear, profile?.center_id]);
+
+  const parseTaskPeriod = (t: any): string => {
+    if (t.period && ['P1', 'P2', 'P3', 'P4'].includes(t.period.toUpperCase())) {
+      return t.period.toUpperCase();
+    }
+    const match = (t.description || '').match(/<!--period:(P[1-4])-->/i);
+    if (match) return match[1].toUpperCase();
+    return 'P1';
+  };
+
+  const getCleanDescription = (desc: string = ''): string => {
+    return desc.replace(/<!--period:P[1-4]-->\s*/gi, '').trim();
+  };
+
+  const togglePeriodCollapse = (period: string) => {
+    setCollapsedPeriods((prev) => ({
+      ...prev,
+      [period]: !prev[period]
+    }));
+  };
+
+  const toggleAllPeriods = (collapse: boolean) => {
+    setCollapsedPeriods({
+      P1: collapse,
+      P2: collapse,
+      P3: collapse,
+      P4: collapse
+    });
+  };
+
+  // Materias con tareas asignadas
+  const availableTaskSubjects = useMemo(() => {
+    const subjectIds = new Set(tasks.map((t: any) => t.subject_id).filter(Boolean));
+    return (state.subjects || []).filter((s: any) => subjectIds.has(s.id));
+  }, [tasks, state.subjects]);
+
+  // Tareas filtradas por materia seleccionada
+  const filteredTasks = useMemo(() => {
+    if (selectedSubjectFilter === 'ALL') return tasks;
+    return tasks.filter((t: any) => t.subject_id === selectedSubjectFilter);
+  }, [tasks, selectedSubjectFilter]);
+
+  // Agrupación de tareas por periodo (P1, P2, P3, P4)
+  const tasksByPeriod = useMemo(() => {
+    const grouped: Record<string, any[]> = {
+      P1: [],
+      P2: [],
+      P3: [],
+      P4: []
+    };
+    filteredTasks.forEach((t: any) => {
+      const p = parseTaskPeriod(t);
+      if (!grouped[p]) grouped[p] = [];
+      grouped[p].push(t);
+    });
+    Object.keys(grouped).forEach((k) => {
+      grouped[k].sort((a, b) => new Date(b.due_date || b.created_at || 0).getTime() - new Date(a.due_date || a.created_at || 0).getTime());
+    });
+    return grouped;
+  }, [filteredTasks]);
 
   const [isLinking, setIsLinking] = useState(false);
 
@@ -1449,98 +1530,288 @@ export const StudentDashboard = ({
       {/* COMUNICADOS Y TAREAS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* TAREAS PENDIENTES */}
-        <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl">
-          <h2 className="text-xl font-black mb-6 flex items-center gap-3 text-slate-900">
-            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
-              <ClipboardList size={20} />
-            </div>
-            TAREAS Y ASIGNACIONES
-          </h2>
+        <div className="bg-white p-6 md:p-8 rounded-[3rem] border border-slate-100 shadow-xl">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h2 className="text-xl font-black flex items-center gap-3 text-slate-900">
+              <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+                <ClipboardList size={20} />
+              </div>
+              TAREAS Y ASIGNACIONES
+            </h2>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full">
+              {filteredTasks.length} {filteredTasks.length === 1 ? 'Tarea' : 'Tareas'}
+            </span>
+          </div>
 
-          <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-            {tasks.length === 0 ? (
+          {/* ACCESOS DIRECTOS FIJOS DEL DOCENTE */}
+          {coursePlatformLinks && (coursePlatformLinks.classroom_url || coursePlatformLinks.meet_url || coursePlatformLinks.other_url) && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-indigo-50/80 rounded-2xl border border-indigo-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-900 flex items-center gap-1.5">
+                  <Globe size={13} className="text-indigo-600" />
+                  Accesos Directos de Clase (Docente)
+                </span>
+                <span className="text-[9px] text-indigo-600 font-bold">1 Clic</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {coursePlatformLinks.classroom_url && (
+                  <a
+                    href={coursePlatformLinks.classroom_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 bg-white hover:bg-amber-50/50 border border-slate-200/80 rounded-xl flex items-center justify-between transition-all group shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <GraduationCap size={16} className="text-amber-500" />
+                      <span className="text-[10px] font-black uppercase text-slate-800">Classroom</span>
+                    </div>
+                    <ExternalLink size={12} className="text-slate-400 group-hover:text-amber-500" />
+                  </a>
+                )}
+                {coursePlatformLinks.meet_url && (
+                  <a
+                    href={coursePlatformLinks.meet_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 bg-white hover:bg-emerald-50/50 border border-slate-200/80 rounded-xl flex items-center justify-between transition-all group shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Video size={16} className="text-emerald-500" />
+                      <span className="text-[10px] font-black uppercase text-slate-800">Meet / Clase</span>
+                    </div>
+                    <ExternalLink size={12} className="text-slate-400 group-hover:text-emerald-500" />
+                  </a>
+                )}
+                {coursePlatformLinks.other_url && (
+                  <a
+                    href={coursePlatformLinks.other_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 bg-white hover:bg-violet-50/50 border border-slate-200/80 rounded-xl flex items-center justify-between transition-all group shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Globe size={16} className="text-violet-500 shrink-0" />
+                      <span className="text-[10px] font-black uppercase text-slate-800 truncate">
+                        {coursePlatformLinks.other_label || 'Plataforma'}
+                      </span>
+                    </div>
+                    <ExternalLink size={12} className="text-slate-400 group-hover:text-violet-500 shrink-0" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* FILTRO POR MATERIAS */}
+          {availableTaskSubjects.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-4 custom-scrollbar">
+              <button
+                type="button"
+                onClick={() => setSelectedSubjectFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                  selectedSubjectFilter === 'ALL'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                Todas ({tasks.length})
+              </button>
+              {availableTaskSubjects.map((sub: any) => {
+                const subCount = tasks.filter((t: any) => t.subject_id === sub.id).length;
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => setSelectedSubjectFilter(sub.id)}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                      selectedSubjectFilter === sub.id
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {sub.name} ({subCount})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* CONTROLES DE HISTORIAL Y COLAPSO */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Historial por Período
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleAllPeriods(false)}
+                className="text-[9px] font-bold text-indigo-600 hover:underline cursor-pointer"
+              >
+                Expandir todos
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => toggleAllPeriods(true)}
+                className="text-[9px] font-bold text-slate-500 hover:underline cursor-pointer"
+              >
+                Colapsar todos
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+            {filteredTasks.length === 0 ? (
               <div className="text-center py-16 bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                 <CheckCircle2 className="mx-auto mb-4 text-emerald-500 animate-bounce" size={40} />
                 <p className="text-xs font-black text-slate-950 uppercase tracking-widest">
                   ¡Estás al día!
                 </p>
                 <p className="text-slate-500 text-xs mt-1 font-medium">
-                  No tienes tareas asignadas pendientes en este curso.
+                  No tienes tareas asignadas pendientes en este curso o materia.
                 </p>
               </div>
             ) : (
-              tasks.map((t: any) => {
-                const subject = state.subjects.find((s) => s.id === t.subject_id);
-                const isLate = new Date(t.due_date) < new Date();
+              ['P1', 'P2', 'P3', 'P4'].map((periodKey) => {
+                const periodTasks = tasksByPeriod[periodKey] || [];
+                const isCollapsed = !!collapsedPeriods[periodKey];
+                const pendingCount = periodTasks.filter((t) => !t.due_date || new Date(t.due_date) >= new Date()).length;
+
+                // Solo mostrar períodos que tengan tareas o si el filtro es general
+                if (periodTasks.length === 0 && selectedSubjectFilter !== 'ALL') return null;
+
                 return (
                   <div
-                    key={t.id}
-                    className="p-5 bg-white rounded-2xl border-2 border-slate-100 hover:border-indigo-200 transition-all shadow-md group relative overflow-hidden"
+                    key={periodKey}
+                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
                   >
-                    <div className="flex justify-between items-start gap-4 mb-3">
-                      <div>
-                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                          {subject?.name || 'General'}
+                    {/* Header del Periodo (Clickable para Colapsar/Expandir) */}
+                    <button
+                      type="button"
+                      onClick={() => togglePeriodCollapse(periodKey)}
+                      className="w-full flex items-center justify-between p-4 bg-slate-50/80 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs flex items-center justify-center font-mono shadow-sm">
+                          {periodKey}
                         </span>
-                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight group-hover:text-indigo-600 transition-colors">
-                          {t.title}
-                        </h4>
+                        <div>
+                          <h4 className="font-black text-slate-900 text-xs uppercase tracking-tight">
+                            Período {periodKey.replace('P', '')}
+                          </h4>
+                          <p className="text-[9px] text-slate-500 font-bold">
+                            {periodTasks.length === 0
+                              ? 'Sin tareas asignadas'
+                              : `${periodTasks.length} tarea${periodTasks.length === 1 ? '' : 's'}${
+                                  pendingCount > 0 ? ` • ${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}` : ''
+                                }`}
+                          </p>
+                        </div>
                       </div>
-                      <span
-                        className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                          isLate
-                            ? 'bg-rose-50 text-rose-500 border border-rose-100'
-                            : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                        }`}
-                      >
-                        {isLate ? 'VENCIDA' : 'PENDIENTE'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed mb-4">{t.description}</p>
 
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {t.media_url && (
-                        <a
-                          href={t.media_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-indigo-600 transition-all"
-                        >
-                          Ver recurso adjunto
-                        </a>
-                      )}
-                      {t.link_url && (
-                        <a
-                          href={t.link_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-indigo-600 transition-all"
-                        >
-                          Enlace de Drive / PDF
-                        </a>
-                      )}
-                      {t.classroom_url && (
-                        <a
-                          href={t.classroom_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg text-[9px] font-black uppercase tracking-widest text-emerald-600 transition-all"
-                        >
-                          Entregar en Classroom
-                        </a>
-                      )}
-                    </div>
+                      <div className="flex items-center gap-2">
+                        {periodTasks.length > 0 && (
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                            {isCollapsed ? 'Oculto' : 'Visible'}
+                          </span>
+                        )}
+                        <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500">
+                          {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                        </div>
+                      </div>
+                    </button>
 
-                    <div className="flex items-center justify-between text-[9px] font-black text-slate-400 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <span>LÍMITE DE ENTREGA:</span>
-                      <span className={isLate ? 'text-rose-500' : 'text-slate-700'}>
-                        {new Date(t.due_date).toLocaleDateString()}{' '}
-                        {new Date(t.due_date).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
+                    {/* Contenido del Periodo (Tareas) */}
+                    {!isCollapsed && (
+                      <div className="p-4 space-y-3 bg-slate-50/30 border-t border-slate-100">
+                        {periodTasks.length === 0 ? (
+                          <p className="text-center py-4 text-[10px] text-slate-400 italic font-medium">
+                            No hay asignaciones para este período.
+                          </p>
+                        ) : (
+                          periodTasks.map((t: any) => {
+                            const subject = state.subjects.find((s) => s.id === t.subject_id);
+                            const isLate = t.due_date && new Date(t.due_date) < new Date();
+                            const cleanDesc = getCleanDescription(t.description);
+
+                            return (
+                              <div
+                                key={t.id}
+                                className="p-4 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all shadow-sm space-y-3"
+                              >
+                                <div className="flex justify-between items-start gap-4">
+                                  <div>
+                                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase tracking-widest">
+                                      {subject?.name || 'General'}
+                                    </span>
+                                    <h5 className="font-black text-slate-900 text-sm mt-1.5 tracking-tight">
+                                      {t.title}
+                                    </h5>
+                                  </div>
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                      isLate
+                                        ? 'bg-rose-50 text-rose-500 border border-rose-100'
+                                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                    }`}
+                                  >
+                                    {isLate ? 'VENCIDA' : 'PENDIENTE'}
+                                  </span>
+                                </div>
+
+                                {cleanDesc && (
+                                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                                    {cleanDesc}
+                                  </p>
+                                )}
+
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {t.media_url && (
+                                    <a
+                                      href={t.media_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg text-[8px] font-black uppercase tracking-widest text-indigo-600 transition-all flex items-center gap-1"
+                                    >
+                                      <Video size={10} /> Recurso Multimedia
+                                    </a>
+                                  )}
+                                  {t.link_url && (
+                                    <a
+                                      href={t.link_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg text-[8px] font-black uppercase tracking-widest text-indigo-600 transition-all flex items-center gap-1"
+                                    >
+                                      <LinkIcon size={10} /> Drive / Archivo
+                                    </a>
+                                  )}
+                                  {t.classroom_url && (
+                                    <a
+                                      href={t.classroom_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[8px] font-black uppercase tracking-widest text-emerald-600 transition-all flex items-center gap-1"
+                                    >
+                                      <GraduationCap size={10} /> Entregar en Classroom
+                                    </a>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between text-[9px] font-black text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                  <span>LÍMITE DE ENTREGA:</span>
+                                  <span className={isLate ? 'text-rose-500' : 'text-slate-700'}>
+                                    {t.due_date
+                                      ? `${new Date(t.due_date).toLocaleDateString()} ${new Date(t.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                      : 'Sin fecha límite'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })

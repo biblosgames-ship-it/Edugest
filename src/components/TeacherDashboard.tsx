@@ -2047,7 +2047,10 @@ export const TeacherDashboard = ({
                         const centerName =
                           center?.name ||
                           (profile as any)?.center_name ||
-                          'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+                          profile?.center?.name ||
+                          localStorage.getItem('edugens_center_name') ||
+                          localStorage.getItem('edugest_center_name') ||
+                          'Centro Educativo';
 
                         // Header Superior Elegante
                         doc.setFillColor(30, 41, 59); // slate-800

@@ -264,9 +264,10 @@ export const StudentManagement = () => {
         }
       };
 
-      const head = [['Nº', 'NOMBRES Y APELLIDOS', 'SEXO', 'FECHA NACIMIENTO', 'EDAD']];
+      const head = [['Nº', 'CÓDIGO SIGERD', 'NOMBRES Y APELLIDOS', 'SEXO', 'FECHA NACIMIENTO', 'EDAD']];
       const body = [...filteredStudents].map((s: any, idx) => [
         s.order_number || idx + 1,
+        s.sigerd_code || s.sigerdCode || '---',
         `${s.first_surname || ''} ${s.second_surname || ''}, ${s.names || ''}`.toUpperCase(),
         s.sex || '-',
         formatDate(s.birth_date || s.birthDate),
@@ -287,9 +288,10 @@ export const StudentManagement = () => {
         headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 },
-          2: { halign: 'center', cellWidth: 15 },
-          3: { halign: 'center', cellWidth: 35 },
-          4: { halign: 'center', cellWidth: 15 }
+          1: { halign: 'center', cellWidth: 28 },
+          3: { halign: 'center', cellWidth: 15 },
+          4: { halign: 'center', cellWidth: 30 },
+          5: { halign: 'center', cellWidth: 15 }
         },
         margin: { left: 15, right: 15, bottom: 15 },
         didDrawPage: (data) => {
@@ -447,6 +449,7 @@ export const StudentManagement = () => {
               <th className="py-2 px-4 text-[9px] font-black uppercase w-12 text-center border-r border-slate-800">
                 #
               </th>
+              <th className="py-2 px-4 text-[9px] font-black uppercase w-28">Cód. SIGERD</th>
               <th className="py-2 px-4 text-[9px] font-black uppercase">Apellidos y Nombres</th>
               {!selectedCourseId && (
                 <th className="py-2 px-4 text-[9px] font-black uppercase w-48">Curso / Sección / Tanda</th>
@@ -462,7 +465,7 @@ export const StudentManagement = () => {
             {showLoading ? (
               <tr>
                 <td
-                  colSpan={selectedCourseId ? 5 : 6}
+                  colSpan={selectedCourseId ? 6 : 7}
                   className="py-10 text-center animate-pulse font-black text-slate-300 uppercase text-[9px]"
                 >
                   Cargando...
@@ -471,7 +474,7 @@ export const StudentManagement = () => {
             ) : filteredStudents.length === 0 ? (
               <tr>
                 <td
-                  colSpan={selectedCourseId ? 5 : 6}
+                  colSpan={selectedCourseId ? 6 : 7}
                   className="py-10 text-center font-black text-slate-400 uppercase text-[10px]"
                 >
                   Sin resultados
@@ -488,6 +491,11 @@ export const StudentManagement = () => {
                       className="w-12 px-1.5 py-1 bg-white border border-slate-300 rounded-lg text-center font-black text-indigo-700 text-xs outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                       placeholder="#"
                     />
+                  </td>
+                  <td className="py-1 px-4">
+                    <span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      {s.sigerd_code || s.sigerdCode || '---'}
+                    </span>
                   </td>
                   <td className="py-1 px-4">
                     <div className="text-[10px] font-black text-text-main uppercase leading-none">

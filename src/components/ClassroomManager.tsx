@@ -27,7 +27,17 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  GraduationCap,
+  ExternalLink,
+  Edit3,
+  Trash2,
+  Video,
+  Globe,
+  Link as LinkIcon,
+  ClipboardList,
+  X,
+  Settings
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
@@ -63,7 +73,7 @@ export const ClassroomManager = () => {
   // Estados de vista
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'folder'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>('attendance');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(false);
@@ -90,6 +100,48 @@ export const ClassroomManager = () => {
   const [newNoteContent, setNewNoteContent] = useState<string>('');
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
+
+  // Estados de Tareas y Enlaces Fijos
+  const [courseTasks, setCourseTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState<boolean>(false);
+  const [taskFilterPeriod, setTaskFilterPeriod] = useState<string>('ALL');
+  const [taskFilterStatus, setTaskFilterStatus] = useState<'ALL' | 'active' | 'expired'>('ALL');
+  const [taskFilterSubjectId, setTaskFilterSubjectId] = useState<string>('ALL');
+  const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
+
+  const [platformLinks, setPlatformLinks] = useState<{
+    classroom_url: string;
+    meet_url: string;
+    other_url: string;
+    other_label: string;
+  }>({
+    classroom_url: '',
+    meet_url: '',
+    other_url: '',
+    other_label: 'Plataforma Alterna'
+  });
+  const [showLinksModal, setShowLinksModal] = useState<boolean>(false);
+  const [tempLinks, setTempLinks] = useState({
+    classroom_url: '',
+    meet_url: '',
+    other_url: '',
+    other_label: 'Plataforma Alterna'
+  });
+  const [isSavingLinks, setIsSavingLinks] = useState<boolean>(false);
+
+  const [showTaskModal, setShowTaskModal] = useState<boolean>(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [taskFormData, setTaskFormData] = useState({
+    title: '',
+    description: '',
+    period: 'P1',
+    subject_id: '',
+    due_date: '',
+    media_url: '',
+    link_url: '',
+    classroom_url: ''
+  });
+  const [isSavingTask, setIsSavingTask] = useState<boolean>(false);
 
   // Asignaturas del curso seleccionado (personalizadas por docente y curso)
   const availableSubjects = useMemo(() => {
@@ -819,6 +871,248 @@ export const ClassroomManager = () => {
     return { presente, tardanza, excusa, ausente, total: courseStudents.length };
   }, [courseStudents, attendanceState]);
 
+  // CARGA Y GESTIÓN DE TAREAS Y ENLACES DE PLATAFORMA
+  const loadTasksAndLinks = async () => {
+    if (!selectedCourseId) return;
+    setLoadingTasks(true);
+    try {
+      const [tasks, links] = await Promise.all([
+        dataService.getTasks(selectedCourseId),
+        dataService.getPlatformLinks(selectedCourseId, selectedSubjectId || null)
+      ]);
+      setCourseTasks(tasks || []);
+      if (links) {
+        setPlatformLinks(links);
+        setTempLinks(links);
+      }
+    } catch (err) {
+      console.error('Error al cargar tareas o enlaces:', err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCourseId) {
+      loadTasksAndLinks();
+    }
+  }, [selectedCourseId, selectedSubjectId]);
+
+  const parseTaskPeriod = (t: any): string => {
+    if (t.period && ['P1', 'P2', 'P3', 'P4'].includes(t.period.toUpperCase())) {
+      return t.period.toUpperCase();
+    }
+    const match = (t.description || '').match(/<!--period:(P[1-4])-->/i);
+    if (match) return match[1].toUpperCase();
+    return 'P1';
+  };
+
+  const getCleanDescription = (desc: string = ''): string => {
+    return desc.replace(/<!--period:P[1-4]-->\s*/gi, '').trim();
+  };
+
+  // AISLAMIENTO POR DOCENTE: solo tareas de este maestro o de materias asignadas a él
+  const teacherTasks = useMemo(() => {
+    if (!courseTasks || courseTasks.length === 0) return [];
+
+    if (profile?.role === 'teacher') {
+      const myTeacherId = profile.teacher_id || profile.id;
+      const myCourseSubjectIds = new Set(
+        (allAssignments || [])
+          .filter((a: any) => 
+            (a.course_id || a.courseId) === selectedCourseId &&
+            (isSameTeacher(a.teacher_id || a.teacherId, myTeacherId) || 
+             (a.teacher_id || a.teacherId) === myTeacherId ||
+             (a.teacher_id || a.teacherId) === profile.id)
+          )
+          .map((a: any) => a.subject_id || a.subjectId)
+      );
+
+      return courseTasks.filter((t: any) => {
+        if (t.teacher_id) {
+          if (
+            t.teacher_id === myTeacherId || 
+            t.teacher_id === profile.id || 
+            isSameTeacher(t.teacher_id, myTeacherId)
+          ) {
+            return true;
+          }
+        }
+        if (t.subject_id && myCourseSubjectIds.has(t.subject_id)) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    return courseTasks;
+  }, [courseTasks, profile, isSameTeacher, allAssignments, selectedCourseId]);
+
+  // Contadores por periodo para el docente
+  const taskPeriodCounts = useMemo(() => {
+    const counts: Record<string, number> = { P1: 0, P2: 0, P3: 0, P4: 0, total: teacherTasks.length };
+    teacherTasks.forEach((t: any) => {
+      const p = parseTaskPeriod(t);
+      if (counts[p] !== undefined) counts[p]++;
+    });
+    return counts;
+  }, [teacherTasks]);
+
+  // Filtrado final de tareas para la vista
+  const displayedTasks = useMemo(() => {
+    let list = [...teacherTasks];
+
+    if (taskFilterPeriod !== 'ALL') {
+      list = list.filter((t: any) => parseTaskPeriod(t) === taskFilterPeriod);
+    }
+
+    if (taskFilterSubjectId !== 'ALL') {
+      list = list.filter((t: any) => t.subject_id === taskFilterSubjectId);
+    }
+
+    if (taskFilterStatus === 'active') {
+      list = list.filter((t: any) => !t.due_date || new Date(t.due_date) >= new Date());
+    } else if (taskFilterStatus === 'expired') {
+      list = list.filter((t: any) => t.due_date && new Date(t.due_date) < new Date());
+    }
+
+    if (taskSearchQuery.trim()) {
+      const q = taskSearchQuery.toLowerCase();
+      list = list.filter((t: any) => 
+        (t.title && t.title.toLowerCase().includes(q)) ||
+        (t.description && t.description.toLowerCase().includes(q))
+      );
+    }
+
+    return list.sort((a: any, b: any) => {
+      const dateA = new Date(a.due_date || a.created_at || 0).getTime();
+      const dateB = new Date(b.due_date || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [teacherTasks, taskFilterPeriod, taskFilterSubjectId, taskFilterStatus, taskSearchQuery]);
+
+  const handleOpenCreateTask = () => {
+    setEditingTask(null);
+    setTaskFormData({
+      title: '',
+      description: '',
+      period: selectedPeriod || 'P1',
+      subject_id: selectedSubjectId || (availableSubjects[0]?.id || ''),
+      due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      media_url: '',
+      link_url: '',
+      classroom_url: platformLinks.classroom_url || ''
+    });
+    setShowTaskModal(true);
+  };
+
+  const handleOpenEditTask = (task: any) => {
+    setEditingTask(task);
+    setTaskFormData({
+      title: task.title || '',
+      description: getCleanDescription(task.description || ''),
+      period: parseTaskPeriod(task),
+      subject_id: task.subject_id || '',
+      due_date: task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '',
+      media_url: task.media_url || '',
+      link_url: task.link_url || '',
+      classroom_url: task.classroom_url || ''
+    });
+    setShowTaskModal(true);
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskFormData.title.trim()) {
+      alert('Por favor, indica un título para la tarea.');
+      return;
+    }
+    if (!selectedCourseId) {
+      alert('Debes seleccionar un curso para publicar la tarea.');
+      return;
+    }
+
+    setIsSavingTask(true);
+    try {
+      const centerId = profile?.center_id || center?.id;
+      const teacherId = profile?.teacher_id || profile?.id;
+      const payload: any = {
+        center_id: centerId,
+        course_id: selectedCourseId,
+        subject_id: taskFormData.subject_id || null,
+        title: taskFormData.title.trim(),
+        description: taskFormData.description.trim(),
+        period: taskFormData.period,
+        due_date: taskFormData.due_date ? new Date(taskFormData.due_date).toISOString() : null,
+        media_url: taskFormData.media_url.trim() || null,
+        link_url: taskFormData.link_url.trim() || null,
+        classroom_url: taskFormData.classroom_url.trim() || null
+      };
+
+      if (editingTask?.id) {
+        await dataService.updateTask(editingTask.id, payload);
+        alert('¡Tarea actualizada correctamente!');
+      } else {
+        await dataService.addTask({
+          ...payload,
+          teacher_id: teacherId
+        });
+        alert('¡Tarea creada y publicada con éxito!');
+      }
+
+      setShowTaskModal(false);
+      setEditingTask(null);
+      await loadTasksAndLinks();
+    } catch (err: any) {
+      console.error('Error al guardar tarea:', err);
+      alert(`Error al guardar la tarea: ${err.message || err}`);
+    } finally {
+      setIsSavingTask(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarea? Esta acción no se puede deshacer.')) {
+      return;
+    }
+    try {
+      await dataService.deleteTask(taskId);
+      setCourseTasks((prev) => prev.filter((t) => t.id !== taskId));
+      alert('Tarea eliminada correctamente.');
+    } catch (err: any) {
+      console.error('Error al eliminar tarea:', err);
+      alert(`Error al eliminar la tarea: ${err.message || err}`);
+    }
+  };
+
+  const handleSavePlatformLinks = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCourseId) return;
+    setIsSavingLinks(true);
+    try {
+      const centerId = profile?.center_id || center?.id || 'default_center';
+      const teacherId = profile?.teacher_id || profile?.id || 'default_teacher';
+      await dataService.savePlatformLinks({
+        center_id: centerId,
+        course_id: selectedCourseId,
+        subject_id: selectedSubjectId || null,
+        teacher_id: teacherId,
+        classroom_url: tempLinks.classroom_url.trim(),
+        meet_url: tempLinks.meet_url.trim(),
+        other_url: tempLinks.other_url.trim(),
+        other_label: tempLinks.other_label.trim() || 'Plataforma Alterna'
+      });
+      setPlatformLinks({ ...tempLinks });
+      setShowLinksModal(false);
+      alert('¡Enlaces de plataforma guardados con éxito!');
+    } catch (err: any) {
+      console.error('Error al guardar enlaces de plataforma:', err);
+      alert(`Error al guardar los enlaces: ${err.message || err}`);
+    } finally {
+      setIsSavingLinks(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* HEADER DE BIENVENIDA Y SELECTORES */}
@@ -940,7 +1234,8 @@ export const ClassroomManager = () => {
           { id: 'attendance', label: '1. Pasar Lista', icon: UserCheck },
           { id: 'notes', label: '2. Apuntes y Anecdotario', icon: FileText },
           { id: 'partials', label: '3. Calificaciones Parciales', icon: Award },
-          { id: 'folder', label: '4. Ficha del Estudiante', icon: Users }
+          { id: 'tasks', label: '4. Tareas y Asignaciones', icon: BookOpen },
+          { id: 'folder', label: '5. Ficha del Estudiante', icon: Users }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1003,7 +1298,7 @@ export const ClassroomManager = () => {
                   <tr className="bg-slate-100 dark:bg-slate-900/60 border-b border-border-main text-[10px] font-black text-text-muted uppercase tracking-widest">
                     <th className="px-4 py-2.5">#</th>
                     <th className="px-4 py-2.5">Estudiante</th>
-                    <th className="px-4 py-2.5">RNE / Código</th>
+                    <th className="px-4 py-2.5">Cód. SIGERD / RNE</th>
                     <th className="px-4 py-2.5 text-center">Estado de Asistencia</th>
                     <th className="px-4 py-2.5">Nota u Observación</th>
                   </tr>
@@ -1027,7 +1322,7 @@ export const ClassroomManager = () => {
                             {getStudentFullName(s)}
                           </td>
                           <td className="px-4 py-2 font-mono text-[10px] text-text-muted">
-                            {s.rne || s.student_code || '---'}
+                            {s.sigerd_code || s.rne || s.student_code || '---'}
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-center gap-1.5">
@@ -1463,7 +1758,691 @@ export const ClassroomManager = () => {
         </div>
       )}
 
-      {/* TAB 4: FICHA DEL ESTUDIANTE */}
+      {/* TAB 4: TAREAS Y ASIGNACIONES */}
+      {activeTab === 'tasks' && (
+        <div className="space-y-6">
+          {/* HEADER DEL MODULO Y ENLACES FIJOS DE PLATAFORMA */}
+          <div className="bg-surface p-6 md:p-8 rounded-[2.5rem] border border-border-main shadow-xl space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider mb-2">
+                  <BookOpen size={13} /> Historial y Publicaciones
+                </div>
+                <h2 className="text-xl md:text-2xl font-black text-text-main tracking-tight uppercase">
+                  Tareas y Asignaciones
+                </h2>
+                <p className="text-xs md:text-sm text-text-muted font-medium">
+                  Publica tareas para tu grado, administra el historial por períodos y configura los enlaces de acceso virtual permanente.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempLinks({ ...platformLinks });
+                    setShowLinksModal(true);
+                  }}
+                  className="px-4 py-3 bg-surface hover:bg-slate-100 dark:hover:bg-slate-800 border border-border-main rounded-2xl text-xs font-black uppercase tracking-wider text-text-main flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Settings size={16} className="text-indigo-600" />
+                  Configurar Enlaces Fijos
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateTask}
+                  className="px-5 py-3 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-blue/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Plus size={16} />
+                  Nueva Tarea
+                </button>
+              </div>
+            </div>
+
+            {/* BANNER DE ACCESOS Y ENLACES FIJOS */}
+            <div className="bg-gradient-to-r from-indigo-50/70 via-slate-50 to-blue-50/70 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 p-5 rounded-3xl border border-indigo-100/60 dark:border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-300">
+                  <Globe size={15} className="text-indigo-600" />
+                  Enlaces Fijos del Docente para Estudiantes y Padres
+                </div>
+                <span className="text-[10px] text-text-muted font-bold">
+                  Visibles con 1 clic en el portal del alumno
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                {/* Google Classroom */}
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                      <GraduationCap size={18} />
+                    </div>
+                    <div className="truncate">
+                      <p className="text-[10px] font-black uppercase text-text-muted">Google Classroom</p>
+                      <p className="text-xs font-bold text-text-main truncate">
+                        {platformLinks.classroom_url ? 'Enlace activo' : 'No configurado'}
+                      </p>
+                    </div>
+                  </div>
+                  {platformLinks.classroom_url ? (
+                    <a
+                      href={platformLinks.classroom_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-colors shrink-0"
+                      title="Abrir Classroom"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempLinks({ ...platformLinks });
+                        setShowLinksModal(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                    >
+                      + Añadir
+                    </button>
+                  )}
+                </div>
+
+                {/* Google Meet / Videollamada */}
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Video size={18} />
+                    </div>
+                    <div className="truncate">
+                      <p className="text-[10px] font-black uppercase text-text-muted">Videollamada / Meet</p>
+                      <p className="text-xs font-bold text-text-main truncate">
+                        {platformLinks.meet_url ? 'Enlace activo' : 'No configurado'}
+                      </p>
+                    </div>
+                  </div>
+                  {platformLinks.meet_url ? (
+                    <a
+                      href={platformLinks.meet_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-colors shrink-0"
+                      title="Abrir Videollamada"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempLinks({ ...platformLinks });
+                        setShowLinksModal(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                    >
+                      + Añadir
+                    </button>
+                  )}
+                </div>
+
+                {/* Plataforma Alterna / Drive */}
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-9 h-9 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center shrink-0">
+                      <Globe size={18} />
+                    </div>
+                    <div className="truncate">
+                      <p className="text-[10px] font-black uppercase text-text-muted">
+                        {platformLinks.other_label || 'Plataforma Alterna'}
+                      </p>
+                      <p className="text-xs font-bold text-text-main truncate">
+                        {platformLinks.other_url ? 'Enlace activo' : 'No configurado'}
+                      </p>
+                    </div>
+                  </div>
+                  {platformLinks.other_url ? (
+                    <a
+                      href={platformLinks.other_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-xl transition-colors shrink-0"
+                      title="Abrir Plataforma Alterna"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempLinks({ ...platformLinks });
+                        setShowLinksModal(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                    >
+                      + Añadir
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BARRA DE FILTROS */}
+          <div className="bg-surface p-4 rounded-3xl border border-border-main shadow-md space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              {/* Filtro por Periodo */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-border-main overflow-x-auto text-[11px] font-black uppercase">
+                {[
+                  { id: 'ALL', label: `Todos (${taskPeriodCounts.total})` },
+                  { id: 'P1', label: `P1 (${taskPeriodCounts.P1})` },
+                  { id: 'P2', label: `P2 (${taskPeriodCounts.P2})` },
+                  { id: 'P3', label: `P3 (${taskPeriodCounts.P3})` },
+                  { id: 'P4', label: `P4 (${taskPeriodCounts.P4})` }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setTaskFilterPeriod(p.id)}
+                    className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                      taskFilterPeriod === p.id
+                        ? 'bg-brand-blue text-white shadow-md'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Filtro por Estado */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-border-main text-[11px] font-black uppercase">
+                {[
+                  { id: 'ALL', label: 'Todas' },
+                  { id: 'active', label: 'Pendientes' },
+                  { id: 'expired', label: 'Vencidas' }
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setTaskFilterStatus(st.id as any)}
+                    className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                      taskFilterStatus === st.id
+                        ? 'bg-white dark:bg-slate-700 text-text-main shadow-sm'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-border-main/50">
+              {/* Filtro por Materia */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-text-muted">Materia:</span>
+                <select
+                  value={taskFilterSubjectId}
+                  onChange={(e) => setTaskFilterSubjectId(e.target.value)}
+                  className="bg-surface border border-border-main text-text-main text-xs font-bold px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
+                >
+                  <option value="ALL">TODAS MIS ASIGNATURAS</option>
+                  {availableSubjects.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Buscador de tareas */}
+              <div className="relative min-w-[220px] flex-1 max-w-sm">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={15} />
+                <input
+                  type="text"
+                  placeholder="Buscar tarea por título o descripción..."
+                  value={taskSearchQuery}
+                  onChange={(e) => setTaskSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-surface border border-border-main rounded-xl text-xs text-text-main font-medium placeholder-text-muted outline-none focus:ring-2 focus:ring-brand-blue"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* LISTA / HISTORIAL DE TAREAS */}
+          {loadingTasks ? (
+            <div className="py-20 text-center bg-surface rounded-3xl border border-border-main">
+              <div className="w-8 h-8 border-4 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-xs font-black uppercase tracking-widest text-text-muted">
+                Cargando historial de tareas...
+              </p>
+            </div>
+          ) : displayedTasks.length === 0 ? (
+            <div className="py-16 text-center bg-surface rounded-[2.5rem] border-2 border-dashed border-border-main p-6 space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-slate-800 text-indigo-600 mx-auto flex items-center justify-center">
+                <ClipboardList size={30} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-text-main uppercase tracking-tight">
+                  No hay tareas registradas
+                </h3>
+                <p className="text-xs text-text-muted max-w-md mx-auto">
+                  {taskSearchQuery || taskFilterPeriod !== 'ALL' || taskFilterSubjectId !== 'ALL'
+                    ? 'No se encontraron tareas con los filtros aplicados. Prueba restablecer los filtros.'
+                    : 'Aún no has publicado tareas para este grado. Las tareas creadas aquí son exclusivas para tus materias.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCreateTask}
+                className="px-5 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider inline-flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+              >
+                <Plus size={15} /> Publicar Primera Tarea
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {displayedTasks.map((t: any) => {
+                const subject = (allSubjects || []).find((s: any) => s.id === t.subject_id);
+                const period = parseTaskPeriod(t);
+                const isLate = t.due_date && new Date(t.due_date) < new Date();
+                const cleanDesc = getCleanDescription(t.description);
+
+                return (
+                  <div
+                    key={t.id}
+                    className="bg-surface p-6 rounded-3xl border border-border-main shadow-md hover:shadow-xl transition-all space-y-4 flex flex-col justify-between group"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                            {subject?.name || 'General'}
+                          </span>
+                          <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900 rounded-lg text-[9px] font-black uppercase tracking-wider font-mono">
+                            {period}
+                          </span>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                            isLate
+                              ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-100 dark:border-rose-900'
+                              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900'
+                          }`}
+                        >
+                          <Clock size={11} />
+                          {isLate ? 'Vencida' : 'Activa'}
+                        </span>
+                      </div>
+
+                      <h3 className="text-base font-black text-text-main group-hover:text-brand-blue transition-colors">
+                        {t.title}
+                      </h3>
+
+                      {cleanDesc && (
+                        <p className="text-xs text-text-muted line-clamp-3 leading-relaxed">
+                          {cleanDesc}
+                        </p>
+                      )}
+
+                      {/* Enlaces y Recursos Adjuntos */}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {t.media_url && (
+                          <a
+                            href={t.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-indigo-50 flex items-center gap-1 transition-colors"
+                          >
+                            <Video size={11} /> Recurso Multimedia
+                          </a>
+                        )}
+                        {t.link_url && (
+                          <a
+                            href={t.link_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-indigo-50 flex items-center gap-1 transition-colors"
+                          >
+                            <LinkIcon size={11} /> Documento / Drive
+                          </a>
+                        )}
+                        {t.classroom_url && (
+                          <a
+                            href={t.classroom_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-emerald-100 flex items-center gap-1 transition-colors"
+                          >
+                            <GraduationCap size={11} /> Google Classroom
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-border-main/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="text-[10px] text-text-muted font-bold flex items-center gap-1.5">
+                        <Calendar size={13} />
+                        <span>Límite:</span>
+                        <span className={isLate ? 'text-rose-500 font-black' : 'text-text-main font-black'}>
+                          {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'Sin fecha límite'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditTask(t)}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Edit3 size={12} /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTask(t.id)}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={12} /> Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* MODAL PARA CONFIGURAR ENLACES FIJOS */}
+          {showLinksModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-surface w-full max-w-lg rounded-3xl border border-border-main shadow-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                      <Settings size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-base uppercase tracking-tight">Enlaces Fijos de Clase</h3>
+                      <p className="text-xs text-indigo-200">Visibles para alumnos y padres en su portal</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLinksModal(false)}
+                    className="text-white/70 hover:text-white p-1 rounded-xl hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSavePlatformLinks} className="p-6 space-y-4 text-xs font-bold">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Google Classroom (Link permanente del curso / clase)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://classroom.google.com/c/..."
+                      value={tempLinks.classroom_url}
+                      onChange={(e) => setTempLinks({ ...tempLinks, classroom_url: e.target.value })}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Google Meet / Videollamada (Enlace recurrente)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://meet.google.com/..."
+                      value={tempLinks.meet_url}
+                      onChange={(e) => setTempLinks({ ...tempLinks, meet_url: e.target.value })}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Plataforma Alterna o Carpeta Drive (URL)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      value={tempLinks.other_url}
+                      onChange={(e) => setTempLinks({ ...tempLinks, other_url: e.target.value })}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Nombre o Etiqueta de la Plataforma Alterna
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Carpeta de Recursos en Drive / Padlet / Moodle"
+                      value={tempLinks.other_label}
+                      onChange={(e) => setTempLinks({ ...tempLinks, other_label: e.target.value })}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+                    <button
+                      type="button"
+                      onClick={() => setShowLinksModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-border-main text-text-muted hover:text-text-main font-black uppercase tracking-wider text-[10px] cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingLinks}
+                      className="px-5 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingLinks ? 'Guardando...' : 'Guardar Enlaces'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL PARA CREAR O EDITAR TAREA */}
+          {showTaskModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+              <div className="bg-surface w-full max-w-2xl rounded-3xl border border-border-main shadow-2xl overflow-hidden my-8">
+                <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 p-6 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                      <BookOpen size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-lg uppercase tracking-tight">
+                        {editingTask ? 'Editar Tarea' : 'Nueva Tarea / Asignación'}
+                      </h3>
+                      <p className="text-xs text-indigo-100">
+                        {editingTask ? 'Modifica los detalles de la asignación' : 'Publica una tarea para este grado'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTaskModal(false);
+                      setEditingTask(null);
+                    }}
+                    className="text-white/70 hover:text-white p-1 rounded-xl hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveTask} className="p-6 md:p-8 space-y-6">
+                  {/* Título */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Título de la Asignación *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Informe de Lectura - Capítulo 3"
+                      value={taskFormData.title}
+                      onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold"
+                      required
+                    />
+                  </div>
+
+                  {/* Periodo, Asignatura y Fecha de Entrega */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                        Período Escolar *
+                      </label>
+                      <select
+                        value={taskFormData.period}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, period: e.target.value })}
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold cursor-pointer"
+                        required
+                      >
+                        <option value="P1">Período 1 (P1)</option>
+                        <option value="P2">Período 2 (P2)</option>
+                        <option value="P3">Período 3 (P3)</option>
+                        <option value="P4">Período 4 (P4)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                        Materia Asociada
+                      </label>
+                      <select
+                        value={taskFormData.subject_id}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, subject_id: e.target.value })}
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold cursor-pointer"
+                      >
+                        <option value="">GENERAL / TODAS</option>
+                        {availableSubjects.map((s: any) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                        Fecha y Hora Límite
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={taskFormData.due_date}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, due_date: e.target.value })}
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Instrucciones / Descripción */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Instrucciones y Criterios de Evaluación
+                    </label>
+                    <textarea
+                      placeholder="Indica detalladamente los pasos a seguir para completar la tarea..."
+                      value={taskFormData.description}
+                      onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
+                      rows={4}
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-medium leading-relaxed resize-none"
+                    />
+                  </div>
+
+                  {/* Recursos Multimedia y Enlaces */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-border-main space-y-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+                      Recursos Adicionales (Opcional)
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-[9px] font-black uppercase text-text-muted">
+                          Enlace Drive / PDF / Web
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="https://drive.google.com/..."
+                          value={taskFormData.link_url}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, link_url: e.target.value })}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[9px] font-black uppercase text-text-muted">
+                          Vídeo de YouTube o Foto
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="https://youtube.com/watch?v=..."
+                          value={taskFormData.media_url}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, media_url: e.target.value })}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[9px] font-black uppercase text-text-muted">
+                        Acceso Directo a Google Classroom (para entrega en Classroom)
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://classroom.google.com/c/..."
+                        value={taskFormData.classroom_url}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, classroom_url: e.target.value })}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTaskModal(false);
+                        setEditingTask(null);
+                      }}
+                      className="px-5 py-3 rounded-2xl border border-border-main text-text-muted hover:text-text-main font-black uppercase tracking-wider text-xs cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingTask}
+                      className="px-6 py-3 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-wider text-xs flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingTask ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={16} />
+                          {editingTask ? 'Actualizar Tarea' : 'Publicar Tarea Ahora'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: FICHA DEL ESTUDIANTE */}
       {activeTab === 'folder' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* SELECTOR DE ALUMNO */}
@@ -1484,7 +2463,7 @@ export const ClassroomManager = () => {
                   }`}
                 >
                   <span className="font-bold text-xs">{getStudentFullName(s)}</span>
-                  <span className="text-[10px] font-mono opacity-70">{s.rne || 'RNE'}</span>
+                  <span className="text-[10px] font-mono opacity-70">{s.sigerd_code || s.rne || '---'}</span>
                 </button>
               ))}
             </div>
@@ -1511,7 +2490,11 @@ export const ClassroomManager = () => {
                       </div>
                       <div>
                         <h3 className="text-xl font-black">{sFullName}</h3>
-                        <p className="text-xs text-slate-400 font-mono">RNE: {student.rne || 'Sin RNE'}</p>
+                        <p className="text-xs text-slate-400 font-mono">
+                          {student.sigerd_code ? `SIGERD: ${student.sigerd_code}` : ''}
+                          {student.sigerd_code && student.rne ? ' | ' : ''}
+                          {student.rne ? `RNE: ${student.rne}` : (!student.sigerd_code ? 'Sin RNE / SIGERD' : '')}
+                        </p>
                       </div>
                     </div>
 

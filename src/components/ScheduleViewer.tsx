@@ -41,7 +41,13 @@ export const ScheduleViewer = () => {
     setAppState
   } = useApp();
 
-  const centerName = center?.name || (profile as any)?.center_name || profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+  const centerName =
+    center?.name ||
+    (profile as any)?.center_name ||
+    profile?.center?.name ||
+    localStorage.getItem('edugens_center_name') ||
+    localStorage.getItem('edugest_center_name') ||
+    'Centro Educativo';
 
   const isAdminOrStaff =
     profile?.role && ['admin', 'coordinator', 'finance', 'superAdmin'].includes(profile.role);
@@ -1488,7 +1494,13 @@ export const ScheduleViewer = () => {
         format: 'a4'
       });
 
-      const centerName = profile?.center?.name || 'CENTRO EDUCATIVO JUAN PABLO DUARTE';
+      const centerName =
+        center?.name ||
+        (profile as any)?.center_name ||
+        profile?.center?.name ||
+        localStorage.getItem('edugens_center_name') ||
+        localStorage.getItem('edugest_center_name') ||
+        'Centro Educativo';
 
       if (filterType === 'teacher') {
         const targetTeachers = filterId
