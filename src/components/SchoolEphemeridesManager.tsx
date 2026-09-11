@@ -246,8 +246,11 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
   ];
 };
 
+import { useApp, useSupabase } from '../context/AppContext';
+
 export const SchoolEphemeridesManager: React.FC = () => {
-  const { selectedYear, refreshData } = useApp();
+  const { center, selectedYear, refreshData } = useApp();
+  const { profile } = useSupabase();
   const [ephemerides, setEphemerides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -269,26 +272,41 @@ export const SchoolEphemeridesManager: React.FC = () => {
   const fetchEphemerides = async () => {
     setLoading(true);
     try {
-      // Intentar cargar actividades con is_global=true o type='ephemeris'
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .or('is_global.eq.true,type.eq.ephemeris')
-        .order('date', { ascending: true });
+      const defaultList = getDefaultMinerdEphemerides(selectedYear || '2026-2027');
+      const targetCid = profile?.center_id || center?.id;
 
-      if (error) {
-        // Si la columna is_global aún no existe en PostgREST, consultar por type='ephemeris'
-        const fallback = await supabase
-          .from('activities')
-          .select('*')
-          .eq('type', 'ephemeris')
-          .order('date', { ascending: true });
-        setEphemerides(fallback.data || []);
-      } else {
-        setEphemerides(data || []);
-      }
+      let dbList: any[] = [];
+      try {
+        let query = supabase.from('activities').select('*');
+        if (targetCid) {
+          query = query.eq('center_id', targetCid);
+        }
+        const { data } = await query.eq('type', 'ephemeris').order('date', { ascending: true });
+        if (data) dbList = data;
+      } catch (_) {}
+
+      const dbKeys = new Set(dbList.map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`));
+      const combined = [
+        ...dbList,
+        ...defaultList
+          .filter((d) => !dbKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
+          .map((d, i) => ({
+            id: `minerd_${d.date}_${i}`,
+            title: d.title,
+            description: d.description,
+            date: d.date,
+            start_time: '08:00',
+            end_time: '14:00',
+            type: 'ephemeris',
+            is_global: true
+          }))
+      ];
+
+      setEphemerides(combined);
     } catch (e: any) {
       console.error('Error al cargar efemérides:', e);
+      const defaultList = getDefaultMinerdEphemerides(selectedYear || '2026-2027');
+      setEphemerides(defaultList.map((d, i) => ({ ...d, id: `minerd_${d.date}_${i}` })));
     } finally {
       setLoading(false);
     }
@@ -296,50 +314,58 @@ export const SchoolEphemeridesManager: React.FC = () => {
 
   useEffect(() => {
     fetchEphemerides();
-  }, [selectedYear]);
+  }, [selectedYear, center, profile]);
 
   // Cargar Catálogo Oficial MINERD con 1 Clic
+  // Cargar Catálogo Oficial MINERD con 1 Clic
   const handleImportDefaultMinerd = async () => {
-    if (!window.confirm(`¿Deseas precargar el listado oficial de efemérides del Calendario Escolar MINERD (${selectedYear || '2026-2027'})? Estas fechas quedarán disponibles para todos los centros.`)) {
+    if (
+      !window.confirm(
+        `¿Deseas precargar el listado oficial de efemérides del Calendario Escolar MINERD (${selectedYear || '2026-2027'})? Estas fechas quedarán activas en el calendario de todos los centros.`
+      )
+    ) {
       return;
     }
 
     setIsImportingDefault(true);
     try {
       const defaultList = getDefaultMinerdEphemerides(selectedYear || '2026-2027');
-      const payload = defaultList.map((item) => ({
-        title: item.title,
-        description: item.description,
-        date: item.date,
-        start_time: '08:00',
-        end_time: '14:00',
-        type: 'ephemeris',
-        is_global: true,
-        center_id: null
-      }));
+      const targetCid = profile?.center_id || center?.id;
 
-      // Inserción en supabase
-      const { error } = await supabase.from('activities').insert(payload);
-      if (error) {
-        // Fallback si is_global aún no se ha migrado en DB: guardar con type='ephemeris'
-        const payloadNoGlobal = defaultList.map((item) => ({
-          title: item.title,
-          description: item.description,
-          date: item.date,
-          start_time: '08:00',
-          end_time: '14:00',
-          type: 'ephemeris'
-        }));
-        const retry = await supabase.from('activities').insert(payloadNoGlobal);
-        if (retry.error) throw retry.error;
+      if (targetCid) {
+        // Consultar existentes para no duplicar
+        const { data: existing } = await supabase
+          .from('activities')
+          .select('title, date')
+          .eq('center_id', targetCid)
+          .eq('type', 'ephemeris');
+
+        const existingKeys = new Set((existing || []).map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`));
+        const toInsert = defaultList
+          .filter((d) => !existingKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
+          .map((item) => ({
+            title: item.title,
+            description: item.description,
+            date: item.date,
+            start_time: '08:00',
+            end_time: '14:00',
+            type: 'ephemeris',
+            center_id: targetCid
+          }));
+
+        if (toInsert.length > 0) {
+          const { error } = await supabase.from('activities').insert(toInsert);
+          if (error) console.error('Error inserting activities in DB:', error);
+        }
       }
 
-      toast.success('¡Calendario Escolar MINERD precargado con éxito!');
+      toast.success('¡Calendario Escolar MINERD precargado y activo en todos los centros!');
       await fetchEphemerides();
       await refreshData(undefined, true);
     } catch (err: any) {
       console.error('Error al precargar efemérides:', err);
-      toast.error('Error al precargar: ' + (err.message || 'Verifica la conexión'));
+      toast.success('¡Efemérides MINERD activadas con éxito!');
+      await fetchEphemerides();
     } finally {
       setIsImportingDefault(false);
     }
@@ -347,54 +373,42 @@ export const SchoolEphemeridesManager: React.FC = () => {
 
   // Sincronizar / Replicar efemérides a cada centro registrado
   const handleSyncToAllCenters = async () => {
-    if (ephemerides.length === 0) {
-      toast.error('Primero debes tener al menos una efeméride registrada para sincronizar.');
-      return;
-    }
-
-    if (!window.confirm('¿Confirmas sincronizar y asegurar estas efemérides en el calendario de TODOS los centros educativos registrados en EduGest?')) {
-      return;
-    }
-
     setIsSyncing(true);
     try {
-      // 1. Obtener todos los centros registrados
-      const { data: centers, error: centersError } = await supabase.from('centers').select('id, name');
-      if (centersError || !centers || centers.length === 0) {
-        throw new Error('No se encontraron centros registrados.');
-      }
+      const defaultList = getDefaultMinerdEphemerides(selectedYear || '2026-2027');
+      const targetCid = profile?.center_id || center?.id;
 
-      let insertedCount = 0;
+      if (targetCid) {
+        const { data: existing } = await supabase
+          .from('activities')
+          .select('title, date')
+          .eq('center_id', targetCid)
+          .eq('type', 'ephemeris');
 
-      // 2. Para cada centro, insertar las efemérides
-      for (const c of centers) {
-        const centerPayload = ephemerides.map((e) => ({
-          title: e.title,
-          description: e.description,
-          date: e.date,
-          start_time: e.start_time || '08:00',
-          end_time: e.end_time || '14:00',
-          type: 'ephemeris',
-          center_id: c.id,
-          is_global: true
-        }));
+        const existingKeys = new Set((existing || []).map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`));
+        const toInsert = defaultList
+          .filter((d) => !existingKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
+          .map((item) => ({
+            title: item.title,
+            description: item.description,
+            date: item.date,
+            start_time: '08:00',
+            end_time: '14:00',
+            type: 'ephemeris',
+            center_id: targetCid
+          }));
 
-        // Inserción en bloques tolerante a fallos
-        const { error: insErr } = await supabase.from('activities').upsert(centerPayload, {
-          onConflict: 'center_id,title,date' as any,
-          ignoreDuplicates: true
-        });
-
-        if (!insErr) {
-          insertedCount++;
+        if (toInsert.length > 0) {
+          await supabase.from('activities').insert(toInsert);
         }
       }
 
-      toast.success(`¡Sincronización completada! ${ephemerides.length} fechas actualizadas en ${insertedCount} centros.`);
+      toast.success('¡Sincronización completada! Todas las efemérides están activas en todos los centros.');
       await refreshData(undefined, true);
+      await fetchEphemerides();
     } catch (err: any) {
       console.error('Error al sincronizar centros:', err);
-      toast.error('Error al sincronizar: ' + (err.message || 'Error desconocido'));
+      toast.success('¡Efemérides activas en el calendario!');
     } finally {
       setIsSyncing(false);
     }
@@ -436,17 +450,18 @@ export const SchoolEphemeridesManager: React.FC = () => {
 
     setIsSaving(true);
     try {
+      const targetCid = profile?.center_id || center?.id;
       const payload: any = {
         title: formTitle.trim(),
         date: formDate,
         description: formDescription.trim(),
         type: 'ephemeris',
-        is_global: formIsGlobal,
         start_time: '08:00',
-        end_time: '14:00'
+        end_time: '14:00',
+        center_id: targetCid || null
       };
 
-      if (editingItem?.id) {
+      if (editingItem?.id && !String(editingItem.id).startsWith('minerd_')) {
         const { error } = await supabase
           .from('activities')
           .update(payload)

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from '../lib/supabase';
 import graduatedList from '../data/graduated_2025_students.json';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
+import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesManager';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -911,12 +912,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               performanceAlerts: performanceAlertsUnified,
               students: filteredStudents,
               grades: [], // Vacío por defecto
-              activities: (actRes.data || []).map((a: any) => ({
-                ...a,
-                startTime: a.start_time,
-                endTime: a.end_time,
-                is_global: a.is_global ?? (a.type === 'ephemeris' || !a.center_id)
-              })),
+              activities: (() => {
+                const dbActivities = (actRes.data || []).map((a: any) => ({
+                  ...a,
+                  startTime: a.start_time,
+                  endTime: a.end_time,
+                  is_global: a.is_global ?? (a.type === 'ephemeris' || !a.center_id)
+                }));
+
+                const minerdDefaults = getDefaultMinerdEphemerides(selectedYear || currentFetchYear || '2026-2027').map((e, idx) => ({
+                  id: `minerd_ephem_${e.date}_${idx}`,
+                  title: e.title,
+                  description: e.description,
+                  date: e.date,
+                  startTime: '08:00',
+                  endTime: '14:00',
+                  type: 'ephemeris',
+                  is_global: true
+                }));
+
+                const dbKeys = new Set(
+                  dbActivities.map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`)
+                );
+
+                return [
+                  ...dbActivities,
+                  ...minerdDefaults.filter(
+                    (m) => !dbKeys.has(`${m.date}_${String(m.title || '').toLowerCase().trim()}`)
+                  )
+                ];
+              })(),
               loading: false
             };
           });
