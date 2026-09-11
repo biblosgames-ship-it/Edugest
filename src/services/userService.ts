@@ -383,3 +383,51 @@ export const getStaffForInvitation = async (code: string) => {
   if (error) throw error;
   return data || [];
 };
+
+export const getStudentsForInvitation = async (code: string, courseId?: string, centerId?: string) => {
+  const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
+
+  // 1. Intentar primero con RPC seguro (SECURITY DEFINER, no bloqueado por RLS)
+  try {
+    const { data, error } = await supabase.rpc('get_students_for_invitation', {
+      p_code: sanitizedCode
+    });
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data;
+    }
+  } catch (rpcErr) {
+    console.warn('RPC get_students_for_invitation error fallback:', rpcErr);
+  }
+
+  // 2. Intentar RPC directo por course_id si se conoce
+  if (courseId) {
+    try {
+      const { data, error } = await supabase.rpc('get_students_by_course_id', {
+        p_course_id: courseId
+      });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch (rpcErr) {
+      console.warn('RPC get_students_by_course_id error fallback:', rpcErr);
+    }
+  }
+
+  // 3. Consulta directa con fallback de ordenación
+  if (courseId) {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_number', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch (dbErr) {
+      console.warn('Direct students query fallback error:', dbErr);
+    }
+  }
+
+  return [];
+};

@@ -5,6 +5,7 @@ import {
   validateInvitationCode,
   registerMemberWithCode,
   getStaffForInvitation,
+  getStudentsForInvitation,
   createUserProfile
 } from '../services/userService';
 import { supabase } from '../lib/supabase';
@@ -20,6 +21,7 @@ export const InvitationForm = () => {
   const [detectedCourse, setDetectedCourse] = useState<any>(null);
   const [role, setRole] = useState<'student' | 'parent'>('student');
   const [courseStudents, setCourseStudents] = useState<any[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [manualStudentName, setManualStudentName] = useState('');
 
@@ -33,6 +35,66 @@ export const InvitationForm = () => {
   const [manualStaffName, setManualStaffName] = useState('');
   const [detectedTeacherId, setDetectedTeacherId] = useState<string | null>(null);
   const [detectedTeacherName, setDetectedTeacherName] = useState<string | null>(null);
+
+  const loadStudentsForCourse = async (targetCode: string, targetCourseId: string, targetCenterId: string) => {
+    setIsLoadingStudents(true);
+    try {
+      // 1. Asegurar puente de RLS en el perfil del usuario autenticado
+      // Si el usuario no tiene center_id asignado, las políticas RLS bloquean la lectura de 'students'.
+      if (user?.id && targetCenterId) {
+        try {
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            email: user.email,
+            center_id: targetCenterId
+          });
+        } catch (upsertErr) {
+          console.warn('RLS bridge upsert warning:', upsertErr);
+        }
+      }
+
+      // 2. Obtener lista vía servicio (RPC SECURITY DEFINER o consulta directa)
+      let list = await getStudentsForInvitation(targetCode, targetCourseId, targetCenterId);
+
+      // 3. Fallback directo si no trajo datos por la RPC
+      if (!list || list.length === 0) {
+        if (targetCourseId) {
+          const { data: directStudents } = await supabase
+            .from('students')
+            .select('*')
+            .eq('course_id', targetCourseId);
+          if (directStudents && directStudents.length > 0) {
+            list = directStudents;
+          }
+        }
+      }
+
+      // 4. Filtrar y ordenar los alumnos alfabéticamente por apellido y nombre
+      const activeStudents = (list || []).filter((s: any) => {
+        const status = (s.status || '').toLowerCase().trim();
+        return status !== 'retirado' && status !== 'inactivo' && status !== 'expulsado';
+      });
+
+      activeStudents.sort((a: any, b: any) => {
+        const orderA = a.order_number ?? 999;
+        const orderB = b.order_number ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
+
+        const nameA = `${a.first_surname || a.last_name || ''} ${a.second_surname || ''} ${a.names || a.first_name || a.name || ''}`.trim().toLowerCase();
+        const nameB = `${b.first_surname || b.last_name || ''} ${b.second_surname || ''} ${b.names || b.first_name || b.name || ''}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+
+      setCourseStudents(activeStudents);
+      return activeStudents;
+    } catch (loadErr) {
+      console.error('Error loading course students:', loadErr);
+      setCourseStudents([]);
+      return [];
+    } finally {
+      setIsLoadingStudents(false);
+    }
+  };
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,12 +124,6 @@ export const InvitationForm = () => {
           .maybeSingle();
 
         if (directCourse) {
-          const { data: stData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('course_id', directCourse.id);
-
-          setCourseStudents(stData || []);
           setIsCourseCode(true);
           setDetectedCourse({
             valid: true,
@@ -80,6 +136,7 @@ export const InvitationForm = () => {
             level: directCourse.level,
             tanda: directCourse.tanda
           });
+          await loadStudentsForCourse(sanitizedCode, directCourse.id, directCourse.center_id);
           setIsLoading(false);
           return;
         }
@@ -101,12 +158,6 @@ export const InvitationForm = () => {
               courseObj = cObj;
             }
 
-            const { data: stData } = await supabase
-              .from('students')
-              .select('*')
-              .eq('course_id', targetCourseId || '');
-
-            setCourseStudents(stData || []);
             setIsCourseCode(true);
             setDetectedCourse({
               valid: true,
@@ -119,6 +170,9 @@ export const InvitationForm = () => {
               level: courseObj?.level,
               tanda: courseObj?.tanda
             });
+            if (targetCourseId) {
+              await loadStudentsForCourse(sanitizedCode, targetCourseId, directCode.center_id);
+            }
             setIsLoading(false);
             return;
           }
@@ -298,20 +352,9 @@ export const InvitationForm = () => {
         setDetectedAllowedPanels(codeData.allowed_panels || []);
         setIsStaffCode(true);
       } else if (codeData.type === 'course') {
-        // Cargar alumnos inscritos en este curso para la selección
-        try {
-          const { data: stData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('course_id', codeData.course_id);
-
-          setCourseStudents(stData || []);
-        } catch (stErr) {
-          console.error('Error al cargar lista de estudiantes del curso:', stErr);
-        }
-
         setIsCourseCode(true);
         setDetectedCourse(codeData);
+        await loadStudentsForCourse(sanitizedCode, codeData.course_id, codeData.center_id);
       } else {
         throw new Error('Tipo de código no reconocido.');
       }
@@ -330,7 +373,7 @@ export const InvitationForm = () => {
     setError('');
 
     let selectedName = '';
-    if (selectedStudentId === 'manual') {
+    if (selectedStudentId === 'manual' || (!selectedStudentId && manualStudentName.trim())) {
       selectedName = manualStudentName.trim();
       if (!selectedName) {
         setError('Por favor escribe el nombre completo.');
@@ -340,14 +383,14 @@ export const InvitationForm = () => {
     } else if (selectedStudentId) {
       const matchSt = courseStudents.find((s) => s.id === selectedStudentId);
       if (matchSt) {
-        if (matchSt.first_surname || matchSt.names) {
-          const surnames = `${matchSt.first_surname || ''} ${matchSt.second_surname || ''}`.trim();
-          const names = matchSt.names || '';
-          selectedName = surnames ? `${names} ${surnames}`.trim() : names;
-        } else if (matchSt.first_name || matchSt.last_name) {
-          selectedName = `${matchSt.first_name || ''} ${matchSt.last_name || ''}`.trim();
+        const firstName = (matchSt.names || matchSt.first_name || '').trim();
+        const lastName = (matchSt.first_surname || matchSt.last_name || '').trim();
+        const secondSurname = (matchSt.second_surname || '').trim();
+        const fullSurnames = `${lastName} ${secondSurname}`.trim();
+        if (fullSurnames && firstName) {
+          selectedName = `${firstName} ${fullSurnames}`.trim();
         } else {
-          selectedName = matchSt.name || '';
+          selectedName = firstName || fullSurnames || matchSt.name || matchSt.full_name || '';
         }
       }
     }
@@ -361,13 +404,15 @@ export const InvitationForm = () => {
     const sanitizedCode = code.trim().toUpperCase().replace(/\s+/g, '');
 
     try {
-      // 1. Obtener la cantidad de alumnos registrados en el curso
-      const { count: studentCount, error: countErr } = await supabase
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('course_id', detectedCourse.course_id);
-
-      if (countErr) throw countErr;
+      // 1. Obtener la cantidad de alumnos registrados en el curso (usando la lista cargada o consulta)
+      let studentCount = courseStudents.length;
+      if (!studentCount && detectedCourse.course_id) {
+        const { count: countExact } = await supabase
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .eq('course_id', detectedCourse.course_id);
+        studentCount = countExact || 0;
+      }
 
       // 2. Obtener la cantidad de perfiles ya registrados para este curso (roles student y parent)
       const { count: profilesCount, error: profilesErr } = await supabase
@@ -429,6 +474,22 @@ export const InvitationForm = () => {
           .upsert(profileUpdates);
       } catch (e) {
         console.warn('Profile direct update fallback error:', e);
+      }
+
+      // Si es rol parent y seleccionó un alumno de la lista, registrar el enlace en la tabla parents
+      if (role === 'parent' && selectedStudentId && selectedStudentId !== 'manual') {
+        try {
+          await supabase.from('parents').insert([
+            {
+              center_id: detectedCourse.center_id,
+              student_id: selectedStudentId,
+              profile_id: user.id,
+              name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Padre/Tutor',
+              email: user.email,
+              relation: 'Tutor'
+            }
+          ]);
+        } catch (_) {}
       }
 
       // Asegurar que el código de invitación para el curso se mantenga reutilizable para todos los demás padres
@@ -738,59 +799,87 @@ export const InvitationForm = () => {
           </div>
 
           <div className="space-y-3">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
-              {role === 'parent'
-                ? 'Selecciona el Nombre de tu Hijo(a)'
-                : 'Selecciona tu Nombre en la Lista del Curso'}
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
+                {role === 'parent'
+                  ? 'Selecciona el Nombre de tu Hijo(a) *'
+                  : 'Selecciona tu Nombre en la Lista del Curso *'}
+              </label>
+              {isLoadingStudents ? (
+                <span className="text-[10px] font-bold text-indigo-500 animate-pulse">
+                  Cargando alumnos...
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  {courseStudents.length} alumnos en lista
+                </span>
+              )}
+            </div>
+
             <select
-              required
-              className="w-full px-4 py-3.5 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+              required={selectedStudentId !== 'manual' && courseStudents.length > 0}
+              disabled={isLoadingStudents}
+              className="w-full px-4 py-3.5 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all disabled:opacity-60 cursor-pointer"
               value={selectedStudentId}
               onChange={(e) => setSelectedStudentId(e.target.value)}
             >
-              <option value="">-- Seleccionar de la lista oficial del curso --</option>
+              <option value="">
+                {isLoadingStudents
+                  ? '-- Cargando lista de alumnos del curso... --'
+                  : courseStudents.length > 0
+                  ? '-- Seleccionar de la lista oficial del curso --'
+                  : '-- No se encontraron alumnos en este curso --'}
+              </option>
               {courseStudents.map((st: any) => {
+                const firstName = (st.names || st.first_name || '').trim();
+                const lastName = (st.first_surname || st.last_name || '').trim();
+                const secondSurname = (st.second_surname || '').trim();
+                const fullSurnames = `${lastName} ${secondSurname}`.trim();
+                
                 let displayName = '';
-                if (st.first_surname || st.names) {
-                  const surnames = `${st.first_surname || ''} ${st.second_surname || ''}`.trim();
-                  const names = st.names || '';
-                  displayName = surnames ? `${surnames}, ${names}` : names;
-                } else if (st.first_name || st.last_name) {
-                  displayName = `${st.last_name || ''}, ${st.first_name || ''}`.trim();
+                if (fullSurnames && firstName) {
+                  displayName = `${fullSurnames}, ${firstName}`;
                 } else {
-                  displayName = st.name || 'Estudiante';
+                  displayName = fullSurnames || firstName || st.name || st.full_name || 'Estudiante';
                 }
+
                 const orderStr = st.order_number ? `#${st.order_number} - ` : '';
+                const idTag = st.student_id ? ` (Mat: ${st.student_id})` : '';
+
                 return (
                   <option key={st.id} value={st.id}>
-                    {orderStr}{displayName}
+                    {orderStr}{displayName}{idTag}
                   </option>
                 );
               })}
               <option value="manual">
                 {role === 'parent'
-                  ? 'El nombre de mi hijo(a) no está en la lista (Escribir manualmente)'
-                  : 'Mi nombre no está en la lista (Escribir manualmente)'}
+                  ? '✍️ El nombre de mi hijo(a) no aparece en la lista (Escribir manualmente)'
+                  : '✍️ Mi nombre no aparece en la lista (Escribir manualmente)'}
               </option>
             </select>
           </div>
 
-          {selectedStudentId === 'manual' && (
+          {(selectedStudentId === 'manual' || (!isLoadingStudents && courseStudents.length === 0)) && (
             <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
                 {role === 'parent'
-                  ? 'Escribe el Nombre Completo de tu Hijo(a)'
-                  : 'Escribe tu Nombre Completo'}
+                  ? 'Escribe el Nombre Completo de tu Hijo(a) *'
+                  : 'Escribe tu Nombre Completo *'}
               </label>
               <input
                 type="text"
                 value={manualStudentName}
                 onChange={(e) => setManualStudentName(e.target.value)}
-                placeholder="Nombre completo del estudiante"
+                placeholder={role === 'parent' ? 'Nombres y apellidos del estudiante' : 'Tus nombres y apellidos'}
                 className="w-full px-4 py-3 border-2 border-slate-100 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                 required
               />
+              {courseStudents.length === 0 && !isLoadingStudents && (
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-xl font-medium leading-relaxed">
+                  💡 <strong>Información:</strong> La sección aún no tiene alumnos pre-cargados en la plataforma. Escribe el nombre del alumno aquí arriba para vincularte directamente y acceder al aula virtual.
+                </p>
+              )}
             </div>
           )}
 
