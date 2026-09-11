@@ -1,113 +1,46 @@
 -- =========================================================================
--- FUNCIÓN RPC: OBTENER ALUMNOS DE UN CURSO PARA VINCULACIÓN (PADRES Y ALUMNOS)
+-- FUNCIÓN RPC: OBTENER ALUMNOS DE UN CURSO PARA VINCULACIÓN DE PADRES Y ALUMNOS
 -- =========================================================================
--- Al registrarse o vincularse por primera vez, el usuario no tiene center_id
--- asignado en profiles, por lo que las políticas de RLS bloquean la lectura
--- de la tabla 'students'. Esta función SECURITY DEFINER permite obtener de
--- forma segura los alumnos activos de una sección ingresando el código del curso.
+-- Ejecuta este script en el editor SQL de Supabase (SQL Editor -> New Query).
+-- Esta función SECURITY DEFINER permite listar los alumnos de una sección
+-- mediante el código del curso sin ser bloqueado por RLS.
 
-CREATE OR REPLACE FUNCTION public.get_students_for_invitation(
-  p_code text
-)
-RETURNS TABLE (
-  id uuid,
-  center_id uuid,
-  course_id uuid,
-  names text,
-  first_name text,
-  last_name text,
-  first_surname text,
-  second_surname text,
-  name text,
-  student_id text,
-  order_number integer,
-  status text
-) AS $$
+CREATE OR REPLACE FUNCTION public.get_students_for_invitation(p_code text)
+RETURNS jsonb AS $$
 DECLARE
   v_course_id uuid;
-  v_center_id uuid;
+  v_result jsonb;
 BEGIN
-  -- 1. Buscar en courses directamente por código amigable (ej: GEN-5A)
-  SELECT c.id, c.center_id INTO v_course_id, v_center_id
-  FROM public.courses c
-  WHERE upper(trim(c.code)) = upper(trim(p_code))
+  -- 1. Buscar en courses por código (ej: GEN-5A)
+  SELECT id INTO v_course_id
+  FROM public.courses
+  WHERE upper(trim(code)) = upper(trim(p_code))
   LIMIT 1;
 
-  -- 2. Si no es un código de curso directo, buscar en invitation_codes
+  -- 2. Si no está en courses, buscar en invitation_codes
   IF v_course_id IS NULL THEN
-    SELECT ic.course_id, ic.center_id INTO v_course_id, v_center_id
-    FROM public.invitation_codes ic
-    WHERE upper(trim(ic.code)) = upper(trim(p_code))
+    SELECT course_id INTO v_course_id
+    FROM public.invitation_codes
+    WHERE upper(trim(code)) = upper(trim(p_code))
     LIMIT 1;
   END IF;
 
-  IF v_course_id IS NOT NULL THEN
-    RETURN QUERY
-    SELECT 
-      s.id,
-      s.center_id,
-      s.course_id,
-      s.names,
-      s.first_name,
-      s.last_name,
-      s.first_surname,
-      s.second_surname,
-      s.name,
-      COALESCE(s.student_id::text, s.order_number::text, '')::text AS student_id,
-      s.order_number,
-      s.status
-    FROM public.students s
-    WHERE s.course_id = v_course_id
-      AND lower(COALESCE(s.status, 'activo')) NOT IN ('retirado', 'inactivo', 'expulsado')
-    ORDER BY 
-      COALESCE(s.order_number, 999) ASC,
-      COALESCE(s.first_surname, s.last_name, s.names, s.first_name, '') ASC;
+  IF v_course_id IS NULL THEN
+    RETURN '[]'::jsonb;
   END IF;
+
+  -- 3. Obtener alumnos activos del curso
+  SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb)
+  INTO v_result
+  FROM (
+    SELECT *
+    FROM public.students
+    WHERE course_id = v_course_id
+      AND lower(COALESCE(status, 'activo')) NOT IN ('retirado', 'inactivo', 'expulsado')
+  ) t;
+
+  RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Función alternativa directa por ID de curso
-CREATE OR REPLACE FUNCTION public.get_students_by_course_id(
-  p_course_id uuid
-)
-RETURNS TABLE (
-  id uuid,
-  center_id uuid,
-  course_id uuid,
-  names text,
-  first_name text,
-  last_name text,
-  first_surname text,
-  second_surname text,
-  name text,
-  student_id text,
-  order_number integer,
-  status text
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    s.id,
-    s.center_id,
-    s.course_id,
-    s.names,
-    s.first_name,
-    s.last_name,
-    s.first_surname,
-    s.second_surname,
-    s.name,
-    COALESCE(s.student_id::text, s.order_number::text, '')::text AS student_id,
-    s.order_number,
-    s.status
-  FROM public.students s
-  WHERE s.course_id = p_course_id
-    AND lower(COALESCE(s.status, 'activo')) NOT IN ('retirado', 'inactivo', 'expulsado')
-  ORDER BY 
-    COALESCE(s.order_number, 999) ASC,
-    COALESCE(s.first_surname, s.last_name, s.names, s.first_name, '') ASC;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Otorgar permisos de ejecución para usuarios anónimos y autenticados
 GRANT EXECUTE ON FUNCTION public.get_students_for_invitation(text) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_students_by_course_id(uuid) TO anon, authenticated, service_role;

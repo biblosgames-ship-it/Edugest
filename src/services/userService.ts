@@ -392,8 +392,11 @@ export const getStudentsForInvitation = async (code: string, courseId?: string, 
     const { data, error } = await supabase.rpc('get_students_for_invitation', {
       p_code: sanitizedCode
     });
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data;
+    if (!error && data) {
+      const arr = typeof data === 'string' ? JSON.parse(data) : data;
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr;
+      }
     }
   } catch (rpcErr) {
     console.warn('RPC get_students_for_invitation error fallback:', rpcErr);
