@@ -206,4 +206,6 @@ export interface Activity {
   courseId?: string; // Optional link to course
   scheduleEntryId?: string; // Optional link to schedule entry
   is_global?: boolean;
+  suspends_classes?: boolean;
 }
+

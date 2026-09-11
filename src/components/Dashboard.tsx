@@ -15,7 +15,8 @@ import {
   Target,
   BarChart3,
   PieChart as PieIcon,
-  LineChart as LineIcon
+  LineChart as LineIcon,
+  Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
@@ -1025,32 +1026,152 @@ export const Dashboard = React.memo(() => {
                 .toLocaleString('es', { month: 'short' })
                 .toUpperCase()
                 .replace('.', '');
+              const dayWeek = eventDate
+                .toLocaleString('es', { weekday: 'short' })
+                .toUpperCase()
+                .replace('.', '');
+
+              const isEphem = event.is_global || event.type === 'ephemeris';
+              const titleLower = String(event.title || '').toLowerCase();
+              const descLower = String(event.description || '').toLowerCase();
+              const isPatria =
+                titleLower.includes('duarte') ||
+                titleLower.includes('mella') ||
+                titleLower.includes('sánchez') ||
+                titleLower.includes('sanchez') ||
+                titleLower.includes('independencia') ||
+                titleLower.includes('restauración') ||
+                titleLower.includes('restauracion') ||
+                titleLower.includes('patria') ||
+                titleLower.includes('constitución') ||
+                titleLower.includes('constitucion') ||
+                titleLower.includes('bandera') ||
+                titleLower.includes('batalla') ||
+                titleLower.includes('luperón') ||
+                titleLower.includes('luperon') ||
+                titleLower.includes('mirabal') ||
+                descLower.includes('patria') ||
+                descLower.includes('independencia');
+
+              const isNoClasses =
+                event.suspends_classes !== undefined
+                  ? !!event.suspends_classes
+                  : descLower.includes('[no_docencia]') ||
+                    titleLower.includes('feriado') ||
+                    titleLower.includes('asueto') ||
+                    descLower.includes('feriado nacional') ||
+                    event.category === 'holiday';
+
+              const isOwnActivity = !isEphem && !isNoClasses;
+              const centerColor = center?.primary_color || '#4f46e5';
 
               return (
                 <div
                   key={idx}
-                  className="min-w-[300px] p-6 rounded-[2.5rem] bg-slate-50 border border-slate-100 hover:border-indigo-600 hover:bg-white transition-all group cursor-pointer shadow-sm hover:shadow-xl"
+                  className={`min-w-[300px] max-w-[340px] p-5 sm:p-6 rounded-[2.5rem] bg-slate-50 border transition-all group cursor-pointer shadow-sm hover:shadow-xl ${
+                    isNoClasses ? 'border-red-300 bg-red-50/20 hover:bg-white' : 'border-slate-100 hover:bg-white'
+                  }`}
+                  style={{
+                    borderColor: isNoClasses
+                      ? '#ef4444'
+                      : isOwnActivity
+                      ? `${centerColor}35`
+                      : undefined
+                  }}
                 >
-                  <div className="flex items-center gap-5">
-                    <div className="w-16 h-16 bg-white rounded-[1.5rem] flex flex-col items-center justify-center shadow-lg border border-slate-100 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                      <span className="text-[9px] font-black uppercase leading-none mb-1 opacity-60 group-hover:text-white/60">
+                  <div className="flex items-start gap-4">
+                    {/* Badge de Fecha con DÍA DE LA SEMANA + NÚMERO + MES */}
+                    <div
+                      className="w-16 h-18 py-1.5 bg-white rounded-[1.4rem] flex flex-col items-center justify-center shadow-md border transition-all duration-300 shrink-0"
+                      style={{
+                        borderColor: isNoClasses
+                          ? '#ef4444'
+                          : isOwnActivity
+                          ? `${centerColor}40`
+                          : '#e2e8f0'
+                      }}
+                    >
+                      <span
+                        className="text-[8.5px] font-black uppercase tracking-wider leading-none"
+                        style={{
+                          color: isNoClasses ? '#dc2626' : isOwnActivity ? centerColor : '#6366f1'
+                        }}
+                      >
+                        {dayWeek}
+                      </span>
+                      <span
+                        className={`text-xl font-black leading-none my-0.5 ${
+                          isNoClasses ? 'text-red-700' : 'text-slate-800'
+                        }`}
+                      >
+                        {dayNum}
+                      </span>
+                      <span className="text-[8px] font-black uppercase leading-none opacity-60 text-slate-500">
                         {monthName}
                       </span>
-                      <span className="text-2xl font-black leading-none">{dayNum}</span>
                     </div>
+
                     <div className="flex-1 overflow-hidden">
-                      <h4 className="text-md font-black text-slate-800 truncate group-hover:text-indigo-600 transition-colors leading-tight mb-2">
-                        {event.title}
-                      </h4>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <p className="text-[10px] font-black text-indigo-600 uppercase flex items-center gap-1.5">
-                          <Clock size={12} /> {event.startTime}
+                      {isNoClasses && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white font-black text-[8px] uppercase tracking-wider mb-1.5 shadow-xs">
+                          <Ban size={9} /> No Hay Docencia
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {isEphem ? (
+                          isPatria ? (
+                            <span className="text-xs shrink-0" title="Fecha Patria">
+                              🇩🇴
+                            </span>
+                          ) : (
+                            <img
+                              src="/minerd_logo.webp"
+                              alt="MINERD"
+                              className="w-3.5 h-3.5 object-contain bg-white rounded-xs p-0.5 shrink-0 border border-slate-200"
+                              title="MINERD"
+                            />
+                          )
+                        ) : null}
+                        <h4
+                          className="text-sm font-black truncate leading-tight transition-colors"
+                          style={{
+                            color: isNoClasses ? '#dc2626' : isOwnActivity ? centerColor : '#1e293b'
+                          }}
+                        >
+                          {event.title}
+                        </h4>
+                      </div>
+
+                      {/* Hora */}
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        <p
+                          className="text-[10px] font-black uppercase flex items-center gap-1.5"
+                          style={{
+                            color: isNoClasses
+                              ? '#dc2626'
+                              : isOwnActivity
+                              ? centerColor
+                              : '#4f46e5'
+                          }}
+                        >
+                          <Clock size={12} /> {event.startTime || 'Todo el día'}{' '}
+                          {event.endTime && event.endTime !== event.startTime
+                            ? `- ${event.endTime}`
+                            : ''}
                         </p>
                         <p className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1.5">
                           <MapPin size={12} /> {event.level?.[0] || 'I'} -{' '}
                           {event.cycle || 'Institucional'}
                         </p>
                       </div>
+
+                      {/* Descripción abajo junto a la hora */}
+                      {event.description && (
+                        <p className="text-xs text-slate-600 font-medium line-clamp-2 mt-2 leading-snug border-t border-slate-100 pt-1.5">
+                          {event.description}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

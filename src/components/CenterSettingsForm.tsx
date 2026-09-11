@@ -183,15 +183,36 @@ export const CenterSettingsForm = () => {
                   />
                 </div>
               </div>
-              <div>
-                <label className={labelClass}>Eslogan / Lema Institucional</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Compromiso con la excelencia"
-                  value={center?.slogan || ''}
-                  onChange={(e) => setCenter({ ...center, slogan: e.target.value })}
-                  className={inputClass}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Eslogan / Lema Institucional</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Compromiso con la excelencia"
+                    value={center?.slogan || ''}
+                    onChange={(e) => setCenter({ ...center, slogan: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Color Oficial del Centro</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={center?.primary_color || '#4f46e5'}
+                      onChange={(e) => setCenter({ ...center, primary_color: e.target.value })}
+                      className="w-11 h-11 rounded-xl border border-slate-200 cursor-pointer p-1 bg-white shrink-0"
+                      title="Seleccionar color oficial del centro"
+                    />
+                    <input
+                      type="text"
+                      placeholder="#4F46E5"
+                      value={center?.primary_color || '#4f46e5'}
+                      onChange={(e) => setCenter({ ...center, primary_color: e.target.value })}
+                      className={`${inputClass} font-mono uppercase font-bold`}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

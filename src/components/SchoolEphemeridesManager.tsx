@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { useApp } from '../context/AppContext';
+import { useApp, useSupabase } from '../context/AppContext';
 import {
   Calendar as CalendarIcon,
   Sparkles,
@@ -16,6 +16,7 @@ import {
   Coffee,
   Building2,
   Layers,
+  Ban,
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -27,6 +28,7 @@ export interface EphemerisItem {
   date: string; // YYYY-MM-DD
   category: 'civic' | 'educational' | 'holiday' | 'institutional';
   is_global?: boolean;
+  suspends_classes?: boolean;
 }
 
 // Catálogo Base Oficial del Calendario Escolar Dominicano (MINERD)
@@ -41,7 +43,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día de la Restauración de la República',
       date: `${y1}-08-16`,
       description: 'Conmemoración del Grito de Capotillo y el inicio de la Guerra de la Restauración (1863). Feriado Nacional.',
-      category: 'civic'
+      category: 'civic',
+      suspends_classes: true
     },
     {
       title: 'Apertura del Año Escolar / Inicio de Docencia',
@@ -101,7 +104,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día de la Constitución Dominicana',
       date: `${y1}-11-06`,
       description: 'Firma de la primera Carta Magna dominicana en San Cristóbal en 1844. Fiesta Nacional.',
-      category: 'civic'
+      category: 'civic',
+      suspends_classes: true
     },
     {
       title: 'Día de la No Violencia contra la Mujer (Hermanas Mirabal)',
@@ -119,7 +123,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Cierre del Primer Período / Vacaciones de Navidad',
       date: `${y1}-12-22`,
       description: 'Conclusión de la primera etapa del año lectivo e inicio del receso escolar navideño.',
-      category: 'holiday'
+      category: 'holiday',
+      suspends_classes: true
     },
 
     // --- SEGUNDO PERÍODO (Enero - Junio) ---
@@ -127,7 +132,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día de los Santos Reyes',
       date: `${y2}-01-06`,
       description: 'Celebración de la Epifanía y festividad tradicional de los Reyes Magos. Feriado.',
-      category: 'holiday'
+      category: 'holiday',
+      suspends_classes: true
     },
     {
       title: 'Reanudación de la Docencia (Segundo Período)',
@@ -145,13 +151,15 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día de Nuestra Señora de la Altagracia',
       date: `${y2}-01-21`,
       description: 'Festividad de la protectora del pueblo dominicano. Feriado Nacional.',
-      category: 'holiday'
+      category: 'holiday',
+      suspends_classes: true
     },
     {
       title: 'Natalicio de Juan Pablo Duarte',
       date: `${y2}-01-26`,
       description: 'Conmemoración del nacimiento del Padre Fundador de la República Dominicana. Inicio del Mes de la Patria.',
-      category: 'civic'
+      category: 'civic',
+      suspends_classes: true
     },
     {
       title: 'Día Nacional de la Juventud',
@@ -175,7 +183,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día de la Independencia Nacional',
       date: `${y2}-02-27`,
       description: '1844: Proclamación de la Independencia de la República Dominicana. Fiesta Patria Nacional.',
-      category: 'civic'
+      category: 'civic',
+      suspends_classes: true
     },
     {
       title: 'Día Internacional de la Mujer',
@@ -217,7 +226,8 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Día Internacional del Trabajo',
       date: `${y2}-05-01`,
       description: 'Homenaje a la clase trabajadora y al valor social del trabajo honrado. Feriado.',
-      category: 'holiday'
+      category: 'holiday',
+      suspends_classes: true
     },
     {
       title: 'Día de las Madres Dominicanas',
@@ -246,8 +256,6 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
   ];
 };
 
-import { useApp, useSupabase } from '../context/AppContext';
-
 export const SchoolEphemeridesManager: React.FC = () => {
   const { center, selectedYear, refreshData } = useApp();
   const { profile } = useSupabase();
@@ -267,6 +275,7 @@ export const SchoolEphemeridesManager: React.FC = () => {
   const [formCategory, setFormCategory] = useState<'civic' | 'educational' | 'holiday' | 'institutional'>('civic');
   const [formDescription, setFormDescription] = useState('');
   const [formIsGlobal, setFormIsGlobal] = useState(true);
+  const [formSuspendsClasses, setFormSuspendsClasses] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchEphemerides = async () => {
@@ -287,7 +296,10 @@ export const SchoolEphemeridesManager: React.FC = () => {
 
       const dbKeys = new Set(dbList.map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`));
       const combined = [
-        ...dbList,
+        ...dbList.map((x: any) => ({
+          ...x,
+          suspends_classes: x.suspends_classes ?? (x.description?.includes('[NO_DOCENCIA]') || x.description?.toLowerCase().includes('feriado') || false)
+        })),
         ...defaultList
           .filter((d) => !dbKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
           .map((d, i) => ({
@@ -298,7 +310,8 @@ export const SchoolEphemeridesManager: React.FC = () => {
             start_time: '08:00',
             end_time: '14:00',
             type: 'ephemeris',
-            is_global: true
+            is_global: true,
+            suspends_classes: d.suspends_classes ?? (d.category === 'holiday')
           }))
       ];
 
@@ -316,7 +329,6 @@ export const SchoolEphemeridesManager: React.FC = () => {
     fetchEphemerides();
   }, [selectedYear, center, profile]);
 
-  // Cargar Catálogo Oficial MINERD con 1 Clic
   // Cargar Catálogo Oficial MINERD con 1 Clic
   const handleImportDefaultMinerd = async () => {
     if (
@@ -345,17 +357,23 @@ export const SchoolEphemeridesManager: React.FC = () => {
           .filter((d) => !existingKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
           .map((item) => ({
             title: item.title,
-            description: item.description,
+            description: item.suspends_classes && !item.description?.includes('[NO_DOCENCIA]')
+              ? `${item.description}\n[NO_DOCENCIA]`
+              : item.description,
             date: item.date,
             start_time: '08:00',
             end_time: '14:00',
             type: 'ephemeris',
+            suspends_classes: item.suspends_classes ?? false,
             center_id: targetCid
           }));
 
         if (toInsert.length > 0) {
           const { error } = await supabase.from('activities').insert(toInsert);
-          if (error) console.error('Error inserting activities in DB:', error);
+          if (error && error.message?.includes('suspends_classes')) {
+            const fallbackToInsert = toInsert.map(({ suspends_classes, ...rest }) => rest);
+            await supabase.from('activities').insert(fallbackToInsert);
+          }
         }
       }
 
@@ -390,16 +408,23 @@ export const SchoolEphemeridesManager: React.FC = () => {
           .filter((d) => !existingKeys.has(`${d.date}_${String(d.title || '').toLowerCase().trim()}`))
           .map((item) => ({
             title: item.title,
-            description: item.description,
+            description: item.suspends_classes && !item.description?.includes('[NO_DOCENCIA]')
+              ? `${item.description}\n[NO_DOCENCIA]`
+              : item.description,
             date: item.date,
             start_time: '08:00',
             end_time: '14:00',
             type: 'ephemeris',
+            suspends_classes: item.suspends_classes ?? false,
             center_id: targetCid
           }));
 
         if (toInsert.length > 0) {
-          await supabase.from('activities').insert(toInsert);
+          const { error } = await supabase.from('activities').insert(toInsert);
+          if (error && error.message?.includes('suspends_classes')) {
+            const fallbackToInsert = toInsert.map(({ suspends_classes, ...rest }) => rest);
+            await supabase.from('activities').insert(fallbackToInsert);
+          }
         }
       }
 
@@ -427,8 +452,11 @@ export const SchoolEphemeridesManager: React.FC = () => {
           ? 'civic'
           : 'educational'
       );
-      setFormDescription(item.description || '');
+      setFormDescription(item.description ? item.description.replace(/\[NO_DOCENCIA\]/g, '').trim() : '');
       setFormIsGlobal(item.is_global ?? true);
+      setFormSuspendsClasses(
+        !!(item.suspends_classes || item.description?.includes('[NO_DOCENCIA]') || item.category === 'holiday' || item.description?.toLowerCase().includes('feriado'))
+      );
     } else {
       setEditingItem(null);
       setFormTitle('');
@@ -436,6 +464,7 @@ export const SchoolEphemeridesManager: React.FC = () => {
       setFormCategory('civic');
       setFormDescription('');
       setFormIsGlobal(true);
+      setFormSuspendsClasses(false);
     }
     setShowModal(true);
   };
@@ -451,27 +480,47 @@ export const SchoolEphemeridesManager: React.FC = () => {
     setIsSaving(true);
     try {
       const targetCid = profile?.center_id || center?.id;
+      let finalDesc = formDescription.trim();
+      if (formSuspendsClasses) {
+        if (!finalDesc.includes('[NO_DOCENCIA]')) {
+          finalDesc = `${finalDesc}\n[NO_DOCENCIA]`.trim();
+        }
+      } else {
+        finalDesc = finalDesc.replace(/\[NO_DOCENCIA\]/g, '').trim();
+      }
+
       const payload: any = {
         title: formTitle.trim(),
         date: formDate,
-        description: formDescription.trim(),
+        description: finalDesc,
         type: 'ephemeris',
         start_time: '08:00',
         end_time: '14:00',
+        suspends_classes: formSuspendsClasses,
         center_id: targetCid || null
       };
 
       if (editingItem?.id && !String(editingItem.id).startsWith('minerd_')) {
-        const { error } = await supabase
+        let { error } = await supabase
           .from('activities')
           .update(payload)
           .eq('id', editingItem.id);
+        if (error && error.message?.includes('suspends_classes')) {
+          const { suspends_classes, ...fallbackPayload } = payload;
+          const retryRes = await supabase.from('activities').update(fallbackPayload).eq('id', editingItem.id);
+          error = retryRes.error;
+        }
         if (error) throw error;
         toast.success('Efeméride actualizada correctamente');
       } else {
-        const { error } = await supabase
+        let { error } = await supabase
           .from('activities')
           .insert([payload]);
+        if (error && error.message?.includes('suspends_classes')) {
+          const { suspends_classes, ...fallbackPayload } = payload;
+          const retryRes = await supabase.from('activities').insert([fallbackPayload]);
+          error = retryRes.error;
+        }
         if (error) throw error;
         toast.success('Efeméride registrada correctamente');
       }
@@ -550,7 +599,12 @@ export const SchoolEphemeridesManager: React.FC = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider text-blue-200 border border-white/10">
-              <span>🇩🇴</span> Calendario Escolar Oficial MINERD
+              <img
+                src="/minerd_logo.webp"
+                alt="MINERD"
+                className="w-4 h-4 object-contain rounded bg-white p-0.5"
+              />
+              <span>Calendario Escolar Oficial MINERD</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black tracking-tight">
               Efemérides y Fechas Oficiales
@@ -667,13 +721,32 @@ export const SchoolEphemeridesManager: React.FC = () => {
                     formattedDate = `${d}/${m}/${y}`;
                   } catch {}
 
+                  const titleLower = item.title?.toLowerCase() || '';
+                  const descLower = item.description?.toLowerCase() || '';
                   const isPatria =
-                    item.title?.toLowerCase().includes('duarte') ||
-                    item.title?.toLowerCase().includes('independencia') ||
-                    item.title?.toLowerCase().includes('restauración') ||
-                    item.title?.toLowerCase().includes('mella') ||
-                    item.title?.toLowerCase().includes('sánchez') ||
-                    item.title?.toLowerCase().includes('constitución');
+                    titleLower.includes('duarte') ||
+                    titleLower.includes('mella') ||
+                    titleLower.includes('sánchez') ||
+                    titleLower.includes('sanchez') ||
+                    titleLower.includes('independencia') ||
+                    titleLower.includes('restauración') ||
+                    titleLower.includes('restauracion') ||
+                    titleLower.includes('patria') ||
+                    titleLower.includes('constitución') ||
+                    titleLower.includes('constitucion') ||
+                    titleLower.includes('bandera') ||
+                    titleLower.includes('batalla') ||
+                    titleLower.includes('luperón') ||
+                    titleLower.includes('luperon') ||
+                    titleLower.includes('mirabal') ||
+                    descLower.includes('patria') ||
+                    descLower.includes('independencia');
+
+                  const isNoClasses =
+                    item.suspends_classes ||
+                    item.description?.includes('[NO_DOCENCIA]') ||
+                    item.description?.toLowerCase().includes('feriado') ||
+                    item.category === 'holiday';
 
                   return (
                     <tr key={item.id || index} className="hover:bg-brand-bg transition-colors">
@@ -684,19 +757,34 @@ export const SchoolEphemeridesManager: React.FC = () => {
                         {formattedDate}
                       </td>
                       <td className="py-3 px-4 space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-black text-text-main uppercase text-xs">
                             {item.title}
                           </span>
-                          {isPatria && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 text-[9px] font-black uppercase flex items-center gap-1">
+                          {isPatria ? (
+                            <span className="px-2 py-0.5 rounded bg-blue-900 text-blue-100 border border-blue-700 text-[9px] font-black uppercase flex items-center gap-1 shrink-0">
                               🇩🇴 Patria
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-200 text-[9px] font-black uppercase flex items-center gap-1 shrink-0">
+                              <img
+                                src="/minerd_logo.webp"
+                                alt="MINERD"
+                                className="w-3.5 h-3.5 object-contain rounded bg-white p-0.5"
+                              />
+                              MINERD
+                            </span>
+                          )}
+                          {isNoClasses && (
+                            <span className="px-2 py-0.5 rounded bg-rose-600 text-white border border-rose-700 text-[9px] font-black uppercase flex items-center gap-1 shrink-0 animate-pulse shadow-sm">
+                              <Ban size={10} className="stroke-[3]" />
+                              Sin Docencia
                             </span>
                           )}
                         </div>
                         {item.description && (
                           <p className="text-[11px] text-text-muted line-clamp-2 leading-relaxed font-medium">
-                            {item.description}
+                            {item.description.replace(/\[NO_DOCENCIA\]/g, '').trim()}
                           </p>
                         )}
                       </td>
@@ -805,6 +893,43 @@ export const SchoolEphemeridesManager: React.FC = () => {
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* ALERTA ROJA: NO HAY DOCENCIA */}
+              <div
+                onClick={() => setFormSuspendsClasses(!formSuspendsClasses)}
+                className={`p-4 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
+                  formSuspendsClasses
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-400 shadow-sm'
+                    : 'bg-brand-bg border-border-main text-text-muted hover:border-slate-300 dark:hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 rounded-xl transition-colors ${
+                      formSuspendsClasses
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <Ban size={18} className="stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider">
+                      Suspender Docencia (No hay clases)
+                    </p>
+                    <p className="text-[10px] opacity-80 font-medium">
+                      Pintará el día en rojo con alerta destacada de no docencia en todos los calendarios.
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formSuspendsClasses}
+                  onChange={(e) => setFormSuspendsClasses(e.target.checked)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
                 />
               </div>
 

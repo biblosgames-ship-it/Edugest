@@ -913,23 +913,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               students: filteredStudents,
               grades: [], // Vacío por defecto
               activities: (() => {
-                const dbActivities = (actRes.data || []).map((a: any) => ({
-                  ...a,
-                  startTime: a.start_time,
-                  endTime: a.end_time,
-                  is_global: a.is_global ?? (a.type === 'ephemeris' || !a.center_id)
-                }));
+                const dbActivities = (actRes.data || []).map((a: any) => {
+                  const desc = a.description || '';
+                  const hasTag = desc.includes('[NO_DOCENCIA]');
+                  const titleLower = String(a.title || '').toLowerCase();
+                  const descLower = desc.toLowerCase();
+                  const isNoClasses =
+                    a.suspends_classes !== undefined
+                      ? !!a.suspends_classes
+                      : hasTag ||
+                        titleLower.includes('feriado') ||
+                        titleLower.includes('asueto') ||
+                        descLower.includes('feriado nacional');
 
-                const minerdDefaults = getDefaultMinerdEphemerides(selectedYear || currentFetchYear || '2026-2027').map((e, idx) => ({
-                  id: `minerd_ephem_${e.date}_${idx}`,
-                  title: e.title,
-                  description: e.description,
-                  date: e.date,
-                  startTime: '08:00',
-                  endTime: '14:00',
-                  type: 'ephemeris',
-                  is_global: true
-                }));
+                  return {
+                    ...a,
+                    description: desc.replace(/\[NO_DOCENCIA\]\s*/g, '').trim(),
+                    startTime: a.start_time,
+                    endTime: a.end_time,
+                    is_global: a.is_global ?? (a.type === 'ephemeris' || !a.center_id),
+                    suspends_classes: isNoClasses
+                  };
+                });
+
+                const minerdDefaults = getDefaultMinerdEphemerides(selectedYear || currentFetchYear || '2026-2027').map((e, idx) => {
+                  const isHoliday =
+                    e.category === 'holiday' ||
+                    e.title.toLowerCase().includes('feriado') ||
+                    e.description.toLowerCase().includes('feriado') ||
+                    e.title.toLowerCase().includes('asueto');
+
+                  return {
+                    id: `minerd_ephem_${e.date}_${idx}`,
+                    title: e.title,
+                    description: e.description,
+                    date: e.date,
+                    startTime: '08:00',
+                    endTime: '14:00',
+                    type: 'ephemeris',
+                    is_global: true,
+                    suspends_classes: isHoliday
+                  };
+                });
 
                 const dbKeys = new Set(
                   dbActivities.map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`)
@@ -1420,17 +1445,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAppState: setState,
         addActivity: async (a: any) => {
           if (!profile?.center_id) return;
-          const mapped = {
+          const isSuspended = !!a.suspends_classes;
+          const cleanDesc = (a.description || '').replace(/\[NO_DOCENCIA\]\s*/g, '').trim();
+          const finalDesc = isSuspended ? `[NO_DOCENCIA] ${cleanDesc}`.trim() : cleanDesc;
+
+          const mapped: any = {
             title: a.title,
-            description: a.description,
+            description: finalDesc,
             date: a.date,
             start_time: a.startTime,
             end_time: a.endTime,
             type: a.type || 'event',
             schedule_entry_id: a.scheduleEntryId || null,
-            center_id: profile.center_id
+            center_id: profile.center_id,
+            suspends_classes: isSuspended
           };
-          const { error } = await supabase.from('activities').insert([mapped]);
+
+          let { error } = await supabase.from('activities').insert([mapped]);
+          if (error && error.message?.includes('suspends_classes')) {
+            delete mapped.suspends_classes;
+            const res2 = await supabase.from('activities').insert([mapped]);
+            error = res2.error;
+          }
           if (error) {
             console.error('Error in addActivity:', error);
             throw error;
@@ -1438,16 +1474,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await refreshData(undefined, true);
         },
         updateActivity: async (id: string, u: any) => {
-          const mapped = {
+          const isSuspended = !!u.suspends_classes;
+          const cleanDesc = (u.description || '').replace(/\[NO_DOCENCIA\]\s*/g, '').trim();
+          const finalDesc = isSuspended ? `[NO_DOCENCIA] ${cleanDesc}`.trim() : cleanDesc;
+
+          const mapped: any = {
             title: u.title,
-            description: u.description,
+            description: finalDesc,
             date: u.date,
             start_time: u.startTime,
             end_time: u.endTime,
             type: u.type || 'event',
-            schedule_entry_id: u.scheduleEntryId || null
+            schedule_entry_id: u.scheduleEntryId || null,
+            suspends_classes: isSuspended
           };
-          const { error } = await supabase.from('activities').update(mapped).eq('id', id);
+
+          let { error } = await supabase.from('activities').update(mapped).eq('id', id);
+          if (error && error.message?.includes('suspends_classes')) {
+            delete mapped.suspends_classes;
+            const res2 = await supabase.from('activities').update(mapped).eq('id', id);
+            error = res2.error;
+          }
           if (error) {
             console.error('Error in updateActivity:', error);
             throw error;
