@@ -1280,7 +1280,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cycle: b.cycle,
       center_id: profile.center_id
     };
-    await supabase.from('break_preferences').insert([mapped]);
+    if (b.id) {
+      await supabase.from('break_preferences').update(mapped).eq('id', b.id);
+    } else {
+      await supabase.from('break_preferences').insert([mapped]);
+    }
     await refreshData(undefined, true);
   };
   const deleteBreakPreference = async (id: string) => {

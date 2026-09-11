@@ -616,7 +616,7 @@ export const PreferencesForm = () => {
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => setBreakPref({ ...b })}
+                        onClick={() => setBreakPref({ ...b, startTime: (b.startTime || '').slice(0, 5) })}
                         className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
                         title="Editar recreo"
                       >

@@ -287,45 +287,99 @@ export const TeacherDashboard = ({
   }, []);
 
   const isCourseFirstCycle = useCallback((course: any) => {
-    const cGrade = (course?.grade || '').toLowerCase();
+    const cGrade = (course?.grade || course?.name || '').toLowerCase();
     const cCycle = (course?.cycle || '').toLowerCase();
+
     if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
-    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) {
+      const hasStrictC1Grade =
+        /^[1-3]/.test(cGrade) ||
+        cGrade.includes('1ro') ||
+        cGrade.includes('1ero') ||
+        cGrade.includes('2do') ||
+        cGrade.includes('3ro') ||
+        cGrade.includes('7mo') ||
+        cGrade.includes('8vo') ||
+        cGrade.includes('9no');
+      if (!hasStrictC1Grade) return false;
+    }
+
+    if (
+      cGrade.includes('segundo ciclo') ||
+      cGrade.includes('2do ciclo') ||
+      cGrade.includes('2do. ciclo') ||
+      cGrade.includes('2do.ciclo')
+    ) {
+      return false;
+    }
+    if (
+      cGrade.includes('primer ciclo') ||
+      cGrade.includes('1er ciclo') ||
+      cGrade.includes('1er. ciclo') ||
+      cGrade.includes('1er.ciclo')
+    ) {
+      return true;
+    }
 
     return (
       /^[1-3]/.test(cGrade) ||
       cGrade.includes('1ro') ||
       cGrade.includes('2do') ||
       cGrade.includes('3ro') ||
+      cGrade.includes('1ero') ||
       cGrade.includes('1°') ||
       cGrade.includes('2°') ||
       cGrade.includes('3°') ||
+      cGrade.includes('primero') ||
+      (cGrade.includes('segundo') && !cGrade.includes('ciclo')) ||
+      cGrade.includes('tercero') ||
       cGrade.includes('primer') ||
-      cGrade.includes('segundo') ||
       cGrade.includes('tercer') ||
       cGrade.includes('7mo') ||
       cGrade.includes('8vo') ||
-      cGrade.includes('9no')
+      cGrade.includes('9no') ||
+      cGrade.includes('septimo') ||
+      cGrade.includes('séptimo') ||
+      cGrade.includes('octavo') ||
+      cGrade.includes('noveno')
     );
   }, []);
 
   const isCourseSecondCycle = useCallback((course: any) => {
-    const cGrade = (course?.grade || '').toLowerCase();
+    const cGrade = (course?.grade || course?.name || '').toLowerCase();
     const cCycle = (course?.cycle || '').toLowerCase();
+
     if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
     if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+    if (
+      cGrade.includes('segundo ciclo') ||
+      cGrade.includes('2do ciclo') ||
+      cGrade.includes('2do. ciclo') ||
+      cGrade.includes('2do.ciclo')
+    ) {
+      return true;
+    }
+    if (
+      cGrade.includes('primer ciclo') ||
+      cGrade.includes('1er ciclo') ||
+      cGrade.includes('1er. ciclo') ||
+      cGrade.includes('1er.ciclo')
+    ) {
+      return false;
+    }
 
     return (
       /^[4-6]/.test(cGrade) ||
       cGrade.includes('4to') ||
       cGrade.includes('5to') ||
       cGrade.includes('6to') ||
-      cGrade.includes('4°') ||
-      cGrade.includes('5°') ||
-      cGrade.includes('6°') ||
       cGrade.includes('cuarto') ||
       cGrade.includes('quinto') ||
       cGrade.includes('sexto') ||
+      cGrade.includes('4°') ||
+      cGrade.includes('5°') ||
+      cGrade.includes('6°') ||
       cGrade.includes('10mo') ||
       cGrade.includes('11mo') ||
       cGrade.includes('12mo') ||
@@ -365,40 +419,71 @@ export const TeacherDashboard = ({
       const isC1 = isCourseFirstCycle(course);
       const isC2 = isCourseSecondCycle(course);
 
-      const cycleBPref = (state.breakPreferences || []).find((bp: any) => {
+      const shiftBPs = (state.breakPreferences || []).filter((bp: any) => {
         let bpMins = toMins(bp.startTime || bp.start_time);
-        if (!courseIsMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        if (courseIsMorning !== isBpMorning) return false;
-
-        const bpLevel = (bp.level || '').toLowerCase();
-        const bpCycle = (bp.cycle || '').toLowerCase();
-        const levelNorm = (course?.level || '').toLowerCase();
-
-        // 1. Validar Nivel
-        const levelMatch =
-          !bpLevel ||
-          bpLevel.includes('gen') ||
-          bpLevel.includes('todo') ||
-          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-          levelNorm.includes(bpLevel.substring(0, 3));
-        if (!levelMatch) return false;
-
-        // 2. Validar Ciclo (Primer Ciclo vs Segundo Ciclo)
-        if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
-          if (isC1 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return false;
-          if (isC2 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return false;
-        }
-
-        return true;
-      });
-
-      const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime || bp.start_time);
-        if (!courseIsMorning && bpMins < 720) bpMins += 720;
+        if (!courseIsMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
         const isBpMorning = bpMins < 780;
         return courseIsMorning === isBpMorning;
       });
+
+      const levelNorm = (course?.level || '').toLowerCase();
+
+      const matchesLevel = (bp: any) => {
+        const bpLevel = (bp.level || '').toLowerCase();
+        if (!bpLevel) return false;
+        return (
+          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+          levelNorm.includes(bpLevel.substring(0, 3)) ||
+          bpLevel.includes(levelNorm.substring(0, 3))
+        );
+      };
+
+      const matchesCycle = (bp: any) => {
+        const bpCycle = (bp.cycle || '').toLowerCase();
+        if (!bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo')) return false;
+        if (isC1 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return true;
+        if (isC2 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return true;
+        return false;
+      };
+
+      // Prioridad 1: Coincidencia EXACTA de Nivel Y Ciclo
+      let cycleBPref = shiftBPs.find((bp: any) => matchesLevel(bp) && matchesCycle(bp));
+
+      // Prioridad 2: Nivel exacto y Ciclo General o vacío
+      if (!cycleBPref) {
+        cycleBPref = shiftBPs.find((bp: any) => {
+          const bpCycle = (bp.cycle || '').toLowerCase();
+          const isGenCycle = !bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo');
+          return matchesLevel(bp) && isGenCycle;
+        });
+      }
+
+      // Prioridad 3: Nivel General y Ciclo exacto
+      if (!cycleBPref) {
+        cycleBPref = shiftBPs.find((bp: any) => {
+          const bpLevel = (bp.level || '').toLowerCase();
+          const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+          return isGenLevel && matchesCycle(bp);
+        });
+      }
+
+      // Prioridad 4: Nivel General y Ciclo General
+      if (!cycleBPref) {
+        cycleBPref = shiftBPs.find((bp: any) => {
+          const bpLevel = (bp.level || '').toLowerCase();
+          const bpCycle = (bp.cycle || '').toLowerCase();
+          const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+          const isGenCycle = !bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo');
+          return isGenLevel && isGenCycle;
+        });
+      }
+
+      // Prioridad 5: Cualquier recreo de la tanda
+      if (!cycleBPref && shiftBPs.length > 0) {
+        cycleBPref = shiftBPs[0];
+      }
+
+      const firstRelevantBreak = shiftBPs[0] || null;
 
       const rawMasterStart =
         firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '16:00:00');
@@ -503,7 +588,6 @@ export const TeacherDashboard = ({
 
       // Eventos Fijos Post-Recreo
       let currTimePost = bEnd;
-      const levelNorm = (course?.level || '').toLowerCase();
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
         const feName = (fe.name || '').toLowerCase();
         const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
@@ -672,11 +756,12 @@ export const TeacherDashboard = ({
       return isMorning === isBpMorning;
     });
 
-    const bStart = firstRelevantBreak
+    let bStart = firstRelevantBreak
       ? toMins(firstRelevantBreak.startTime || firstRelevantBreak.start_time)
       : isMorning
         ? 600
         : 960; // 10:00 AM o 04:00 PM
+    if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
     const bDuration = firstRelevantBreak
       ? Number(firstRelevantBreak.durationMinutes || firstRelevantBreak.duration_minutes) || 30
       : 30;

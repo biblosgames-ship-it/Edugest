@@ -141,8 +141,8 @@ export function usePreferences() {
 
   const mappedBreakPrefs = (state.breakPreferences || []).map((b: any) => ({
     id: b.id,
-    startTime: b.startTime,
-    durationMinutes: b.durationMinutes,
+    startTime: (b.startTime || b.start_time || '').slice(0, 5),
+    durationMinutes: Number(b.durationMinutes || b.duration_minutes),
     level: b.level,
     cycle: b.cycle
   }));

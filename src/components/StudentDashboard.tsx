@@ -602,74 +602,126 @@ export const StudentDashboard = ({
     if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      let bpMins = toMinsLocal(bp.startTime);
-      if (!isMorning && bpMins < 720) bpMins += 720;
+      let bpMins = toMinsLocal(bp.startTime || bp.start_time);
+      if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
       const isBpMorning = bpMins < 780;
       return isMorning === isBpMorning;
     });
 
-    const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
+    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (isMorning ? '10:00:00' : '16:00:00');
     let masterStartMins = toMinsLocal(rawMasterStart);
     if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
     if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
     const masterBPref = {
       startTime: fromMinsLocal(masterStartMins),
-      durationMinutes: firstRelevantBreak?.durationMinutes || (isMorning ? 30 : 15)
+      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (isMorning ? 30 : 15)
     };
 
-    const grade = course.grade?.toLowerCase() || '';
+    const grade = (course.grade || course.name || '').toLowerCase();
+    const cycle = (course.cycle || '').toLowerCase();
     const isFirstCycle =
+      cycle.includes('primer') ||
+      cycle.includes('1er') ||
+      cycle.includes('1') ||
       /^[1-3]/.test(grade) ||
-      grade.includes('1') ||
-      grade.includes('2') ||
-      grade.includes('3') ||
-      grade.includes('primer') ||
+      grade.includes('1ro') ||
+      grade.includes('1ero') ||
+      grade.includes('2do') ||
+      grade.includes('3ro') ||
+      grade.includes('1°') ||
+      grade.includes('2°') ||
+      grade.includes('3°') ||
+      grade.includes('primero') ||
       (grade.includes('segundo') && !grade.includes('ciclo')) ||
-      grade.includes('tercer');
+      grade.includes('tercero') ||
+      grade.includes('primer') ||
+      grade.includes('7mo') ||
+      grade.includes('8vo') ||
+      grade.includes('9no');
     const isSecondCycle =
-      /^[4-6]/.test(grade) ||
-      grade.includes('4') ||
-      grade.includes('5') ||
-      grade.includes('6') ||
-      grade.includes('cuarto') ||
-      grade.includes('quinto') ||
-      grade.includes('sexto');
+      !isFirstCycle &&
+      (cycle.includes('segundo') ||
+        cycle.includes('2do') ||
+        cycle.includes('2') ||
+        /^[4-6]/.test(grade) ||
+        grade.includes('4to') ||
+        grade.includes('5to') ||
+        grade.includes('6to') ||
+        grade.includes('4°') ||
+        grade.includes('5°') ||
+        grade.includes('6°') ||
+        grade.includes('cuarto') ||
+        grade.includes('quinto') ||
+        grade.includes('sexto') ||
+        grade.includes('10mo') ||
+        grade.includes('11mo') ||
+        grade.includes('12mo'));
 
-    const applicableBPs = (state.breakPreferences || []).filter((bp: any) => {
-      let bpMins = toMinsLocal(bp.startTime);
-      if (!isMorning && bpMins < 720) bpMins += 720;
+    const shiftBPs = (state.breakPreferences || []).filter((bp: any) => {
+      let bpMins = toMinsLocal(bp.startTime || bp.start_time);
+      if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
       const isBpMorning = bpMins < 780;
-      if (isMorning !== isBpMorning) return false;
+      return isMorning === isBpMorning;
+    });
 
-      const levelNormBP = (bp.level || '').toLowerCase();
-      const levelNormCourse = (course.level || '').toLowerCase();
-      if (!levelNormBP || levelNormBP.includes('gen') || levelNormBP.includes('todo')) return true;
+    const levelNormCourse = (course.level || '').toLowerCase();
+
+    const matchesLevel = (bp: any) => {
+      const bpLevel = (bp.level || '').toLowerCase();
+      if (!bpLevel) return false;
       return (
-        levelNormBP.substring(0, 3) === levelNormCourse.substring(0, 3) ||
-        levelNormCourse.includes(levelNormBP.substring(0, 3))
+        bpLevel.substring(0, 3) === levelNormCourse.substring(0, 3) ||
+        levelNormCourse.includes(bpLevel.substring(0, 3)) ||
+        bpLevel.includes(levelNormCourse.substring(0, 3))
       );
-    });
+    };
 
-    let bPref = applicableBPs.find((bp: any) => {
-      const cNorm = (bp.cycle || '').toLowerCase();
-      if (isFirstCycle && (cNorm.includes('primer') || cNorm.includes('1er') || cNorm.includes('1'))) return true;
-      if (isSecondCycle && (cNorm.includes('segundo') || cNorm.includes('2do') || cNorm.includes('2'))) return true;
+    const matchesCycle = (bp: any) => {
+      const bpCycle = (bp.cycle || '').toLowerCase();
+      if (!bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo')) return false;
+      if (isFirstCycle && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return true;
+      if (isSecondCycle && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return true;
       return false;
-    });
+    };
 
+    // Prioridad 1: Nivel y Ciclo exacto
+    let bPref = shiftBPs.find((bp: any) => matchesLevel(bp) && matchesCycle(bp));
+
+    // Prioridad 2: Nivel exacto y Ciclo general
     if (!bPref) {
-      bPref = applicableBPs.find((bp: any) => {
-        const cNorm = (bp.cycle || '').toLowerCase();
-        return !cNorm || cNorm === 'general' || cNorm === 'gen';
+      bPref = shiftBPs.find((bp: any) => {
+        const bpCycle = (bp.cycle || '').toLowerCase();
+        const isGenCycle = !bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo');
+        return matchesLevel(bp) && isGenCycle;
+      });
+    }
+
+    // Prioridad 3: Nivel general y Ciclo exacto
+    if (!bPref) {
+      bPref = shiftBPs.find((bp: any) => {
+        const bpLevel = (bp.level || '').toLowerCase();
+        const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+        return isGenLevel && matchesCycle(bp);
+      });
+    }
+
+    // Prioridad 4: Nivel general y Ciclo general
+    if (!bPref) {
+      bPref = shiftBPs.find((bp: any) => {
+        const bpLevel = (bp.level || '').toLowerCase();
+        const bpCycle = (bp.cycle || '').toLowerCase();
+        const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+        const isGenCycle = !bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo');
+        return isGenLevel && isGenCycle;
       });
     }
 
     bPref = bPref || masterBPref;
 
-    let bStart = toMinsLocal(bPref.startTime);
+    let bStart = toMinsLocal(bPref.startTime || bPref.start_time);
     if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
     if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-    const bEnd = bStart + (Number(bPref.durationMinutes) || masterBPref.durationMinutes);
+    const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || masterBPref.durationMinutes);
 
     const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
       const feName = (fe.name || '').toLowerCase();

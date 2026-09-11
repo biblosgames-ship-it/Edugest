@@ -83,10 +83,21 @@ const isDeporteSubject = (sName: string) => {
 };
 
 const isFirstCycleCourse = (course: any) => {
-  const cGrade = (course?.grade || '').toLowerCase();
+  const cGrade = (course?.grade || course?.name || '').toLowerCase();
   const cCycle = (course?.cycle || '').toLowerCase();
   if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
-  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) {
+    const hasStrictC1Grade =
+      /^[1-3]/.test(cGrade) ||
+      cGrade.includes('1ro') ||
+      cGrade.includes('1ero') ||
+      cGrade.includes('2do') ||
+      cGrade.includes('3ro') ||
+      cGrade.includes('7mo') ||
+      cGrade.includes('8vo') ||
+      cGrade.includes('9no');
+    if (!hasStrictC1Grade) return false;
+  }
 
   if (
     cGrade.includes('segundo ciclo') ||
@@ -110,6 +121,7 @@ const isFirstCycleCourse = (course: any) => {
     cGrade.includes('1ro') ||
     cGrade.includes('2do') ||
     cGrade.includes('3ro') ||
+    cGrade.includes('1ero') ||
     cGrade.includes('1°') ||
     cGrade.includes('2°') ||
     cGrade.includes('3°') ||
@@ -129,7 +141,7 @@ const isFirstCycleCourse = (course: any) => {
 };
 
 const isSecondCycleCourse = (course: any) => {
-  const cGrade = (course?.grade || '').toLowerCase();
+  const cGrade = (course?.grade || course?.name || '').toLowerCase();
   const cCycle = (course?.cycle || '').toLowerCase();
   if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
   if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
@@ -170,6 +182,76 @@ const isSecondCycleCourse = (course: any) => {
   );
 };
 
+const getEffectiveCourseBreak = (
+  course: any,
+  breakPreferences: any[],
+  shift: string,
+  toMins: (t: string) => number
+) => {
+  const isMorning = shift === 'Matutina';
+  const isC1 = isFirstCycleCourse(course);
+  const isC2 = isSecondCycleCourse(course);
+  const levelNorm = (course?.level || '').toLowerCase();
+
+  const shiftBPs = (breakPreferences || []).filter((bp: any) => {
+    let bpMins = toMins(bp.startTime || bp.start_time);
+    if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
+    const isBpMorning = bpMins < 780;
+    return isMorning === isBpMorning;
+  });
+
+  const matchesLevel = (bp: any) => {
+    const bpLevel = (bp.level || '').toLowerCase();
+    if (!bpLevel) return false;
+    return (
+      bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
+      levelNorm.includes(bpLevel.substring(0, 3)) ||
+      bpLevel.includes(levelNorm.substring(0, 3))
+    );
+  };
+
+  const matchesCycle = (bp: any) => {
+    const bpCycle = (bp.cycle || '').toLowerCase();
+    if (!bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo')) return false;
+    if (isC1 && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1'))) return true;
+    if (isC2 && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2'))) return true;
+    return false;
+  };
+
+  // 1. Nivel y Ciclo exacto
+  let bPref = shiftBPs.find((bp: any) => matchesLevel(bp) && matchesCycle(bp));
+  // 2. Nivel exacto y Ciclo general
+  if (!bPref) {
+    bPref = shiftBPs.find((bp: any) => {
+      const bpCycle = (bp.cycle || '').toLowerCase();
+      return matchesLevel(bp) && (!bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo'));
+    });
+  }
+  // 3. Nivel general y Ciclo exacto
+  if (!bPref) {
+    bPref = shiftBPs.find((bp: any) => {
+      const bpLevel = (bp.level || '').toLowerCase();
+      const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+      return isGenLevel && matchesCycle(bp);
+    });
+  }
+  // 4. Nivel general y Ciclo general
+  if (!bPref) {
+    bPref = shiftBPs.find((bp: any) => {
+      const bpLevel = (bp.level || '').toLowerCase();
+      const bpCycle = (bp.cycle || '').toLowerCase();
+      const isGenLevel = !bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo');
+      const isGenCycle = !bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo');
+      return isGenLevel && isGenCycle;
+    });
+  }
+  if (!bPref && shiftBPs.length > 0) {
+    bPref = shiftBPs[0];
+  }
+
+  return bPref;
+};
+
 const doesOverlapCourseBreak = (
   sStart: number,
   sEnd: number,
@@ -178,63 +260,16 @@ const doesOverlapCourseBreak = (
   shift: string,
   toMins: (t: string) => number
 ) => {
-  const isInicial = isCourseInicial(course);
-  const isSec = isCourseSecundaria(course);
-  const isPri = isCoursePrimaria(course);
-  const isCFirstCycle = isFirstCycleCourse(course);
-  const isCSecondCycle = isSecondCycleCourse(course);
+  const isMorning = shift === 'Matutina';
+  const effectiveBP = getEffectiveCourseBreak(course, breakPreferences, shift, toMins);
+  if (!effectiveBP) return false;
 
-  return (breakPreferences || []).some((bp: any) => {
-    let bpMins = toMins(bp.startTime);
-    if (shift === 'Vespertina' && bpMins < 420) bpMins += 720;
-    const isBpMorning = bpMins < 780;
-    if ((shift === 'Matutina') !== isBpMorning) return false;
+  let bpMins = toMins(effectiveBP.startTime || effectiveBP.start_time);
+  if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
+  const bpStart = bpMins;
+  const bpEnd = bpStart + (Number(effectiveBP.durationMinutes || effectiveBP.duration_minutes) || 15);
 
-    const bpLevel = (bp.level || '').toLowerCase();
-    const bpCycle = (bp.cycle || '').toLowerCase();
-
-    // Si el curso es de Nivel Inicial:
-    if (isInicial) {
-      const matchIni =
-        bpLevel.includes('ini') ||
-        bpLevel.includes('pre') ||
-        bpLevel.includes('parv') ||
-        bpLevel.includes('kínder') ||
-        bpLevel.includes('kinder') ||
-        bpCycle.includes('ini');
-      if (!matchIni && bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
-        return false;
-      }
-    } else {
-      // Si el curso NO es inicial pero el recreo es exclusivo de Inicial, ignorarlo
-      const isBpInicial =
-        bpLevel.includes('ini') ||
-        bpLevel.includes('pre') ||
-        bpLevel.includes('parv') ||
-        bpLevel.includes('kínder') ||
-        bpLevel.includes('kinder') ||
-        bpCycle.includes('ini');
-      if (isBpInicial) return false;
-
-      // Verificar nivel
-      if (bpLevel && !bpLevel.includes('gen') && !bpLevel.includes('todo')) {
-        if (isPri && !bpLevel.includes('prim')) return false;
-        if (isSec && !bpLevel.includes('sec')) return false;
-      }
-
-      // Verificar ciclo
-      if (bpCycle && !bpCycle.includes('gen') && !bpCycle.includes('todo')) {
-        if (isCFirstCycle && (bpCycle.includes('segundo') || bpCycle.includes('2do') || bpCycle.includes('2')))
-          return false;
-        if (isCSecondCycle && (bpCycle.includes('primer') || bpCycle.includes('1er') || bpCycle.includes('1')))
-          return false;
-      }
-    }
-
-    const bpStart = bpMins;
-    const bpEnd = bpStart + (Number(bp.durationMinutes) || 15);
-    return sStart < bpEnd && sEnd > bpStart;
-  });
+  return sStart < bpEnd && sEnd > bpStart;
 };
 
 const doesOverlapSportsBreak = (
@@ -467,40 +502,13 @@ export const scheduleService = {
       let endT = official?.end_time ? toMins(official.end_time) : (isMorning ? 720 : 1095);
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
-      const applicableBPs = (breakPreferences || []).filter((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        if (isMorning !== isBpMorning) return false;
-
-        const bpLevel = (bp.level || '').toLowerCase();
-        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
-        return (
-          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-          levelNorm.includes(bpLevel.substring(0, 3))
-        );
-      });
-
-      let bPref = applicableBPs.find((bp: any) => {
-        const bpCyc = (bp.cycle || '').toLowerCase();
-        if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
-        if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
-        return false;
-      });
-
-      if (!bPref) {
-        bPref = applicableBPs.find(
-          (bp: any) =>
-            !bp.cycle || bp.cycle.toLowerCase() === 'general' || bp.cycle.toLowerCase() === 'gen'
-        );
-      }
-
+      let bPref = getEffectiveCourseBreak(course, breakPreferences, shift, toMins);
       bPref = bPref || { startTime: isMorning ? '10:00:00' : '16:00:00', durationMinutes: 15 };
 
-      let bStart = toMins(bPref.startTime);
+      let bStart = toMins(bPref.startTime || bPref.start_time);
       if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
       if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
+      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 15);
 
       const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
       const isSecundaria = levelNorm.includes('secun');
@@ -1363,40 +1371,13 @@ export const scheduleService = {
       let endT = official?.end_time ? toMins(official.end_time) : (isMorning ? 720 : 1095);
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
-      const applicableBPs = (breakPreferences || []).filter((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        if (isMorning !== isBpMorning) return false;
-
-        const bpLevel = (bp.level || '').toLowerCase();
-        if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
-        return (
-          bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-          levelNorm.includes(bpLevel.substring(0, 3))
-        );
-      });
-
-      let bPref = applicableBPs.find((bp: any) => {
-        const bpCyc = (bp.cycle || '').toLowerCase();
-        if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
-        if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
-        return false;
-      });
-
-      if (!bPref) {
-        bPref = applicableBPs.find(
-          (bp: any) =>
-            !bp.cycle || bp.cycle.toLowerCase() === 'general' || bp.cycle.toLowerCase() === 'gen'
-        );
-      }
-
+      let bPref = getEffectiveCourseBreak(course, breakPreferences, shift, toMins);
       bPref = bPref || { startTime: isMorning ? '10:00:00' : '16:00:00', durationMinutes: 15 };
 
-      let bStart = toMins(bPref.startTime);
+      let bStart = toMins(bPref.startTime || bPref.start_time);
       if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
       if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
+      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 15);
       
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
       const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
@@ -2685,39 +2666,12 @@ export const scheduleService = {
     const endT = toMins(courseOfficial?.end_time || (isMorning ? '12:00' : '18:15'));
 
     // Recreo del curso
-    const applicableBPs = (breakPreferences || []).filter((bp: any) => {
-      let bpMins = toMins(bp.startTime);
-      if (!isMorning && bpMins < 420) bpMins += 720;
-      const isBpMorning = bpMins < 780;
-      if (isMorning !== isBpMorning) return false;
-
-      const bpLevel = (bp.level || '').toLowerCase();
-      const levelNorm = (course.level || '').toLowerCase();
-      if (!bpLevel || bpLevel.includes('gen') || bpLevel.includes('todo')) return true;
-      return (
-        bpLevel.substring(0, 3) === levelNorm.substring(0, 3) ||
-        levelNorm.includes(bpLevel.substring(0, 3))
-      );
-    });
-
-    let bPref = applicableBPs.find((bp: any) => {
-      const bpCyc = (bp.cycle || '').toLowerCase();
-      if (isFirstCycle && (bpCyc.includes('primer') || bpCyc.includes('1er') || bpCyc.includes('1'))) return true;
-      if (isSecondCycle && (bpCyc.includes('segundo') || bpCyc.includes('2do') || bpCyc.includes('2'))) return true;
-      return false;
-    });
-
-    if (!bPref) {
-      bPref = applicableBPs.find(
-        (bp: any) =>
-          !bp.cycle || bp.cycle.toLowerCase() === 'general' || bp.cycle.toLowerCase() === 'gen'
-      );
-    }
+    let bPref = getEffectiveCourseBreak(course, breakPreferences, effectiveTargetShift, toMins);
     bPref = bPref || { startTime: isMorning ? '10:00' : '16:00', durationMinutes: 15 };
 
-    let bStart = toMins(bPref.startTime);
-    if (!isMorning && bStart < 420) bStart += 720;
-    const bEnd = bStart + (Number(bPref.durationMinutes) || 15);
+    let bStart = toMins(bPref.startTime || bPref.start_time);
+    if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
+    const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 15);
 
     const isSecundaria = (course.level || '').toLowerCase().includes('secun');
     const targetTotal = isSecundaria ? 6 : 5;
@@ -3310,20 +3264,14 @@ export const scheduleService = {
       let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
-      const firstRelevantBreak = (breakPreferences || []).find((bp: any) => {
-        let bpMins = toMins(bp.startTime);
-        if (!isMorning && bpMins < 720) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return isMorning === isBpMorning;
-      });
-
-      const rawMasterStart = firstRelevantBreak?.startTime || (isMorning ? '10:00:00' : '16:00:00');
+      const bPref = getEffectiveCourseBreak(course, breakPreferences, isMorning ? 'Matutina' : 'Vespertina', toMins);
+      const rawMasterStart = bPref?.startTime || bPref?.start_time || (isMorning ? '10:00:00' : '16:00:00');
       let masterStartMins = toMins(rawMasterStart);
       if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
       if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
 
       const bStart = masterStartMins;
-      const bDuration = firstRelevantBreak ? Number(firstRelevantBreak.durationMinutes) : isMorning ? 30 : 15;
+      const bDuration = Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorning ? 30 : 15);
       const bEnd = bStart + bDuration;
 
       const slots: any[] = [];
