@@ -21,6 +21,8 @@ import {
   BookOpen
 } from 'lucide-react';
 
+import { SchoolEphemeridesManager } from './SchoolEphemeridesManager';
+
 const locales = { es: es };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
@@ -28,6 +30,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const { state, addActivity, updateActivity, deleteActivity } = useApp();
   const { profile } = useSupabase();
   const [showModal, setShowModal] = useState(false);
+  const [showEphemeridesModal, setShowEphemeridesModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -35,7 +38,9 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const [date, setDate] = useState(new Date());
 
   const userRole = profile?.role || 'student';
-  const isReadOnly = readOnly || (userRole !== 'admin' && userRole !== 'coordinator');
+  const isSuperAdmin = !!profile?.is_superadmin;
+  const isReadOnly = readOnly || (userRole !== 'admin' && userRole !== 'coordinator' && !isSuperAdmin);
+  const canManageEphemerides = userRole === 'admin' || userRole === 'coordinator' || isSuperAdmin;
 
   const [newActivity, setNewActivity] = useState({
     title: '',
@@ -49,6 +54,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const events = (state.activities || [])
     .filter((a) => {
       const type = a.type || 'event';
+      if (a.is_global || type === 'ephemeris') return true;
       if (userRole === 'admin' || userRole === 'coordinator') {
         return true;
       }
@@ -70,13 +76,15 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
         const start = new Date(`${a.date}T${startH || '00:00:00'}`);
         const end = new Date(`${a.date}T${endH || '23:59:59'}`);
         if (isNaN(start.getTime())) throw new Error('Invalid');
+        const isEphem = a.is_global || a.type === 'ephemeris';
         return {
           id: a.id,
-          title: a.title,
+          title: isEphem ? `🇩🇴 ${a.title}` : a.title,
           start,
           end,
           desc: a.description,
           type: a.type || 'event',
+          is_global: !!isEphem,
           raw: a
         };
       } catch (e) {
@@ -101,8 +109,21 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   };
 
   const handleSelectEvent = (event: any) => {
-    if (isReadOnly) return;
     const a = event.raw;
+    if (!a) return;
+
+    const isGlobalEphem = a.is_global || a.type === 'ephemeris';
+    const isSuperAdmin = !!profile?.is_superadmin;
+
+    // Si es una efeméride oficial y no es superadmin, mostrar visor informativo
+    if (isGlobalEphem && !isSuperAdmin) {
+      alert(
+        `🇩🇴 EFEMÉRIDE OFICIAL DEL CALENDARIO ESCOLAR\n\n📌 ${a.title}\n📅 Fecha: ${a.date}\n\n${a.description || 'Sin descripción adicional.'}\n\n(Fecha oficial registrada a nivel nacional para todos los centros en EduGest)`
+      );
+      return;
+    }
+
+    if (isReadOnly) return;
     setSelectedEventId(a.id);
     setSelectedDate(new Date(`${a.date}T12:00:00`));
     setNewActivity({
@@ -175,14 +196,25 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
             <p className="text-slate-500 text-sm">Gestiona y consulta los eventos del centro</p>
           </div>
         </div>
-        {!isReadOnly && (
-          <button
-            onClick={() => handleSelectSlot({ start: new Date() })}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all flex items-center gap-2"
-          >
-            <Plus size={20} /> Nueva Actividad
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {canManageEphemerides && (
+            <button
+              onClick={() => setShowEphemeridesModal(true)}
+              className="bg-sky-50 text-sky-700 border border-sky-200 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-sky-100 transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+              title="Cargar y gestionar efemérides del Calendario Escolar MINERD para todos los centros"
+            >
+              <span>🇩🇴</span> Efemérides MINERD
+            </button>
+          )}
+          {!isReadOnly && (
+            <button
+              onClick={() => handleSelectSlot({ start: new Date() })}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Plus size={20} /> Nueva Actividad
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 mb-6 px-2">
@@ -208,6 +240,12 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
           <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             Reunión Pedagógica
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-[#0284c7]"></div>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <span>🇩🇴</span> Efeméride MINERD
           </span>
         </div>
       </div>
@@ -248,12 +286,13 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
             if (event.type === 'incident') color = '#e11d48'; // Incidencia (Rose)
             if (event.type === 'meeting') color = '#0891b2'; // Reunión (Cyan)
             if (event.type === 'pedagogical_group') color = '#7c3aed'; // Grupo Pedagógico (Violet)
+            if (event.type === 'ephemeris' || event.is_global) color = '#0284c7'; // Efeméride Oficial (Sky 600)
 
             return {
               style: {
                 backgroundColor: color,
                 borderRadius: '10px',
-                border: 'none',
+                border: event.type === 'ephemeris' || event.is_global ? '1px solid #7dd3fc' : 'none',
                 padding: '4px 8px',
                 fontSize: '11px',
                 fontWeight: '700'
@@ -422,6 +461,23 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               >
                 {isSaving ? 'Guardando...' : selectedEventId ? 'Actualizar' : 'Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEphemeridesModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[150] p-4 text-left animate-fade-in overflow-y-auto">
+          <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl relative border border-white my-auto overflow-hidden">
+            <button
+              onClick={() => setShowEphemeridesModal(false)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors z-20 cursor-pointer"
+              title="Cerrar"
+            >
+              <X size={24} />
+            </button>
+            <div className="flex-1 overflow-y-auto pr-1">
+              <SchoolEphemeridesManager />
             </div>
           </div>
         </div>

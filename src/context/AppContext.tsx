@@ -297,12 +297,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 .order('created_at', { ascending: false })
                 .range(from, to)
             ),
-            supabase
-              .from('activities')
-              .select('*')
-              .eq('center_id', targetCid)
-              .order('date', { ascending: false })
-              .limit(300),
+            (async () => {
+              try {
+                const res = await supabase
+                  .from('activities')
+                  .select('*')
+                  .or(`center_id.eq.${targetCid},is_global.eq.true`)
+                  .order('date', { ascending: false })
+                  .limit(500);
+                if (!res.error && res.data) return res;
+              } catch (_) {}
+
+              try {
+                return await supabase
+                  .from('activities')
+                  .select('*')
+                  .eq('center_id', targetCid)
+                  .order('date', { ascending: false })
+                  .limit(300);
+              } catch (e) {
+                return { data: [], error: null };
+              }
+            })(),
             supabase.from('centers').select('*').eq('id', targetCid).single(),
             supabase
               .from('saas_licenses')
@@ -898,7 +914,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               activities: (actRes.data || []).map((a: any) => ({
                 ...a,
                 startTime: a.start_time,
-                endTime: a.end_time
+                endTime: a.end_time,
+                is_global: a.is_global ?? (a.type === 'ephemeris' || !a.center_id)
               })),
               loading: false
             };

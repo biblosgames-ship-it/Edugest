@@ -13,6 +13,7 @@ import { ComplianceDashboard } from './ComplianceDashboard';
 import { WinterSchedulePreference } from '../types';
 import { MasterImportWizard } from './MasterImportWizard';
 import { CloneYearWizard } from './CloneYearWizard';
+import { SchoolEphemeridesManager } from './SchoolEphemeridesManager';
 import {
   FileSpreadsheet,
   Upload,
@@ -173,7 +174,7 @@ export const AdminDashboard = () => {
   const [users, setUsers] = useState<any[]>([]);
   const { state, setAppState, center, refreshData } = useApp();
   const { user, profile } = useSupabase();
-  const [tab, setTab] = useState<'users' | 'performance' | 'compliance' | 'data' | 'settings'>(
+  const [tab, setTab] = useState<'users' | 'performance' | 'compliance' | 'data' | 'settings' | 'ephemerides'>(
     'users'
   );
   const [subTab, setSubTab] = useState<'personal' | 'directory' | 'invitations'>('personal');
@@ -474,6 +475,12 @@ export const AdminDashboard = () => {
             className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'settings' ? 'bg-surface text-text-main shadow-sm' : 'text-text-muted hover:text-text-main'}`}
           >
             Configuración Centro
+          </button>
+          <button
+            onClick={() => setTab('ephemerides')}
+            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${tab === 'ephemerides' ? 'bg-indigo-600 text-white shadow-md' : 'text-text-muted hover:text-text-main'}`}
+          >
+            <span>🇩🇴</span> Efemérides Escolares
           </button>
         </div>
       </div>
@@ -801,6 +808,7 @@ export const AdminDashboard = () => {
       )}
 
       {tab === 'settings' && <CenterSettingsForm />}
+      {tab === 'ephemerides' && <SchoolEphemeridesManager />}
 
       {showWizard && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4 lg:pl-[280px] overflow-y-auto">

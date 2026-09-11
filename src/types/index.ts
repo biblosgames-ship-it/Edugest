@@ -193,7 +193,7 @@ export interface TeacherPerformanceStats {
   activeAlerts: number;
 }
 
-export type ActivityType = 'event' | 'incident' | 'meeting' | 'pedagogical_group';
+export type ActivityType = 'event' | 'incident' | 'meeting' | 'pedagogical_group' | 'ephemeris';
 
 export interface Activity {
   id: string;
@@ -205,4 +205,5 @@ export interface Activity {
   type: ActivityType;
   courseId?: string; // Optional link to course
   scheduleEntryId?: string; // Optional link to schedule entry
+  is_global?: boolean;
 }

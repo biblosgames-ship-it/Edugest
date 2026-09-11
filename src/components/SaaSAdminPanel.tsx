@@ -53,6 +53,7 @@ import {
   SaaSPlan,
   SaaSPayment
 } from '../services/saasAdminService';
+import { SchoolEphemeridesManager } from './SchoolEphemeridesManager';
 
 export const SaaSAdminPanel: React.FC = () => {
   const [stats, setStats] = useState<SaaSStats | null>(null);
@@ -79,7 +80,7 @@ export const SaaSAdminPanel: React.FC = () => {
   const [isPaying, setIsPaying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups'
+    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups' | 'ephemerides'
   >('licenses');
 
   // Backup / Import State
@@ -905,6 +906,12 @@ soporte@edugest.net`;
             className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'backups' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <Database size={18} /> Copias y Migración
+          </button>
+          <button
+            onClick={() => setActiveTab('ephemerides')}
+            className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'ephemerides' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <span>🇩🇴</span> Efemérides MINERD
           </button>
         </div>
 
@@ -1923,6 +1930,13 @@ soporte@edugest.net`;
                   </form>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: EFEMÉRIDES ESCOLARES MINERD */}
+          {activeTab === 'ephemerides' && (
+            <div className="animate-fade-in">
+              <SchoolEphemeridesManager />
             </div>
           )}
         </div>
