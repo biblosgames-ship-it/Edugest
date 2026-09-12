@@ -623,7 +623,19 @@ export const PreferencesForm = () => {
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() => deleteBreakPreference(b.id)}
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`¿Estás seguro de que deseas eliminar el recreo de ${b.level} (${b.cycle}) a las ${b.startTime}?`)) {
+                            return;
+                          }
+                          try {
+                            await deleteBreakPreference(b.id);
+                            alert('Recreo eliminado correctamente');
+                          } catch (err: any) {
+                            console.error('Error eliminando recreo:', err);
+                            alert('No se pudo eliminar el recreo: ' + (err.message || 'Error desconocido'));
+                          }
+                        }}
                         className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
                         title="Eliminar recreo"
                       >

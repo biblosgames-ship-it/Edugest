@@ -4,7 +4,7 @@ import { useSupabase, useApp } from '../context/AppContext';
 
 export function usePreferences() {
   const { profile } = useSupabase();
-  const { state, refreshData } = useApp();
+  const { state, refreshData, setAppState } = useApp();
   const centerId = profile?.center_id;
 
   console.log(
@@ -101,8 +101,17 @@ export function usePreferences() {
 
   const deleteBreakPreference = useMutation({
     mutationFn: async (id: string) => {
+      if (setAppState) {
+        setAppState((prev: any) => ({
+          ...prev,
+          breakPreferences: (prev.breakPreferences || []).filter((b: any) => String(b.id) !== String(id))
+        }));
+      }
       const { error } = await supabase.from('break_preferences').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        refreshData(centerId, true);
+        throw error;
+      }
     },
     onSuccess: () => {
       refreshData(centerId, true);

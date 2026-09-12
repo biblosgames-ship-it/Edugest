@@ -742,11 +742,22 @@ export const ScheduleViewer = () => {
     const isC1 = isCourseFirstCycle(course);
     const isC2 = isCourseSecondCycle(course);
 
+    const isBreakInShift = (timeStr: string, isMorn: boolean) => {
+      const rawMins = toMins(timeStr);
+      const isBpMorning = rawMins >= 420 && rawMins < 780;
+      return isMorn === isBpMorning;
+    };
+
+    const normalizeBreakMins = (timeStr: string, isMorn: boolean) => {
+      let m = toMins(timeStr);
+      if (!isMorn && m > 0 && m < 420) {
+        m += 720;
+      }
+      return m;
+    };
+
     const shiftBPs = (state.breakPreferences || []).filter((bp: any) => {
-      let bpMins = toMins(bp.startTime || bp.start_time);
-      if (!courseIsMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
-      const isBpMorning = bpMins < 780;
-      return courseIsMorning === isBpMorning;
+      return isBreakInShift(bp.startTime || bp.start_time, courseIsMorning);
     });
 
     const levelNorm = (course?.level || '').toLowerCase();
@@ -781,6 +792,11 @@ export const ScheduleViewer = () => {
       });
     }
 
+    // Prioridad 2.5: Mismo Nivel (cualquier ciclo configurado del mismo nivel en la tanda)
+    if (!cycleBPref) {
+      cycleBPref = shiftBPs.find((bp: any) => matchesLevel(bp));
+    }
+
     // Prioridad 3: Nivel General y Ciclo exacto (ej: General + Primer Ciclo)
     if (!cycleBPref) {
       cycleBPref = shiftBPs.find((bp: any) => {
@@ -806,22 +822,20 @@ export const ScheduleViewer = () => {
       cycleBPref = shiftBPs[0];
     }
 
-    const firstRelevantBreak = shiftBPs[0] || null;
+    const firstRelevantBreak = shiftBPs.find((bp: any) => matchesLevel(bp)) || shiftBPs[0] || null;
 
-    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '16:00:00');
-    let masterStartMins = toMins(rawMasterStart);
-    if (!courseIsMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-    if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 960;
+    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '15:55:00');
+    let masterStartMins = normalizeBreakMins(rawMasterStart, courseIsMorning);
+    if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 955;
     const masterBPref = {
       startTime: fromMins(masterStartMins),
-      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (courseIsMorning ? 30 : 15)
+      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (courseIsMorning ? 30 : 20)
     };
 
     const effectiveBPref = cycleBPref || masterBPref;
-    let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
-    if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
-    if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
-    const bDuration = Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) || (courseIsMorning ? 30 : 15);
+    let bStart = normalizeBreakMins(effectiveBPref.startTime || effectiveBPref.start_time, courseIsMorning);
+    if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 955;
+    const bDuration = Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) || (courseIsMorning ? 30 : 20);
     const bEnd = bStart + bDuration;
 
     // Evento de Acto Cívico/Apertura
@@ -1020,19 +1034,18 @@ export const ScheduleViewer = () => {
     }
 
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      let bpMins = toMins(bp.startTime || bp.start_time);
-      if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
-      const isBpMorning = bpMins < 780;
+      const rawMins = toMins(bp.startTime || bp.start_time);
+      const isBpMorning = rawMins >= 420 && rawMins < 780;
       return isMorning === isBpMorning;
     });
 
-    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (isMorning ? '10:00:00' : '16:00:00');
+    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (isMorning ? '10:00:00' : '15:55:00');
     let masterStartMins = toMins(rawMasterStart);
-    if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-    if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
+    if (!isMorning && masterStartMins > 0 && masterStartMins < 420) masterStartMins += 720;
+    if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 955;
     const masterBPref = {
       startTime: fromMins(masterStartMins),
-      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (isMorning ? 30 : 15)
+      durationMinutes: Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) || (isMorning ? 30 : 20)
     };
 
     // VISTA DE DOCENTE: construir grilla separada por tanda (Matutina o Vespertina según la pestaña activa)
@@ -1091,9 +1104,9 @@ export const ScheduleViewer = () => {
     // VISTA GENERAL (O CURSO SIN HORARIOS OFICIALES)
     const slots: any[] = [];
     let bStartMaster = toMins(masterBPref.startTime);
-    if (!isMorning && bStartMaster < 720 && bStartMaster > 0) bStartMaster += 720;
-    if (!isMorning && (bStartMaster <= startT || bStartMaster >= endT)) bStartMaster = 960;
-    const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || (isMorning ? 20 : 15));
+    if (!isMorning && bStartMaster > 0 && bStartMaster < 420) bStartMaster += 720;
+    if (!isMorning && (bStartMaster <= startT || bStartMaster >= endT)) bStartMaster = 955;
+    const bEndMaster = bStartMaster + (Number(masterBPref.durationMinutes) || (isMorning ? 20 : 20));
 
     // Evento de Acto Cívico/Apertura General
     const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {

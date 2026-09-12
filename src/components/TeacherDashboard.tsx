@@ -419,11 +419,22 @@ export const TeacherDashboard = ({
       const isC1 = isCourseFirstCycle(course);
       const isC2 = isCourseSecondCycle(course);
 
+      const isBreakInShift = (timeStr: string, isMorn: boolean) => {
+        const rawMins = toMins(timeStr);
+        const isBpMorning = rawMins >= 420 && rawMins < 780;
+        return isMorn === isBpMorning;
+      };
+
+      const normalizeBreakMins = (timeStr: string, isMorn: boolean) => {
+        let m = toMins(timeStr);
+        if (!isMorn && m > 0 && m < 420) {
+          m += 720;
+        }
+        return m;
+      };
+
       const shiftBPs = (state.breakPreferences || []).filter((bp: any) => {
-        let bpMins = toMins(bp.startTime || bp.start_time);
-        if (!courseIsMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
-        const isBpMorning = bpMins < 780;
-        return courseIsMorning === isBpMorning;
+        return isBreakInShift(bp.startTime || bp.start_time, courseIsMorning);
       });
 
       const levelNorm = (course?.level || '').toLowerCase();
@@ -458,6 +469,11 @@ export const TeacherDashboard = ({
         });
       }
 
+      // Prioridad 2.5: Mismo Nivel (cualquier ciclo configurado del mismo nivel en la tanda)
+      if (!cycleBPref) {
+        cycleBPref = shiftBPs.find((bp: any) => matchesLevel(bp));
+      }
+
       // Prioridad 3: Nivel General y Ciclo exacto
       if (!cycleBPref) {
         cycleBPref = shiftBPs.find((bp: any) => {
@@ -483,27 +499,25 @@ export const TeacherDashboard = ({
         cycleBPref = shiftBPs[0];
       }
 
-      const firstRelevantBreak = shiftBPs[0] || null;
+      const firstRelevantBreak = shiftBPs.find((bp: any) => matchesLevel(bp)) || shiftBPs[0] || null;
 
       const rawMasterStart =
-        firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '16:00:00');
-      let masterStartMins = toMins(rawMasterStart);
-      if (!courseIsMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-      if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 960;
+        firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '15:55:00');
+      let masterStartMins = normalizeBreakMins(rawMasterStart, courseIsMorning);
+      if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 955;
       const masterBPref = {
         startTime: fromMins(masterStartMins),
         durationMinutes:
           Number(firstRelevantBreak?.durationMinutes || firstRelevantBreak?.duration_minutes) ||
-          (courseIsMorning ? 30 : 15)
+          (courseIsMorning ? 30 : 20)
       };
 
       const effectiveBPref = cycleBPref || masterBPref;
-      let bStart = toMins(effectiveBPref.startTime || effectiveBPref.start_time);
-      if (!courseIsMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 960;
+      let bStart = normalizeBreakMins(effectiveBPref.startTime || effectiveBPref.start_time, courseIsMorning);
+      if (!courseIsMorning && (bStart <= courseStartT || bStart >= courseEndT)) bStart = 955;
       const bDuration =
         Number(effectiveBPref.durationMinutes || effectiveBPref.duration_minutes) ||
-        (courseIsMorning ? 30 : 15);
+        (courseIsMorning ? 30 : 20);
       const bEnd = bStart + bDuration;
 
       // Evento de Acto Cívico/Apertura
@@ -750,9 +764,8 @@ export const TeacherDashboard = ({
 
     // Buscar recreo en breakPreferences
     const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      let bpMins = toMins(bp.startTime || bp.start_time);
-      if (!isMorning && bpMins < 420) bpMins += 720;
-      const isBpMorning = bpMins < 780;
+      const rawMins = toMins(bp.startTime || bp.start_time);
+      const isBpMorning = rawMins >= 420 && rawMins < 780;
       return isMorning === isBpMorning;
     });
 
@@ -760,11 +773,11 @@ export const TeacherDashboard = ({
       ? toMins(firstRelevantBreak.startTime || firstRelevantBreak.start_time)
       : isMorning
         ? 600
-        : 960; // 10:00 AM o 04:00 PM
-    if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
+        : 955; // 10:00 AM o 03:55 PM
+    if (!isMorning && bStart > 0 && bStart < 420) bStart += 720;
     const bDuration = firstRelevantBreak
-      ? Number(firstRelevantBreak.durationMinutes || firstRelevantBreak.duration_minutes) || 30
-      : 30;
+      ? Number(firstRelevantBreak.durationMinutes || firstRelevantBreak.duration_minutes) || 20
+      : 20;
     const bEnd = bStart + bDuration;
 
     const breakItem = {

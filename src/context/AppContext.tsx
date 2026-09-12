@@ -1281,14 +1281,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       center_id: profile.center_id
     };
     if (b.id) {
-      await supabase.from('break_preferences').update(mapped).eq('id', b.id);
+      const { error } = await supabase.from('break_preferences').update(mapped).eq('id', b.id);
+      if (error) throw error;
     } else {
-      await supabase.from('break_preferences').insert([mapped]);
+      const { error } = await supabase.from('break_preferences').insert([mapped]);
+      if (error) throw error;
     }
     await refreshData(undefined, true);
   };
   const deleteBreakPreference = async (id: string) => {
-    await supabase.from('break_preferences').delete().eq('id', id);
+    setState((prev) => ({
+      ...prev,
+      breakPreferences: (prev.breakPreferences || []).filter((b: any) => String(b.id) !== String(id))
+    }));
+    const { error } = await supabase.from('break_preferences').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting break preference:', error);
+      await refreshData(undefined, true);
+      throw error;
+    }
     await refreshData(undefined, true);
   };
 

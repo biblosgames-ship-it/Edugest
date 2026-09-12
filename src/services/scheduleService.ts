@@ -193,11 +193,14 @@ const getEffectiveCourseBreak = (
   const isC2 = isSecondCycleCourse(course);
   const levelNorm = (course?.level || '').toLowerCase();
 
+  const isBreakInShift = (timeStr: string, isMorn: boolean) => {
+    const rawMins = toMins(timeStr);
+    const isBpMorning = rawMins >= 420 && rawMins < 780;
+    return isMorn === isBpMorning;
+  };
+
   const shiftBPs = (breakPreferences || []).filter((bp: any) => {
-    let bpMins = toMins(bp.startTime || bp.start_time);
-    if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
-    const isBpMorning = bpMins < 780;
-    return isMorning === isBpMorning;
+    return isBreakInShift(bp.startTime || bp.start_time, isMorning);
   });
 
   const matchesLevel = (bp: any) => {
@@ -226,6 +229,10 @@ const getEffectiveCourseBreak = (
       const bpCycle = (bp.cycle || '').toLowerCase();
       return matchesLevel(bp) && (!bpCycle || bpCycle.includes('gen') || bpCycle.includes('todo'));
     });
+  }
+  // 2.5 Mismo nivel (cualquier ciclo configurado del mismo nivel en la tanda)
+  if (!bPref) {
+    bPref = shiftBPs.find((bp: any) => matchesLevel(bp));
   }
   // 3. Nivel general y Ciclo exacto
   if (!bPref) {
@@ -265,7 +272,7 @@ const doesOverlapCourseBreak = (
   if (!effectiveBP) return false;
 
   let bpMins = toMins(effectiveBP.startTime || effectiveBP.start_time);
-  if (!isMorning && bpMins < 720 && bpMins > 0) bpMins += 720;
+  if (!isMorning && bpMins > 0 && bpMins < 420) bpMins += 720;
   const bpStart = bpMins;
   const bpEnd = bpStart + (Number(effectiveBP.durationMinutes || effectiveBP.duration_minutes) || 15);
 
@@ -503,12 +510,12 @@ export const scheduleService = {
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
       let bPref = getEffectiveCourseBreak(course, breakPreferences, shift, toMins);
-      bPref = bPref || { startTime: isMorning ? '10:00:00' : '16:00:00', durationMinutes: 15 };
+      bPref = bPref || { startTime: isMorning ? '10:00:00' : '15:55:00', durationMinutes: isMorning ? 30 : 20 };
 
       let bStart = toMins(bPref.startTime || bPref.start_time);
-      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 15);
+      if (!isMorning && bStart > 0 && bStart < 420) bStart += 720;
+      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 955;
+      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 20);
 
       const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
       const isSecundaria = levelNorm.includes('secun');
@@ -1372,12 +1379,12 @@ export const scheduleService = {
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
       let bPref = getEffectiveCourseBreak(course, breakPreferences, shift, toMins);
-      bPref = bPref || { startTime: isMorning ? '10:00:00' : '16:00:00', durationMinutes: 15 };
+      bPref = bPref || { startTime: isMorning ? '10:00:00' : '15:55:00', durationMinutes: isMorning ? 30 : 20 };
 
       let bStart = toMins(bPref.startTime || bPref.start_time);
-      if (!isMorning && bStart < 720 && bStart > 0) bStart += 720;
-      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 960;
-      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 15);
+      if (!isMorning && bStart > 0 && bStart < 420) bStart += 720;
+      if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 955;
+      const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || 20);
       
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
       const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
@@ -3265,13 +3272,13 @@ export const scheduleService = {
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
       const bPref = getEffectiveCourseBreak(course, breakPreferences, isMorning ? 'Matutina' : 'Vespertina', toMins);
-      const rawMasterStart = bPref?.startTime || bPref?.start_time || (isMorning ? '10:00:00' : '16:00:00');
+      const rawMasterStart = bPref?.startTime || bPref?.start_time || (isMorning ? '10:00:00' : '15:55:00');
       let masterStartMins = toMins(rawMasterStart);
-      if (!isMorning && masterStartMins < 720 && masterStartMins > 0) masterStartMins += 720;
-      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 960;
+      if (!isMorning && masterStartMins > 0 && masterStartMins < 420) masterStartMins += 720;
+      if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 955;
 
       const bStart = masterStartMins;
-      const bDuration = Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorning ? 30 : 15);
+      const bDuration = Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorning ? 30 : 20);
       const bEnd = bStart + bDuration;
 
       const slots: any[] = [];
