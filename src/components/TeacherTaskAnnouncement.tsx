@@ -14,6 +14,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
+import { parseTextWithLinks } from './LinkifiedText';
 
 export const TeacherTaskAnnouncement = ({
   userData: profile,
@@ -236,14 +237,19 @@ export const TeacherTaskAnnouncement = ({
               <textarea
                 placeholder={
                   type === 'task'
-                    ? 'Escribe aquí los pasos a seguir, recursos y criterios de evaluación...'
-                    : 'Escribe aquí el anuncio importante para el grupo...'
+                    ? 'Escribe aquí los pasos a seguir, recursos y criterios de evaluación... Puedes escribir enlaces (https://... o www....) y se detectarán como enlaces clicables.'
+                    : 'Escribe aquí el anuncio importante para el grupo... Puedes escribir enlaces (https://... o www....) y se detectarán como enlaces clicables.'
                 }
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 className={`${inputClass} h-40 resize-none leading-relaxed`}
                 required
               />
+              {content && parseTextWithLinks(content).some((p) => p.type === 'link') && (
+                <p className="text-[10px] font-bold text-indigo-600 bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-100 flex items-center gap-1.5">
+                  <span>🔗 Enlaces detectados en el texto. Se presentarán automáticamente como enlaces directos para los alumnos.</span>
+                </p>
+              )}
             </div>
           </div>
 

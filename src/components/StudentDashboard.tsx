@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
+import { LinkifiedText } from './LinkifiedText';
 
 export const StudentDashboard = ({
   userData: profile,
@@ -1823,9 +1824,11 @@ export const StudentDashboard = ({
                                 </div>
 
                                 {cleanDesc && (
-                                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                                    {cleanDesc}
-                                  </p>
+                                  <LinkifiedText
+                                    text={cleanDesc}
+                                    className="text-xs text-slate-600"
+                                    clampLines={3}
+                                  />
                                 )}
 
                                 <div className="flex flex-wrap gap-2 pt-1">
@@ -1924,7 +1927,12 @@ export const StudentDashboard = ({
                         {new Date(a.created_at || a.timestamp).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 leading-relaxed mb-4">{a.content}</p>
+
+                    <LinkifiedText
+                      text={a.content}
+                      className="text-xs text-slate-600 mb-4"
+                      clampLines={4}
+                    />
 
                     {a.link_url && (
                       <a

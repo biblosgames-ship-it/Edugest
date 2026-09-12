@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
+import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -2080,9 +2081,11 @@ export const ClassroomManager = () => {
                       </h3>
 
                       {cleanDesc && (
-                        <p className="text-xs text-text-muted line-clamp-3 leading-relaxed">
-                          {cleanDesc}
-                        </p>
+                        <LinkifiedText
+                          text={cleanDesc}
+                          className="text-xs text-text-muted"
+                          clampLines={3}
+                        />
                       )}
 
                       {/* Enlaces y Recursos Adjuntos */}
@@ -2349,12 +2352,17 @@ export const ClassroomManager = () => {
                       Instrucciones y Criterios de Evaluación
                     </label>
                     <textarea
-                      placeholder="Indica detalladamente los pasos a seguir para completar la tarea..."
+                      placeholder="Indica detalladamente los pasos a seguir para completar la tarea... Puedes incluir enlaces (ej: https://... o www....) y se convertirán en enlaces clicables."
                       value={taskFormData.description}
                       onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
                       rows={4}
                       className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-medium leading-relaxed resize-none"
                     />
+                    {taskFormData.description && parseTextWithLinks(taskFormData.description).some((p) => p.type === 'link') && (
+                      <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900">
+                        <span>🔗 Enlaces detectados en el texto. Se mostrarán como enlaces directos para los estudiantes.</span>
+                      </p>
+                    )}
                   </div>
 
                   {/* Recursos Multimedia y Enlaces */}

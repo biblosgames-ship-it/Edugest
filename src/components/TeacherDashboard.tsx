@@ -34,6 +34,7 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTeacherIdentity } from '../utils/teacherUtils';
+import { LinkifiedText } from './LinkifiedText';
 
 const toMins = (val: string) => {
   if (!val) return 0;
@@ -1721,9 +1722,11 @@ export const TeacherDashboard = ({
                             <h5 className="text-sm font-black text-slate-900 uppercase tracking-tight mt-1">
                               {t.title}
                             </h5>
-                            <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-3">
-                              {t.description}
-                            </p>
+                            <LinkifiedText
+                              text={t.description}
+                              className="text-xs text-slate-600 mt-2"
+                              clampLines={3}
+                            />
                           </div>
 
                           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-[9px] font-black text-slate-400">
@@ -1789,7 +1792,11 @@ export const TeacherDashboard = ({
                             </button>
                           </div>
                         </div>
-                        <p className="text-xs text-slate-600 mt-2 leading-relaxed">{a.content}</p>
+                        <LinkifiedText
+                          text={a.content}
+                          className="text-xs text-slate-600 mt-2"
+                          clampLines={4}
+                        />
                       </div>
                     ))
                   )}
