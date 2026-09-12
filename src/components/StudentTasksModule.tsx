@@ -73,6 +73,16 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'LATE'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Referencia para scroll automático suave hacia las tareas
+  const tasksSectionRef = React.useRef<HTMLDivElement>(null);
+
+  const handleSelectSubject = (subjectId: string) => {
+    setSelectedSubjectId(subjectId);
+    setTimeout(() => {
+      tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
   // Modal de detalle de tarea
   const [selectedTaskForModal, setSelectedTaskForModal] = useState<any | null>(null);
 
@@ -462,41 +472,36 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
           </button>
         </div>
 
-        {/* Carrusel / Grid de Materias */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 pt-2">
+        {/* Cuadrícula compacta de materias optimizada para móvil y pantalla completa */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 pt-1">
           {/* Tarjeta General: Todas */}
-          <div
-            onClick={() => setSelectedSubjectId('ALL')}
-            className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+          <button
+            type="button"
+            onClick={() => handleSelectSubject('ALL')}
+            className={`p-2.5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
               selectedSubjectId === 'ALL'
-                ? 'bg-indigo-50/70 border-indigo-600 shadow-md scale-[1.01]'
-                : 'bg-slate-50/60 border-slate-200/80 hover:border-indigo-300 hover:bg-slate-50'
+                ? 'bg-indigo-50 border-indigo-600 shadow-md ring-2 ring-indigo-500/20'
+                : 'bg-slate-50/70 border-slate-200/80 hover:border-indigo-300 hover:bg-white'
             }`}
           >
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-sm">
-                <BookOpen size={18} />
+            <div className="flex items-center justify-between gap-1.5 mb-1">
+              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                <BookOpen size={12} />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-indigo-600">
-                General
+              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
+                {globalStats.totalTasks} tareas
               </span>
             </div>
 
             <div>
-              <h3 className="font-black text-slate-900 text-sm tracking-tight mb-1">
+              <h3 className="font-black text-slate-900 text-xs tracking-tight truncate">
                 Todas las Materias
               </h3>
-              <p className="text-[11px] text-slate-500 font-medium line-clamp-1">
-                Vista general de todas las áreas
+              <p className="text-[9px] text-amber-600 font-bold truncate">
+                {globalStats.pendingTasks > 0 ? `${globalStats.pendingTasks} pendientes` : 'Al día'}
               </p>
             </div>
-
-            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200/60 text-[10px] font-black uppercase tracking-wider text-slate-600">
-              <span className="text-amber-600 font-black">{globalStats.pendingTasks} pendientes</span>
-              <span>•</span>
-              <span>{globalStats.announcements} avisos</span>
-            </div>
-          </div>
+          </button>
 
           {/* Tarjetas individuales de materias */}
           {courseSubjects.map(({ subject, teacher }) => {
@@ -504,56 +509,47 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
             const isSelected = selectedSubjectId === subject.id;
 
             return (
-              <div
+              <button
                 key={subject.id}
-                onClick={() => setSelectedSubjectId(subject.id)}
-                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                type="button"
+                onClick={() => handleSelectSubject(subject.id)}
+                className={`p-2.5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
                   isSelected
-                    ? 'bg-indigo-50/70 border-indigo-600 shadow-md scale-[1.01]'
-                    : 'bg-white border-slate-200/80 hover:border-indigo-300 hover:shadow-sm'
+                    ? 'bg-indigo-50 border-indigo-600 shadow-md ring-2 ring-indigo-500/20'
+                    : 'bg-white border-slate-200/80 hover:border-indigo-300 hover:bg-slate-50'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs uppercase shadow-sm">
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-[9px] uppercase shadow-xs shrink-0">
                     {subject.name.substring(0, 2)}
                   </div>
                   {stats.pendingTasks > 0 ? (
-                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 animate-pulse">
-                      {stats.pendingTasks} pendiente{stats.pendingTasks === 1 ? '' : 's'}
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500 text-white shadow-xs animate-pulse">
+                      {stats.pendingTasks} pend.
                     </span>
                   ) : (
-                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-slate-50 text-slate-400 border border-slate-200">
-                      Al día
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                      {stats.totalTasks} tar.
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <h3 className="font-black text-slate-900 text-sm tracking-tight leading-snug line-clamp-2 mb-1">
+                  <h3 className="font-black text-slate-900 text-xs tracking-tight truncate leading-tight" title={subject.name}>
                     {subject.name}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1 truncate">
-                    <User size={12} className="text-indigo-600 shrink-0" />
-                    {teacher ? (teacher.name || teacher.full_name) : 'Docente asignado'}
+                  <p className="text-[9px] text-slate-400 font-medium truncate" title={teacher ? (teacher.name || teacher.full_name) : ''}>
+                    {teacher ? (teacher.name || teacher.full_name) : `${stats.totalTasks} tareas`}
                   </p>
                 </div>
-
-                <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100 text-[10px] font-black uppercase tracking-wider">
-                  <span className="text-indigo-600 font-bold">
-                    {stats.totalTasks} tarea{stats.totalTasks === 1 ? '' : 's'}
-                  </span>
-                  <span className="text-slate-400">
-                    {stats.announcements} anuncio{stats.announcements === 1 ? '' : 's'}
-                  </span>
-                </div>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
       {/* CONTENIDO DE LA MATERIA SELECCIONADA (O TODAS) */}
-      <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-6">
+      <div ref={tasksSectionRef} className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-6 scroll-mt-24">
         {/* Banner de la materia activa */}
         <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -758,10 +754,14 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                           </div>
                         )}
 
-                        {/* DESCRIPCIÓN COMPLETA (Con enlaces activos, sin cortar texto) */}
+                        {/* DESCRIPCIÓN COMPLETA (Con texto nítido de alto contraste y enlaces activos) */}
                         {cleanDesc && (
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
-                            <LinkifiedText text={cleanDesc} className="text-xs" allowExpand={true} />
+                          <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 text-slate-950 font-medium">
+                            <LinkifiedText
+                              text={cleanDesc}
+                              className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed"
+                              allowExpand={true}
+                            />
                           </div>
                         )}
                       </div>
@@ -871,9 +871,9 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                         {a.title}
                       </h3>
 
-                      {/* Contenido completo del anuncio con enlaces */}
-                      <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-100 text-xs">
-                        <LinkifiedText text={a.content} className="text-xs leading-relaxed" />
+                      {/* Contenido completo del anuncio con texto nítido */}
+                      <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 text-slate-950 font-medium">
+                        <LinkifiedText text={a.content} className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed" />
                       </div>
 
                       {/* Adjunto si existe */}

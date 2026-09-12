@@ -92,7 +92,7 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({
   return (
     <div className="space-y-1.5">
       <div
-        className={`whitespace-pre-line leading-relaxed break-words text-slate-700 dark:text-slate-200 ${className} ${
+        className={`whitespace-pre-line leading-relaxed break-words text-slate-900 dark:text-slate-100 font-medium ${className} ${
           shouldClamp ? getClampClass(clampLines) : ''
         }`}
       >

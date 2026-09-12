@@ -130,9 +130,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <BookOpen size={14} className="text-indigo-600" />
               Indicaciones e Instrucciones de la Tarea:
             </h4>
-            <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200/80 text-slate-700 text-sm leading-relaxed">
+            <div className="p-5 bg-white rounded-2xl border-2 border-slate-200 text-slate-950 text-sm sm:text-base leading-relaxed shadow-xs">
               {cleanDescription ? (
-                <LinkifiedText text={cleanDescription} className="text-sm" />
+                <LinkifiedText text={cleanDescription} className="text-sm sm:text-base text-slate-950 font-medium leading-relaxed" />
               ) : (
                 <p className="italic text-slate-400 text-xs">
                   No se agregaron instrucciones adicionales para esta asignación.

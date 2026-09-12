@@ -1849,10 +1849,10 @@ export const StudentDashboard = ({
                                 </div>
 
                                 {cleanDesc && (
-                                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 text-slate-950 font-medium">
                                     <LinkifiedText
                                       text={cleanDesc}
-                                      className="text-xs text-slate-600"
+                                      className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed"
                                       allowExpand={true}
                                     />
                                   </div>

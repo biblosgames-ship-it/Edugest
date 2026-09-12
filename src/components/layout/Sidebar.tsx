@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from '../Logo';
-import { LogOut, Sun, Moon, X } from 'lucide-react';
+import { LogOut, Sun, Moon, X, UserPlus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
 import { SchoolBellControl } from '../SchoolBellControl';
+import { LinkChildModal } from '../LinkChildModal';
 
 export const Sidebar = ({
   navItems,
@@ -21,6 +22,8 @@ export const Sidebar = ({
   onClose?: () => void;
 }) => {
   const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const isParent = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(userData?.role || '');
 
   useEffect(() => {
     if (isDark) {
@@ -160,6 +163,21 @@ export const Sidebar = ({
                 </button>
               );
             })}
+
+            {isParent && (
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(true)}
+                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl transition-all duration-300 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 group mt-2 cursor-pointer active:scale-95 shadow-sm"
+              >
+                <div className="relative transition-transform duration-300 group-hover:scale-110 text-indigo-400 group-hover:text-white">
+                  <UserPlus size={20} />
+                </div>
+                <span className="font-bold text-xs tracking-wide flex-1 text-left uppercase">
+                  Vincular Otro Hijo
+                </span>
+              </button>
+            )}
           </nav>
 
           <div className="mt-2 pt-2 border-t border-white/10 relative z-10 space-y-1.5">
@@ -244,6 +262,18 @@ export const Sidebar = ({
           </div>
         </div>
       </aside>
+
+      {/* Modal para vincular otro hijo desde el menú */}
+      {isParent && (
+        <LinkChildModal
+          userData={userData}
+          isOpen={showLinkModal}
+          onClose={() => {
+            setShowLinkModal(false);
+            onClose?.();
+          }}
+        />
+      )}
     </>
   );
 };
