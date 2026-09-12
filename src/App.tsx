@@ -3,6 +3,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Toaster, toast } from 'react-hot-toast';
 import { Dashboard } from './components/Dashboard';
 import { StudentDashboard } from './components/StudentDashboard';
+import { StudentTasksModule } from './components/StudentTasksModule';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { StudentManagement } from './components/StudentManagement';
 import { GeneralReports } from './components/GeneralReports';
@@ -171,9 +172,9 @@ function AppContent() {
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
 
-    // Para padres y alumnos: acceso a su aula virtual y horario de clases
+    // Para padres y alumnos: acceso a su aula virtual, tareas por materias y horario de clases
     if (isStudentOrParent) {
-      return ['dashboard', 'schedule'];
+      return ['dashboard', 'tasks', 'schedule'];
     }
 
     let panels = [...rawAllowed];
@@ -385,7 +386,11 @@ function AppContent() {
       icon: CalendarDays
     },
     { id: 'agenda', label: 'Calendario', icon: Calendar },
-    { id: 'tasks', label: 'Asignar Tareas', icon: BookOpen },
+    {
+      id: 'tasks',
+      label: isStudentOrParent ? 'Tareas' : 'Asignar Tareas',
+      icon: BookOpen
+    },
     {
       id: 'communications',
       label: 'Excusas y Comunicados',
@@ -519,7 +524,11 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'tasks' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <TeacherTaskAnnouncement userData={profile} />
+              {isStudentOrParent ? (
+                <StudentTasksModule userData={profile} onViewChange={setActiveView} />
+              ) : (
+                <TeacherTaskAnnouncement userData={profile} />
+              )}
             </div>
           </div>
         )}

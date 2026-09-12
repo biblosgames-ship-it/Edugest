@@ -25,6 +25,7 @@ import {
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
+import { TaskDetailModal } from './TaskDetailModal';
 
 export const StudentDashboard = ({
   userData: profile,
@@ -87,6 +88,7 @@ export const StudentDashboard = ({
     P3: true,
     P4: true
   });
+  const [selectedTaskForModal, setSelectedTaskForModal] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -1576,11 +1578,22 @@ export const StudentDashboard = ({
               Resumen Escolar
             </h4>
             <div className="space-y-3 text-[10px] font-black uppercase tracking-widest">
-              <div className="flex justify-between p-3 bg-slate-50 rounded-xl">
-                <span className="text-slate-500">Tareas Pendientes</span>
-                <span className="text-indigo-600">
-                  {tasks.filter((t) => new Date(t.due_date) >= new Date()).length}
-                </span>
+              <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                <div>
+                  <span className="text-slate-500 block">Tareas Pendientes</span>
+                  <span className="text-indigo-600 font-black text-sm">
+                    {tasks.filter((t) => new Date(t.due_date) >= new Date()).length}
+                  </span>
+                </div>
+                {onViewChange && (
+                  <button
+                    type="button"
+                    onClick={() => onViewChange('tasks')}
+                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer shadow-sm"
+                  >
+                    Ver por materias →
+                  </button>
+                )}
               </div>
               <div className="flex justify-between p-3 bg-slate-50 rounded-xl">
                 <span className="text-slate-500">Anuncios del Mes</span>
@@ -1595,16 +1608,28 @@ export const StudentDashboard = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* TAREAS PENDIENTES */}
         <div className="bg-white p-6 md:p-8 rounded-[3rem] border border-slate-100 shadow-xl">
-          <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <h2 className="text-xl font-black flex items-center gap-3 text-slate-900">
               <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
                 <ClipboardList size={20} />
               </div>
               TAREAS Y ASIGNACIONES
             </h2>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full">
-              {filteredTasks.length} {filteredTasks.length === 1 ? 'Tarea' : 'Tareas'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full">
+                {filteredTasks.length} {filteredTasks.length === 1 ? 'Tarea' : 'Tareas'}
+              </span>
+              {onViewChange && (
+                <button
+                  type="button"
+                  onClick={() => onViewChange('tasks')}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
+                >
+                  <BookOpen size={12} />
+                  Módulo de Materias
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ACCESOS DIRECTOS FIJOS DEL DOCENTE */}
@@ -1824,11 +1849,13 @@ export const StudentDashboard = ({
                                 </div>
 
                                 {cleanDesc && (
-                                  <LinkifiedText
-                                    text={cleanDesc}
-                                    className="text-xs text-slate-600"
-                                    clampLines={3}
-                                  />
+                                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <LinkifiedText
+                                      text={cleanDesc}
+                                      className="text-xs text-slate-600"
+                                      allowExpand={true}
+                                    />
+                                  </div>
                                 )}
 
                                 <div className="flex flex-wrap gap-2 pt-1">
@@ -1864,13 +1891,23 @@ export const StudentDashboard = ({
                                   )}
                                 </div>
 
-                                <div className="flex items-center justify-between text-[9px] font-black text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                                  <span>LÍMITE DE ENTREGA:</span>
-                                  <span className={isLate ? 'text-rose-500' : 'text-slate-700'}>
-                                    {t.due_date
-                                      ? `${new Date(t.due_date).toLocaleDateString()} ${new Date(t.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                      : 'Sin fecha límite'}
-                                  </span>
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                                  <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                                    <span>LÍMITE:</span>
+                                    <span className={isLate ? 'text-rose-500 font-bold' : 'text-slate-700'}>
+                                      {t.due_date
+                                        ? `${new Date(t.due_date).toLocaleDateString()} ${new Date(t.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                        : 'Sin límite'}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedTaskForModal(t)}
+                                    className="px-3 py-1.5 bg-slate-900 hover:bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
+                                  >
+                                    Ver Detalle Completo
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -1960,6 +1997,26 @@ export const StudentDashboard = ({
           </div>
         </div>
       </div>
+
+      {/* Modal de Detalle Completo de Tarea */}
+      {selectedTaskForModal && (
+        <TaskDetailModal
+          task={selectedTaskForModal}
+          subjectName={
+            (state.subjects || []).find((s) => s.id === selectedTaskForModal.subject_id)?.name ||
+            'Materia General'
+          }
+          teacherName={
+            (state.teachers || []).find((tc: any) => {
+              const assign = (state.assignments || []).find(
+                (a: any) => a.course_id === course?.id && a.subject_id === selectedTaskForModal.subject_id
+              );
+              return assign && tc.id === assign.teacher_id;
+            })?.name
+          }
+          onClose={() => setSelectedTaskForModal(null)}
+        />
+      )}
     </div>
   );
 };
