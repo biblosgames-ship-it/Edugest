@@ -1766,7 +1766,7 @@ export const StudentDashboard = ({
                                     <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase tracking-widest">
                                       {subject?.name || 'General'}
                                     </span>
-                                    <h5 className="font-black text-slate-900 text-sm mt-1.5 tracking-tight">
+                                    <h5 style={{ color: '#0f172a' }} className="font-black text-sm mt-1.5 tracking-tight">
                                       {t.title}
                                     </h5>
                                   </div>
@@ -1782,10 +1782,13 @@ export const StudentDashboard = ({
                                 </div>
 
                                 {cleanDesc && (
-                                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 text-slate-950 font-medium">
+                                  <div
+                                    style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+                                    className="p-3 rounded-xl border text-slate-900"
+                                  >
                                     <LinkifiedText
                                       text={cleanDesc}
-                                      className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed"
+                                      className="text-xs sm:text-sm font-medium leading-relaxed"
                                       allowExpand={true}
                                     />
                                   </div>
@@ -1889,7 +1892,7 @@ export const StudentDashboard = ({
                             {subject.name}
                           </span>
                         )}
-                        <h4 className="font-black text-slate-900 text-base mt-2 tracking-tight">
+                        <h4 style={{ color: '#0f172a' }} className="font-black text-base mt-2 tracking-tight">
                           {a.title}
                         </h4>
                       </div>
@@ -1898,11 +1901,16 @@ export const StudentDashboard = ({
                       </span>
                     </div>
 
-                    <LinkifiedText
-                      text={a.content}
-                      className="text-xs text-slate-600 mb-4"
-                      clampLines={4}
-                    />
+                    <div
+                      style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+                      className="p-3 rounded-xl border text-slate-900 mb-4"
+                    >
+                      <LinkifiedText
+                        text={a.content}
+                        className="text-xs font-medium leading-relaxed"
+                        clampLines={4}
+                      />
+                    </div>
 
                     {a.link_url && (
                       <a

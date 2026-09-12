@@ -92,7 +92,8 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({
   return (
     <div className="space-y-1.5">
       <div
-        className={`whitespace-pre-line leading-relaxed break-words text-slate-900 dark:text-slate-100 font-medium ${className} ${
+        style={{ color: '#0f172a' }}
+        className={`whitespace-pre-line leading-relaxed break-words font-medium text-slate-900 ${className} ${
           shouldClamp ? getClampClass(clampLines) : ''
         }`}
       >
@@ -106,7 +107,8 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 title={`Abrir ${part.href}`}
-                className="text-indigo-600 dark:text-indigo-400 font-bold underline underline-offset-2 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 rounded px-1 py-0.5 transition-all break-all inline-flex items-center gap-1 cursor-pointer mx-0.5"
+                style={{ color: '#3730a3', textDecorationColor: '#4f46e5' }}
+                className="font-black underline underline-offset-4 hover:text-indigo-900 hover:bg-indigo-100/70 rounded px-1 py-0.5 transition-all break-all inline-flex items-center gap-1 cursor-pointer mx-0.5"
               >
                 <span>{part.content}</span>
                 <ExternalLink
@@ -116,7 +118,11 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({
               </a>
             );
           }
-          return <span key={idx}>{part.content}</span>;
+          return (
+            <span key={idx} style={{ color: '#0f172a' }} className="text-slate-900">
+              {part.content}
+            </span>
+          );
         })}
       </div>
 
@@ -127,7 +133,8 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({
             e.stopPropagation();
             setIsExpanded(!isExpanded);
           }}
-          className="text-[11px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+          style={{ color: '#4338ca' }}
+          className="text-[11px] font-black uppercase tracking-wider hover:text-indigo-900 inline-flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-indigo-50"
         >
           {isExpanded ? (
             <>

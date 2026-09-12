@@ -85,7 +85,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </span>
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
+            <h3 style={{ color: '#0f172a' }} className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
               {task.title}
             </h3>
 
@@ -118,7 +118,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Fecha límite de entrega
               </p>
-              <p className="font-black text-slate-800 capitalize">
+              <p style={{ color: '#0f172a' }} className="font-black capitalize">
                 {getDueDateLabel()}
               </p>
             </div>
@@ -130,9 +130,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <BookOpen size={14} className="text-indigo-600" />
               Indicaciones e Instrucciones de la Tarea:
             </h4>
-            <div className="p-5 bg-white rounded-2xl border-2 border-slate-200 text-slate-950 text-sm sm:text-base leading-relaxed shadow-xs">
+            <div
+              style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+              className="p-5 rounded-2xl border text-slate-900 text-sm sm:text-base leading-relaxed shadow-xs"
+            >
               {cleanDescription ? (
-                <LinkifiedText text={cleanDescription} className="text-sm sm:text-base text-slate-950 font-medium leading-relaxed" />
+                <LinkifiedText text={cleanDescription} className="text-sm sm:text-base font-medium leading-relaxed" />
               ) : (
                 <p className="italic text-slate-400 text-xs">
                   No se agregaron instrucciones adicionales para esta asignación.

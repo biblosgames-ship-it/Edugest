@@ -735,16 +735,19 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                         </div>
 
                         {/* Título de la tarea */}
-                        <h4 className="font-black text-slate-900 text-base tracking-tight leading-snug">
+                        <h4
+                          style={{ color: '#0f172a' }}
+                          className="font-black text-base tracking-tight leading-snug"
+                        >
                           {t.title}
                         </h4>
 
                         {/* Fecha Límite */}
                         {t.due_date && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-bold">
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-bold">
                             <Calendar size={13} className="text-indigo-600" />
                             <span>Entrega:</span>
-                            <span className="text-slate-800">
+                            <span style={{ color: '#0f172a' }} className="font-black">
                               {new Date(t.due_date).toLocaleDateString('es-ES', {
                                 weekday: 'short',
                                 day: 'numeric',
@@ -756,10 +759,13 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
                         {/* DESCRIPCIÓN COMPLETA (Con texto nítido de alto contraste y enlaces activos) */}
                         {cleanDesc && (
-                          <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 text-slate-950 font-medium">
+                          <div
+                            style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+                            className="p-3.5 rounded-xl border text-slate-900"
+                          >
                             <LinkifiedText
                               text={cleanDesc}
-                              className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed"
+                              className="text-xs sm:text-sm font-medium leading-relaxed"
                               allowExpand={true}
                             />
                           </div>
@@ -867,13 +873,16 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                         </div>
                       </div>
 
-                      <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                      <h3 style={{ color: '#0f172a' }} className="text-lg font-black tracking-tight">
                         {a.title}
                       </h3>
 
                       {/* Contenido completo del anuncio con texto nítido */}
-                      <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 text-slate-950 font-medium">
-                        <LinkifiedText text={a.content} className="text-xs sm:text-sm text-slate-950 font-medium leading-relaxed" />
+                      <div
+                        style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a' }}
+                        className="p-4 rounded-2xl border text-slate-900"
+                      >
+                        <LinkifiedText text={a.content} className="text-xs sm:text-sm font-medium leading-relaxed" />
                       </div>
 
                       {/* Adjunto si existe */}
