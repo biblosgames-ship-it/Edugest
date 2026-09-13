@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';
 import { useCourses } from '../hooks/useCourses';
@@ -88,6 +89,7 @@ export const ClassroomManager = () => {
   const [notesList, setNotesList] = useState<Array<{
     id: string;
     studentId: string;
+    teacherId?: string;
     date: string;
     category: NoteCategory;
     content: string;
@@ -99,6 +101,7 @@ export const ClassroomManager = () => {
   const [newNoteStudentId, setNewNoteStudentId] = useState<string>('');
   const [newNoteCategory, setNewNoteCategory] = useState<NoteCategory>('Conducta');
   const [newNoteContent, setNewNoteContent] = useState<string>('');
+  const [notesTeacherFilter, setNotesTeacherFilter] = useState<'ALL' | 'MINE'>('ALL');
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
 
@@ -371,6 +374,7 @@ export const ClassroomManager = () => {
           const cloudNotes = data.map((n: any) => ({
             id: n.id,
             studentId: n.student_id,
+            teacherId: n.teacher_id,
             date: n.date,
             category: n.category as NoteCategory,
             content: n.content,
@@ -483,6 +487,155 @@ export const ClassroomManager = () => {
   const [newActivityName, setNewActivityName] = useState<string>('');
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
   const [folderStudentId, setFolderStudentId] = useState<string>('');
+  const [folderStudentDetails, setFolderStudentDetails] = useState<{
+    parents: any[];
+    medical: any;
+    history: any;
+    studentInfo: any;
+    loading: boolean;
+  }>({
+    parents: [],
+    medical: null,
+    history: null,
+    studentInfo: null,
+    loading: false
+  });
+
+  const [showTutorEditModal, setShowTutorEditModal] = useState<boolean>(false);
+  const [isSavingTutor, setIsSavingTutor] = useState<boolean>(false);
+  const [tutorEditForm, setTutorEditForm] = useState({
+    name: '',
+    relation: 'Tutor',
+    phone: '',
+    id_card: '',
+    occupation: ''
+  });
+
+  // Cargar expediente digital completo (familia, salud, tutor) al seleccionar alumno
+  useEffect(() => {
+    if (!folderStudentId) {
+      setFolderStudentDetails({
+        parents: [],
+        medical: null,
+        history: null,
+        studentInfo: null,
+        loading: false
+      });
+      return;
+    }
+
+    let isMounted = true;
+    const loadFolder = async () => {
+      setFolderStudentDetails((prev) => ({ ...prev, loading: true }));
+      try {
+        const full = await dataService.getFullStudent(folderStudentId);
+        if (isMounted && full) {
+          setFolderStudentDetails({
+            parents: full.family || [],
+            medical: full.medical || null,
+            history: full.history || null,
+            studentInfo: full,
+            loading: false
+          });
+        }
+      } catch (err) {
+        console.error('Error loading student folder:', err);
+        if (isMounted) {
+          setFolderStudentDetails((prev) => ({ ...prev, loading: false }));
+        }
+      }
+    };
+
+    loadFolder();
+    return () => {
+      isMounted = false;
+    };
+  }, [folderStudentId]);
+
+  // Guardar o actualizar datos de contacto del tutor
+  const handleSaveTutor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!folderStudentId) return;
+
+    if (!tutorEditForm.name.trim()) {
+      toast.error('Por favor ingresa el nombre del tutor o familiar');
+      return;
+    }
+
+    setIsSavingTutor(true);
+    try {
+      const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+      const centerId = profile?.center_id || targetCourse?.center_id || center?.id;
+      const familyList = folderStudentDetails.parents || [];
+      const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
+      const existingTutor =
+        familyList.find((f: any) => {
+          const r = getRole(f);
+          return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
+        }) || familyList[0];
+
+      if (existingTutor?.id) {
+        const { error } = await supabase
+          .from('parents')
+          .update({
+            name: tutorEditForm.name.trim(),
+            relation: tutorEditForm.relation.trim() || 'Tutor',
+            phone: tutorEditForm.phone.trim(),
+            secondary_phone: tutorEditForm.id_card.trim(),
+            occupation: tutorEditForm.occupation.trim()
+          })
+          .eq('id', existingTutor.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('parents').insert([
+          {
+            student_id: folderStudentId,
+            center_id: centerId,
+            name: tutorEditForm.name.trim(),
+            relation: tutorEditForm.relation.trim() || 'Tutor',
+            phone: tutorEditForm.phone.trim(),
+            secondary_phone: tutorEditForm.id_card.trim(),
+            occupation: tutorEditForm.occupation.trim()
+          }
+        ]);
+
+        if (error) throw error;
+      }
+
+      if (tutorEditForm.phone.trim() || tutorEditForm.name.trim()) {
+        try {
+          await supabase
+            .from('students')
+            .update({
+              personal_phone: tutorEditForm.phone.trim(),
+              authorized_person: tutorEditForm.name.trim()
+            })
+            .eq('id', folderStudentId);
+        } catch (sErr) {
+          console.warn('Could not update students table columns:', sErr);
+        }
+      }
+
+      // Recargar expediente
+      const full = await dataService.getFullStudent(folderStudentId);
+      setFolderStudentDetails({
+        parents: full.family || [],
+        medical: full.medical || null,
+        history: full.history || null,
+        studentInfo: full,
+        loading: false
+      });
+
+      toast.success('¡Contacto del tutor guardado con éxito!');
+      setShowTutorEditModal(false);
+    } catch (err: any) {
+      console.error('Error saving tutor:', err);
+      toast.error('Error al guardar tutor: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setIsSavingTutor(false);
+    }
+  };
 
   // Filtrar estudiantes por búsqueda
   const filteredStudents = useMemo(() => {
@@ -622,6 +775,7 @@ export const ClassroomManager = () => {
     const note = {
       id: `note_${Date.now()}`,
       studentId: newNoteStudentId,
+      teacherId: profile?.teacher_id || profile?.id || '',
       date: dateFormatted,
       category: newNoteCategory,
       content: newNoteContent.trim(),
@@ -634,18 +788,28 @@ export const ClassroomManager = () => {
 
     if (centerId) {
       try {
-        await supabase.from('student_anecdotal_notes').insert([
-          {
-            center_id: centerId,
-            student_id: newNoteStudentId,
-            course_id: selectedCourseId,
-            teacher_id: profile?.teacher_id || profile?.id || null,
-            teacher_name: teacherName,
-            category: newNoteCategory,
-            content: newNoteContent.trim(),
-            date: dateFormatted
-          }
-        ]);
+        const { data: insertedData, error: insErr } = await supabase
+          .from('student_anecdotal_notes')
+          .insert([
+            {
+              center_id: centerId,
+              student_id: newNoteStudentId,
+              course_id: selectedCourseId,
+              teacher_id: profile?.teacher_id || profile?.id || null,
+              teacher_name: teacherName,
+              category: newNoteCategory,
+              content: newNoteContent.trim(),
+              date: dateFormatted
+            }
+          ])
+          .select('id')
+          .maybeSingle();
+
+        if (insertedData?.id) {
+          const withRealId = updated.map((n) => n.id === note.id ? { ...n, id: insertedData.id } : n);
+          setNotesList(withRealId);
+          localStorage.setItem('edugens_anecdotal_notes', JSON.stringify(withRealId));
+        }
       } catch (e) {
         console.warn('Error saving note to Supabase:', e);
       }
@@ -653,7 +817,44 @@ export const ClassroomManager = () => {
 
     setNewNoteContent('');
     setNewNoteStudentId('');
-    alert('¡Apunte registrado exitosamente y guardado en la nube!');
+    toast.success('¡Apunte registrado exitosamente en el historial!');
+  };
+
+  // Eliminación de un apunte del anecdotario
+  const handleDeleteNote = async (noteId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const confirmed = window.confirm(
+      '¿Estás seguro de que deseas eliminar este apunte del historial anecdótico? Esta acción no se puede deshacer.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await supabase.from('student_anecdotal_notes').delete().eq('id', noteId);
+    } catch (e) {
+      console.warn('Error deleting note from supabase:', e);
+    }
+
+    const updated = notesList.filter((n) => n.id !== noteId);
+    setNotesList(updated);
+    localStorage.setItem('edugens_anecdotal_notes', JSON.stringify(updated));
+    toast.success('Apunte eliminado del cuadernillo');
+  };
+
+  // Permiso para borrar un apunte
+  const canDeleteNote = (n: any) => {
+    if (!profile) return false;
+    if (['admin', 'superAdmin', 'coordinator'].includes(profile.role) || profile.is_superadmin) {
+      return true;
+    }
+    const myTeacherId = profile.teacher_id || profile.id;
+    if (n.teacherId && myTeacherId && String(n.teacherId) === String(myTeacherId)) {
+      return true;
+    }
+    const myName = (profile.full_name || profile.name || '').toLowerCase().trim();
+    if (myName && n.teacherName && n.teacherName.toLowerCase().trim() === myName) {
+      return true;
+    }
+    return profile.role === 'teacher';
   };
 
   // Determinar número de competencias según nivel del curso (3 para Primaria/Inicial, 4 para Secundaria)
@@ -1472,20 +1673,63 @@ export const ClassroomManager = () => {
 
           {/* LISTADO DE APUNTES HISTORICOS */}
           <div className="md:col-span-2 bg-surface p-6 rounded-3xl border border-border-main shadow-xl space-y-4">
-            <h2 className="text-base font-black uppercase tracking-wider text-text-main flex items-center gap-2">
-              <FileText size={18} className="text-brand-blue" /> Historial de Apuntes del Grado
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-main">
+              <h2 className="text-base font-black uppercase tracking-wider text-text-main flex items-center gap-2">
+                <FileText size={18} className="text-brand-blue" /> Historial de Apuntes del Grado
+              </h2>
+              <div className="flex items-center gap-1.5 bg-brand-bg p-1 rounded-xl border border-border-main text-xs">
+                <button
+                  type="button"
+                  onClick={() => setNotesTeacherFilter('ALL')}
+                  className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
+                    notesTeacherFilter === 'ALL'
+                      ? 'bg-brand-blue text-white shadow-sm'
+                      : 'text-text-muted hover:text-text-main'
+                  }`}
+                >
+                  Todos ({notesList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotesTeacherFilter('MINE')}
+                  className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
+                    notesTeacherFilter === 'MINE'
+                      ? 'bg-brand-blue text-white shadow-sm'
+                      : 'text-text-muted hover:text-text-main'
+                  }`}
+                >
+                  Mis Apuntes
+                </button>
+              </div>
+            </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-              {notesList.length === 0 ? (
-                <div className="py-12 text-center text-text-muted font-bold text-xs">
-                  No hay observaciones ni apuntes registrados todavía.
-                </div>
-              ) : (
-                notesList.map((n) => {
+              {(() => {
+                const displayed = notesList.filter((n) => {
+                  if (notesTeacherFilter === 'MINE') {
+                    const myTeacherId = profile?.teacher_id || profile?.id;
+                    const myName = (profile?.full_name || profile?.name || '').toLowerCase().trim();
+                    if (n.teacherId && myTeacherId && String(n.teacherId) === String(myTeacherId)) return true;
+                    if (myName && n.teacherName && n.teacherName.toLowerCase().trim() === myName) return true;
+                    return false;
+                  }
+                  return true;
+                });
+
+                if (displayed.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-text-muted font-bold text-xs">
+                      {notesTeacherFilter === 'MINE'
+                        ? 'No has registrado ningún apunte personal en este grado todavía.'
+                        : 'No hay observaciones ni apuntes registrados todavía.'}
+                    </div>
+                  );
+                }
+
+                return displayed.map((n) => {
                   const studentObj = courseStudents.find((s: any) => s.id === n.studentId);
                   return (
-                    <div key={n.id} className="p-4 rounded-2xl border border-border-main bg-brand-bg/50 space-y-2">
+                    <div key={n.id} className="p-4 rounded-2xl border border-border-main bg-brand-bg/50 space-y-2 relative group hover:border-brand-blue/30 transition-all">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-black text-sm text-brand-blue">
                           {getStudentFullName(studentObj)}
@@ -1495,6 +1739,16 @@ export const ClassroomManager = () => {
                             {n.category}
                           </span>
                           <span className="text-[10px] font-bold text-text-muted">{n.date}</span>
+                          {canDeleteNote(n) && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteNote(n.id, e)}
+                              className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
+                              title="Eliminar apunte del cuadernillo"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       <p className="text-xs text-text-main font-medium leading-relaxed">{n.content}</p>
@@ -1503,8 +1757,8 @@ export const ClassroomManager = () => {
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           </div>
         </div>
@@ -2489,16 +2743,65 @@ export const ClassroomManager = () => {
               if (!student) return null;
               const sFullName = getStudentFullName(student);
 
+              const familyList = folderStudentDetails.parents || [];
+              const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
+              const dbPadre = familyList.find((f: any) => getRole(f) === 'padre');
+              const dbMadre = familyList.find((f: any) => getRole(f) === 'madre');
+              const dbTutor = familyList.find((f: any) => {
+                const r = getRole(f);
+                return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
+              });
+
+              const primaryContact = dbTutor || dbMadre || dbPadre || familyList[0];
+              const primaryName =
+                primaryContact?.name ||
+                student.parent_name ||
+                student.authorized_person ||
+                folderStudentDetails.studentInfo?.authorized_person ||
+                '';
+              const primaryPhone =
+                primaryContact?.phone ||
+                student.parent_phone ||
+                student.personal_phone ||
+                student.home_phone ||
+                folderStudentDetails.studentInfo?.personal_phone ||
+                folderStudentDetails.studentInfo?.home_phone ||
+                '';
+              const primaryRelation =
+                primaryContact?.relation ||
+                primaryContact?.role ||
+                (dbTutor ? 'Tutor' : dbMadre ? 'Madre' : dbPadre ? 'Padre' : 'Tutor / Encargado');
+              const cleanPhone = primaryPhone.replace(/[^0-9]/g, '');
+
+              const openEditModal = () => {
+                setTutorEditForm({
+                  name: primaryName,
+                  relation: primaryRelation || 'Tutor',
+                  phone: primaryPhone,
+                  id_card: primaryContact?.secondary_phone || primaryContact?.id_card || '',
+                  occupation: primaryContact?.occupation || ''
+                });
+                setShowTutorEditModal(true);
+              };
+
               return (
-                <div className="space-y-6">
-                  <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-slate-900 text-white rounded-3xl border border-white/10">
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  {/* ENCABEZADO DEL ESTUDIANTE */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-slate-900 text-white rounded-3xl border border-white/10 shadow-lg">
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg">
+                      <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shrink-0">
                         {sFullName[0]}
                       </div>
                       <div>
-                        <h3 className="text-xl font-black">{sFullName}</h3>
-                        <p className="text-xs text-slate-400 font-mono">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-black text-white">{sFullName}</h3>
+                          {student.order_number && (
+                            <span className="text-[10px] font-black bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md">
+                              #{student.order_number}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
                           {student.sigerd_code ? `SIGERD: ${student.sigerd_code}` : ''}
                           {student.sigerd_code && student.rne ? ' | ' : ''}
                           {student.rne ? `RNE: ${student.rne}` : (!student.sigerd_code ? 'Sin RNE / SIGERD' : '')}
@@ -2506,42 +2809,246 @@ export const ClassroomManager = () => {
                       </div>
                     </div>
 
-                    {student.parent_phone && (
-                      <a
-                        href={`tel:${student.parent_phone}`}
-                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all"
+                    <div className="flex flex-wrap items-center gap-2">
+                      {primaryPhone ? (
+                        <>
+                          <a
+                            href={`tel:${primaryPhone}`}
+                            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all"
+                            title={`Llamar a ${primaryName || 'Tutor'}`}
+                          >
+                            <Phone size={14} /> Llamar ({primaryPhone})
+                          </a>
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/${cleanPhone.length <= 10 && !cleanPhone.startsWith('1') ? '1' + cleanPhone : cleanPhone}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg transition-all"
+                              title="Abrir WhatsApp con el tutor"
+                            >
+                              <span>💬 WhatsApp</span>
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={openEditModal}
+                            className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all cursor-pointer"
+                            title="Editar datos del tutor"
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openEditModal}
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                        >
+                          <Plus size={14} /> Agregar Contacto del Tutor
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* DATOS DEL TUTOR Y CONTACTO FAMILIAR */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
+                        <Users size={15} className="text-brand-blue" />
+                        Datos del Tutor y Contacto Familiar
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={openEditModal}
+                        className="text-[11px] font-black uppercase text-brand-blue hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
                       >
-                        <Phone size={14} /> Llamar Tutor ({student.parent_phone})
-                      </a>
+                        <Edit3 size={12} /> {primaryName ? 'Editar Contacto' : 'Registrar Contacto'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Tarjeta de Tutor Principal */}
+                      <div className="p-5 rounded-2xl border border-border-main bg-brand-bg space-y-2 relative group">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md">
+                            {primaryRelation || 'Tutor Responsable'}
+                          </span>
+                          {primaryContact?.secondary_phone && (
+                            <span className="text-[10px] font-mono text-text-muted">
+                              Cédula: {primaryContact.secondary_phone}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-black text-text-main">
+                          {primaryName || <span className="text-text-muted italic">No especificado</span>}
+                        </p>
+                        {primaryContact?.occupation && (
+                          <p className="text-xs text-text-muted font-medium">
+                            Ocupación: {primaryContact.occupation}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Tarjeta de Teléfono */}
+                      <div className="p-5 rounded-2xl border border-border-main bg-brand-bg space-y-2">
+                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md">
+                          Teléfono de Emergencia / Tutor
+                        </span>
+                        <div className="flex items-center justify-between">
+                          <p className="text-base font-black text-text-main font-mono">
+                            {primaryPhone || <span className="text-text-muted italic font-sans text-sm">Sin teléfono registrado</span>}
+                          </p>
+                          {primaryPhone && (
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={`tel:${primaryPhone}`}
+                                className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all cursor-pointer shadow-sm"
+                                title="Llamar"
+                              >
+                                <Phone size={13} />
+                              </a>
+                              {cleanPhone && (
+                                <a
+                                  href={`https://wa.me/${cleanPhone.length <= 10 && !cleanPhone.startsWith('1') ? '1' + cleanPhone : cleanPhone}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all cursor-pointer shadow-sm text-xs font-bold"
+                                  title="WhatsApp"
+                                >
+                                  💬
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Otros Familiares (Madre o Padre si existen de forma independiente) */}
+                    {familyList.length > 1 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {dbMadre && dbMadre.id !== primaryContact?.id && (
+                          <div className="p-3.5 rounded-2xl border border-border-main bg-brand-bg/60 flex items-center justify-between">
+                            <div>
+                              <span className="text-[9px] font-black uppercase text-indigo-500">Madre:</span>
+                              <p className="text-xs font-bold text-text-main">{dbMadre.name}</p>
+                              {dbMadre.phone && <p className="text-[10px] font-mono text-text-muted">{dbMadre.phone}</p>}
+                            </div>
+                            {dbMadre.phone && (
+                              <a
+                                href={`tel:${dbMadre.phone}`}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1"
+                              >
+                                <Phone size={11} /> Llamar
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {dbPadre && dbPadre.id !== primaryContact?.id && (
+                          <div className="p-3.5 rounded-2xl border border-border-main bg-brand-bg/60 flex items-center justify-between">
+                            <div>
+                              <span className="text-[9px] font-black uppercase text-indigo-500">Padre:</span>
+                              <p className="text-xs font-bold text-text-main">{dbPadre.name}</p>
+                              {dbPadre.phone && <p className="text-[10px] font-mono text-text-muted">{dbPadre.phone}</p>}
+                            </div>
+                            {dbPadre.phone && (
+                              <a
+                                href={`tel:${dbPadre.phone}`}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1"
+                              >
+                                <Phone size={11} /> Llamar
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-2xl border border-border-main bg-brand-bg space-y-1">
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Padre / Tutor Responsable</span>
-                      <p className="text-sm font-black text-text-main">{student.parent_name || 'No especificado'}</p>
+                  {/* FICHA MÉDICA / SALUD DEL ESTUDIANTE */}
+                  {folderStudentDetails.medical && (
+                    <div className="p-4 rounded-2xl border border-border-main bg-brand-bg/40 space-y-2">
+                      <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
+                        <span>🩺</span> Información Médica y Alergias
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold text-text-muted block">Alergias:</span>
+                          <span className="font-bold text-text-main">
+                            {folderStudentDetails.medical.allergies || 'Ninguna reportada'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-text-muted block">Condiciones / Cuidados:</span>
+                          <span className="font-bold text-text-main">
+                            {folderStudentDetails.medical.medical_conditions || 'Ninguna'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-text-muted block">Tipo de Sangre:</span>
+                          <span className="font-bold text-text-main">
+                            {folderStudentDetails.medical.blood_type || 'No registrado'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-4 rounded-2xl border border-border-main bg-brand-bg space-y-1">
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Teléfono de Contacto</span>
-                      <p className="text-sm font-black text-text-main">{student.parent_phone || student.phone || 'Sin Teléfono'}</p>
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-black uppercase text-text-muted tracking-wider">
-                      Observaciones y Apuntes Históricos ({studentNotes.length})
-                    </h4>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                  {/* HISTORIAL Y OBSERVACIONES DEL CUADERNILLO ANECDÓTICO */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
+                        <FileText size={15} className="text-brand-blue" />
+                        Observaciones y Apuntes Históricos ({studentNotes.length})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewNoteStudentId(folderStudentId);
+                          setActiveTab('notes');
+                        }}
+                        className="text-[11px] font-black uppercase text-brand-blue hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                      >
+                        <Plus size={12} /> Nuevo Apunte
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-2">
                       {studentNotes.length === 0 ? (
-                        <p className="text-xs text-text-muted italic">Sin apuntes en el expediente.</p>
+                        <div className="py-8 text-center bg-brand-bg rounded-2xl border border-dashed border-border-main">
+                          <p className="text-xs text-text-muted italic">
+                            Sin apuntes ni observaciones registradas para este alumno.
+                          </p>
+                        </div>
                       ) : (
                         studentNotes.map((n) => (
-                          <div key={n.id} className="p-3 rounded-xl border border-border-main bg-brand-bg text-xs space-y-1">
-                            <div className="flex justify-between font-bold text-[10px] text-text-muted">
-                              <span>{n.category}</span>
-                              <span>{n.date}</span>
+                          <div
+                            key={n.id}
+                            className="p-4 rounded-2xl border border-border-main bg-brand-bg text-xs space-y-2 relative group hover:border-brand-blue/30 transition-all"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-black text-[9px] uppercase tracking-wider rounded-md">
+                                {n.category}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[10px] text-text-muted">{n.date}</span>
+                                {canDeleteNote(n) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteNote(n.id, e)}
+                                    className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
+                                    title="Eliminar este apunte del expediente"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-text-main font-medium">{n.content}</p>
+                            <p className="text-text-main font-medium leading-relaxed">{n.content}</p>
+                            <div className="text-[10px] font-bold text-text-muted text-right">
+                              Registrado por: {n.teacherName}
+                            </div>
                           </div>
                         ))
                       )}
@@ -2550,6 +3057,128 @@ export const ClassroomManager = () => {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA AGREGAR O EDITAR CONTACTO DE TUTOR */}
+      {showTutorEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-md rounded-[2.5rem] border border-border-main shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="flex items-center justify-between border-b border-border-main pb-4">
+              <div>
+                <h3 className="text-lg font-black text-text-main">
+                  Contacto de Tutor / Familiar
+                </h3>
+                <p className="text-xs text-text-muted font-medium">
+                  Información de contacto directo para el estudiante
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTutorEditModal(false)}
+                className="p-1.5 rounded-xl hover:bg-brand-bg text-text-muted hover:text-text-main cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTutor} className="space-y-4">
+              <div className="space-y-1">
+                <label className="block text-[10px] font-black uppercase text-text-muted">
+                  Nombre del Tutor o Familiar *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: María Rodríguez"
+                  value={tutorEditForm.name}
+                  onChange={(e) => setTutorEditForm({ ...tutorEditForm, name: e.target.value })}
+                  className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-text-muted">
+                    Parentesco *
+                  </label>
+                  <select
+                    value={tutorEditForm.relation}
+                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, relation: e.target.value })}
+                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
+                  >
+                    <option value="Tutor">Tutor / Encargado</option>
+                    <option value="Madre">Madre</option>
+                    <option value="Padre">Padre</option>
+                    <option value="Abuelo/a">Abuelo / Abuela</option>
+                    <option value="Tío/a">Tío / Tía</option>
+                    <option value="Hermano/a">Hermano / Hermana</option>
+                    <option value="Familiar">Otro Familiar</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-text-muted">
+                    Teléfono Principal *
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="Ej: 809-555-1234"
+                    value={tutorEditForm.phone}
+                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, phone: e.target.value })}
+                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-text-muted">
+                    Cédula / Documento
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 001-0000000-0"
+                    value={tutorEditForm.id_card}
+                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, id_card: e.target.value })}
+                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-text-muted">
+                    Ocupación
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Comerciante"
+                    value={tutorEditForm.occupation}
+                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, occupation: e.target.value })}
+                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+                <button
+                  type="button"
+                  onClick={() => setShowTutorEditModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-black uppercase text-text-muted hover:bg-brand-bg cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTutor}
+                  className="px-5 py-2.5 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  {isSavingTutor ? 'Guardando...' : 'Guardar Contacto'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
