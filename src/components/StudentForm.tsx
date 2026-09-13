@@ -18,7 +18,8 @@ import {
   ChevronLeft,
   ShieldAlert,
   Search as SearchIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Pin
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSupabase } from '../context/AppContext';
@@ -869,6 +870,34 @@ export const StudentForm = ({
                     🔵 Nuevo Ingreso
                   </button>
                 </div>
+              </div>
+
+              {/* NOTA FIJA / OBSERVACIÓN ESPECIAL DEL ALUMNO (EQUIPO DE GESTIÓN) */}
+              <div className="bg-amber-500/10 border border-amber-400/40 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-200 tracking-wider flex items-center gap-1.5">
+                    <Pin size={14} className="fill-amber-500 text-amber-600 rotate-45" /> Nota Fija / Observación Especial del Alumno
+                  </label>
+                  {medical.special_observations && (
+                    <button
+                      type="button"
+                      onClick={() => setMedical({ ...medical, special_observations: '' })}
+                      className="text-[10px] font-black uppercase text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Quitar Nota
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Si el Equipo de Gestión escribe una nota aquí, se mostrará únicamente una pequeña chincheta (📌) al final del nombre del alumno en los listados del aula para que los docentes la consulten.
+                </p>
+                <textarea
+                  value={medical.special_observations || ''}
+                  onChange={(e) => setMedical({ ...medical, special_observations: e.target.value })}
+                  placeholder="Escribe aquí la observación o indicación especial para este alumno (o déjalo vacío si no tiene)..."
+                  rows={2}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border-main bg-white dark:bg-surface text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed text-text-main"
+                />
               </div>
 
               <div className="grid md:grid-cols-3 gap-6">
