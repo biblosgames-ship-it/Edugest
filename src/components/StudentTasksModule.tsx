@@ -521,7 +521,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
               >
                 <div className="flex items-center justify-between gap-1.5 mb-1">
                   <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-[9px] uppercase shadow-xs shrink-0">
-                    {subject.name.substring(0, 2)}
+                    {(subject?.name || 'MT').substring(0, 2)}
                   </div>
                   {stats.pendingTasks > 0 ? (
                     <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500 text-white shadow-xs animate-pulse">
@@ -535,8 +535,8 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                 </div>
 
                 <div>
-                  <h3 className="font-black text-slate-900 text-xs tracking-tight truncate leading-tight" title={subject.name}>
-                    {subject.name}
+                  <h3 className="font-black text-slate-900 text-xs tracking-tight truncate leading-tight" title={subject?.name || 'Materia'}>
+                    {subject?.name || 'Materia'}
                   </h3>
                   <p className="text-[9px] text-slate-400 font-medium truncate" title={teacher ? (teacher.name || teacher.full_name) : ''}>
                     {teacher ? (teacher.name || teacher.full_name) : `${stats.totalTasks} tareas`}
@@ -560,12 +560,12 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
               {activeSubjectData?.teacher && (
                 <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
                   <User size={13} className="text-indigo-600" />
-                  Prof. {activeSubjectData.teacher.name || activeSubjectData.teacher.full_name}
+                  Prof. {activeSubjectData.teacher.name || activeSubjectData.teacher.full_name || 'Docente'}
                 </span>
               )}
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {selectedSubjectId === 'ALL' ? 'Todas las Materias' : activeSubjectData?.subject.name}
+              {selectedSubjectId === 'ALL' ? 'Todas las Materias' : (activeSubjectData?.subject?.name || 'Materia')}
             </h2>
           </div>
 

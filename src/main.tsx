@@ -53,6 +53,30 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Detección y auto-recuperación de chunks desincronizados en despliegues
+window.addEventListener('error', (event) => {
+  const msg = event.message || '';
+  if (
+    msg.includes('dynamically imported module') ||
+    msg.includes('Loading chunk') ||
+    msg.includes('is not a valid JavaScript MIME type')
+  ) {
+    const hasAttempted = sessionStorage.getItem('edugest_chunk_recovery');
+    if (!hasAttempted) {
+      sessionStorage.setItem('edugest_chunk_recovery', 'true');
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          Promise.all(names.map((name) => caches.delete(name))).then(() => {
+            window.location.reload();
+          });
+        });
+      } else {
+        window.location.reload();
+      }
+    }
+  }
+});
+
 // Crear el cliente de React Query
 const queryClient = new QueryClient({
   defaultOptions: {

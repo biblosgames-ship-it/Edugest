@@ -165,8 +165,9 @@ export const StudentDashboard = ({
 
         // Encontrar el alumno que coincida con el nombre en el perfil del padre
         const match = students.find((s) => {
-          const fullName = `${s.names} ${s.first_surname} ${s.second_surname}`.toLowerCase().trim();
-          return fullName.includes(studentNamePart) || studentNamePart.includes(s.names.toLowerCase());
+          const sNames = s.names || '';
+          const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
+          return fullName.includes(studentNamePart) || (sNames && studentNamePart.includes(sNames.toLowerCase()));
         });
 
         if (!match) return;
@@ -1137,7 +1138,7 @@ export const StudentDashboard = ({
                 <span>
                   {(() => {
                     const studentForCourse = familyStudents.find((s) => s.course_id === c.id);
-                    return studentForCourse
+                    return studentForCourse && studentForCourse.names
                       ? `${studentForCourse.names.split(' ')[0]}: ${c.grade} "${c.section}"`
                       : `Hijo: ${c.grade} "${c.section}"`;
                   })()}

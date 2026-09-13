@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from '../Logo';
-import { LogOut, Sun, Moon, X, UserPlus } from 'lucide-react';
+import { LogOut, Sun, Moon, X, UserPlus, RotateCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
 import { SchoolBellControl } from '../SchoolBellControl';
@@ -239,6 +239,39 @@ export const Sidebar = ({
                 </p>
               </div>
             </div>
+
+            <button
+              onClick={async () => {
+                const ok = window.confirm(
+                  '¿Deseas restablecer la aplicación y descargar la última versión actualizada?'
+                );
+                if (ok) {
+                  try {
+                    if ('caches' in window) {
+                      const names = await caches.keys();
+                      await Promise.all(names.map((n) => caches.delete(n)));
+                    }
+                    if ('serviceWorker' in navigator) {
+                      const regs = await navigator.serviceWorker.getRegistrations();
+                      await Promise.all(regs.map((r) => r.unregister()));
+                    }
+                  } catch (e) {}
+                  try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                  } catch (e) {}
+                  window.location.href =
+                    window.location.origin + window.location.pathname + '?v=' + Date.now();
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300 text-sky-400 hover:bg-sky-500/10 hover:text-sky-300 border border-transparent hover:border-sky-500/20 group cursor-pointer"
+            >
+              <RotateCw
+                size={15}
+                className="transform group-hover:rotate-180 transition-transform duration-500"
+              />
+              <span className="font-semibold text-xs">Restablecer y Actualizar</span>
+            </button>
 
             <button
               onClick={handleLogout}

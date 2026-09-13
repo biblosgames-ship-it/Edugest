@@ -56,7 +56,8 @@ import {
   Menu,
   Lock,
   UserCheck,
-  Building2
+  Building2,
+  RotateCw
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
 import { useNotifications } from './hooks/useNotifications';
@@ -450,6 +451,40 @@ function AppContent() {
               {center?.name || profile?.center_name || 'Edugest'}
             </span>
           </div>
+        </div>
+
+        {/* Mobile quick reset / reload button */}
+        <div className="md:hidden fixed top-4 right-4 z-40 pointer-events-auto">
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = window.confirm(
+                '¿Deseas restablecer la aplicación para cargar la versión más reciente?'
+              );
+              if (ok) {
+                try {
+                  if ('caches' in window) {
+                    const names = await caches.keys();
+                    await Promise.all(names.map((n) => caches.delete(n)));
+                  }
+                  if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map((r) => r.unregister()));
+                  }
+                } catch (e) {}
+                try {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                } catch (e) {}
+                window.location.href =
+                  window.location.origin + window.location.pathname + '?v=' + Date.now();
+              }
+            }}
+            className="bg-slate-900/80 backdrop-blur-md text-slate-300 hover:text-white p-3.5 rounded-2xl border border-white/10 shadow-xl hover:bg-slate-800 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+            title="Restablecer y Actualizar App"
+          >
+            <RotateCw size={18} />
+          </button>
         </div>
 
         {/* VISTAS PERSISTENTES (KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}
