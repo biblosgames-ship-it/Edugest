@@ -39,7 +39,9 @@ import {
   ClipboardList,
   X,
   Settings,
-  Pin
+  Pin,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
@@ -580,15 +582,18 @@ export const ClassroomManager = () => {
     loading: false
   });
 
-  const [showTutorEditModal, setShowTutorEditModal] = useState<boolean>(false);
-  const [isSavingTutor, setIsSavingTutor] = useState<boolean>(false);
-  const [tutorEditForm, setTutorEditForm] = useState({
-    name: '',
-    relation: 'Tutor',
-    phone: '',
-    id_card: '',
-    occupation: ''
-  });
+  // Estado para enviar mensaje interno al tutor desde la ficha
+  const [showDirectMessageModal, setShowDirectMessageModal] = useState<boolean>(false);
+  const [directMessageRecipient, setDirectMessageRecipient] = useState<{
+    studentId: string;
+    studentName: string;
+    tutorName: string;
+    tutorPhone: string;
+    courseId: string;
+  } | null>(null);
+  const [directMessageMotive, setDirectMessageMotive] = useState<string>('Aviso');
+  const [directMessageText, setDirectMessageText] = useState<string>('');
+  const [isSendingDirectMessage, setIsSendingDirectMessage] = useState<boolean>(false);
 
   // Cargar expediente digital completo (familia, salud, tutor) al seleccionar alumno
   useEffect(() => {
@@ -632,87 +637,44 @@ export const ClassroomManager = () => {
   }, [folderStudentId]);
 
   // Guardar o actualizar datos de contacto del tutor
-  const handleSaveTutor = async (e: React.FormEvent) => {
+  const handleSendDirectMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!folderStudentId) return;
-
-    if (!tutorEditForm.name.trim()) {
-      toast.error('Por favor ingresa el nombre del tutor o familiar');
+    if (!directMessageRecipient || !directMessageText.trim()) {
+      toast.error('Por favor escribe un mensaje.');
       return;
     }
 
-    setIsSavingTutor(true);
+    const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+    const centerId = profile?.center_id || targetCourse?.center_id || center?.id;
+    if (!centerId) {
+      toast.error('Centro educativo no identificado.');
+      return;
+    }
+
+    setIsSendingDirectMessage(true);
     try {
-      const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
-      const centerId = profile?.center_id || targetCourse?.center_id || center?.id;
-      const familyList = folderStudentDetails.parents || [];
-      const getRole = (f: any) => (f.relation || f.role || '').toLowerCase().trim();
-      const existingTutor =
-        familyList.find((f: any) => {
-          const r = getRole(f);
-          return r === 'tutor' || (!['padre', 'madre'].includes(r) && r !== '');
-        }) || familyList[0];
+      const senderName = currentTeacherIdentity?.name || profile?.full_name || 'Docente';
 
-      if (existingTutor?.id) {
-        const { error } = await supabase
-          .from('parents')
-          .update({
-            name: tutorEditForm.name.trim(),
-            relation: tutorEditForm.relation.trim() || 'Tutor',
-            phone: tutorEditForm.phone.trim(),
-            secondary_phone: tutorEditForm.id_card.trim(),
-            occupation: tutorEditForm.occupation.trim()
-          })
-          .eq('id', existingTutor.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('parents').insert([
-          {
-            student_id: folderStudentId,
-            center_id: centerId,
-            name: tutorEditForm.name.trim(),
-            relation: tutorEditForm.relation.trim() || 'Tutor',
-            phone: tutorEditForm.phone.trim(),
-            secondary_phone: tutorEditForm.id_card.trim(),
-            occupation: tutorEditForm.occupation.trim()
-          }
-        ]);
-
-        if (error) throw error;
-      }
-
-      if (tutorEditForm.phone.trim() || tutorEditForm.name.trim()) {
-        try {
-          await supabase
-            .from('students')
-            .update({
-              personal_phone: tutorEditForm.phone.trim(),
-              authorized_person: tutorEditForm.name.trim()
-            })
-            .eq('id', folderStudentId);
-        } catch (sErr) {
-          console.warn('Could not update students table columns:', sErr);
-        }
-      }
-
-      // Recargar expediente
-      const full = await dataService.getFullStudent(folderStudentId);
-      setFolderStudentDetails({
-        parents: full.family || [],
-        medical: full.medical || null,
-        history: full.history || null,
-        studentInfo: full,
-        loading: false
+      await dataService.saveCommunication({
+        center_id: centerId,
+        sender_id: profile?.id,
+        sender_name: senderName,
+        motive: directMessageMotive || 'Aviso',
+        message: directMessageText.trim(),
+        target_roles: ['Padres'],
+        target_student_ids: [directMessageRecipient.studentId],
+        target_student_name: directMessageRecipient.studentName,
+        target_courses: [directMessageRecipient.courseId || selectedCourseId]
       });
 
-      toast.success('¡Contacto del tutor guardado con éxito!');
-      setShowTutorEditModal(false);
+      toast.success(`Mensaje enviado con éxito al tutor de ${directMessageRecipient.studentName}`);
+      setShowDirectMessageModal(false);
+      setDirectMessageText('');
     } catch (err: any) {
-      console.error('Error saving tutor:', err);
-      toast.error('Error al guardar tutor: ' + (err.message || 'Error desconocido'));
+      console.error('Error sending direct message:', err);
+      toast.error('Error al enviar el mensaje: ' + (err.message || 'Error desconocido'));
     } finally {
-      setIsSavingTutor(false);
+      setIsSendingDirectMessage(false);
     }
   };
 
@@ -2912,201 +2874,87 @@ export const ClassroomManager = () => {
               return (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   {/* ENCABEZADO DEL ESTUDIANTE */}
-                  <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-slate-900 text-white rounded-3xl border border-white/10 shadow-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shrink-0">
-                        {sFullName[0]}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-black text-white">{sFullName}</h3>
-                          {student.order_number && (
-                            <span className="text-[10px] font-black bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md">
-                              #{student.order_number}
-                            </span>
-                          )}
+                  <div className="p-6 bg-slate-900 text-white rounded-3xl border border-white/10 shadow-lg space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shrink-0">
+                          {sFullName[0]}
                         </div>
-                        <p className="text-xs text-slate-400 font-mono mt-0.5">
-                          {student.sigerd_code ? `SIGERD: ${student.sigerd_code}` : ''}
-                          {student.sigerd_code && student.rne ? ' | ' : ''}
-                          {student.rne ? `RNE: ${student.rne}` : (!student.sigerd_code ? 'Sin RNE / SIGERD' : '')}
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xl font-black text-white">{sFullName}</h3>
+                            {student.order_number && (
+                              <span className="text-[10px] font-black bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md">
+                                #{student.order_number}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">
+                            {student.sigerd_code ? `SIGERD: ${student.sigerd_code}` : ''}
+                            {student.sigerd_code && student.rne ? ' | ' : ''}
+                            {student.rne ? `RNE: ${student.rne}` : (!student.sigerd_code ? 'Sin RNE / SIGERD' : '')}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {primaryPhone ? (
-                        <>
+                    {/* DATO COMPACTO DEL TUTOR DEBAJO DEL NOMBRE Y CÓDIGO */}
+                    <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/30">
+                          {primaryRelation || 'Tutor'}:
+                        </span>
+                        <span className="font-bold text-white text-xs">
+                          {primaryName || <span className="text-slate-400 italic">No especificado</span>}
+                        </span>
+                        {primaryPhone && (
+                          <span className="font-mono text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-md">
+                            {primaryPhone}
+                          </span>
+                        )}
+                        {primaryContact?.secondary_phone && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            Cédula: {primaryContact.secondary_phone}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {cleanPhone && (
                           <a
-                            href={`tel:${primaryPhone}`}
-                            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all"
-                            title={`Llamar a ${primaryName || 'Tutor'}`}
+                            href={`https://wa.me/${cleanPhone.length <= 10 && !cleanPhone.startsWith('1') ? '1' + cleanPhone : cleanPhone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                            title="Contactar al tutor vía WhatsApp"
                           >
-                            <Phone size={14} /> Llamar ({primaryPhone})
+                            <span>💬 WhatsApp</span>
                           </a>
-                          {cleanPhone && (
-                            <a
-                              href={`https://wa.me/${cleanPhone.length <= 10 && !cleanPhone.startsWith('1') ? '1' + cleanPhone : cleanPhone}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg transition-all"
-                              title="Abrir WhatsApp con el tutor"
-                            >
-                              <span>💬 WhatsApp</span>
-                            </a>
-                          )}
-                          <button
-                            type="button"
-                            onClick={openEditModal}
-                            className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all cursor-pointer"
-                            title="Editar datos del tutor"
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                        </>
-                      ) : (
+                        )}
+
                         <button
                           type="button"
-                          onClick={openEditModal}
-                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                          onClick={() => {
+                            setDirectMessageRecipient({
+                              studentId: student.id,
+                              studentName: sFullName,
+                              tutorName: primaryName || 'Tutor Responsable',
+                              tutorPhone: primaryPhone,
+                              courseId: selectedCourseId
+                            });
+                            setShowDirectMessageModal(true);
+                          }}
+                          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                          title="Enviar Mensaje Interno dentro de la plataforma"
                         >
-                          <Plus size={14} /> Agregar Contacto del Tutor
+                          <MessageSquare size={14} />
+                          <span>Mensaje Interno</span>
                         </button>
-                      )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* NOTA DEL ALUMNO (SOLO SI FUE REGISTRADA EN EL PERFIL DESDE GESTIÓN DE ALUMNO) */}
-                  {specialNotesMap[folderStudentId] && (
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-400/40 text-xs flex items-start gap-2.5">
-                      <Pin size={15} className="text-amber-600 fill-amber-500 shrink-0 mt-0.5 rotate-45" />
-                      <div>
-                        <span className="font-black text-amber-800 dark:text-amber-300 text-[10px] uppercase tracking-wider block">
-                          Nota del Alumno (Historial)
-                        </span>
-                        <p className="font-semibold text-text-main mt-0.5 leading-relaxed whitespace-pre-wrap">
-                          {specialNotesMap[folderStudentId]}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* DATOS DEL TUTOR Y CONTACTO FAMILIAR */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
-                        <Users size={15} className="text-brand-blue" />
-                        Datos del Tutor y Contacto Familiar
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={openEditModal}
-                        className="text-[11px] font-black uppercase text-brand-blue hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
-                      >
-                        <Edit3 size={12} /> {primaryName ? 'Editar Contacto' : 'Registrar Contacto'}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Tarjeta de Tutor Principal */}
-                      <div className="p-5 rounded-2xl border border-border-main bg-brand-bg space-y-2 relative group">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md">
-                            {primaryRelation || 'Tutor Responsable'}
-                          </span>
-                          {primaryContact?.secondary_phone && (
-                            <span className="text-[10px] font-mono text-text-muted">
-                              Cédula: {primaryContact.secondary_phone}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-base font-black text-text-main">
-                          {primaryName || <span className="text-text-muted italic">No especificado</span>}
-                        </p>
-                        {primaryContact?.occupation && (
-                          <p className="text-xs text-text-muted font-medium">
-                            Ocupación: {primaryContact.occupation}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Tarjeta de Teléfono */}
-                      <div className="p-5 rounded-2xl border border-border-main bg-brand-bg space-y-2">
-                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md">
-                          Teléfono de Emergencia / Tutor
-                        </span>
-                        <div className="flex items-center justify-between">
-                          <p className="text-base font-black text-text-main font-mono">
-                            {primaryPhone || <span className="text-text-muted italic font-sans text-sm">Sin teléfono registrado</span>}
-                          </p>
-                          {primaryPhone && (
-                            <div className="flex items-center gap-1.5">
-                              <a
-                                href={`tel:${primaryPhone}`}
-                                className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all cursor-pointer shadow-sm"
-                                title="Llamar"
-                              >
-                                <Phone size={13} />
-                              </a>
-                              {cleanPhone && (
-                                <a
-                                  href={`https://wa.me/${cleanPhone.length <= 10 && !cleanPhone.startsWith('1') ? '1' + cleanPhone : cleanPhone}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all cursor-pointer shadow-sm text-xs font-bold"
-                                  title="WhatsApp"
-                                >
-                                  💬
-                                </a>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Otros Familiares (Madre o Padre si existen de forma independiente) */}
-                    {familyList.length > 1 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        {dbMadre && dbMadre.id !== primaryContact?.id && (
-                          <div className="p-3.5 rounded-2xl border border-border-main bg-brand-bg/60 flex items-center justify-between">
-                            <div>
-                              <span className="text-[9px] font-black uppercase text-indigo-500">Madre:</span>
-                              <p className="text-xs font-bold text-text-main">{dbMadre.name}</p>
-                              {dbMadre.phone && <p className="text-[10px] font-mono text-text-muted">{dbMadre.phone}</p>}
-                            </div>
-                            {dbMadre.phone && (
-                              <a
-                                href={`tel:${dbMadre.phone}`}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1"
-                              >
-                                <Phone size={11} /> Llamar
-                              </a>
-                            )}
-                          </div>
-                        )}
-                        {dbPadre && dbPadre.id !== primaryContact?.id && (
-                          <div className="p-3.5 rounded-2xl border border-border-main bg-brand-bg/60 flex items-center justify-between">
-                            <div>
-                              <span className="text-[9px] font-black uppercase text-indigo-500">Padre:</span>
-                              <p className="text-xs font-bold text-text-main">{dbPadre.name}</p>
-                              {dbPadre.phone && <p className="text-[10px] font-mono text-text-muted">{dbPadre.phone}</p>}
-                            </div>
-                            {dbPadre.phone && (
-                              <a
-                                href={`tel:${dbPadre.phone}`}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1"
-                              >
-                                <Phone size={11} /> Llamar
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* FICHA MÉDICA / SALUD DEL ESTUDIANTE */}
+                  {/* FICHA MÉDICA / SALUD DEL ESTUDIANTE (UBICACIÓN SUPERIOR DESTACADA) */}
                   {folderStudentDetails.medical && (
                     <div className="p-4 rounded-2xl border border-border-main bg-brand-bg/40 space-y-2">
                       <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
@@ -3131,6 +2979,21 @@ export const ClassroomManager = () => {
                             {folderStudentDetails.medical.blood_type || 'No registrado'}
                           </span>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* NOTA DEL ALUMNO (SOLO SI FUE REGISTRADA EN EL HISTORIAL) */}
+                  {specialNotesMap[folderStudentId] && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-400/40 text-xs flex items-start gap-2.5">
+                      <Pin size={15} className="text-amber-600 fill-amber-500 shrink-0 mt-0.5 rotate-45" />
+                      <div>
+                        <span className="font-black text-amber-800 dark:text-amber-300 text-[10px] uppercase tracking-wider block">
+                          Nota del Alumno (Historial)
+                        </span>
+                        <p className="font-semibold text-text-main mt-0.5 leading-relaxed whitespace-pre-wrap">
+                          {specialNotesMap[folderStudentId]}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -3215,121 +3078,97 @@ export const ClassroomManager = () => {
         </div>
       )}
 
-      {/* MODAL PARA AGREGAR O EDITAR CONTACTO DE TUTOR */}
-      {showTutorEditModal && (
+      {/* MODAL PARA ENVIAR MENSAJE INTERNO AL TUTOR / PADRE */}
+      {showDirectMessageModal && directMessageRecipient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface w-full max-w-md rounded-[2.5rem] border border-border-main shadow-2xl p-6 sm:p-8 space-y-6">
+          <div className="bg-surface w-full max-w-md rounded-[2.5rem] border border-border-main shadow-2xl p-6 sm:p-8 space-y-6 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-border-main pb-4">
-              <div>
-                <h3 className="text-lg font-black text-text-main">
-                  Contacto de Tutor / Familiar
-                </h3>
-                <p className="text-xs text-text-muted font-medium">
-                  Información de contacto directo para el estudiante
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <MessageSquare size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-text-main">
+                    Mensaje Interno al Tutor
+                  </h3>
+                  <p className="text-xs text-brand-blue font-bold">
+                    {directMessageRecipient.studentName}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowTutorEditModal(false)}
+                onClick={() => setShowDirectMessageModal(false)}
                 className="p-1.5 rounded-xl hover:bg-brand-bg text-text-muted hover:text-text-main cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveTutor} className="space-y-4">
+            <form onSubmit={handleSendDirectMessage} className="space-y-4">
+              <div className="p-3.5 bg-brand-bg rounded-2xl border border-border-main text-xs space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-text-muted font-semibold">
+                  <span>Destinatario:</span>
+                  <span className="font-bold text-text-main">{directMessageRecipient.tutorName}</span>
+                </div>
+                {directMessageRecipient.tutorPhone && (
+                  <div className="flex items-center justify-between text-[11px] text-text-muted font-semibold">
+                    <span>Contacto:</span>
+                    <span className="font-mono text-emerald-600 font-bold">{directMessageRecipient.tutorPhone}</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-text-muted/80 italic pt-1">
+                  Este mensaje llegará directamente a la bandeja y notificaciones de la cuenta del padre/tutor en la plataforma.
+                </p>
+              </div>
+
               <div className="space-y-1">
                 <label className="block text-[10px] font-black uppercase text-text-muted">
-                  Nombre del Tutor o Familiar *
+                  Motivo / Tipo de Mensaje
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ej: María Rodríguez"
-                  value={tutorEditForm.name}
-                  onChange={(e) => setTutorEditForm({ ...tutorEditForm, name: e.target.value })}
-                  className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                <select
+                  value={directMessageMotive}
+                  onChange={(e) => setDirectMessageMotive(e.target.value)}
+                  className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
+                >
+                  <option value="Aviso">Aviso sobre el Alumno</option>
+                  <option value="Conducta">Seguimiento / Conducta</option>
+                  <option value="Rendimiento Académico">Rendimiento Académico</option>
+                  <option value="Cita / Convocatoria">Convocatoria a Reunión</option>
+                  <option value="Felicitación">Felicitación / Reconocimiento</option>
+                  <option value="Comunicado General">Comunicado</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-black uppercase text-text-muted">
+                  Mensaje *
+                </label>
+                <textarea
+                  rows={4}
                   required
+                  placeholder="Escribe aquí el mensaje respetuoso y claro para el padre o tutor del alumno..."
+                  value={directMessageText}
+                  onChange={(e) => setDirectMessageText(e.target.value)}
+                  className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-brand-blue leading-relaxed"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black uppercase text-text-muted">
-                    Parentesco *
-                  </label>
-                  <select
-                    value={tutorEditForm.relation}
-                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, relation: e.target.value })}
-                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
-                  >
-                    <option value="Tutor">Tutor / Encargado</option>
-                    <option value="Madre">Madre</option>
-                    <option value="Padre">Padre</option>
-                    <option value="Abuelo/a">Abuelo / Abuela</option>
-                    <option value="Tío/a">Tío / Tía</option>
-                    <option value="Hermano/a">Hermano / Hermana</option>
-                    <option value="Familiar">Otro Familiar</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black uppercase text-text-muted">
-                    Teléfono Principal *
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="Ej: 809-555-1234"
-                    value={tutorEditForm.phone}
-                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, phone: e.target.value })}
-                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black uppercase text-text-muted">
-                    Cédula / Documento
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: 001-0000000-0"
-                    value={tutorEditForm.id_card}
-                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, id_card: e.target.value })}
-                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-black uppercase text-text-muted">
-                    Ocupación
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Comerciante"
-                    value={tutorEditForm.occupation}
-                    onChange={(e) => setTutorEditForm({ ...tutorEditForm, occupation: e.target.value })}
-                    className="w-full p-3 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border-main">
                 <button
                   type="button"
-                  onClick={() => setShowTutorEditModal(false)}
+                  onClick={() => setShowDirectMessageModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-black uppercase text-text-muted hover:bg-brand-bg cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingTutor}
-                  className="px-5 py-2.5 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                  disabled={isSendingDirectMessage || !directMessageText.trim()}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
                 >
-                  <Save size={14} />
-                  {isSavingTutor ? 'Guardando...' : 'Guardar Contacto'}
+                  <Send size={14} />
+                  {isSendingDirectMessage ? 'Enviando...' : 'Enviar Mensaje'}
                 </button>
               </div>
             </form>

@@ -499,8 +499,37 @@ export const dataService = {
     if (!data.center_id) {
       throw new Error('center_id es requerido para guardar una comunicación');
     }
+
+    // Preparar roles y etiquetas directas codificadas de forma segura
+    const directTags: string[] = [];
+    if (Array.isArray(data.target_student_ids)) {
+      data.target_student_ids.forEach((sid: string) => sid && directTags.push(`STUDENT:${sid}`));
+    }
+    if (data.target_student_id) {
+      directTags.push(`STUDENT:${data.target_student_id}`);
+    }
+    if (Array.isArray(data.target_parent_ids)) {
+      data.target_parent_ids.forEach((pid: string) => pid && directTags.push(`PARENT:${pid}`));
+    }
+    if (data.target_student_name) {
+      directTags.push(`STUDENT_NAME:${data.target_student_name}`);
+    }
+
+    const mergedRoles = Array.from(new Set([...(data.target_roles || []), ...directTags]));
+
+    const payload = {
+      center_id: data.center_id,
+      sender_id: data.sender_id,
+      sender_name: data.sender_name,
+      motive: data.motive,
+      message: data.message,
+      target_roles: mergedRoles,
+      target_courses: data.target_courses || [],
+      target_teachers: data.target_teachers || []
+    };
+
     try {
-      const { error } = await supabase.from('communications').insert([data]);
+      const { error } = await supabase.from('communications').insert([payload]);
       if (error) throw error;
       window.dispatchEvent(new CustomEvent('edugens_notifications_updated'));
     } catch (err: any) {
@@ -535,9 +564,13 @@ export const dataService = {
             sender_name: data.sender_name,
             motive: data.motive,
             message: data.message,
-            target_roles: data.target_roles,
+            target_roles: mergedRoles,
             target_courses: data.target_courses,
-            target_teachers: data.target_teachers
+            target_teachers: data.target_teachers,
+            target_student_ids: data.target_student_ids,
+            target_student_id: data.target_student_id,
+            target_student_name: data.target_student_name,
+            target_parent_ids: data.target_parent_ids
           })}`
         };
         const { error: fallbackError } = await supabase
@@ -619,7 +652,20 @@ export const dataService = {
       }
     }
 
-    if (role === 'admin' || role === 'coordinator') {
+    // Desempaquetar etiquetas de destinatarios directos en rawComms
+    rawComms.forEach((c: any) => {
+      const roles = Array.isArray(c.target_roles) ? c.target_roles : [];
+      const sIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('STUDENT:')).map((r: string) => r.replace('STUDENT:', ''));
+      const pIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('PARENT:')).map((r: string) => r.replace('PARENT:', ''));
+      const sName = roles.find((r: string) => typeof r === 'string' && r.startsWith('STUDENT_NAME:'))?.replace('STUDENT_NAME:', '');
+      
+      c.target_student_ids = Array.from(new Set([...(c.target_student_ids || []), ...sIds]));
+      c.target_parent_ids = Array.from(new Set([...(c.target_parent_ids || []), ...pIds]));
+      if (sName && !c.target_student_name) c.target_student_name = sName;
+      c.target_roles = roles.filter((r: string) => typeof r === 'string' && !r.startsWith('STUDENT:') && !r.startsWith('PARENT:') && !r.startsWith('STUDENT_NAME:'));
+    });
+
+    if (role === 'admin' || role === 'coordinator' || role === 'management_teacher') {
       return rawComms;
     }
 
@@ -690,13 +736,19 @@ export const dataService = {
           (c.target_teachers || []).some((tid: string) => candidateTeacherIds.has(tid));
         if (isDirectTeacher) return true;
 
-        const targetRoles = c.target_roles || [];
+        // Si es un mensaje directo a un estudiante que pertenece a sus cursos
         const targetCourses = c.target_courses || [];
+        const matchesTeacherCourse = targetCourses.some((cid: string) => teacherCourseIds.includes(cid));
+        if ((c.target_student_ids || []).length > 0 && matchesTeacherCourse) {
+          return true;
+        }
+
+        const targetRoles = c.target_roles || [];
         const hasRoles = targetRoles.length > 0;
         const hasCourses = targetCourses.length > 0;
 
         const roleMatches = !hasRoles || targetRoles.includes('Docentes') || targetRoles.includes('Toda la comunidad');
-        const courseMatches = !hasCourses || targetCourses.some((cid: string) => teacherCourseIds.includes(cid));
+        const courseMatches = !hasCourses || matchesTeacherCourse;
 
         return roleMatches && courseMatches;
       });
@@ -706,6 +758,9 @@ export const dataService = {
     const isStudent = (role || '').toLowerCase() === 'student';
 
     let userCourseIds: string[] = [];
+    const linkedStudentIds = new Set<string>();
+    let userStudentId: string | null = null;
+
     try {
       const { data: prof } = await supabase
         .from('profiles')
@@ -716,6 +771,10 @@ export const dataService = {
       const ids = new Set<string>();
       if (prof?.course_code) ids.add(prof.course_code);
       if (prof?.course_id) ids.add(prof.course_id);
+      if (prof?.student_id) {
+        userStudentId = prof.student_id;
+        linkedStudentIds.add(prof.student_id);
+      }
       if (Array.isArray(prof?.parent_course_ids)) {
         prof.parent_course_ids.forEach((cid: string) => cid && ids.add(cid));
       }
@@ -734,19 +793,52 @@ export const dataService = {
         if (localCode) ids.add(localCode);
       } catch (e) {}
 
-      if (prof?.student_id) {
-        const { data: st } = await supabase
-          .from('students')
-          .select('course_id')
-          .eq('id', prof.student_id)
-          .maybeSingle();
-        if (st?.course_id) ids.add(st.course_id);
+      // Buscar alumnos vinculados en la tabla parents para este perfil
+      if (isParent) {
+        try {
+          const { data: pLinks } = await supabase
+            .from('parents')
+            .select('student_id')
+            .eq('profile_id', userId);
+          (pLinks || []).forEach((pl: any) => {
+            if (pl.student_id) linkedStudentIds.add(pl.student_id);
+          });
+        } catch (e) {}
       }
+
+      // Si tenemos alumnos vinculados, obtener sus cursos también
+      if (linkedStudentIds.size > 0) {
+        try {
+          const { data: stList } = await supabase
+            .from('students')
+            .select('course_id')
+            .in('id', Array.from(linkedStudentIds));
+          (stList || []).forEach((st: any) => {
+            if (st.course_id) ids.add(st.course_id);
+          });
+        } catch (e) {}
+      }
+
       userCourseIds = Array.from(ids);
     } catch (e) {}
 
     return rawComms.filter((c: any) => {
       if (c.sender_id === userId) return true;
+
+      // Mensajes personales directos
+      const cStudentIds = c.target_student_ids || [];
+      const cParentIds = c.target_parent_ids || [];
+
+      if (cParentIds.includes(userId)) return true;
+      if (isParent && cStudentIds.some((sid: string) => linkedStudentIds.has(sid))) return true;
+      if (isStudent && userStudentId && cStudentIds.includes(userStudentId)) return true;
+
+      // Si fue enviado exclusivamente a alumnos específicos y no coincide con este usuario, descartar
+      if (cStudentIds.length > 0) {
+        const matchesThisFamily = (isParent && cStudentIds.some((sid: string) => linkedStudentIds.has(sid))) ||
+                                  (isStudent && userStudentId && cStudentIds.includes(userStudentId));
+        if (!matchesThisFamily) return false;
+      }
 
       const targetRoles = c.target_roles || [];
       const targetCourses = c.target_courses || [];

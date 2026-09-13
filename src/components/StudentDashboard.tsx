@@ -20,7 +20,8 @@ import {
   ExternalLink,
   Video,
   Globe,
-  Link as LinkIcon
+  Link as LinkIcon,
+  MessageSquare
 } from 'lucide-react';
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
@@ -1173,6 +1174,18 @@ export const StudentDashboard = ({
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {onViewChange && (
+            <button
+              type="button"
+              onClick={() => onViewChange('communications')}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
+              title="Ir a Mensajería Interna"
+            >
+              <MessageSquare size={13} />
+              <span>{isParent ? 'Mensaje a Docentes' : 'Mensajería Interna'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setScheduleViewMode('weekly')}

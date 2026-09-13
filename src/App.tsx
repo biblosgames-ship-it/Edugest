@@ -121,13 +121,13 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'general-reports',
     'facility'
   ],
-  teacher: ['dashboard', 'classroom', 'digital-register', 'tasks'],
-  student: ['dashboard'],
-  parent: ['dashboard'],
-  padre: ['dashboard'],
-  tutor: ['dashboard'],
-  madre: ['dashboard'],
-  familiar: ['dashboard'],
+  teacher: ['dashboard', 'classroom', 'digital-register', 'tasks', 'communications'],
+  student: ['dashboard', 'communications'],
+  parent: ['dashboard', 'communications'],
+  padre: ['dashboard', 'communications'],
+  tutor: ['dashboard', 'communications'],
+  madre: ['dashboard', 'communications'],
+  familiar: ['dashboard', 'communications'],
   support: ['dashboard', 'facility', 'agenda'],
   supervisor: ['dashboard', 'facility', 'agenda'],
   conserje: ['dashboard', 'facility', 'agenda'],
@@ -173,9 +173,9 @@ function AppContent() {
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
 
-    // Para padres y alumnos: acceso a su aula virtual, tareas por materias y horario de clases
+    // Para padres y alumnos: acceso a su aula virtual, tareas por materias, horario de clases y mensajería interna
     if (isStudentOrParent) {
-      return ['dashboard', 'tasks', 'schedule'];
+      return ['dashboard', 'tasks', 'schedule', 'communications'];
     }
 
     let panels = [...rawAllowed];
@@ -189,6 +189,9 @@ function AppContent() {
       }
       if (!panels.includes('dashboard')) {
         panels.push('dashboard');
+      }
+      if (!panels.includes('communications')) {
+        panels.push('communications');
       }
     }
     return panels;
@@ -394,7 +397,7 @@ function AppContent() {
     },
     {
       id: 'communications',
-      label: 'Excusas y Comunicados',
+      label: 'Mensajería Interna',
       icon: MessageSquare,
       badge: unreadCount > 0 ? unreadCount : undefined
     },
