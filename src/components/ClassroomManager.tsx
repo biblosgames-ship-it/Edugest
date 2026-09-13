@@ -38,7 +38,8 @@ import {
   Link as LinkIcon,
   ClipboardList,
   X,
-  Settings
+  Settings,
+  Pin
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
@@ -62,6 +63,22 @@ export const ClassroomManager = () => {
   const { subjects: allSubjects } = useSubjects();
   const { assignments: allAssignments } = useAssignments();
   const { students: allStudents, isLoading: studentsLoading } = useStudents();
+
+  // Roles y Permisos: Equipo de Gestión, Coordinadores y Directores
+  const isManagementOrDirector = Boolean(
+    profile?.is_superadmin ||
+    ['admin', 'superAdmin', 'coordinator', 'coordinador', 'management_teacher', 'director', 'directora', 'orientador', 'orientacion', 'psicologo', 'creator'].includes(profile?.role || '')
+  );
+
+  // Verificador si un apunte o nota fue redactada por el usuario actual
+  const isMyNote = (n: { teacherId?: string; teacherName?: string }) => {
+    if (!profile) return false;
+    const myTeacherId = profile.teacher_id || profile.id;
+    const myName = (profile.full_name || profile.name || '').toLowerCase().trim();
+    if (n.teacherId && myTeacherId && String(n.teacherId) === String(myTeacherId)) return true;
+    if (myName && n.teacherName && n.teacherName.toLowerCase().trim() === myName) return true;
+    return false;
+  };
 
   // Fecha local YYYY-MM-DD
   const getTodayDateString = () => {
@@ -102,6 +119,19 @@ export const ClassroomManager = () => {
   const [newNoteCategory, setNewNoteCategory] = useState<NoteCategory>('Conducta');
   const [newNoteContent, setNewNoteContent] = useState<string>('');
   const [notesTeacherFilter, setNotesTeacherFilter] = useState<'ALL' | 'MINE'>('ALL');
+
+  // Estado de Notas Fijas / Observaciones Especiales (Orientación, Psicología, Dirección)
+  const [specialNotesMap, setSpecialNotesMap] = useState<Record<string, { text: string; author?: string; date?: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('edugest_fixed_special_notes');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [selectedSpecialNoteModalStudentId, setSelectedSpecialNoteModalStudentId] = useState<string | null>(null);
+  const [specialNoteInputText, setSpecialNoteInputText] = useState<string>('');
+  const [isSavingSpecialNote, setIsSavingSpecialNote] = useState<boolean>(false);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
 
@@ -397,6 +427,44 @@ export const ClassroomManager = () => {
     loadNotes();
     return () => { isMounted = false; };
   }, [selectedCourseId]);
+
+  // 2.1 CARGAR NOTAS FIJAS / OBSERVACIONES ESPECIALES (ORIENTACIÓN Y PSICOLOGÍA)
+  useEffect(() => {
+    if (!selectedCourseId || courseStudents.length === 0) return;
+    let isMounted = true;
+    const studentIds = courseStudents.map((s: any) => s.id);
+
+    const loadSpecialNotes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('student_medical')
+          .select('student_id, special_observations')
+          .in('student_id', studentIds);
+
+        if (!error && data && isMounted) {
+          setSpecialNotesMap((prev) => {
+            const next = { ...prev };
+            data.forEach((item: any) => {
+              if (item.special_observations && item.special_observations.trim()) {
+                next[item.student_id] = {
+                  text: item.special_observations.trim(),
+                  author: next[item.student_id]?.author || 'Orientación y Psicología',
+                  date: next[item.student_id]?.date || ''
+                };
+              }
+            });
+            localStorage.setItem('edugest_fixed_special_notes', JSON.stringify(next));
+            return next;
+          });
+        }
+      } catch (err) {
+        console.warn('Error fetching special notes:', err);
+      }
+    };
+
+    loadSpecialNotes();
+    return () => { isMounted = false; };
+  }, [selectedCourseId, courseStudents]);
 
   // 3. CARGAR CALIFICACIONES PARCIALES (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
@@ -843,18 +911,98 @@ export const ClassroomManager = () => {
   // Permiso para borrar un apunte
   const canDeleteNote = (n: any) => {
     if (!profile) return false;
-    if (['admin', 'superAdmin', 'coordinator'].includes(profile.role) || profile.is_superadmin) {
-      return true;
+    if (isManagementOrDirector) return true;
+    return isMyNote(n);
+  };
+
+  // Gestión de Notas Fijas / Situación Especial (Orientación, Psicología, Dirección)
+  const handleSaveSpecialNote = async (studentId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      await handleRemoveSpecialNote(studentId);
+      return;
     }
-    const myTeacherId = profile.teacher_id || profile.id;
-    if (n.teacherId && myTeacherId && String(n.teacherId) === String(myTeacherId)) {
-      return true;
+
+    setIsSavingSpecialNote(true);
+    const authorName = profile?.full_name || profile?.name || 'Orientación y Psicología';
+    const dateFormatted = new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const newEntry = {
+      text: trimmed,
+      author: authorName,
+      date: dateFormatted
+    };
+
+    // Actualizar estado local y caché
+    setSpecialNotesMap((prev) => {
+      const next = { ...prev, [studentId]: newEntry };
+      localStorage.setItem('edugest_fixed_special_notes', JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      // 1. Guardar en student_medical.special_observations
+      await supabase
+        .from('student_medical')
+        .upsert(
+          { student_id: studentId, special_observations: trimmed },
+          { onConflict: 'student_id' }
+        );
+
+      // 2. Registrar en anecdotario histórico bajo categoría 'Orientación'
+      const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
+      const centerId = profile?.center_id || targetCourse?.center_id;
+      if (centerId) {
+        await supabase.from('student_anecdotal_notes').insert([
+          {
+            center_id: centerId,
+            student_id: studentId,
+            course_id: selectedCourseId,
+            teacher_id: profile?.teacher_id || profile?.id || null,
+            teacher_name: authorName,
+            category: 'Orientación',
+            content: `[NOTA FIJA ORIENTACIÓN / PSICOLOGÍA]: ${trimmed}`,
+            date: dateFormatted
+          }
+        ]);
+      }
+      toast.success('Nota de Orientación fijada correctamente');
+    } catch (err) {
+      console.warn('Error saving special observation:', err);
+      toast.success('Nota especial fijada en sistema');
+    } finally {
+      setIsSavingSpecialNote(false);
+      setSelectedSpecialNoteModalStudentId(null);
     }
-    const myName = (profile.full_name || profile.name || '').toLowerCase().trim();
-    if (myName && n.teacherName && n.teacherName.toLowerCase().trim() === myName) {
-      return true;
+  };
+
+  const handleRemoveSpecialNote = async (studentId: string) => {
+    setIsSavingSpecialNote(true);
+    setSpecialNotesMap((prev) => {
+      const next = { ...prev };
+      delete next[studentId];
+      localStorage.setItem('edugest_fixed_special_notes', JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      await supabase
+        .from('student_medical')
+        .update({ special_observations: null })
+        .eq('student_id', studentId);
+      toast.success('Nota especial removida');
+    } catch (err) {
+      console.warn('Error removing special observation:', err);
+      toast.success('Nota removida');
+    } finally {
+      setIsSavingSpecialNote(false);
+      setSelectedSpecialNoteModalStudentId(null);
     }
-    return profile.role === 'teacher';
+  };
+
+  const openSpecialNoteModal = (studentId: string) => {
+    setSelectedSpecialNoteModalStudentId(studentId);
+    setSpecialNoteInputText(specialNotesMap[studentId]?.text || '');
   };
 
   // Determinar número de competencias según nivel del curso (3 para Primaria/Inicial, 4 para Secundaria)
@@ -1515,13 +1663,44 @@ export const ClassroomManager = () => {
                   ) : (
                     filteredStudents.map((s: any, idx: number) => {
                       const currentStatus = attendanceState[s.id]?.status || 'presente';
+                      const isExcusa = currentStatus === 'excusa';
+                      const isAusente = currentStatus === 'ausente';
+                      const studentSpecialNote = specialNotesMap[s.id]?.text;
+
                       return (
-                        <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors">
+                        <tr
+                          key={s.id}
+                          className={`transition-colors border-b border-border-main/40 ${
+                            isExcusa
+                              ? 'bg-amber-500/15 dark:bg-amber-950/40 border-l-4 border-l-amber-500 hover:bg-amber-500/20'
+                              : isAusente
+                              ? 'bg-rose-500/5 hover:bg-surface-hover'
+                              : 'hover:bg-brand-bg/60'
+                          }`}
+                        >
                           <td className="px-4 py-2 font-black text-text-muted text-xs">
                             {s.order_number != null && s.order_number !== '' ? s.order_number : (idx + 1)}
                           </td>
                           <td className="px-4 py-2 font-bold text-text-main text-xs">
-                            {getStudentFullName(s)}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span>{getStudentFullName(s)}</span>
+                              {isExcusa && (
+                                <span className="px-2 py-0.5 rounded-md font-black text-[9px] uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/50 shadow-xs">
+                                  Excusa
+                                </span>
+                              )}
+                              {studentSpecialNote && (
+                                <button
+                                  type="button"
+                                  onClick={() => openSpecialNoteModal(s.id)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-300/60 hover:scale-105 hover:bg-purple-200 transition-all cursor-pointer shadow-xs"
+                                  title="Nota Fija de Orientación y Psicología (Haz clic para leer)"
+                                >
+                                  <Pin size={10} className="text-purple-600 fill-purple-600" />
+                                  <span>Orientación</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-2 font-mono text-[10px] text-text-muted">
                             {s.sigerd_code || s.rne || s.student_code || '---'}
@@ -1554,8 +1733,8 @@ export const ClassroomManager = () => {
                                 onClick={() => handleSetAttendance(s.id, 'excusa')}
                                 className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'excusa'
-                                    ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-indigo-100 hover:text-indigo-700'
+                                    ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-amber-100 hover:text-amber-700'
                                 }`}
                               >
                                 <Info size={11} /> Excusa
@@ -1576,7 +1755,7 @@ export const ClassroomManager = () => {
                           <td className="px-4 py-2">
                             <input
                               type="text"
-                              placeholder="Ej. Llegó a 2da hora..."
+                              placeholder={isExcusa ? 'Motivo directo de la excusa (médico, permiso)...' : 'Ej. Llegó a 2da hora...'}
                               value={attendanceState[s.id]?.note || ''}
                               onChange={(e) =>
                                 setAttendanceState((prev) => ({
@@ -1587,7 +1766,11 @@ export const ClassroomManager = () => {
                                   }
                                 }))
                               }
-                              className="w-full px-3 py-1 rounded-xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-1 focus:ring-brand-blue"
+                              className={`w-full px-3 py-1.5 rounded-xl border text-xs outline-none transition-all ${
+                                isExcusa
+                                  ? 'border-amber-400 bg-amber-50/80 dark:bg-amber-950/60 text-amber-950 dark:text-amber-100 placeholder:text-amber-600/70 ring-1 ring-amber-400/40 font-medium'
+                                  : 'border-border-main bg-brand-bg text-text-main focus:ring-1 focus:ring-brand-blue'
+                              }`}
                             />
                           </td>
                         </tr>
@@ -1675,53 +1858,67 @@ export const ClassroomManager = () => {
           <div className="md:col-span-2 bg-surface p-6 rounded-3xl border border-border-main shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-main">
               <h2 className="text-base font-black uppercase tracking-wider text-text-main flex items-center gap-2">
-                <FileText size={18} className="text-brand-blue" /> Historial de Apuntes del Grado
+                <FileText size={18} className="text-brand-blue" />
+                {isManagementOrDirector ? 'Historial de Apuntes del Grado' : 'Mis Apuntes en este Grado'}
               </h2>
-              <div className="flex items-center gap-1.5 bg-brand-bg p-1 rounded-xl border border-border-main text-xs">
-                <button
-                  type="button"
-                  onClick={() => setNotesTeacherFilter('ALL')}
-                  className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
-                    notesTeacherFilter === 'ALL'
-                      ? 'bg-brand-blue text-white shadow-sm'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  Todos ({notesList.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNotesTeacherFilter('MINE')}
-                  className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
-                    notesTeacherFilter === 'MINE'
-                      ? 'bg-brand-blue text-white shadow-sm'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  Mis Apuntes
-                </button>
-              </div>
+
+              {isManagementOrDirector ? (
+                <div className="flex items-center gap-1.5 bg-brand-bg p-1 rounded-xl border border-border-main text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setNotesTeacherFilter('ALL')}
+                    className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
+                      notesTeacherFilter === 'ALL'
+                        ? 'bg-brand-blue text-white shadow-sm'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    Todos ({notesList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotesTeacherFilter('MINE')}
+                    className={`px-3 py-1 rounded-lg font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer ${
+                      notesTeacherFilter === 'MINE'
+                        ? 'bg-brand-blue text-white shadow-sm'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}
+                  >
+                    Mis Apuntes ({notesList.filter(isMyNote).length})
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-brand-bg px-3 py-1.5 rounded-xl border border-border-main text-[11px] font-bold text-text-muted">
+                  <span>🔒 Solo tus apuntes ({notesList.filter(isMyNote).length})</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
               {(() => {
                 const displayed = notesList.filter((n) => {
+                  if (!isManagementOrDirector) {
+                    return isMyNote(n);
+                  }
                   if (notesTeacherFilter === 'MINE') {
-                    const myTeacherId = profile?.teacher_id || profile?.id;
-                    const myName = (profile?.full_name || profile?.name || '').toLowerCase().trim();
-                    if (n.teacherId && myTeacherId && String(n.teacherId) === String(myTeacherId)) return true;
-                    if (myName && n.teacherName && n.teacherName.toLowerCase().trim() === myName) return true;
-                    return false;
+                    return isMyNote(n);
                   }
                   return true;
                 });
 
                 if (displayed.length === 0) {
                   return (
-                    <div className="py-12 text-center text-text-muted font-bold text-xs">
-                      {notesTeacherFilter === 'MINE'
-                        ? 'No has registrado ningún apunte personal en este grado todavía.'
-                        : 'No hay observaciones ni apuntes registrados todavía.'}
+                    <div className="py-12 text-center text-text-muted font-bold text-xs space-y-1">
+                      <p>
+                        {!isManagementOrDirector || notesTeacherFilter === 'MINE'
+                          ? 'No has registrado ningún apunte personal en este grado todavía.'
+                          : 'No hay observaciones ni apuntes registrados todavía.'}
+                      </p>
+                      {!isManagementOrDirector && (
+                        <p className="text-[10px] text-text-muted/80 font-normal">
+                          Por confidencialidad y objetividad docente, los apuntes de otros profesores están reservados exclusivamente al Equipo de Gestión y Dirección.
+                        </p>
+                      )}
                     </div>
                   );
                 }
@@ -2724,7 +2921,12 @@ export const ClassroomManager = () => {
                       : 'bg-brand-bg text-text-main border-border-main hover:border-brand-blue'
                   }`}
                 >
-                  <span className="font-bold text-xs">{getStudentFullName(s)}</span>
+                  <span className="font-bold text-xs flex items-center gap-1.5">
+                    {getStudentFullName(s)}
+                    {specialNotesMap[s.id]?.text && (
+                      <Pin size={11} className="text-purple-600 fill-purple-600 shrink-0" title="Tiene observación especial activa" />
+                    )}
+                  </span>
                   <span className="text-[10px] font-mono opacity-70">{s.sigerd_code || s.rne || '---'}</span>
                 </button>
               ))}
@@ -2739,7 +2941,11 @@ export const ClassroomManager = () => {
               </div>
             ) : (() => {
               const student = courseStudents.find((s: any) => s.id === folderStudentId);
-              const studentNotes = notesList.filter((n) => n.studentId === folderStudentId);
+              const studentNotes = notesList.filter((n) => {
+                if (n.studentId !== folderStudentId) return false;
+                if (isManagementOrDirector) return true;
+                return isMyNote(n);
+              });
               if (!student) return null;
               const sFullName = getStudentFullName(student);
 
@@ -2849,6 +3055,77 @@ export const ClassroomManager = () => {
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* NOTA FIJA / OBSERVACIÓN DE ORIENTACIÓN Y PSICOLOGÍA */}
+                  <div className={`p-5 rounded-3xl border transition-all ${
+                    specialNotesMap[folderStudentId]?.text
+                      ? 'bg-purple-50/80 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/60 shadow-sm'
+                      : 'bg-brand-bg/60 border-dashed border-border-main'
+                  }`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                          <Pin size={15} className="fill-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-purple-900 dark:text-purple-200">
+                            Nota Fija / Situación Especial (Orientación y Psicología)
+                          </h4>
+                          <p className="text-[10px] text-text-muted">
+                            {specialNotesMap[folderStudentId]?.text
+                              ? 'Indicación activa para consideración de los docentes en aula'
+                              : 'Observación fija especial sobre situaciones delicadas o seguimiento del alumno'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isManagementOrDirector ? (
+                        <div className="flex items-center gap-2">
+                          {specialNotesMap[folderStudentId]?.text && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSpecialNote(folderStudentId)}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                            >
+                              Quitar Nota
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openSpecialNoteModal(folderStudentId)}
+                            className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+                          >
+                            <Edit3 size={13} />
+                            {specialNotesMap[folderStudentId]?.text ? 'Editar Nota Fija' : 'Fijar Nota Especial'}
+                          </button>
+                        </div>
+                      ) : (
+                        specialNotesMap[folderStudentId]?.text && (
+                          <span className="px-2.5 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                            Nota Activa
+                          </span>
+                        )
+                      )}
+                    </div>
+
+                    {specialNotesMap[folderStudentId]?.text ? (
+                      <div className="mt-3 p-4 rounded-2xl bg-white dark:bg-surface border border-purple-200 dark:border-purple-800/40 space-y-2">
+                        <p className="text-xs font-semibold text-text-main leading-relaxed">
+                          {specialNotesMap[folderStudentId].text}
+                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-purple-700 dark:text-purple-400 font-bold border-t border-purple-100 dark:border-purple-900/30 pt-2">
+                          <span>Registrada por: {specialNotesMap[folderStudentId].author || 'Orientación y Psicología'}</span>
+                          {specialNotesMap[folderStudentId].date && <span>{specialNotesMap[folderStudentId].date}</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-text-muted italic mt-1">
+                        {isManagementOrDirector
+                          ? 'No hay ninguna nota fija para este estudiante. Haz clic en "Fijar Nota Especial" para redactar una indicación fija (ej. NEE, adaptación curricular, seguimiento familiar).'
+                          : 'El estudiante no presenta ninguna observación especial activa de Orientación.'}
+                      </p>
+                    )}
                   </div>
 
                   {/* DATOS DEL TUTOR Y CONTACTO FAMILIAR */}
@@ -2997,18 +3274,25 @@ export const ClassroomManager = () => {
 
                   {/* HISTORIAL Y OBSERVACIONES DEL CUADERNILLO ANECDÓTICO */}
                   <div className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
-                        <FileText size={15} className="text-brand-blue" />
-                        Observaciones y Apuntes Históricos ({studentNotes.length})
-                      </h4>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-text-muted tracking-wider flex items-center gap-2">
+                          <FileText size={15} className="text-brand-blue" />
+                          {isManagementOrDirector ? 'Historial de Apuntes del Alumno' : 'Mis Apuntes sobre este Alumno'} ({studentNotes.length})
+                        </h4>
+                        {!isManagementOrDirector && (
+                          <p className="text-[10px] text-text-muted/80 font-medium mt-0.5">
+                            🔒 Vista confidencial: Los apuntes de otros docentes están reservados exclusivamente al Equipo de Gestión.
+                          </p>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
                           setNewNoteStudentId(folderStudentId);
                           setActiveTab('notes');
                         }}
-                        className="text-[11px] font-black uppercase text-brand-blue hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                        className="text-[11px] font-black uppercase text-brand-blue hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none shrink-0"
                       >
                         <Plus size={12} /> Nuevo Apunte
                       </button>
@@ -3016,10 +3300,17 @@ export const ClassroomManager = () => {
 
                     <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-2">
                       {studentNotes.length === 0 ? (
-                        <div className="py-8 text-center bg-brand-bg rounded-2xl border border-dashed border-border-main">
+                        <div className="py-8 text-center bg-brand-bg rounded-2xl border border-dashed border-border-main space-y-1">
                           <p className="text-xs text-text-muted italic">
-                            Sin apuntes ni observaciones registradas para este alumno.
+                            {isManagementOrDirector
+                              ? 'Sin apuntes ni observaciones registradas para este alumno.'
+                              : 'No tienes apuntes personales registrados para este alumno.'}
                           </p>
+                          {!isManagementOrDirector && (
+                            <p className="text-[10px] text-text-muted/70">
+                              Puedes redactar un apunte personal con el botón "+ Nuevo Apunte".
+                            </p>
+                          )}
                         </div>
                       ) : (
                         studentNotes.map((n) => (
@@ -3182,6 +3473,150 @@ export const ClassroomManager = () => {
           </div>
         </div>
       )}
+
+      {/* MODAL DE OBSERVACIÓN ESPECIAL / ORIENTACIÓN Y PSICOLOGÍA */}
+      {selectedSpecialNoteModalStudentId && (() => {
+        const student = courseStudents.find((s: any) => s.id === selectedSpecialNoteModalStudentId);
+        const existingNote = specialNotesMap[selectedSpecialNoteModalStudentId];
+        const studentName = student ? getStudentFullName(student) : 'Estudiante';
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-surface border border-border-main rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-border-main pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md">
+                    <Pin size={17} className="fill-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-text-main">
+                      Nota Fija de Orientación / Situación Especial
+                    </h3>
+                    <p className="text-[11px] font-bold text-brand-blue">{studentName}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpecialNoteModalStudentId(null)}
+                  className="p-2 text-text-muted hover:text-text-main hover:bg-brand-bg rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {isManagementOrDirector ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-text-muted">
+                    Esta observación permanecerá fija y visible (con icono de Orientación) para todos los docentes que interactúen con el estudiante en el aula:
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      '🩺 Indicación Médica / Salud',
+                      '🧠 Adaptación Curricular',
+                      '⚠️ Seguimiento de Orientación',
+                      '🤝 Apoyo Psicopedagógico',
+                      '🏠 Situación Familiar Especial'
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const current = specialNoteInputText.trim();
+                          setSpecialNoteInputText(current ? `${current} | ${tag}` : tag);
+                        }}
+                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    rows={4}
+                    placeholder="Escribe la observación especial o indicación para los docentes (ej: Estudiante con condición auditiva leve, mantener en primera fila...)"
+                    value={specialNoteInputText}
+                    onChange={(e) => setSpecialNoteInputText(e.target.value)}
+                    className="w-full p-4 bg-brand-bg border border-border-main rounded-2xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-purple-600 leading-relaxed"
+                  />
+
+                  {existingNote && (
+                    <div className="text-[10px] font-medium text-text-muted flex items-center justify-between px-1">
+                      <span>Redactada por: {existingNote.author || 'Orientación'}</span>
+                      {existingNote.date && <span>Fecha: {existingNote.date}</span>}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-border-main">
+                    {existingNote ? (
+                      <button
+                        type="button"
+                        disabled={isSavingSpecialNote}
+                        onClick={() => handleRemoveSpecialNote(selectedSpecialNoteModalStudentId)}
+                        className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        Quitar Nota Fija
+                      </button>
+                    ) : <div />}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSpecialNoteModalStudentId(null)}
+                        className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-black uppercase text-text-muted hover:bg-brand-bg cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSavingSpecialNote || !specialNoteInputText.trim()}
+                        onClick={() => handleSaveSpecialNote(selectedSpecialNoteModalStudentId, specialNoteInputText)}
+                        className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                      >
+                        <Save size={14} />
+                        {isSavingSpecialNote ? 'Guardando...' : 'Fijar Nota Especial'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-purple-600 text-white text-[9px] font-black uppercase tracking-wider">
+                        Indicación Docente
+                      </span>
+                      <span className="text-[10px] text-text-muted font-bold">
+                        {existingNote?.date || 'Nota Activa'}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-text-main leading-relaxed bg-white dark:bg-surface p-3.5 rounded-xl border border-purple-200/60 dark:border-purple-800/40">
+                      {existingNote?.text || 'Sin texto registrado.'}
+                    </p>
+                    <div className="text-[10px] text-purple-700 dark:text-purple-400 font-bold">
+                      Redactado por: {existingNote?.author || 'Orientación y Psicología'}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-text-muted/90 italic">
+                    ℹ️ Esta nota fue fijada por Orientación, Psicología o Dirección para que la tomes en consideración durante la docencia en el aula.
+                  </p>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSpecialNoteModalStudentId(null)}
+                      className="px-5 py-2.5 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md"
+                    >
+                      Entendido / Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
