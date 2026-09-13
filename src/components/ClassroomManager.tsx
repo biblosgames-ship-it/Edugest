@@ -419,31 +419,57 @@ export const ClassroomManager = () => {
     return () => { isMounted = false; };
   }, [selectedCourseId]);
 
-  // 2.1 CARGAR NOTAS FIJAS / OBSERVACIONES ESPECIALES (ORIENTACIÓN Y PSICOLOGÍA)
+  // 2.1 CARGAR NOTAS FIJAS / OBSERVACIONES ESPECIALES (CONFIGURADAS EN HISTORIAL)
   useEffect(() => {
     if (!selectedCourseId || courseStudents.length === 0) return;
     let isMounted = true;
     const studentIds = courseStudents.map((s: any) => s.id);
 
+    const isRealStudentNote = (note?: string | null): boolean => {
+      if (!note) return false;
+      const clean = note.trim().toLowerCase();
+      if (!clean) return false;
+      const ignored = [
+        'no',
+        'no.',
+        'no tiene',
+        'ninguna',
+        'ninguno',
+        'ningun',
+        'ningún',
+        'n/a',
+        'na',
+        '-',
+        '--',
+        'ninguno/a',
+        'sin observaciones',
+        'ninguna observacion',
+        'ninguna observación',
+        'sin observacion',
+        'sin observación'
+      ];
+      return !ignored.includes(clean);
+    };
+
     const loadSpecialNotes = async () => {
       try {
         const { data, error } = await supabase
-          .from('student_medical')
-          .select('student_id, special_observations')
+          .from('student_history')
+          .select('student_id, performance_observations')
           .in('student_id', studentIds);
 
         if (!error && data && isMounted) {
           const map: Record<string, string> = {};
           data.forEach((item: any) => {
-            const obs = (item.special_observations || '').trim();
-            if (obs) {
+            const obs = (item.performance_observations || '').trim();
+            if (isRealStudentNote(obs)) {
               map[item.student_id] = obs;
             }
           });
           setSpecialNotesMap(map);
         }
       } catch (err) {
-        console.warn('Error fetching special notes:', err);
+        console.warn('Error fetching special notes from history:', err);
       }
     };
 
@@ -2956,7 +2982,7 @@ export const ClassroomManager = () => {
                       <Pin size={15} className="text-amber-600 fill-amber-500 shrink-0 mt-0.5 rotate-45" />
                       <div>
                         <span className="font-black text-amber-800 dark:text-amber-300 text-[10px] uppercase tracking-wider block">
-                          Nota del Alumno (Gestión)
+                          Nota del Alumno (Historial)
                         </span>
                         <p className="font-semibold text-text-main mt-0.5 leading-relaxed whitespace-pre-wrap">
                           {specialNotesMap[folderStudentId]}

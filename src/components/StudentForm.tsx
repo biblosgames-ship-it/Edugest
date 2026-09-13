@@ -226,7 +226,20 @@ export const StudentForm = ({
 
         if (!siblingSource) {
           if (full.medical) setMedical((prev) => ({ ...prev, ...full.medical }));
-          if (full.history) setHistory((prev) => ({ ...prev, ...full.history }));
+          if (full.history) {
+            const h = { ...full.history };
+            const clean = (h.performance_observations || '').trim().toLowerCase();
+            if (['no', 'no.', 'no tiene', 'ninguna', 'ninguno', 'n/a', 'na', '-', '--'].includes(clean)) {
+              h.performance_observations = '';
+            }
+            if (!h.performance_observations && full.medical?.special_observations) {
+              const medClean = full.medical.special_observations.trim().toLowerCase();
+              if (!['no', 'no.', 'no tiene', 'ninguna', 'ninguno', 'n/a', 'na', '-', '--'].includes(medClean)) {
+                h.performance_observations = full.medical.special_observations;
+              }
+            }
+            setHistory((prev) => ({ ...prev, ...h }));
+          }
           if (full.documents) setDocuments((prev) => ({ ...prev, ...full.documents }));
 
           setStudent((prev) => ({
@@ -870,34 +883,6 @@ export const StudentForm = ({
                     🔵 Nuevo Ingreso
                   </button>
                 </div>
-              </div>
-
-              {/* NOTA FIJA / OBSERVACIÓN ESPECIAL DEL ALUMNO (EQUIPO DE GESTIÓN) */}
-              <div className="bg-amber-500/10 border border-amber-400/40 p-5 rounded-2xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-200 tracking-wider flex items-center gap-1.5">
-                    <Pin size={14} className="fill-amber-500 text-amber-600 rotate-45" /> Nota Fija / Observación Especial del Alumno
-                  </label>
-                  {medical.special_observations && (
-                    <button
-                      type="button"
-                      onClick={() => setMedical({ ...medical, special_observations: '' })}
-                      className="text-[10px] font-black uppercase text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Quitar Nota
-                    </button>
-                  )}
-                </div>
-                <p className="text-[11px] text-text-muted">
-                  Si el Equipo de Gestión escribe una nota aquí, se mostrará únicamente una pequeña chincheta (📌) al final del nombre del alumno en los listados del aula para que los docentes la consulten.
-                </p>
-                <textarea
-                  value={medical.special_observations || ''}
-                  onChange={(e) => setMedical({ ...medical, special_observations: e.target.value })}
-                  placeholder="Escribe aquí la observación o indicación especial para este alumno (o déjalo vacío si no tiene)..."
-                  rows={2}
-                  className="w-full px-4 py-2.5 rounded-xl border border-border-main bg-white dark:bg-surface text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed text-text-main"
-                />
               </div>
 
               <div className="grid md:grid-cols-3 gap-6">
@@ -1662,15 +1647,33 @@ export const StudentForm = ({
                   />
                 </div>
               </div>
-              <div>
-                <label className={labelClass}>Observaciones de Rendimiento</label>
+              {/* NOTA FIJA / OBSERVACIÓN ESPECIAL DEL ALUMNO (EQUIPO DE GESTIÓN) */}
+              <div className="bg-amber-500/10 border border-amber-400/40 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-200 tracking-wider flex items-center gap-1.5">
+                    <Pin size={14} className="fill-amber-500 text-amber-600 rotate-45" /> Nota Fija / Observación Especial del Alumno
+                  </label>
+                  {history.performance_observations && (
+                    <button
+                      type="button"
+                      onClick={() => setHistory({ ...history, performance_observations: '' })}
+                      className="text-[10px] font-black uppercase text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Quitar Nota
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Si el Equipo de Gestión escribe una nota fija u observación especial aquí, aparecerá una pequeña chincheta (📌) junto al nombre del alumno en los listados del aula para que los docentes la consulten. Déjalo vacío si no tiene observaciones especiales.
+                </p>
                 <textarea
-                  value={history.performance_observations}
+                  value={history.performance_observations || ''}
                   onChange={(e) =>
                     setHistory({ ...history, performance_observations: e.target.value })
                   }
-                  className={inputClass}
-                  rows={2}
+                  placeholder="Escribe aquí la indicación u observación especial para el alumno (ej. Orientación y Psicología, condición de aprendizaje, etc.)..."
+                  rows={3}
+                  className="w-full px-4 py-2.5 rounded-xl border border-border-main bg-white dark:bg-surface text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed text-text-main"
                 />
               </div>
               <div className="flex justify-between pt-6">
