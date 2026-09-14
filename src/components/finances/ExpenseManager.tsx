@@ -880,9 +880,37 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   };
 
   const handleCondensedCashClosing = () => {
-    const doc = new jsPDF({ format: [100, 150] });
     if (filteredEntries.length === 0)
       return toast.error('No hay movimientos en este rango de fechas');
+
+    const summary: Record<string, number> = {};
+    filteredEntries.forEach((e) => {
+      const acc = e.account || 'GENERAL';
+      if (!summary[acc]) summary[acc] = 0;
+      summary[acc] += e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0);
+    });
+
+    const methodSummary: Record<string, number> = { cash: 0, transfer: 0, internal_transfer: 0, card: 0, check: 0 };
+    filteredEntries.forEach((e) => {
+      if (e.type === 'income') {
+        const isInternal = e.account === 'TRANSFERENCIA ENTRE CAJAS' || e.method === 'internal_transfer';
+        const method = isInternal ? 'internal_transfer' : (e.method || 'cash');
+        const amt = Number(e.amount || 0);
+        if (methodSummary.hasOwnProperty(method)) methodSummary[method] += amt;
+        else if (method === 'bank_transfer') methodSummary['transfer'] += amt;
+        else methodSummary['cash'] += amt;
+      }
+    });
+
+    const accountEntries = Object.entries(summary);
+    const accountCount = accountEntries.length;
+    const activeMethods = Object.entries(methodSummary).filter(([, total]) => total > 0);
+
+    // Dynamic height calculation so all accounts, totals, payment breakdown and signatures fit without getting cut off
+    const calculatedHeight = 48 + (accountCount * 6) + 26 + 12 + (activeMethods.length * 5) + 16 + 35 + 25;
+    const pageHeight = Math.max(150, Math.ceil(calculatedHeight));
+
+    const doc = new jsPDF({ format: [100, pageHeight] });
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -894,12 +922,6 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.text(`PERIODO: ${startDate} al ${endDate}`, 50, 26, { align: 'center' });
     doc.line(10, 30, 90, 30);
 
-    const summary: any = {};
-    filteredEntries.forEach((e) => {
-      if (!summary[e.account]) summary[e.account] = 0;
-      summary[e.account] += e.type === 'income' ? e.amount : -e.amount;
-    });
-
     let currentY = 40;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
@@ -909,18 +931,18 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     currentY += 8;
 
     doc.setFont('helvetica', 'normal');
-    Object.entries(summary).forEach(([account, total]: [string, any]) => {
-      doc.text(account.substring(0, 25), 10, currentY);
+    accountEntries.forEach(([account, total]) => {
+      doc.text(account.length > 28 ? account.substring(0, 27) + '…' : account, 10, currentY);
       doc.text(`RD$ ${total.toLocaleString()}`, 90, currentY, { align: 'right' });
       currentY += 6;
     });
 
     const totalIncome = filteredEntries
       .filter((e) => e.type === 'income')
-      .reduce((sum, e) => sum + Number(e.amount), 0);
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const totalExpense = filteredEntries
       .filter((e) => e.type === 'expense')
-      .reduce((sum, e) => sum + Number(e.amount), 0);
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const netBalance = totalIncome - totalExpense;
 
     currentY += 2;
@@ -939,7 +961,8 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     doc.setFillColor(240, 240, 240);
     doc.rect(10, currentY - 4, 80, 6, 'F');
-    doc.text('BALANCE DEL DÍA:', 12, currentY);
+    const balanceLabel = startDate === endDate ? 'BALANCE DEL DÍA:' : 'BALANCE DEL PERIODO:';
+    doc.text(balanceLabel, 12, currentY);
     doc.text(`RD$ ${netBalance.toLocaleString()}`, 88, currentY, { align: 'right' });
     currentY += 8;
 
@@ -951,31 +974,18 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.text('DESGLOSE POR MÉTODO:', 10, currentY);
     currentY += 6;
 
-    const methodSummary: any = { cash: 0, transfer: 0, internal_transfer: 0, card: 0, check: 0 };
-    filteredEntries.forEach((e) => {
-      if (e.type === 'income') {
-        const isInternal = e.account === 'TRANSFERENCIA ENTRE CAJAS' || e.method === 'internal_transfer';
-        const method = isInternal ? 'internal_transfer' : (e.method || 'cash');
-        if (methodSummary.hasOwnProperty(method)) methodSummary[method] += e.amount;
-        else if (method === 'bank_transfer') methodSummary['transfer'] += e.amount;
-        else methodSummary['cash'] += e.amount;
-      }
-    });
-
     doc.setFont('helvetica', 'normal');
-    const methodNames: any = {
+    const methodNames: Record<string, string> = {
       cash: 'Efectivo',
       transfer: 'Transferencia Bancaria',
       internal_transfer: 'Traspaso Interno (Entre Cajas)',
       card: 'Tarjeta',
       check: 'Cheque'
     };
-    Object.entries(methodSummary).forEach(([method, total]: [string, any]) => {
-      if (total > 0) {
-        doc.text(methodNames[method] || method, 15, currentY);
-        doc.text(`RD$ ${total.toLocaleString()}`, 90, currentY, { align: 'right' });
-        currentY += 5;
-      }
+    activeMethods.forEach(([method, total]) => {
+      doc.text(methodNames[method] || method, 15, currentY);
+      doc.text(`RD$ ${total.toLocaleString()}`, 90, currentY, { align: 'right' });
+      currentY += 5;
     });
 
     doc.line(10, currentY + 2, 90, currentY + 2);
@@ -985,7 +995,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFillColor(245, 245, 245);
     doc.rect(10, currentY - 6, 80, 10, 'F');
     const grandTotal = filteredEntries.reduce(
-      (acc, e) => acc + (e.type === 'income' ? e.amount : -e.amount),
+      (acc, e) => acc + (e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0)),
       0
     );
     doc.text(`BALANCE: RD$ ${grandTotal.toLocaleString()}`, 50, currentY, { align: 'center' });
