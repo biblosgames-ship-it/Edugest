@@ -85,19 +85,8 @@ const isDeporteSubject = (sName: string) => {
 const isFirstCycleCourse = (course: any) => {
   const cGrade = (course?.grade || course?.name || '').toLowerCase();
   const cCycle = (course?.cycle || '').toLowerCase();
+  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
   if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
-  if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) {
-    const hasStrictC1Grade =
-      /^[1-3]/.test(cGrade) ||
-      cGrade.includes('1ro') ||
-      cGrade.includes('1ero') ||
-      cGrade.includes('2do') ||
-      cGrade.includes('3ro') ||
-      cGrade.includes('7mo') ||
-      cGrade.includes('8vo') ||
-      cGrade.includes('9no');
-    if (!hasStrictC1Grade) return false;
-  }
 
   if (
     cGrade.includes('segundo ciclo') ||

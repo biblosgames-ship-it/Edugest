@@ -35,6 +35,7 @@ import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText } from './LinkifiedText';
+import { getSubjectTheme } from '../utils/subjectColors';
 
 const toMins = (val: string) => {
   if (!val) return 0;
@@ -1341,6 +1342,17 @@ export const TeacherDashboard = ({
                 Tareas
               </button>
             )}
+
+            {onViewChange && (
+              <button
+                onClick={() => onViewChange('agenda')}
+                className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                title="Ir a Agenda Institucional"
+              >
+                <CalendarIcon size={13} />
+                Agenda
+              </button>
+            )}
           </div>
 
           {hidePeriodAlert && (
@@ -1635,20 +1647,24 @@ export const TeacherDashboard = ({
                               );
                             }
 
+                            const theme = getSubjectTheme(c.sub?.name);
                             return (
                               <div
                                 key={index}
-                                className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between"
+                                className={`${theme.bg} p-3 rounded-xl border ${theme.border} shadow-xs flex flex-col justify-between`}
                               >
                                 <div>
-                                  <p className="text-[10px] font-black text-slate-900 leading-tight uppercase line-clamp-2">
+                                  <p className={`text-[10px] font-black ${theme.text} leading-tight uppercase line-clamp-2`}>
                                     {c.sub?.name}
                                   </p>
-                                  <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
+                                  <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5">
                                     {c.tea?.name}
                                   </p>
                                 </div>
-                                <span className="text-[8px] font-black text-indigo-600 mt-2 block bg-indigo-50/50 w-fit px-1.5 py-0.5 rounded">
+                                <span
+                                  className="text-[8px] font-black mt-2 block w-fit px-2 py-0.5 rounded-md shadow-2xs"
+                                  style={{ backgroundColor: theme.badgeBg, color: theme.accent }}
+                                >
                                   {format12h(c.sTime)} - {format12h(c.eTime)}
                                 </span>
                               </div>
@@ -1962,36 +1978,38 @@ export const TeacherDashboard = ({
                         );
                       }
 
+                      const theme = getSubjectTheme(c.sub?.name);
                       return (
                         <div
                           key={c.id}
                           className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
                             c.isNow
-                              ? 'bg-emerald-50 border-emerald-400 shadow-sm'
-                              : 'bg-white border-slate-100 hover:border-slate-300'
+                              ? 'bg-emerald-50 border-emerald-400 shadow-sm ring-2 ring-emerald-200'
+                              : `${theme.bg} ${theme.border} shadow-xs`
                           }`}
                         >
                           <div className="flex items-center gap-4">
                             <div
-                              className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
+                              className="w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-xs"
+                              style={{ backgroundColor: c.isNow ? '#10b981' : theme.accent }}
                             >
                               {format12h(c.sTime)}
                             </div>
                             <div>
                               <p
-                                className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
+                                className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : theme.text}`}
                               >
                                 {c.sub?.name}
                               </p>
-                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
                                 {c.course?.level} • {c.course?.grade}
                                 {c.course?.section}
                               </p>
                             </div>
                           </div>
                           {c.room && (
-                            <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase">
-                              <MapPin size={10} className="text-indigo-600" /> {c.room.name}
+                            <span className="text-[9px] font-black text-slate-700 bg-white/85 border border-slate-200/80 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase shadow-xs">
+                              <MapPin size={10} style={{ color: theme.accent }} /> {c.room.name}
                             </span>
                           )}
                         </div>
@@ -2409,19 +2427,29 @@ export const TeacherDashboard = ({
                                 }
 
                                 // Celda de clase activa
+                                const theme = getSubjectTheme(cell.sub?.name);
                                 return (
                                   <td key={day} className="p-2 align-middle">
-                                    <div className="bg-indigo-50/80 border-2 border-indigo-150 rounded-2xl p-3 text-left relative overflow-hidden group hover:border-indigo-400 hover:shadow-lg transition-all duration-300">
-                                      <div className="absolute top-0 right-0 w-12 h-12 bg-indigo-500/5 blur-md rounded-full"></div>
-                                      <h5 className="text-xs font-black text-indigo-950 uppercase tracking-tight leading-tight">
-                                        {cell.sub?.name}
-                                      </h5>
-                                      <p className="text-[9px] font-black text-indigo-600 mt-1 uppercase tracking-tight">
+                                    <div className={`${theme.bg} border-2 ${theme.border} rounded-2xl p-3 text-left relative overflow-hidden group hover:shadow-lg transition-all duration-300`}>
+                                      <div
+                                        className="absolute top-0 right-0 w-12 h-12 blur-md rounded-full opacity-30 pointer-events-none"
+                                        style={{ backgroundColor: theme.accent }}
+                                      ></div>
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <span
+                                          className="w-2 h-2 rounded-full shrink-0"
+                                          style={{ backgroundColor: theme.accent }}
+                                        ></span>
+                                        <h5 className={`text-xs font-black ${theme.text} uppercase tracking-tight leading-tight`}>
+                                          {cell.sub?.name}
+                                        </h5>
+                                      </div>
+                                      <p className="text-[9px] font-black uppercase tracking-tight" style={{ color: theme.accent }}>
                                         Curso: {cell.course?.grade} {cell.course?.section}
                                       </p>
                                       {cell.room && (
-                                        <p className="text-[8px] font-bold text-slate-400 mt-1 flex items-center gap-1.5 uppercase">
-                                          <MapPin size={8} className="text-indigo-500" />{' '}
+                                        <p className="text-[8px] font-bold text-slate-500 mt-1 flex items-center gap-1.5 uppercase">
+                                          <MapPin size={8} style={{ color: theme.accent }} />{' '}
                                           {cell.room.name}
                                         </p>
                                       )}

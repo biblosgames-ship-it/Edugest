@@ -823,7 +823,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const handleCashClosing = () => {
     const doc = new jsPDF();
     const closingDateText = startDate === endDate ? startDate : `${startDate} al ${endDate}`;
-    if (filteredEntries.length === 0) return toast.error('Sin movimientos en el periodo seleccionado');
+    // Excluir transferencias internas del cuadre contable
+    const cuadreEntries = filteredEntries.filter(
+      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
+    );
+    if (cuadreEntries.length === 0) return toast.error('Sin movimientos válidos de cuadre en el periodo seleccionado');
 
     // HEADER
     doc.setFontSize(18);
@@ -841,7 +845,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     doc.text(`FECHA DE CIERRE: ${closingDateText}`, 14, 52);
 
-    const groupedEntries = groupLedgerEntries(filteredEntries);
+    const groupedEntries = groupLedgerEntries(cuadreEntries);
 
     autoTable(doc, {
       startY: 60,
@@ -862,7 +866,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'bold');
     doc.line(14, finalY, 196, finalY);
     doc.text(
-      `EFECTIVO EN CAJA: RD$ ${filteredEntries.reduce((acc, e) => acc + (e.type === 'income' ? e.amount : -e.amount), 0).toLocaleString()}`,
+      `EFECTIVO EN CAJA: RD$ ${cuadreEntries.reduce((acc, e) => acc + (e.type === 'income' ? e.amount : -e.amount), 0).toLocaleString()}`,
       196,
       finalY + 10,
       { align: 'right' }
@@ -880,21 +884,24 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   };
 
   const handleCondensedCashClosing = () => {
-    if (filteredEntries.length === 0)
-      return toast.error('No hay movimientos en este rango de fechas');
+    // Excluir transferencias internas del resumen contable condensado
+    const cuadreEntries = filteredEntries.filter(
+      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
+    );
+    if (cuadreEntries.length === 0)
+      return toast.error('No hay movimientos válidos de cuadre en este rango de fechas');
 
     const summary: Record<string, number> = {};
-    filteredEntries.forEach((e) => {
+    cuadreEntries.forEach((e) => {
       const acc = e.account || 'GENERAL';
       if (!summary[acc]) summary[acc] = 0;
       summary[acc] += e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0);
     });
 
-    const methodSummary: Record<string, number> = { cash: 0, transfer: 0, internal_transfer: 0, card: 0, check: 0 };
-    filteredEntries.forEach((e) => {
+    const methodSummary: Record<string, number> = { cash: 0, transfer: 0, card: 0, check: 0 };
+    cuadreEntries.forEach((e) => {
       if (e.type === 'income') {
-        const isInternal = e.account === 'TRANSFERENCIA ENTRE CAJAS' || e.method === 'internal_transfer';
-        const method = isInternal ? 'internal_transfer' : (e.method || 'cash');
+        const method = e.method || 'cash';
         const amt = Number(e.amount || 0);
         if (methodSummary.hasOwnProperty(method)) methodSummary[method] += amt;
         else if (method === 'bank_transfer') methodSummary['transfer'] += amt;
@@ -937,10 +944,10 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       currentY += 6;
     });
 
-    const totalIncome = filteredEntries
+    const totalIncome = cuadreEntries
       .filter((e) => e.type === 'income')
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    const totalExpense = filteredEntries
+    const totalExpense = cuadreEntries
       .filter((e) => e.type === 'expense')
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const netBalance = totalIncome - totalExpense;
@@ -978,7 +985,6 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     const methodNames: Record<string, string> = {
       cash: 'Efectivo',
       transfer: 'Transferencia Bancaria',
-      internal_transfer: 'Traspaso Interno (Entre Cajas)',
       card: 'Tarjeta',
       check: 'Cheque'
     };
@@ -994,7 +1000,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'bold');
     doc.setFillColor(245, 245, 245);
     doc.rect(10, currentY - 6, 80, 10, 'F');
-    const grandTotal = filteredEntries.reduce(
+    const grandTotal = cuadreEntries.reduce(
       (acc, e) => acc + (e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0)),
       0
     );
@@ -1027,7 +1033,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     doc.text(`Periodo: ${startDate} al ${endDate}`, 14, 46);
 
-    const groupedEntries = groupLedgerEntries(filteredEntries);
+    // Excluir transferencias internas del reporte PDF
+    const reportEntries = filteredEntries.filter(
+      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
+    );
+    const groupedEntries = groupLedgerEntries(reportEntries);
 
     const grouped: any = {};
     groupedEntries.forEach((e) => {
@@ -1075,7 +1085,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   };
 
   const handleExportCSV = () => {
-    const groupedEntries = groupLedgerEntries(filteredEntries);
+    // Excluir transferencias internas de la exportación a Excel / CSV
+    const reportEntries = filteredEntries.filter(
+      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
+    );
+    const groupedEntries = groupLedgerEntries(reportEntries);
     if (groupedEntries.length === 0) return toast.error('No hay movimientos para exportar');
 
     const headers = ['FECHA', 'CUENTA', 'ALUMNO_CLIENTE', 'GRADO', 'DESCRIPCION', 'METODO_PAGO', 'TIPO', 'MONTO'];

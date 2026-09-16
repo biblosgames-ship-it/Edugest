@@ -418,7 +418,8 @@ export const TeacherForm = () => {
       </form>
 
       <div className="bg-surface rounded-[2rem] border border-border-main shadow-2xl overflow-hidden">
-        <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto w-full touch-pan-x">
+          <table className="w-full min-w-[680px] text-left border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white">
               <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest w-1/4">
@@ -607,6 +608,7 @@ export const TeacherForm = () => {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

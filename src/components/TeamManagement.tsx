@@ -199,7 +199,8 @@ export const TeamManagement = () => {
       </div>
 
       <div className="bg-surface rounded-2xl border border-border-main shadow-sm overflow-hidden mx-2">
-        <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto w-full touch-pan-x">
+          <table className="w-full min-w-[520px] text-left border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white">
               <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">
@@ -283,6 +284,7 @@ export const TeamManagement = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {editingUser && (

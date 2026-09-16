@@ -59,6 +59,13 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  // Excuse specific states
+  const [excuseDurationType, setExcuseDurationType] = useState<'12h' | '24h' | '48h' | '3d' | '5d' | 'custom'>('12h');
+  const [excuseCustomHours, setExcuseCustomHours] = useState<number>(12);
+  const [excuseCustomUntilDate, setExcuseCustomUntilDate] = useState<string>('');
+  const [excuseColor, setExcuseColor] = useState<string>('amber'); // 'amber', 'indigo', 'emerald', 'rose', 'purple'
+
+
   // Recipient modes for different roles
   const [teacherTargetMode, setTeacherTargetMode] = useState<'student_parent' | 'entire_course' | 'management'>('student_parent');
   const [adminTargetMode, setAdminTargetMode] = useState<'teachers' | 'student_parent' | 'courses' | 'roles'>('teachers');
@@ -448,6 +455,30 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
 
     setIsSending(true);
     try {
+      const isExcuseMotive = (selectedMotive || '').toLowerCase().includes('excus') || (selectedMotive || '').toLowerCase().includes('ausenc');
+      let calculatedValidUntil: string | undefined = undefined;
+      let calculatedDurationHours: number | undefined = undefined;
+
+      if (isExcuseMotive) {
+        let hours = 12;
+        if (excuseDurationType === '12h') hours = 12;
+        else if (excuseDurationType === '24h') hours = 24;
+        else if (excuseDurationType === '48h') hours = 48;
+        else if (excuseDurationType === '3d') hours = 72;
+        else if (excuseDurationType === '5d') hours = 120;
+        else if (excuseDurationType === 'custom') {
+          if (excuseCustomUntilDate) {
+            calculatedValidUntil = new Date(excuseCustomUntilDate).toISOString();
+          } else {
+            hours = Math.max(1, excuseCustomHours || 12);
+          }
+        }
+        calculatedDurationHours = hours;
+        if (!calculatedValidUntil) {
+          calculatedValidUntil = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+        }
+      }
+
       const senderSuffix = isParent ? ' (Tutor)' : isTeacher ? ' (Docente)' : '';
       await dataService.saveCommunication({
         center_id: centerId,
@@ -459,7 +490,10 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
         target_courses: targetCourses,
         target_teachers: targetTeachers,
         target_student_ids: targetStudentIds,
-        target_student_name: targetStudentName
+        target_student_name: targetStudentName,
+        valid_until: calculatedValidUntil,
+        excuse_color: isExcuseMotive ? excuseColor : undefined,
+        duration_hours: calculatedDurationHours
       });
 
       setSuccessNotice('¡Mensaje enviado y registrado exitosamente!');
@@ -1200,6 +1234,115 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                   Añadir
                 </button>
               </div>
+
+              {/* OPCIONES ESPECÍFICAS DE VIGENCIA Y COLOR PARA EXCUSAS MÉDICAS / AUSENCIAS */}
+              {((selectedMotive || '').toLowerCase().includes('excus') || (selectedMotive || '').toLowerCase().includes('ausenc')) && (
+                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50/50 border-2 border-amber-200 rounded-2xl space-y-3.5 mt-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-amber-600" />
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                        Vigencia y Visibilidad en "Mi Aula"
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded-lg uppercase">
+                      Por defecto: 12 Horas
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Esta justificación resaltará automáticamente al alumno en el pase de lista y en la lista de aula con una nota visible, evitando tener que registrarla a diario si la ausencia abarca varias jornadas.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-amber-900">
+                      Tiempo de Permanencia:
+                    </label>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {[
+                        { id: '12h', label: '12 Horas (Default)' },
+                        { id: '24h', label: '24 Horas (1 Día)' },
+                        { id: '48h', label: '48 Horas (2 Días)' },
+                        { id: '3d', label: '3 Días' },
+                        { id: '5d', label: '5 Días (Semana)' },
+                        { id: 'custom', label: 'Personalizado' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setExcuseDurationType(opt.id as any)}
+                          className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border text-center cursor-pointer ${
+                            excuseDurationType === opt.id
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                              : 'bg-white text-amber-900 border-amber-200 hover:bg-amber-100/60'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {excuseDurationType === 'custom' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-black uppercase text-amber-900">
+                          Horas de duración:
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={720}
+                          value={excuseCustomHours}
+                          onChange={(e) => setExcuseCustomHours(Math.max(1, Number(e.target.value)))}
+                          placeholder="Ej. 36"
+                          className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-black uppercase text-amber-900">
+                          O fecha y hora límite de fin:
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={excuseCustomUntilDate}
+                          onChange={(e) => setExcuseCustomUntilDate(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5 pt-1">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-amber-900">
+                      Color Distintivo del Alumno en Aula:
+                    </label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {[
+                        { id: 'amber', label: 'Ámbar (Clásico)', bg: 'bg-amber-500', ring: 'ring-amber-500' },
+                        { id: 'rose', label: 'Rosa / Urgencia', bg: 'bg-rose-500', ring: 'ring-rose-500' },
+                        { id: 'indigo', label: 'Índigo Institucional', bg: 'bg-indigo-600', ring: 'ring-indigo-600' },
+                        { id: 'emerald', label: 'Esmeralda', bg: 'bg-emerald-600', ring: 'ring-emerald-600' },
+                        { id: 'purple', label: 'Púrpura', bg: 'bg-purple-600', ring: 'ring-purple-600' },
+                      ].map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setExcuseColor(c.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                            excuseColor === c.id
+                              ? 'bg-white border-amber-400 ring-2 ' + c.ring + ' text-slate-900 shadow-sm'
+                              : 'bg-white/80 border-amber-200 text-slate-600 hover:bg-white'
+                          }`}
+                        >
+                          <span className={`w-3 h-3 rounded-full ${c.bg}`} />
+                          <span>{c.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

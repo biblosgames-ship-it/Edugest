@@ -96,6 +96,26 @@ export const useSchoolBell = () => {
     playSchoolBellSound(soundStyle, volume);
   }, [soundStyle, volume]);
 
+  // Detectar si el centro tiene tanda vespertina activa
+  const hasAfternoonShift = useMemo(() => {
+    // 1. Verificar si hay cursos en la tarde
+    const hasVespCourse = (state.courses || []).some((c: any) => {
+      const t = (c.tanda || '').toLowerCase().trim();
+      return t.includes('ves') || t.includes('tar');
+    });
+    // 2. Verificar si en levelSchedules hay tanda vespertina
+    const hasVespSchedule = (state.levelSchedules || []).some((ls: any) => {
+      const s = (ls.shift || '').toLowerCase().trim();
+      return s.includes('ves') || s.includes('tar');
+    });
+    // 3. Verificar si en el horario generado hay clases en la tarde
+    const hasVespEntries = (state.schedule || []).some((s: any) => {
+      const sh = (s.shift || '').toLowerCase().trim();
+      return sh.includes('ves') || sh.includes('tar');
+    });
+    return hasVespCourse || hasVespSchedule || hasVespEntries;
+  }, [state.courses, state.levelSchedules, state.schedule]);
+
   // Construir los horarios de timbrado activos
   const bellSlots = useMemo<BellSlot[]>(() => {
     const rawSlots: BellSlot[] = [];
@@ -103,6 +123,9 @@ export const useSchoolBell = () => {
     // 1. Integrar horarios de levelSchedules si existen
     if (state.levelSchedules && state.levelSchedules.length > 0) {
       state.levelSchedules.forEach((ls: any) => {
+        const isVespLs = (ls.shift || '').toLowerCase().includes('ves') || (ls.shift || '').toLowerCase().includes('tar');
+        if (!hasAfternoonShift && isVespLs) return;
+
         if (ls.start_time) {
           const s5 = ls.start_time.substring(0, 5);
           rawSlots.push({
@@ -127,6 +150,9 @@ export const useSchoolBell = () => {
       state.breakPreferences.forEach((bp: any) => {
         const bStart = (bp.startTime || bp.start_time || '').substring(0, 5);
         if (bStart) {
+          const [h] = bStart.split(':').map(Number);
+          // Si el centro es solo matutino, omitir recreos de la tarde (> 13:30)
+          if (!hasAfternoonShift && h >= 14) return;
           rawSlots.push({
             time: bStart,
             label: bp.name || 'Recreo / Descanso',
@@ -136,21 +162,28 @@ export const useSchoolBell = () => {
       });
     }
 
-    // Si no hay horarios personalizados suficientes, usar el estándar oficial
-    if (rawSlots.length < 4) {
-      return [...DEFAULT_SCHEDULE_MATUTINA, ...DEFAULT_SCHEDULE_VESPERTINA];
+    // Si el centro solo opera en la mañana, usar solo los bloques matutinos
+    const fallbackDefaults = hasAfternoonShift
+      ? [...DEFAULT_SCHEDULE_MATUTINA, ...DEFAULT_SCHEDULE_VESPERTINA]
+      : [...DEFAULT_SCHEDULE_MATUTINA];
+
+    if (rawSlots.length < 3) {
+      return fallbackDefaults;
     }
 
     // Ordenar y desduplicar por hora
     const uniqueMap = new Map<string, BellSlot>();
-    [...rawSlots, ...DEFAULT_SCHEDULE_MATUTINA, ...DEFAULT_SCHEDULE_VESPERTINA].forEach((slot) => {
+    [...rawSlots, ...fallbackDefaults].forEach((slot) => {
+      const [h] = slot.time.split(':').map(Number);
+      // Si el centro solo es matutino, no agregar horas vespertinas
+      if (!hasAfternoonShift && h >= 14 && slot.type !== 'dismissal') return;
       if (!uniqueMap.has(slot.time)) {
         uniqueMap.set(slot.time, slot);
       }
     });
 
     return Array.from(uniqueMap.values()).sort((a, b) => a.time.localeCompare(b.time));
-  }, [state.levelSchedules, state.breakPreferences]);
+  }, [state.levelSchedules, state.breakPreferences, hasAfternoonShift]);
 
   // Actualizar reloj cada segundo
   useEffect(() => {
@@ -169,6 +202,22 @@ export const useSchoolBell = () => {
   useEffect(() => {
     // Si el timbre está desactivado o es fin de semana (Sábado/Domingo), NO timbrar
     if (!isBellEnabled || !isSchoolDay) return;
+
+    // Si el centro solo opera en horario matutino, desactivar el timbre al finalizar la última hora
+    if (!hasAfternoonShift) {
+      const currentH = currentTime.getHours();
+      const currentM = currentTime.getMinutes();
+      const nowMins = currentH * 60 + currentM;
+
+      const morningSlotMins = bellSlots.map((s) => {
+        const [sh, sm] = s.time.split(':').map(Number);
+        return sh * 60 + sm;
+      });
+      const maxMorningMins = morningSlotMins.length > 0 ? Math.max(...morningSlotMins) : 870; // máx 14:30
+
+      // Ya finalizó la última hora matutina: no seguir sonando en toda la tarde
+      if (nowMins > maxMorningMins) return;
+    }
 
     const hours = String(currentTime.getHours()).padStart(2, '0');
     const minutes = String(currentTime.getMinutes()).padStart(2, '0');
@@ -270,6 +319,7 @@ export const useSchoolBell = () => {
 
     // Si ya finalizaron todas las rotaciones del día de hoy
     const isFriday = dayOfWeek === 5;
+    const isMorningCenterEnded = !hasAfternoonShift;
     return {
       isSchoolDay: false,
       isWeekend: false,
@@ -278,9 +328,11 @@ export const useSchoolBell = () => {
       minsLeft: 0,
       secsLeft: 0,
       timeFormatted: isFriday ? `Lunes a las ${firstSlot.time}` : `Mañana a las ${firstSlot.time}`,
-      statusText: isFriday ? 'Fin de jornada semanal' : 'Jornada de hoy concluida'
+      statusText: isMorningCenterEnded
+        ? (isFriday ? 'Fin de jornada semanal (Matutina)' : 'Jornada Matutina concluida • Timbre inactivo')
+        : (isFriday ? 'Fin de jornada semanal' : 'Jornada de hoy concluida')
     };
-  }, [currentTime, isWeekend, dayOfWeek, bellSlots]);
+  }, [currentTime, isWeekend, dayOfWeek, bellSlots, hasAfternoonShift]);
 
   return {
     isBellEnabled,

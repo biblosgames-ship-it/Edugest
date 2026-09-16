@@ -245,11 +245,11 @@ export const FinanceDashboard = () => {
     // Ingresos del día (Pagos de estudiantes)
     const dailyTransactions = transactions.filter(t => (t.created_at || '').startsWith(dashboardDate));
     
-    // Gastos e ingresos extras del sistema viejo (finance_expenses) para ese día
-    const dailyOldExpenses = expenses.filter(e => (e.created_at?.startsWith(dashboardDate) || e.date === dashboardDate));
+    // Gastos e ingresos extras del sistema viejo (finance_expenses) para ese día (excluyendo transferencias internas)
+    const dailyOldExpenses = expenses.filter(e => (e.created_at?.startsWith(dashboardDate) || e.date === dashboardDate) && e.category !== 'TRANSFERENCIA ENTRE CAJAS');
     
-    // Gastos e ingresos extras del sistema nuevo (finance_ledger_entries) para ese día
-    const dailyLedger = ledgerEntries.filter(e => e.date === dashboardDate || e.created_at?.startsWith(dashboardDate));
+    // Gastos e ingresos extras del sistema nuevo (finance_ledger_entries) para ese día (excluyendo transferencias internas)
+    const dailyLedger = ledgerEntries.filter(e => (e.date === dashboardDate || e.created_at?.startsWith(dashboardDate)) && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer');
 
     // Ingresos y egresos de Caja Chica (Filtrados por la Fecha de Cuadre seleccionada)
     const txIncomeCajaChica = dailyTransactions.filter(t => (t.payment_method !== 'transfer' && t.payment_method !== 'bank_transfer')).reduce((acc, t) => acc + Number(t.amount_paid), 0);
@@ -277,10 +277,10 @@ export const FinanceDashboard = () => {
     const outCajaGeneral = oldOutCG + ledgerOutCG;
 
     // Caja General - Acumulado a la fecha
-    const accOldInCG = expenses.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const accLedgerInCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const accOldOutCG = expenses.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
-    const accLedgerOutCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general')).reduce((acc, e) => acc + Number(e.amount), 0);
+    const accOldInCG = expenses.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && e.category !== 'TRANSFERENCIA ENTRE CAJAS').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerInCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'income' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && !isSpecialCat(e.account) && !e.description?.includes('Cobro de:') && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accOldOutCG = expenses.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && e.category !== 'TRANSFERENCIA ENTRE CAJAS').reduce((acc, e) => acc + Number(e.amount), 0);
+    const accLedgerOutCG = ledgerEntries.filter(e => isAccMatch(e) && e.type === 'expense' && ((e.cash_account || 'caja_chica') === 'banco' || e.cash_account === 'caja_general') && e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer').reduce((acc, e) => acc + Number(e.amount), 0);
     const accCajaGeneral = (accOldInCG + accLedgerInCG) - (accOldOutCG + accLedgerOutCG);
 
     const cajaGeneral = { in: inCajaGeneral, out: outCajaGeneral, net: inCajaGeneral - outCajaGeneral, accumulated: accCajaGeneral };

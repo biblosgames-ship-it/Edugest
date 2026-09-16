@@ -550,8 +550,8 @@ export const AdminDashboard = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto w-full touch-pan-x">
+                <table className="w-full min-w-[650px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border-main">
                       <th className="py-4 px-2 font-black text-[9px] text-text-muted uppercase tracking-widest">

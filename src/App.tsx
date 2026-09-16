@@ -173,9 +173,9 @@ function AppContent() {
   const allowed = useMemo(() => {
     const userRole = profile?.role || 'student';
 
-    // Para padres y alumnos: acceso a su aula virtual, tareas por materias, horario de clases y mensajería interna
+    // Para padres y alumnos: acceso a su aula virtual, tareas por materias, horario de clases, agenda del centro y mensajería interna
     if (isStudentOrParent) {
-      return ['dashboard', 'tasks', 'schedule', 'communications'];
+      return ['dashboard', 'tasks', 'schedule', 'agenda', 'communications'];
     }
 
     let panels = [...rawAllowed];
@@ -389,7 +389,11 @@ function AppContent() {
       label: isStudentOrParent ? 'Horario de Clases' : 'Horarios',
       icon: CalendarDays
     },
-    { id: 'agenda', label: 'Calendario', icon: Calendar },
+    {
+      id: 'agenda',
+      label: isStudentOrParent ? 'Agenda del Centro' : 'Calendario',
+      icon: Calendar
+    },
     {
       id: 'tasks',
       label: isStudentOrParent ? 'Tareas' : 'Asignar Tareas',
@@ -552,7 +556,7 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'agenda' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <Agenda readOnly={false} />
+              <Agenda readOnly={isStudentOrParent} />
             </div>
           </div>
         )}

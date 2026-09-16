@@ -612,20 +612,11 @@ export const ScheduleViewer = () => {
     const cGrade = (course?.grade || course?.name || '').toLowerCase();
     const cCycle = (course?.cycle || '').toLowerCase();
 
+    // Si explícitamente se configuró como Segundo Ciclo, nunca debe evaluarse como Primer Ciclo
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return false;
+
     // Verificación directa por nombre del ciclo si está explícito
     if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return true;
-    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) {
-      const hasStrictC1Grade =
-        /^[1-3]/.test(cGrade) ||
-        cGrade.includes('1ro') ||
-        cGrade.includes('1ero') ||
-        cGrade.includes('2do') ||
-        cGrade.includes('3ro') ||
-        cGrade.includes('7mo') ||
-        cGrade.includes('8vo') ||
-        cGrade.includes('9no');
-      if (!hasStrictC1Grade) return false;
-    }
 
     if (
       cGrade.includes('segundo ciclo') ||
@@ -642,6 +633,15 @@ export const ScheduleViewer = () => {
       cGrade.includes('1er.ciclo')
     ) {
       return true;
+    }
+
+    // Si el nivel es Secundario, 1ro y 2do de Secundaria son Primer Ciclo (o 3ro si no es 2do ciclo)
+    const isSecundario = (course?.level || '').toLowerCase().includes('secun');
+    if (isSecundario) {
+      if (cGrade.includes('1ro') || cGrade.includes('1ero') || cGrade.includes('2do')) return true;
+      if (cGrade.includes('4to') || cGrade.includes('5to') || cGrade.includes('6to')) return false;
+      // 3ro de Secundaria: en centros con recreo vespertino 16:30 para 3ro a 6to, 3ro pertenece al bloque mayor
+      return false;
     }
 
     return (
@@ -672,8 +672,10 @@ export const ScheduleViewer = () => {
     const cGrade = (course?.grade || course?.name || '').toLowerCase();
     const cCycle = (course?.cycle || '').toLowerCase();
 
-    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
+    // Si explícitamente se configuró como Primer Ciclo, nunca es Segundo Ciclo
     if (cCycle.includes('primer') || cCycle.includes('1er') || cCycle.includes('1')) return false;
+
+    if (cCycle.includes('segundo') || cCycle.includes('2do') || cCycle.includes('2')) return true;
 
     if (
       cGrade.includes('segundo ciclo') ||
@@ -690,6 +692,12 @@ export const ScheduleViewer = () => {
       cGrade.includes('1er.ciclo')
     ) {
       return false;
+    }
+
+    const isSecundario = (course?.level || '').toLowerCase().includes('secun');
+    if (isSecundario) {
+      if (cGrade.includes('3ro') || cGrade.includes('4to') || cGrade.includes('5to') || cGrade.includes('6to')) return true;
+      if (cGrade.includes('1ro') || cGrade.includes('2do')) return false;
     }
 
     return (
@@ -710,6 +718,171 @@ export const ScheduleViewer = () => {
       cGrade.includes('décimo')
     );
   }, []);
+
+  // Función para determinar si un docente trabaja en dos niveles o ciclos con recreos desfasados en la misma tanda
+  const getTeacherSplitDistribution = useCallback(
+    (teacherId: string, shift: string) => {
+      const emptyResult = {
+        isSplit: false,
+        splitType: 'level' as 'level' | 'cycle',
+        group1Name: '',
+        group2Name: '',
+        group1Items: [] as any[],
+        group2Items: [] as any[],
+        group1Total: 0,
+        group2Total: 0,
+        totalHours: 0
+      };
+
+      if (!teacherId) return emptyResult;
+
+      const shiftBase = (shift || 'Matutina').toLowerCase().substring(0, 3);
+      const isShiftMorn = shiftBase === 'mat';
+
+      // 1. Obtener los cursos en los que el docente tiene carga académica en esta tanda
+      const teacherCourseIds = new Set<string>();
+      (state.assignments || []).forEach((a: any) => {
+        if (isSameTeacher(a.teacher_id || a.teacherId, teacherId)) {
+          teacherCourseIds.add(String(a.course_id || a.courseId));
+        }
+      });
+      (state.schedule || []).forEach((s: any) => {
+        if (isSameTeacher(s.teacher_id, teacherId)) {
+          teacherCourseIds.add(String(s.course_id || s.courseId));
+        }
+      });
+
+      const coursesInShift = (state.courses || []).filter((c: any) => {
+        if (!teacherCourseIds.has(String(c.id))) return false;
+        const cTanda = (c.tanda || '').toLowerCase().trim();
+        const cLvl = (c.level || '').toLowerCase().trim();
+        if (isShiftMorn) {
+          return !cTanda.includes('ves') && !cTanda.includes('tar');
+        } else {
+          return cTanda.includes('ves') || cTanda.includes('tar') || (cTanda === '' && cLvl.includes('secun'));
+        }
+      });
+
+      if (coursesInShift.length === 0) return emptyResult;
+
+      // Evaluar Primaria vs Secundaria en la misma tanda
+      const hasPrimaria = coursesInShift.some((c: any) => (c.level || '').toLowerCase().includes('primar'));
+      const hasSecundaria = coursesInShift.some((c: any) => (c.level || '').toLowerCase().includes('secun'));
+
+      // Evaluar Primer Ciclo vs Segundo Ciclo en la misma tanda
+      const hasC1 = coursesInShift.some((c: any) => isCourseFirstCycle(c));
+      const hasC2 = coursesInShift.some((c: any) => isCourseSecondCycle(c));
+
+      // Verificar si hay recreos diferentes configurados en esta tanda
+      const shiftBPs = (state.breakPreferences || []).filter((bp: any) => {
+        const rawM = toMins(bp.startTime || bp.start_time);
+        const isBpMorn = rawM >= 420 && rawM < 780;
+        return isShiftMorn === isBpMorn;
+      });
+      const distinctBreakTimes = new Set(
+        shiftBPs.map((bp: any) => (bp.startTime || bp.start_time || '').substring(0, 5))
+      );
+      const hasMultipleBreaks = distinctBreakTimes.size > 1;
+
+      let isSplit = false;
+      let splitType: 'level' | 'cycle' = 'level';
+
+      if (hasPrimaria && hasSecundaria) {
+        isSplit = true;
+        splitType = 'level';
+      } else if (hasC1 && hasC2 && (hasMultipleBreaks || !isShiftMorn)) {
+        isSplit = true;
+        splitType = 'cycle';
+      }
+
+      if (!isSplit) return emptyResult;
+
+      const group1Name = splitType === 'level' ? 'Nivel Primario' : 'Primer Ciclo';
+      const group2Name = splitType === 'level' ? 'Nivel Secundario' : 'Segundo Ciclo';
+
+      const group1Items: any[] = [];
+      const group2Items: any[] = [];
+
+      coursesInShift.forEach((course: any) => {
+        const isG1 =
+          splitType === 'level'
+            ? (course.level || '').toLowerCase().includes('primar')
+            : isCourseFirstCycle(course);
+
+        // Materias asignadas al docente en este curso
+        const courseAssignments = (state.assignments || []).filter(
+          (a: any) =>
+            isSameTeacher(a.teacher_id || a.teacherId, teacherId) &&
+            String(a.course_id || a.courseId) === String(course.id)
+        );
+
+        if (courseAssignments.length > 0) {
+          courseAssignments.forEach((asg: any) => {
+            const subject = (state.subjects || []).find((s: any) => String(s.id) === String(asg.subject_id));
+            const hours = Number(asg.hours_per_week || asg.hoursPerWeek || 0);
+            const item = {
+              courseId: course.id,
+              courseName: `${course.grade || ''} "${course.section || ''}"`,
+              level: course.level || '',
+              cycle: course.cycle || (isCourseFirstCycle(course) ? 'Primer Ciclo' : 'Segundo Ciclo'),
+              subjectName: subject?.name || 'Materia',
+              hours
+            };
+            if (isG1) group1Items.push(item);
+            else group2Items.push(item);
+          });
+        } else {
+          // Si no tiene asignaciones en la tabla assignments pero sí en schedule
+          const courseScheduleEntries = (state.schedule || []).filter(
+            (s: any) =>
+              isSameTeacher(s.teacher_id, teacherId) &&
+              String(s.course_id || s.courseId) === String(course.id)
+          );
+          const distinctSubjectIds = [...new Set(courseScheduleEntries.map((s: any) => String(s.subject_id)))];
+          distinctSubjectIds.forEach((sId) => {
+            const subject = (state.subjects || []).find((s: any) => String(s.id) === sId);
+            const hours = courseScheduleEntries.filter((s: any) => String(s.subject_id) === sId).length;
+            const item = {
+              courseId: course.id,
+              courseName: `${course.grade || ''} "${course.section || ''}"`,
+              level: course.level || '',
+              cycle: course.cycle || (isCourseFirstCycle(course) ? 'Primer Ciclo' : 'Segundo Ciclo'),
+              subjectName: subject?.name || 'Materia',
+              hours
+            };
+            if (isG1) group1Items.push(item);
+            else group2Items.push(item);
+          });
+        }
+      });
+
+      const group1Total = group1Items.reduce((acc, i) => acc + i.hours, 0);
+      const group2Total = group2Items.reduce((acc, i) => acc + i.hours, 0);
+      const totalHours = group1Total + group2Total;
+
+      return {
+        isSplit: true,
+        splitType,
+        group1Name,
+        group2Name,
+        group1Items,
+        group2Items,
+        group1Total,
+        group2Total,
+        totalHours
+      };
+    },
+    [
+      state.assignments,
+      state.schedule,
+      state.courses,
+      state.subjects,
+      state.breakPreferences,
+      isSameTeacher,
+      isCourseFirstCycle,
+      isCourseSecondCycle
+    ]
+  );
 
   const getSlotsForCourse = useCallback((course: any) => {
     const cTanda = (course?.tanda || '').toLowerCase();
@@ -1317,6 +1490,11 @@ export const ScheduleViewer = () => {
     });
   }, [buildScheduleMap, filteredSchedule, slots, filterType, filterId, state.courses, isMorning]);
 
+  const activeTeacherSplitDist = useMemo(() => {
+    if (filterType !== 'teacher' || !filterId) return null;
+    return getTeacherSplitDistribution(filterId, selectedShift);
+  }, [filterType, filterId, selectedShift, getTeacherSplitDistribution]);
+
   const conflicts = useMemo(() => {
     const conflictIds: string[] = [];
     const currentShiftSchedule = schedule.filter((s) => s.shift === selectedShift);
@@ -1648,6 +1826,100 @@ export const ScheduleViewer = () => {
         targetTeachers.forEach((teacher: any, idx: number) => {
           if (idx > 0) doc.addPage('a4', 'landscape');
           const teacherName = teacher?.name || 'Docente';
+
+          // Verificar si el docente tiene carga compartida entre niveles o ciclos con recreos desfasados
+          const splitDist = getTeacherSplitDistribution(teacher.id, selectedShift);
+          if (splitDist.isSplit) {
+            // Header Superior Elegante
+            doc.setFillColor(30, 41, 59); // slate-800
+            doc.rect(0, 0, 297, 18, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text(centerName.toUpperCase(), 14, 11);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`TANDA ${selectedShift.toUpperCase()} | AÑO ESCOLAR: ${selectedYear || '2026-2027'}`, 283, 11, { align: 'right' });
+
+            // Título del Docente
+            doc.setTextColor(15, 23, 42); // slate-900
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`DISTRIBUCIÓN OFICIAL DE HORAS: ${teacherName.toUpperCase()}`, 14, 28);
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Docente con asignación en ${splitDist.group1Name} y ${splitDist.group2Name} (Recreos y horarios escalonados)`, 14, 33);
+
+            let currentTableY = 40;
+
+            // Tabla 1: Grupo 1
+            autoTable(doc, {
+              startY: currentTableY,
+              head: [
+                [{ content: `DISTRIBUCIÓN: ${splitDist.group1Name.toUpperCase()}`, colSpan: 3, styles: { fillColor: [79, 70, 229] } }],
+                ['CURSO', 'ASIGNATURA / MATERIA', 'HORAS SEMANALES']
+              ],
+              body: splitDist.group1Items.map((item: any) => [
+                item.courseName,
+                item.subjectName,
+                `${item.hours}h / sem`
+              ]),
+              foot: [['', 'SUBTOTAL:', `${splitDist.group1Total}h / sem`]],
+              footStyles: { fillColor: [241, 245, 249], textColor: [0, 0, 0], fontStyle: 'bold' },
+              theme: 'grid',
+              styles: { fontSize: 8 },
+              headStyles: { fontStyle: 'bold' }
+            });
+
+            currentTableY = (doc as any).lastAutoTable.finalY + 8;
+
+            // Tabla 2: Grupo 2
+            autoTable(doc, {
+              startY: currentTableY,
+              head: [
+                [{ content: `DISTRIBUCIÓN: ${splitDist.group2Name.toUpperCase()}`, colSpan: 3, styles: { fillColor: [124, 58, 237] } }],
+                ['CURSO', 'ASIGNATURA / MATERIA', 'HORAS SEMANALES']
+              ],
+              body: splitDist.group2Items.map((item: any) => [
+                item.courseName,
+                item.subjectName,
+                `${item.hours}h / sem`
+              ]),
+              foot: [['', 'SUBTOTAL:', `${splitDist.group2Total}h / sem`]],
+              footStyles: { fillColor: [241, 245, 249], textColor: [0, 0, 0], fontStyle: 'bold' },
+              theme: 'grid',
+              styles: { fontSize: 8 },
+              headStyles: { fontStyle: 'bold' }
+            });
+
+            currentTableY = (doc as any).lastAutoTable.finalY + 10;
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(`CARGA CONSOLIDADA TOTAL: ${splitDist.totalHours} HORAS SEMANALES`, 14, currentTableY);
+
+            // Firmas al pie de página
+            if (currentTableY > 160) doc.addPage('a4', 'landscape');
+            const signY = Math.min(currentTableY + 25, 185);
+            doc.line(20, signY, 80, signY);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text('FIRMA DEL DOCENTE', 35, signY + 4);
+
+            doc.line(110, signY, 170, signY);
+            doc.text('COORDINACIÓN PEDAGÓGICA', 118, signY + 4);
+
+            doc.line(200, signY, 260, signY);
+            doc.text('DIRECCIÓN DEL CENTRO', 214, signY + 4);
+
+            return; // Pasar al siguiente docente sin pintar la matriz horaria
+          }
 
           // Encontrar los cursos del docente en esta tanda
           const teacherCourseIds = [
@@ -2702,6 +2974,9 @@ export const ScheduleViewer = () => {
                   filterId &&
                   (() => {
                     const teacher = state.teachers.find((t: any) => String(t.id) === String(filterId));
+                    if (activeTeacherSplitDist?.isSplit) {
+                      return `DISTRIBUCIÓN DE CARGA DOCENTE: ${teacher?.name || ''} - ${teacher?.area || 'GENERAL'}`;
+                    }
                     return `HORARIO DEL DOCENTE: ${teacher?.name || ''} - ${teacher?.area || 'GENERAL'}`;
                   })()}
                 {filterType === 'all' && `HORARIO GENERAL DE CLASES - TANDA ${selectedShift.toUpperCase()}`}
@@ -2718,6 +2993,182 @@ export const ScheduleViewer = () => {
           </div>
         </div>
 
+        {activeTeacherSplitDist && activeTeacherSplitDist.isSplit ? (
+          <div className="space-y-8 my-6 animate-fade-in">
+            {/* Aviso explicativo institucional */}
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex items-start gap-4 shadow-sm">
+              <div className="p-3 bg-amber-500/10 rounded-2xl text-amber-600 shrink-0 mt-0.5">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-amber-900 uppercase tracking-wide">
+                  Docente con Carga Compartida ({activeTeacherSplitDist.group1Name} y {activeTeacherSplitDist.group2Name})
+                </h3>
+                <p className="text-xs text-amber-800 font-medium mt-1 leading-relaxed">
+                  Este docente imparte clases en dos grupos con horarios y recreos escalonados en la <strong>Tanda {selectedShift}</strong>. Debido a que imparte docencia mientras uno de los grupos se encuentra en receso, su jornada oficial no se visualiza en cuadrícula de horas y se rige formalmente por las <strong>dos distribuciones de carga horaria</strong> presentadas a continuación.
+                </p>
+              </div>
+            </div>
+
+            {/* Tarjetas de Resumen de Horas */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-indigo-50/60 p-6 rounded-3xl border border-indigo-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">
+                    Total {activeTeacherSplitDist.group1Name}
+                  </span>
+                  <p className="text-3xl font-black text-indigo-950 mt-1">
+                    {activeTeacherSplitDist.group1Total} <span className="text-sm font-bold text-indigo-400">horas/sem</span>
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold text-indigo-600 uppercase mt-2">
+                  {activeTeacherSplitDist.group1Items.length} asignaciones
+                </span>
+              </div>
+
+              <div className="bg-purple-50/60 p-6 rounded-3xl border border-purple-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest">
+                    Total {activeTeacherSplitDist.group2Name}
+                  </span>
+                  <p className="text-3xl font-black text-purple-950 mt-1">
+                    {activeTeacherSplitDist.group2Total} <span className="text-sm font-bold text-purple-400">horas/sem</span>
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold text-purple-600 uppercase mt-2">
+                  {activeTeacherSplitDist.group2Items.length} asignaciones
+                </span>
+              </div>
+
+              <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">
+                    Carga Semanal Consolidada
+                  </span>
+                  <p className="text-3xl font-black text-white mt-1">
+                    {activeTeacherSplitDist.totalHours} <span className="text-sm font-bold text-slate-400">horas/sem</span>
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase mt-2">
+                  Tanda {selectedShift} • Cobertura 100%
+                </span>
+              </div>
+            </div>
+
+            {/* Dos Tablas de Distribución */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Tabla Grupo 1 */}
+              <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider">
+                    Distribución: {activeTeacherSplitDist.group1Name}
+                  </h4>
+                  <span className="text-[10px] font-bold text-indigo-300 uppercase bg-white/10 px-2.5 py-1 rounded-lg">
+                    {activeTeacherSplitDist.group1Total} h/sem
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                        <th className="px-5 py-3">Curso</th>
+                        <th className="px-5 py-3">Asignatura</th>
+                        <th className="px-5 py-3 text-right">Horas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeTeacherSplitDist.group1Items.map((item: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-5 py-3 font-bold text-slate-900 uppercase">
+                            {item.courseName}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 font-medium">
+                            {item.subjectName}
+                          </td>
+                          <td className="px-5 py-3 text-right font-black text-indigo-600">
+                            {item.hours}h
+                          </td>
+                        </tr>
+                      ))}
+                      {activeTeacherSplitDist.group1Items.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-5 py-6 text-center text-slate-400 uppercase text-[10px] font-bold">
+                            Sin asignaturas en este bloque
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
+                        <td colSpan={2} className="px-5 py-3 text-slate-700 uppercase">
+                          Subtotal {activeTeacherSplitDist.group1Name}
+                        </td>
+                        <td className="px-5 py-3 text-right text-indigo-700 font-black">
+                          {activeTeacherSplitDist.group1Total}h / sem
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Tabla Grupo 2 */}
+              <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider">
+                    Distribución: {activeTeacherSplitDist.group2Name}
+                  </h4>
+                  <span className="text-[10px] font-bold text-purple-300 uppercase bg-white/10 px-2.5 py-1 rounded-lg">
+                    {activeTeacherSplitDist.group2Total} h/sem
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                        <th className="px-5 py-3">Curso</th>
+                        <th className="px-5 py-3">Asignatura</th>
+                        <th className="px-5 py-3 text-right">Horas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeTeacherSplitDist.group2Items.map((item: any, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-5 py-3 font-bold text-slate-900 uppercase">
+                            {item.courseName}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 font-medium">
+                            {item.subjectName}
+                          </td>
+                          <td className="px-5 py-3 text-right font-black text-purple-600">
+                            {item.hours}h
+                          </td>
+                        </tr>
+                      ))}
+                      {activeTeacherSplitDist.group2Items.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-5 py-6 text-center text-slate-400 uppercase text-[10px] font-bold">
+                            Sin asignaturas en este bloque
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
+                        <td colSpan={2} className="px-5 py-3 text-slate-700 uppercase">
+                          Subtotal {activeTeacherSplitDist.group2Name}
+                        </td>
+                        <td className="px-5 py-3 text-right text-purple-700 font-black">
+                          {activeTeacherSplitDist.group2Total}h / sem
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
             <div className="grid grid-cols-6 border-b-2 border-slate-900 pb-4 mb-6">
@@ -3003,6 +3454,7 @@ export const ScheduleViewer = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
       {/* Auditoría de Carga Horaria (Solo cuando se filtra por curso) */}
       {filterType === 'course' && filterId && (

@@ -30,9 +30,10 @@ const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales
 const CustomCalendarEvent = ({ event }: any) => {
   const isEphem = event.is_global || event.type === 'ephemeris';
   const isPatriotic = event.is_patriotic;
-  const isOwnActivity = !isEphem;
-  const centerColor = event.centerColor || '#4f46e5';
   const isNoClasses = !!event.suspends_classes;
+  const isIncident = event.type === 'incident';
+  const isMeeting = event.type === 'meeting';
+  const isPedagogical = event.type === 'pedagogical_group';
 
   const timeText = event.raw?.startTime
     ? event.raw.endTime && event.raw.endTime !== event.raw.startTime
@@ -42,7 +43,7 @@ const CustomCalendarEvent = ({ event }: any) => {
 
   return (
     <div
-      className="flex flex-col w-full h-full text-left overflow-hidden select-none p-0.5 leading-tight"
+      className="flex flex-col w-full h-full text-left overflow-hidden select-none p-0.5 leading-tight text-white"
       title={`${isNoClasses ? '🚫 NO HAY DOCENCIA\n' : ''}${event.title}${timeText ? ` (${timeText})` : ''}${event.desc ? `\n\n📝 ${event.desc}` : ''}`}
     >
       {/* Alerta Destacada: NO HAY DOCENCIA */}
@@ -70,54 +71,31 @@ const CustomCalendarEvent = ({ event }: any) => {
               title="Ministerio de Educación (MINERD)"
             />
           )
+        ) : isIncident ? (
+          <AlertTriangle size={12} className="text-white shrink-0 mt-0.5" />
+        ) : isMeeting ? (
+          <UsersIcon size={12} className="text-white shrink-0 mt-0.5" />
+        ) : isPedagogical ? (
+          <BookOpen size={12} className="text-white shrink-0 mt-0.5" />
         ) : (
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0 mt-1"
-            style={{ backgroundColor: centerColor }}
-          />
+          <Star size={11} className="text-white shrink-0 mt-0.5" />
         )}
-        <span
-          className="font-black text-[10px] md:text-[11px] leading-tight break-words line-clamp-2"
-          style={{
-            color: isNoClasses ? '#ffffff' : isOwnActivity ? centerColor : '#ffffff'
-          }}
-        >
+        <span className="font-black text-[10px] md:text-[11px] leading-tight break-words line-clamp-2 text-white">
           {event.title}
         </span>
       </div>
 
       {/* Descripción abajo junto a la hora */}
       {(timeText || event.desc) && (
-        <div
-          className={`mt-1 pt-0.5 flex flex-col gap-0.5 ${
-            isNoClasses
-              ? 'border-t border-red-400/40'
-              : isOwnActivity
-              ? 'border-t border-slate-200/70'
-              : 'border-t border-white/20'
-          }`}
-        >
+        <div className="mt-1 pt-0.5 flex flex-col gap-0.5 border-t border-white/25">
           {timeText && (
-            <div
-              className="flex items-center gap-1 text-[8.5px] font-bold"
-              style={{
-                color: isNoClasses
-                  ? '#fee2e2'
-                  : isOwnActivity
-                  ? centerColor
-                  : 'rgba(255,255,255,0.9)'
-              }}
-            >
+            <div className="flex items-center gap-1 text-[8.5px] font-bold text-white/90">
               <Clock size={10} className="shrink-0" />
               <span>{timeText}</span>
             </div>
           )}
           {event.desc && (
-            <p
-              className={`text-[8.5px] font-medium leading-snug line-clamp-2 break-words whitespace-normal ${
-                isNoClasses ? 'text-red-50' : isOwnActivity ? 'text-slate-600' : 'text-white/95'
-              }`}
-            >
+            <p className="text-[8.5px] font-medium leading-snug line-clamp-2 break-words whitespace-normal text-white/95">
               {event.desc}
             </p>
           )}
@@ -138,6 +116,8 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [view, setView] = useState<any>('month');
   const [date, setDate] = useState(new Date());
+  const [mobileViewMode, setMobileViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const userRole = profile?.role || 'student';
   const isSuperAdmin = !!profile?.is_superadmin;
@@ -233,6 +213,20 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
     })
     .filter(Boolean);
 
+  const filteredEvents = React.useMemo(() => {
+    let list = [...events];
+    if (categoryFilter === 'no_classes') {
+      list = list.filter((e: any) => e.suspends_classes);
+    } else if (categoryFilter === 'patriotic') {
+      list = list.filter((e: any) => e.is_patriotic);
+    } else if (categoryFilter === 'ephemeris') {
+      list = list.filter((e: any) => (e.is_global || e.type === 'ephemeris') && !e.is_patriotic);
+    } else if (categoryFilter === 'activities') {
+      list = list.filter((e: any) => !e.is_global && e.type !== 'ephemeris');
+    }
+    return list.sort((a: any, b: any) => a.start.getTime() - b.start.getTime());
+  }, [events, categoryFilter]);
+
   const handleSelectSlot = (slotInfo: any) => {
     if (isReadOnly) return;
     setSelectedEventId(null);
@@ -322,7 +316,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   };
 
   return (
-    <div className="h-[750px] bg-white p-4 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col overflow-hidden">
+    <div className="min-h-[650px] md:h-[780px] bg-white p-4 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
@@ -417,7 +411,163 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 relative z-10 flex flex-col">
+      {/* SELECTOR VISTA MÓVIL / ESCRITORIO: CALENDARIO VS LISTA DE ACTIVIDADES */}
+      <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100 flex-wrap">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit">
+          <button
+            type="button"
+            onClick={() => setMobileViewMode('calendar')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              mobileViewMode === 'calendar'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <CalendarIcon size={14} /> Calendario
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileViewMode('list')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              mobileViewMode === 'list'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock size={14} /> Lista de Eventos ({events.length})
+          </button>
+        </div>
+
+        {mobileViewMode === 'list' && (
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full pb-1 custom-scrollbar">
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'no_classes', label: '🚫 Sin Docencia' },
+              { id: 'patriotic', label: '🇩🇴 Patrias' },
+              { id: 'ephemeris', label: '🏫 MINERD' },
+              { id: 'activities', label: '⭐ Centro' }
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setCategoryFilter(f.id)}
+                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                  categoryFilter === f.id
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {mobileViewMode === 'list' ? (
+        <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+          {filteredEvents.length === 0 ? (
+            <div className="py-20 text-center text-slate-400 font-bold italic bg-slate-50 rounded-2xl text-xs">
+              No hay actividades registradas en esta categoría.
+            </div>
+          ) : (
+            filteredEvents.map((event: any) => {
+              const a = event.raw || {};
+              const isNoClasses = !!event.suspends_classes;
+              const isPatriotic = event.is_patriotic;
+              const isEphem = event.is_global || event.type === 'ephemeris';
+              const isIncident = event.type === 'incident';
+              const isMeeting = event.type === 'meeting';
+              const isPedagogical = event.type === 'pedagogical_group';
+
+              const cardBg = isNoClasses
+                ? 'bg-rose-50/70 border-rose-200 border-l-rose-600'
+                : isPatriotic
+                ? 'bg-blue-50/70 border-blue-200 border-l-blue-800'
+                : isEphem
+                ? 'bg-sky-50/70 border-sky-200 border-l-sky-600'
+                : isIncident
+                ? 'bg-pink-50/70 border-pink-200 border-l-pink-600'
+                : isMeeting
+                ? 'bg-cyan-50/70 border-cyan-200 border-l-cyan-600'
+                : isPedagogical
+                ? 'bg-purple-50/70 border-purple-200 border-l-purple-600'
+                : 'bg-indigo-50/50 border-indigo-200 border-l-indigo-600';
+
+              const badgeColor = isNoClasses
+                ? 'bg-red-100 text-red-700'
+                : isPatriotic
+                ? 'bg-blue-100 text-blue-800'
+                : isEphem
+                ? 'bg-sky-100 text-sky-800'
+                : isIncident
+                ? 'bg-pink-100 text-pink-700'
+                : isMeeting
+                ? 'bg-cyan-100 text-cyan-800'
+                : isPedagogical
+                ? 'bg-purple-100 text-purple-800'
+                : 'bg-indigo-100 text-indigo-800';
+
+              const categoryTitle = isNoClasses
+                ? '🚫 Suspensión de Docencia'
+                : isPatriotic
+                ? '🇩🇴 Fecha Patria Oficial'
+                : isEphem
+                ? '🏫 Efeméride MINERD'
+                : isIncident
+                ? '⚠️ Incidencia'
+                : isMeeting
+                ? '👥 R. Equipo Gestión'
+                : isPedagogical
+                ? '📖 R. Pedagógica'
+                : '⭐ Actividad Institucional';
+
+              const dateText = format(event.start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+              const capDate = dateText.charAt(0).toUpperCase() + dateText.slice(1);
+
+              return (
+                <div
+                  key={event.id}
+                  onClick={() => handleSelectEvent(event)}
+                  className={`p-4 rounded-2xl border border-l-4 transition-all cursor-pointer shadow-xs hover:shadow-md hover:scale-[1.005] ${cardBg}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 ${badgeColor}`}
+                    >
+                      {categoryTitle}
+                    </span>
+                    <span className="text-[10px] font-black text-slate-500 bg-white/90 border border-slate-200/80 px-2.5 py-1 rounded-lg">
+                      📅 {capDate}
+                    </span>
+                  </div>
+
+                  <h4 className="text-base font-black text-slate-900 tracking-tight leading-snug">
+                    {event.title}
+                  </h4>
+
+                  {event.desc && (
+                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
+                      {event.desc}
+                    </p>
+                  )}
+
+                  <div className="mt-3 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                      <Clock size={12} className="text-indigo-600" />
+                      {a.startTime && a.endTime ? `${a.startTime} - ${a.endTime}` : 'Todo el día'}
+                    </span>
+                    <span className="text-[9px] font-black uppercase text-indigo-600 hover:underline">
+                      Ver Ficha / Detalles →
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 relative z-10 flex flex-col">
         <style>
           {`
             .rbc-toolbar {
@@ -451,6 +601,26 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               word-break: break-word !important;
               overflow-wrap: anywhere !important;
               width: 100% !important;
+            }
+            .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+              padding: 8px 10px !important;
+              vertical-align: middle !important;
+              font-weight: 600 !important;
+            }
+            .rbc-agenda-date-cell {
+              font-weight: 900 !important;
+              color: #1e293b !important;
+              font-size: 11px !important;
+              text-transform: uppercase !important;
+              background-color: #f8fafc !important;
+            }
+            .rbc-agenda-time-cell {
+              font-size: 10px !important;
+              font-weight: 800 !important;
+              color: #475569 !important;
+            }
+            .rbc-agenda-event-cell {
+              font-size: 11px !important;
             }
             @media (max-width: 640px) {
               .rbc-toolbar {
@@ -564,22 +734,58 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               };
             }
 
-            // Actividad propia del centro:
-            // Fondo blanco limpio con borde del color del centro y letras con el color oficial del centro!
-            const actColor = event.centerColor || centerColor;
+            if (event.type === 'incident') {
+              return {
+                style: {
+                  backgroundColor: '#e11d48',
+                  borderRadius: '8px',
+                  border: '1px solid #fda4af',
+                  padding: '3px 6px',
+                  color: '#ffffff'
+                }
+              };
+            }
+
+            if (event.type === 'meeting') {
+              return {
+                style: {
+                  backgroundColor: '#0891b2',
+                  borderRadius: '8px',
+                  border: '1px solid #67e8f9',
+                  padding: '3px 6px',
+                  color: '#ffffff'
+                }
+              };
+            }
+
+            if (event.type === 'pedagogical_group') {
+              return {
+                style: {
+                  backgroundColor: '#7c3aed',
+                  borderRadius: '8px',
+                  border: '1px solid #c4b5fd',
+                  padding: '3px 6px',
+                  color: '#ffffff'
+                }
+              };
+            }
+
+            // Actividad propia del centro con color institucional
+            const actColor = event.centerColor || centerColor || '#4f46e5';
             return {
               style: {
-                backgroundColor: '#ffffff',
-                border: `1.5px solid ${actColor}`,
-                boxShadow: '0 2px 4px -1px rgba(0, 0, 0, 0.08)',
+                backgroundColor: actColor,
+                border: `1px solid ${actColor}`,
+                boxShadow: '0 2px 5px rgba(0, 0, 0, 0.15)',
                 borderRadius: '8px',
                 padding: '3px 6px',
-                color: actColor
+                color: '#ffffff'
               }
             };
           }}
         />
       </div>
+    )}
 
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-3 sm:p-4 text-left animate-fade-in">

@@ -21,12 +21,14 @@ import {
   Video,
   Globe,
   Link as LinkIcon,
-  MessageSquare
+  MessageSquare,
+  CalendarDays
 } from 'lucide-react';
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
+import { getSubjectTheme } from '../utils/subjectColors';
 
 export const StudentDashboard = ({
   userData: profile,
@@ -136,17 +138,31 @@ export const StudentDashboard = ({
     fetchCourses();
   }, [profile?.center_id, selectedYear]);
 
-  // Autovinculación de cursos de hermanos para padres
+  // Autovinculación y carga de hijos para padres
   useEffect(() => {
-    const autoLinkSiblings = async () => {
-      if (!isParent || !profile?.full_name || !profile?.center_id || !allCourses.length) {
+    const fetchLinkedStudentsAndSiblings = async () => {
+      if (!isParent || !profile?.id || !profile?.center_id) {
         return;
       }
-      if (hasCheckedSiblings.current) return;
 
       try {
-        // 1. Extraer nombre del alumno
-        let studentNamePart = profile.full_name.toLowerCase();
+        // 1. Obtener alumnos vinculados directamente a través de la tabla 'parents'
+        const { data: parentLinks, error: pLinkErr } = await supabase
+          .from('parents')
+          .select('student_id, students(id, names, first_surname, second_surname, family_id, course_id)')
+          .eq('profile_id', profile.id);
+
+        let resolvedStudents: any[] = [];
+        if (!pLinkErr && parentLinks) {
+          parentLinks.forEach((link: any) => {
+            if (link.students) {
+              resolvedStudents.push(link.students);
+            }
+          });
+        }
+
+        // 2. Extraer nombre del alumno desde el perfil si contiene sufijo de parentesco
+        let studentNamePart = (profile.full_name || '').toLowerCase();
         if (studentNamePart.includes('padre/madre') || studentNamePart.includes('tutor') || studentNamePart.includes('encargado')) {
           studentNamePart = studentNamePart
             .replace('(padre/madre)', '')
@@ -155,65 +171,67 @@ export const StudentDashboard = ({
             .trim();
         }
 
-        // 2. Buscar al alumno en el ciclo activo
+        // 3. Buscar alumnos del centro en el ciclo escolar activo
         const { data: students, error: sErr } = await supabase
           .from('students')
           .select('id, names, first_surname, second_surname, family_id, course_id')
           .eq('center_id', profile.center_id)
           .eq('school_year', selectedYear || '2026-2027');
 
-        if (sErr || !students) return;
+        if (!sErr && students) {
+          // Encontrar alumno que coincida con el nombre registrado en el perfil
+          const match = students.find((s) => {
+            const sNames = s.names || '';
+            const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
+            return fullName.includes(studentNamePart) || (sNames && studentNamePart.includes(sNames.toLowerCase()));
+          });
 
-        // Encontrar el alumno que coincida con el nombre en el perfil del padre
-        const match = students.find((s) => {
-          const sNames = s.names || '';
-          const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
-          return fullName.includes(studentNamePart) || (sNames && studentNamePart.includes(sNames.toLowerCase()));
-        });
+          if (match) {
+            resolvedStudents.push(match);
 
-        if (!match) return;
-        
-        hasCheckedSiblings.current = true;
+            // Obtener hermanos si tienen family_id compartido
+            if (match.family_id) {
+              const siblings = students.filter((s) => s.family_id === match.family_id);
+              resolvedStudents.push(...siblings);
 
-        if (!match.family_id) return;
+              // Autovincular cursos de hermanos si no estaban aún en el perfil
+              if (!hasCheckedSiblings.current) {
+                hasCheckedSiblings.current = true;
+                const siblingCourseIds = siblings
+                  .map((s) => s.course_id)
+                  .filter(Boolean) as string[];
 
-        // 3. Obtener todos los hermanos que comparten el family_id
-        const siblings = students.filter((s) => s.family_id === match.family_id);
-        setFamilyStudents(siblings);
+                const currentLinked = profile.parent_course_ids || parentCourseIds || [];
+                const missingCourseIds = siblingCourseIds.filter((cId) => !currentLinked.includes(cId));
 
-        const siblingCourseIds = siblings
-          .map((s) => s.course_id)
-          .filter(Boolean) as string[];
+                if (missingCourseIds.length > 0) {
+                  const updatedIds = Array.from(new Set([...currentLinked, ...missingCourseIds]));
+                  await supabase
+                    .from('profiles')
+                    .update({ parent_course_ids: updatedIds })
+                    .eq('id', profile.id);
 
-        // 4. Filtrar los cursos que aún no están vinculados en el perfil del padre
-        const currentLinked = profile.parent_course_ids || parentCourseIds || [];
-        const missingCourseIds = siblingCourseIds.filter(
-          (cId) => !currentLinked.includes(cId)
-        );
-
-        if (missingCourseIds.length > 0) {
-          const updatedIds = Array.from(new Set([...currentLinked, ...missingCourseIds]));
-          
-          console.log('[StudentDashboard] Autovinculando cursos de hermanos:', missingCourseIds);
-          
-          const { error: updErr } = await supabase
-            .from('profiles')
-            .update({ parent_course_ids: updatedIds })
-            .eq('id', profile.id);
-
-          if (!updErr) {
-            localStorage.setItem('parent_course_ids', JSON.stringify(updatedIds));
-            setParentCourseIds(updatedIds);
-            profile.parent_course_ids = updatedIds;
+                  localStorage.setItem('parent_course_ids', JSON.stringify(updatedIds));
+                  setParentCourseIds(updatedIds);
+                  profile.parent_course_ids = updatedIds;
+                }
+              }
+            }
           }
         }
+
+        // Unificar alumnos sin duplicados por ID
+        const uniqueStudents = Array.from(
+          new Map(resolvedStudents.map((s) => [s.id, s])).values()
+        );
+        setFamilyStudents(uniqueStudents);
       } catch (err) {
-        console.error('Error auto-linking sibling courses:', err);
+        console.error('Error loading linked students/siblings for parent:', err);
       }
     };
 
-    autoLinkSiblings();
-  }, [profile, allCourses, selectedYear]);
+    fetchLinkedStudentsAndSiblings();
+  }, [profile, allCourses, selectedYear, isParent, parentCourseIds]);
 
   // Sincronizar reactivamente si cambia en el perfil
   useEffect(() => {
@@ -980,6 +998,14 @@ export const StudentDashboard = ({
     selectedYear
   ]);
 
+  const upcomingActivities = useMemo(() => {
+    const todayStr = currentTime.toISOString().split('T')[0];
+    return (state.activities || [])
+      .filter((act) => act.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 5);
+  }, [state.activities, currentTime]);
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4">
@@ -1173,32 +1199,61 @@ export const StudentDashboard = ({
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        {/* MENÚ DE ACCESO RÁPIDO: HORARIO, TAREAS, AGENDA, MENSAJERÍA */}
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setScheduleViewMode(scheduleViewMode === 'today' ? 'weekly' : 'today')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+              scheduleViewMode === 'weekly'
+                ? 'bg-indigo-600 text-white shadow-indigo-200'
+                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+            }`}
+            title="Ver Horario de Clases"
+          >
+            <CalendarDays size={13} />
+            <span>Horario</span>
+          </button>
+
+          {onViewChange && (
+            <button
+              type="button"
+              onClick={() => onViewChange('tasks')}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Ir a Tareas y Asignaciones"
+            >
+              <BookOpen size={13} />
+              <span>Tareas</span>
+            </button>
+          )}
+
+          {onViewChange && (
+            <button
+              type="button"
+              onClick={() => onViewChange('agenda')}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Ver Agenda Institucional y Efemérides"
+            >
+              <CalendarIcon size={13} />
+              <span>Agenda</span>
+            </button>
+          )}
+
           {onViewChange && (
             <button
               type="button"
               onClick={() => onViewChange('communications')}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
+              className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               title="Ir a Mensajería Interna"
             >
               <MessageSquare size={13} />
-              <span>{isParent ? 'Mensaje a Docentes' : 'Mensajería Interna'}</span>
+              <span>{isParent ? 'Mensajes' : 'Mensajería'}</span>
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => setScheduleViewMode('weekly')}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-indigo-150 shadow-xs transition-all cursor-pointer shrink-0"
-            title="Ver Horario de Clases Semanal"
-          >
-            <CalendarIcon size={13} className="text-indigo-600" />
-            <span>Horario Semanal</span>
-          </button>
-
           {profile?.role !== 'parent' && profile?.course_id && (
-            <span className="text-[8px] font-black text-emerald-700 bg-emerald-50 border border-emerald-150 px-3 py-2.5 rounded-xl uppercase tracking-widest shrink-0">
-              ✓ Curso Vinculado
+            <span className="hidden sm:inline-flex text-[8px] font-black text-emerald-700 bg-emerald-50 border border-emerald-150 px-2.5 py-2.5 rounded-xl uppercase tracking-widest shrink-0">
+              ✓ Vinculado
             </span>
           )}
         </div>
@@ -1302,39 +1357,43 @@ export const StudentDashboard = ({
                       No tienes clases presenciales programadas para hoy.
                     </div>
                   ) : (
-                    todaySchedule.map((c) => (
-                      <div
-                        key={c.id}
-                        className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
-                          c.isNow
-                            ? 'bg-emerald-50 border-emerald-400 shadow-sm'
-                            : 'bg-white border-slate-100 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={`w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs ${c.isNow ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}
-                          >
-                            {format12h(c.sTime)}
-                          </div>
-                          <div>
-                            <p
-                              className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : 'text-slate-900'}`}
+                    todaySchedule.map((c) => {
+                      const theme = getSubjectTheme(c.sub?.name);
+                      return (
+                        <div
+                          key={c.id}
+                          className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+                            c.isNow
+                              ? 'bg-emerald-50 border-emerald-400 shadow-sm ring-2 ring-emerald-200'
+                              : `${theme.bg} ${theme.border} shadow-xs`
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className="w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-xs"
+                              style={{ backgroundColor: c.isNow ? '#10b981' : theme.accent }}
                             >
-                              {c.sub?.name}
-                            </p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
-                              <User size={10} /> {c.tea?.name}
-                            </p>
+                              {format12h(c.sTime)}
+                            </div>
+                            <div>
+                              <p
+                                className={`text-sm font-black tracking-tight ${c.isNow ? 'text-emerald-950' : theme.text}`}
+                              >
+                                {c.sub?.name}
+                              </p>
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
+                                <User size={10} style={{ color: theme.accent }} /> {c.tea?.name}
+                              </p>
+                            </div>
                           </div>
+                          {c.room && (
+                            <span className="text-[9px] font-black text-slate-700 bg-white/85 border border-slate-200/80 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase shadow-xs">
+                              <MapPin size={10} style={{ color: theme.accent }} /> {c.room.name}
+                            </span>
+                          )}
                         </div>
-                        {c.room && (
-                          <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase">
-                            <MapPin size={10} className="text-indigo-600" /> {c.room.name}
-                          </span>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1446,32 +1505,39 @@ export const StudentDashboard = ({
                                 );
                               }
 
+                              const theme = getSubjectTheme(c.sub?.name);
                               return (
                                 <div
                                   key={index}
-                                  className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between group"
+                                  className={`${theme.bg} p-3 rounded-xl border ${theme.border} shadow-xs transition-all flex flex-col justify-between group hover:shadow-md`}
                                 >
                                   <div>
                                     <div className="flex items-center justify-between gap-1 mb-1">
-                                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                                      <span
+                                        className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded"
+                                        style={{ backgroundColor: theme.badgeBg, color: theme.accent }}
+                                      >
                                         {c.label}
                                       </span>
                                       {c.room && (
-                                        <span className="text-[7px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                                        <span className="text-[7px] font-black text-slate-700 bg-white/80 border border-slate-200/80 px-1.5 py-0.5 rounded uppercase">
                                           {c.room.name}
                                         </span>
                                       )}
                                     </div>
-                                    <p className="text-[11px] font-black text-slate-900 leading-tight uppercase line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                                    <p className={`text-[11px] font-black ${theme.text} leading-tight uppercase line-clamp-2 transition-colors`}>
                                       {c.sub?.name}
                                     </p>
                                     {c.tea && (
-                                      <p className="text-[8px] font-bold text-slate-400 uppercase mt-1 truncate">
+                                      <p className="text-[8px] font-bold text-slate-500 uppercase mt-1 truncate">
                                         Prof. {c.tea.name}
                                       </p>
                                     )}
                                   </div>
-                                  <span className="text-[8px] font-black text-indigo-600 mt-2 block bg-indigo-50/70 w-fit px-2 py-0.5 rounded-md">
+                                  <span
+                                    className="text-[8px] font-black mt-2 block w-fit px-2 py-0.5 rounded-md shadow-2xs"
+                                    style={{ backgroundColor: theme.badgeBg, color: theme.accent }}
+                                  >
                                     {format12h(c.sTime)} - {format12h(c.eTime)}
                                   </span>
                                 </div>
@@ -1546,6 +1612,111 @@ export const StudentDashboard = ({
                 <span className="text-slate-500">Anuncios del Mes</span>
                 <span className="text-slate-900">{announcements.length}</span>
               </div>
+            </div>
+          </div>
+
+          {/* AGENDA GENERAL DEL CENTRO */}
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <CalendarIcon size={13} className="text-purple-600" />
+                Agenda General del Centro
+              </h4>
+              {onViewChange && (
+                <button
+                  type="button"
+                  onClick={() => onViewChange('agenda')}
+                  className="text-[9px] font-black uppercase text-purple-600 hover:text-purple-700 transition-colors cursor-pointer"
+                >
+                  Ver Todo →
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {upcomingActivities.length === 0 ? (
+                <p className="text-slate-400 italic text-[10px] font-bold py-2">
+                  Sin eventos próximos programados.
+                </p>
+              ) : (
+                upcomingActivities.map((act) => {
+                  const isNoClasses =
+                    !!act.suspends_classes ||
+                    String(act.title || '').toLowerCase().includes('feriado') ||
+                    String(act.description || '').toLowerCase().includes('[no_docencia]');
+                  const isPatriotic =
+                    String(act.title || '').toLowerCase().includes('patria') ||
+                    String(act.title || '').toLowerCase().includes('duarte') ||
+                    String(act.title || '').toLowerCase().includes('independencia');
+                  const isEphem = act.is_global || act.type === 'ephemeris';
+
+                  return (
+                    <div
+                      key={act.id}
+                      className={`p-3 rounded-xl border transition-all ${
+                        isNoClasses
+                          ? 'bg-rose-50/80 border-rose-200'
+                          : isPatriotic
+                          ? 'bg-blue-50/80 border-blue-200'
+                          : isEphem
+                          ? 'bg-sky-50/80 border-sky-200'
+                          : 'bg-purple-50/50 border-purple-150'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                          {isNoClasses ? (
+                            <span className="text-[10px]">🚫</span>
+                          ) : isPatriotic ? (
+                            <span className="text-[10px]">🇩🇴</span>
+                          ) : isEphem ? (
+                            <img
+                              src="/minerd_logo.webp"
+                              alt="MINERD"
+                              className="w-3 h-3 rounded object-contain bg-white shrink-0"
+                            />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0"></span>
+                          )}
+                          <p
+                            className={`text-[10px] font-black uppercase truncate ${
+                              isNoClasses
+                                ? 'text-rose-950'
+                                : isPatriotic
+                                ? 'text-blue-950'
+                                : isEphem
+                                ? 'text-sky-950'
+                                : 'text-slate-900'
+                            }`}
+                          >
+                            {act.title}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${
+                            isNoClasses
+                              ? 'bg-rose-200 text-rose-800'
+                              : isPatriotic
+                              ? 'bg-blue-200 text-blue-800'
+                              : isEphem
+                              ? 'bg-sky-200 text-sky-800'
+                              : 'bg-purple-100 text-purple-700'
+                          }`}
+                        >
+                          {act.date.split('-').reverse().slice(0, 2).join('/')}
+                        </span>
+                      </div>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+                        {isNoClasses
+                          ? 'SUSPENSIÓN DE DOCENCIA'
+                          : act.startTime && act.endTime
+                          ? `${act.startTime} - ${act.endTime}`
+                          : 'Todo el día'}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

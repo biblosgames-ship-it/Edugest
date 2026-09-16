@@ -514,6 +514,15 @@ export const dataService = {
     if (data.target_student_name) {
       directTags.push(`STUDENT_NAME:${data.target_student_name}`);
     }
+    if (data.valid_until) {
+      directTags.push(`VALID_UNTIL:${data.valid_until}`);
+    }
+    if (data.excuse_color) {
+      directTags.push(`EXCUSE_COLOR:${data.excuse_color}`);
+    }
+    if (data.duration_hours) {
+      directTags.push(`DURATION_HOURS:${data.duration_hours}`);
+    }
 
     const mergedRoles = Array.from(new Set([...(data.target_roles || []), ...directTags]));
 
@@ -570,7 +579,10 @@ export const dataService = {
             target_student_ids: data.target_student_ids,
             target_student_id: data.target_student_id,
             target_student_name: data.target_student_name,
-            target_parent_ids: data.target_parent_ids
+            target_parent_ids: data.target_parent_ids,
+            valid_until: data.valid_until,
+            excuse_color: data.excuse_color,
+            duration_hours: data.duration_hours
           })}`
         };
         const { error: fallbackError } = await supabase
@@ -638,6 +650,9 @@ export const dataService = {
                 target_roles: payload.target_roles,
                 target_courses: payload.target_courses,
                 target_teachers: payload.target_teachers,
+                valid_until: payload.valid_until,
+                excuse_color: payload.excuse_color,
+                duration_hours: payload.duration_hours,
                 created_at: ann.created_at
               });
             } catch (jsonErr) {
@@ -658,11 +673,34 @@ export const dataService = {
       const sIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('STUDENT:')).map((r: string) => r.replace('STUDENT:', ''));
       const pIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('PARENT:')).map((r: string) => r.replace('PARENT:', ''));
       const sName = roles.find((r: string) => typeof r === 'string' && r.startsWith('STUDENT_NAME:'))?.replace('STUDENT_NAME:', '');
-      
+      const validUntil = roles.find((r: string) => typeof r === 'string' && r.startsWith('VALID_UNTIL:'))?.replace('VALID_UNTIL:', '');
+      const excuseColor = roles.find((r: string) => typeof r === 'string' && r.startsWith('EXCUSE_COLOR:'))?.replace('EXCUSE_COLOR:', '');
+      const durationHours = roles.find((r: string) => typeof r === 'string' && r.startsWith('DURATION_HOURS:'))?.replace('DURATION_HOURS:', '');
+
       c.target_student_ids = Array.from(new Set([...(c.target_student_ids || []), ...sIds]));
       c.target_parent_ids = Array.from(new Set([...(c.target_parent_ids || []), ...pIds]));
       if (sName && !c.target_student_name) c.target_student_name = sName;
-      c.target_roles = roles.filter((r: string) => typeof r === 'string' && !r.startsWith('STUDENT:') && !r.startsWith('PARENT:') && !r.startsWith('STUDENT_NAME:'));
+      if (validUntil && !c.valid_until) c.valid_until = validUntil;
+      if (excuseColor && !c.excuse_color) c.excuse_color = excuseColor;
+      if (durationHours && !c.duration_hours) c.duration_hours = Number(durationHours);
+
+      // Si es una excusa y aún no tiene valid_until explícito, asignar por defecto 12 horas desde created_at
+      const isExcuse = (c.motive || '').toLowerCase().includes('excus') || (c.motive || '').toLowerCase().includes('ausenc');
+      if (isExcuse && !c.valid_until && c.created_at) {
+        const createdMs = new Date(c.created_at).getTime();
+        const durHours = c.duration_hours || 12;
+        c.valid_until = new Date(createdMs + durHours * 3600 * 1000).toISOString();
+      }
+
+      c.target_roles = roles.filter((r: string) =>
+        typeof r === 'string' &&
+        !r.startsWith('STUDENT:') &&
+        !r.startsWith('PARENT:') &&
+        !r.startsWith('STUDENT_NAME:') &&
+        !r.startsWith('VALID_UNTIL:') &&
+        !r.startsWith('EXCUSE_COLOR:') &&
+        !r.startsWith('DURATION_HOURS:')
+      );
     });
 
     if (role === 'admin' || role === 'coordinator' || role === 'management_teacher') {

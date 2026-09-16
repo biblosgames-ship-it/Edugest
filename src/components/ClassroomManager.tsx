@@ -126,6 +126,25 @@ export const ClassroomManager = () => {
   const [specialNotesMap, setSpecialNotesMap] = useState<Record<string, string>>({});
   const [selectedSpecialNoteModalStudentId, setSelectedSpecialNoteModalStudentId] = useState<string | null>(null);
 
+  // Estado de Excusas Activas (cargadas desde el módulo de comunicaciones para los alumnos del curso)
+  const [activeExcusesMap, setActiveExcusesMap] = useState<Record<string, {
+    id: string;
+    studentId: string;
+    studentName?: string;
+    motive: string;
+    message: string;
+    senderName: string;
+    createdAt: string;
+    validUntil: string;
+    color: string;
+    durationHours?: number;
+    hoursRemaining: number;
+  }>>({});
+  const [selectedExcuseModalData, setSelectedExcuseModalData] = useState<any | null>(null);
+
+  // Modo de Cálculo de Parciales por Competencias: 'average' (promediado base 100) o 'sum' (sumativo acumulación hasta 100)
+  const [competencyCalcMode, setCompetencyCalcMode] = useState<'average' | 'sum'>('average');
+
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
 
   // Estados de Tareas y Enlaces Fijos
@@ -498,6 +517,9 @@ export const ClassroomManager = () => {
         if (parsed && typeof parsed === 'object') {
           setPartialScores(parsed.scores || {});
           setCompetencyActivities(parsed.activities || getDefaultActivities());
+          if (parsed.calcMode === 'sum' || parsed.calcMode === 'average') {
+            setCompetencyCalcMode(parsed.calcMode);
+          }
           loadedFromLocal = true;
         }
       } catch (e) {
@@ -509,6 +531,7 @@ export const ClassroomManager = () => {
       // RESET INMEDIATO: asegura que el nuevo curso/periodo comience limpio
       setPartialScores({});
       setCompetencyActivities(getDefaultActivities());
+      setCompetencyCalcMode('average');
     }
 
     // 2. Consulta asíncrona a la nube (Supabase)
@@ -536,14 +559,17 @@ export const ClassroomManager = () => {
         if (!error && data && data.scores) {
           const cloudScores = data.scores.scores || {};
           const cloudActivities = data.scores.activities || getDefaultActivities();
+          const cloudMode = data.scores.calcMode || 'average';
 
           setPartialScores(cloudScores);
           setCompetencyActivities(cloudActivities);
+          setCompetencyCalcMode(cloudMode);
 
           // Sincronizar respaldo local para este scope exacto
           localStorage.setItem(storageScopeKey, JSON.stringify({
             scores: cloudScores,
             activities: cloudActivities,
+            calcMode: cloudMode,
             period: selectedPeriod,
             subjectId: selectedSubjectId,
             courseId: selectedCourseId,
@@ -555,6 +581,7 @@ export const ClassroomManager = () => {
           // Si no hay datos en la nube ni en local para este curso/periodo, mantenerlo limpio
           setPartialScores({});
           setCompetencyActivities(getDefaultActivities());
+          setCompetencyCalcMode('average');
         }
       } catch (e) {
         console.warn('Error al cargar desglose de parciales de Supabase:', e);
@@ -564,6 +591,87 @@ export const ClassroomManager = () => {
     loadPartials();
     return () => { isMounted = false; };
   }, [storageScopeKey, selectedCourseId, selectedSubjectId, selectedPeriod, selectedYear, profile?.center_id, center?.id]);
+
+  // CARGAR EXCUSAS ACTIVAS PARA LOS ALUMNOS DEL CURSO SELECCIONADO
+  useEffect(() => {
+    if (!selectedCourseId || courseStudents.length === 0) {
+      setActiveExcusesMap({});
+      return;
+    }
+    let isMounted = true;
+
+    const loadCourseExcuses = async () => {
+      try {
+        const centerId = profile?.center_id || center?.id;
+        const comms = await dataService.getCommunications(
+          profile?.id || '',
+          profile?.role || 'teacher',
+          centerId
+        );
+
+        if (!isMounted) return;
+
+        const studentIdsSet = new Set(courseStudents.map((s: any) => s.id));
+        const now = Date.now();
+        const map: Record<string, any> = {};
+
+        (comms || []).forEach((c: any) => {
+          const isExcuseMotive = (c.motive || '').toLowerCase().includes('excus') || (c.motive || '').toLowerCase().includes('ausenc');
+          if (!isExcuseMotive) return;
+
+          // Verificar si aplica a estudiantes de este curso
+          const targets = c.target_student_ids || [];
+          targets.forEach((stId: string) => {
+            if (!studentIdsSet.has(stId)) return;
+
+            // Calcular vigencia: si tiene valid_until comprobamos tiempo, si no, 12h desde created_at
+            let validUntilMs = 0;
+            if (c.valid_until) {
+              validUntilMs = new Date(c.valid_until).getTime();
+            } else if (c.created_at) {
+              validUntilMs = new Date(c.created_at).getTime() + (c.duration_hours || 12) * 3600 * 1000;
+            }
+
+            // Si aún no ha expirado
+            if (validUntilMs > now) {
+              const diffMs = validUntilMs - now;
+              const hoursRemaining = Math.max(1, Math.round(diffMs / (3600 * 1000)));
+
+              // Guardar la más reciente o con mayor vigencia
+              if (!map[stId] || new Date(c.created_at).getTime() > new Date(map[stId].createdAt).getTime()) {
+                map[stId] = {
+                  id: c.id,
+                  studentId: stId,
+                  studentName: c.target_student_name,
+                  motive: c.motive || 'Excusa Médica / Ausencia',
+                  message: c.message,
+                  senderName: c.sender_name,
+                  createdAt: c.created_at,
+                  validUntil: new Date(validUntilMs).toISOString(),
+                  color: c.excuse_color || 'amber',
+                  durationHours: c.duration_hours || 12,
+                  hoursRemaining: hoursRemaining
+                };
+              }
+            }
+          });
+        });
+
+        setActiveExcusesMap(map);
+      } catch (err) {
+        console.warn('Error al cargar excusas del curso en ClassroomManager:', err);
+      }
+    };
+
+    loadCourseExcuses();
+
+    const handleUpdate = () => loadCourseExcuses();
+    window.addEventListener('edugens_notifications_updated', handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('edugens_notifications_updated', handleUpdate);
+    };
+  }, [selectedCourseId, courseStudents, profile?.id, profile?.role, profile?.center_id, center?.id]);
 
   const [newActivityName, setNewActivityName] = useState<string>('');
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
@@ -1023,6 +1131,7 @@ export const ClassroomManager = () => {
       localStorage.setItem(storageScopeKey, JSON.stringify({
         scores: partialScores,
         activities: competencyActivities,
+        calcMode: competencyCalcMode,
         period: selectedPeriod,
         subjectId: selectedSubjectId,
         courseId: selectedCourseId,
@@ -1043,7 +1152,7 @@ export const ClassroomManager = () => {
               school_year: year,
               competency_id: 'all',
               activity_name: 'Desglose de Parciales',
-              scores: { scores: partialScores, activities: competencyActivities },
+              scores: { scores: partialScores, activities: competencyActivities, calcMode: competencyCalcMode },
               updated_at: new Date().toISOString()
             }
           ], { onConflict: 'center_id,course_id,subject_id,period,school_year' });
@@ -1054,16 +1163,27 @@ export const ClassroomManager = () => {
         try {
           const gradeUpserts = courseStudents.map((s: any) => {
             const sScores = partialScores[s.id] || {};
-            const actList: number[] = [];
-            Object.entries(competencyActivities).forEach(([_, acts]) => {
-              acts.forEach((act) => {
-                if (sScores[act.id] !== undefined && sScores[act.id] !== null && !isNaN(Number(sScores[act.id]))) {
-                  actList.push(Number(sScores[act.id]));
+            const compValues: number[] = [];
+
+            activeCompetencies.forEach((comp) => {
+              const acts = competencyActivities[comp.id] || [];
+              const validScores = acts
+                .map((a) => sScores[a.id])
+                .filter((v) => typeof v === 'number' && !isNaN(v));
+
+              if (validScores.length > 0) {
+                if (competencyCalcMode === 'sum') {
+                  const sumVal = Math.min(100, validScores.reduce((a, b) => a + b, 0));
+                  compValues.push(sumVal);
+                } else {
+                  const avgVal = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+                  compValues.push(avgVal);
                 }
-              });
+              }
             });
-            const avg = actList.length > 0
-              ? Math.round(actList.reduce((a, b) => a + b, 0) / actList.length)
+
+            const finalGrade = compValues.length > 0
+              ? Math.round(compValues.reduce((a, b) => a + b, 0) / compValues.length)
               : null;
 
             return {
@@ -1072,7 +1192,7 @@ export const ClassroomManager = () => {
               course_id: selectedCourseId,
               subject_id: selectedSubjectId,
               school_year: year,
-              [periodKey]: avg
+              [periodKey]: finalGrade
             };
           });
 
@@ -1553,12 +1673,25 @@ export const ClassroomManager = () => {
                       const isExcusa = currentStatus === 'excusa';
                       const isAusente = currentStatus === 'ausente';
                       const studentNote = specialNotesMap[s.id];
+                      const activeExcuse = activeExcusesMap[s.id];
+
+                      // Color dinámico para la fila si tiene excusa médica/justificación activa
+                      const excuseThemeMap: Record<string, { bg: string; border: string; badge: string; text: string }> = {
+                        amber: { bg: 'bg-amber-500/15 dark:bg-amber-950/40', border: 'border-l-4 border-l-amber-500', badge: 'bg-amber-500 text-white', text: 'text-amber-800 dark:text-amber-300' },
+                        rose: { bg: 'bg-rose-500/15 dark:bg-rose-950/40', border: 'border-l-4 border-l-rose-500', badge: 'bg-rose-500 text-white', text: 'text-rose-800 dark:text-rose-300' },
+                        indigo: { bg: 'bg-indigo-500/15 dark:bg-indigo-950/40', border: 'border-l-4 border-l-indigo-500', badge: 'bg-indigo-600 text-white', text: 'text-indigo-800 dark:text-indigo-300' },
+                        emerald: { bg: 'bg-emerald-500/15 dark:bg-emerald-950/40', border: 'border-l-4 border-l-emerald-500', badge: 'bg-emerald-600 text-white', text: 'text-emerald-800 dark:text-emerald-300' },
+                        purple: { bg: 'bg-purple-500/15 dark:bg-purple-950/40', border: 'border-l-4 border-l-purple-500', badge: 'bg-purple-600 text-white', text: 'text-purple-800 dark:text-purple-300' }
+                      };
+                      const activeExcuseTheme = activeExcuse ? (excuseThemeMap[activeExcuse.color] || excuseThemeMap.amber) : null;
 
                       return (
                         <tr
                           key={s.id}
                           className={`transition-colors border-b border-border-main/40 ${
-                            isExcusa
+                            activeExcuseTheme
+                              ? `${activeExcuseTheme.bg} ${activeExcuseTheme.border} hover:opacity-90`
+                              : isExcusa
                               ? 'bg-amber-500/15 dark:bg-amber-950/40 border-l-4 border-l-amber-500 hover:bg-amber-500/20'
                               : isAusente
                               ? 'bg-rose-500/5 hover:bg-surface-hover'
@@ -1569,19 +1702,38 @@ export const ClassroomManager = () => {
                             {s.order_number != null && s.order_number !== '' ? s.order_number : (idx + 1)}
                           </td>
                           <td className="px-4 py-2 font-bold text-text-main text-xs">
-                            <span className="inline-flex items-center gap-1.5">
-                              <span>{getStudentFullName(s)}</span>
-                              {studentNote && (
-                                <button
-                                  type="button"
-                                  onClick={() => openSpecialNoteModal(s.id)}
-                                  className="text-amber-600 hover:text-amber-700 hover:scale-125 transition-transform cursor-pointer inline-flex items-center p-0.5"
-                                  title={studentNote}
-                                >
-                                  <Pin size={12} className="fill-amber-500 text-amber-600 rotate-45" />
-                                </button>
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span>{getStudentFullName(s)}</span>
+                                {studentNote && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSpecialNoteModal(s.id)}
+                                    className="text-amber-600 hover:text-amber-700 hover:scale-125 transition-transform cursor-pointer inline-flex items-center p-0.5"
+                                    title={studentNote}
+                                  >
+                                    <Pin size={12} className="fill-amber-500 text-amber-600 rotate-45" />
+                                  </button>
+                                )}
+                              </span>
+
+                              {activeExcuse && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedExcuseModalData(activeExcuse)}
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[9px] uppercase tracking-wider shadow-xs cursor-pointer hover:scale-105 transition-transform ${activeExcuseTheme?.badge}`}
+                                    title="Haga clic para ver el comunicado y motivo completo de la excusa"
+                                  >
+                                    <Clock size={10} />
+                                    <span>Excusa Activa ({activeExcuse.hoursRemaining}h rest.)</span>
+                                  </button>
+                                  <span className={`text-[10px] font-semibold truncate max-w-[220px] ${activeExcuseTheme?.text}`} title={activeExcuse.message}>
+                                    • {activeExcuse.message}
+                                  </span>
+                                </div>
                               )}
-                            </span>
+                            </div>
                           </td>
                           <td className="px-4 py-2 font-mono text-[10px] text-text-muted">
                             {s.sigerd_code || s.rne || s.student_code || '---'}
@@ -1615,6 +1767,8 @@ export const ClassroomManager = () => {
                                 className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase transition-all cursor-pointer flex items-center gap-1 ${
                                   currentStatus === 'excusa'
                                     ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
+                                    : activeExcuse
+                                    ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 ring-2 ring-amber-400/50'
                                     : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-amber-100 hover:text-amber-700'
                                 }`}
                               >
@@ -1636,19 +1790,27 @@ export const ClassroomManager = () => {
                           <td className="px-4 py-2">
                             <input
                               type="text"
-                              placeholder={isExcusa ? 'Motivo directo de la excusa (médico, permiso)...' : 'Ej. Llegó a 2da hora...'}
+                              placeholder={
+                                activeExcuse
+                                  ? `Excusa vigente: ${activeExcuse.message.slice(0, 40)}...`
+                                  : isExcusa
+                                  ? 'Motivo directo de la excusa (médico, permiso)...'
+                                  : 'Ej. Llegó a 2da hora...'
+                              }
                               value={attendanceState[s.id]?.note || ''}
                               onChange={(e) =>
                                 setAttendanceState((prev) => ({
                                   ...prev,
                                   [s.id]: {
-                                    status: prev[s.id]?.status || 'presente',
+                                    status: prev[s.id]?.status || (activeExcuse ? 'excusa' : 'presente'),
                                     note: e.target.value
                                   }
                                 }))
                               }
                               className={`w-full px-3 py-1.5 rounded-xl border text-xs outline-none transition-all ${
-                                isExcusa
+                                activeExcuse
+                                  ? 'border-amber-400 bg-amber-50/90 dark:bg-amber-950/70 text-amber-950 dark:text-amber-100 placeholder:text-amber-700/70 ring-1 ring-amber-400/50 font-medium'
+                                  : isExcusa
                                   ? 'border-amber-400 bg-amber-50/80 dark:bg-amber-950/60 text-amber-950 dark:text-amber-100 placeholder:text-amber-600/70 ring-1 ring-amber-400/40 font-medium'
                                   : 'border-border-main bg-brand-bg text-text-main focus:ring-1 focus:ring-brand-blue'
                               }`}
@@ -1876,6 +2038,65 @@ export const ClassroomManager = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* COTEJO / SELECTOR DE MODO DE CÁLCULO DE COMPETENCIAS */}
+              <div className="flex items-center gap-1.5 p-1 bg-brand-bg rounded-2xl border border-border-main shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetencyCalcMode('average');
+                    localStorage.setItem(storageScopeKey, JSON.stringify({
+                      scores: partialScores,
+                      activities: competencyActivities,
+                      calcMode: 'average',
+                      period: selectedPeriod,
+                      subjectId: selectedSubjectId,
+                      courseId: selectedCourseId,
+                      teacherId: profile?.teacher_id || profile?.id,
+                      centerId: profile?.center_id || center?.id,
+                      year: selectedYear || '2026-2027',
+                      updatedAt: new Date().toISOString()
+                    }));
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
+                    competencyCalcMode === 'average'
+                      ? 'bg-brand-blue text-white shadow-sm shadow-brand-blue/30'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface'
+                  }`}
+                  title="Calcula el promedio aritmético de las actividades en base a 100"
+                >
+                  <Award size={13} />
+                  <span>Promediado (Base 100)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetencyCalcMode('sum');
+                    localStorage.setItem(storageScopeKey, JSON.stringify({
+                      scores: partialScores,
+                      activities: competencyActivities,
+                      calcMode: 'sum',
+                      period: selectedPeriod,
+                      subjectId: selectedSubjectId,
+                      courseId: selectedCourseId,
+                      teacherId: profile?.teacher_id || profile?.id,
+                      centerId: profile?.center_id || center?.id,
+                      year: selectedYear || '2026-2027',
+                      updatedAt: new Date().toISOString()
+                    }));
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
+                    competencyCalcMode === 'sum'
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface'
+                  }`}
+                  title="Suma las puntuaciones parciales de las actividades acumulando hasta 100 puntos"
+                >
+                  <Plus size={13} />
+                  <span>Sumativo (Hasta 100 pts)</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setHideStudentNames((prev) => !prev)}
@@ -1932,7 +2153,7 @@ export const ClassroomManager = () => {
                     </th>
                     {activeCompetencies.map((comp, idx) => {
                       const acts = competencyActivities[comp.id] || [];
-                      const colSpan = Math.max(1, acts.length) + 1; // columnas de actividades + col de promedio de comp
+                      const colSpan = Math.max(1, acts.length) + 1; // columnas de actividades + col de promedio/suma de comp
                       const colors = [
                         'from-blue-600 to-indigo-700',
                         'from-purple-600 to-indigo-800',
@@ -1981,7 +2202,7 @@ export const ClassroomManager = () => {
                             ))
                           )}
                           <th className="px-2 py-1.5 text-center bg-indigo-50 dark:bg-indigo-950/40 text-brand-blue font-black min-w-[65px] text-[10px]">
-                            Prom. {comp.id.toUpperCase()}
+                            {competencyCalcMode === 'sum' ? `Total ${comp.id.toUpperCase()}` : `Prom. ${comp.id.toUpperCase()}`}
                           </th>
                         </React.Fragment>
                       );
@@ -2000,8 +2221,8 @@ export const ClassroomManager = () => {
                     courseStudents.map((s: any, idx: number) => {
                       const studentScores = partialScores[s.id] || {};
                       
-                      // Calcular promedios por competencia
-                      const compAverages: number[] = [];
+                      // Calcular resultados por competencia según modo seleccionado (Promediado vs Sumativo)
+                      const compCalculatedValues: number[] = [];
 
                       activeCompetencies.forEach((comp) => {
                         const acts = competencyActivities[comp.id] || [];
@@ -2010,16 +2231,21 @@ export const ClassroomManager = () => {
                           .filter((v) => typeof v === 'number' && !isNaN(v));
 
                         if (validScores.length > 0) {
-                          const avg = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
-                          compAverages.push(avg);
+                          if (competencyCalcMode === 'sum') {
+                            const sumVal = Math.min(100, validScores.reduce((a, b) => a + b, 0));
+                            compCalculatedValues.push(sumVal);
+                          } else {
+                            const avgVal = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+                            compCalculatedValues.push(avgVal);
+                          }
                         } else {
-                          compAverages.push(0);
+                          compCalculatedValues.push(0);
                         }
                       });
 
-                      // Promedio final acumulado de las competencias
-                      const finalAvg = compAverages.length > 0
-                        ? Math.round(compAverages.reduce((a, b) => a + b, 0) / compAverages.length)
+                      // Calificación final del período (promedio de las competencias)
+                      const finalAvg = compCalculatedValues.length > 0
+                        ? Math.round(compCalculatedValues.reduce((a, b) => a + b, 0) / compCalculatedValues.length)
                         : 0;
 
                       return (
@@ -2048,7 +2274,7 @@ export const ClassroomManager = () => {
 
                           {activeCompetencies.map((comp, compIdx) => {
                             const acts = competencyActivities[comp.id] || [];
-                            const compAvg = compAverages[compIdx];
+                            const compScore = compCalculatedValues[compIdx];
 
                             return (
                               <React.Fragment key={`cell_group_${comp.id}_${s.id}`}>
@@ -2069,7 +2295,7 @@ export const ClassroomManager = () => {
                                   ))
                                 )}
                                 <td className="px-2 py-1 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue text-xs">
-                                  {compAvg}
+                                  {compScore}
                                 </td>
                               </React.Fragment>
                             );
@@ -2792,25 +3018,38 @@ export const ClassroomManager = () => {
             </h2>
 
             <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
-              {courseStudents.map((s: any) => (
-                <button
-                  key={s.id}
-                  onClick={() => setFolderStudentId(s.id)}
-                  className={`w-full py-2 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    folderStudentId === s.id
-                      ? 'bg-brand-blue text-white border-brand-blue shadow-md'
-                      : 'bg-brand-bg text-text-main border-border-main hover:border-brand-blue'
-                  }`}
-                >
-                  <span className="font-bold text-xs flex items-center gap-1.5">
-                    {getStudentFullName(s)}
-                    {specialNotesMap[s.id] && (
-                      <Pin size={11} className="text-amber-600 fill-amber-500 shrink-0 rotate-45" title={specialNotesMap[s.id]} />
-                    )}
-                  </span>
-                  <span className="text-[10px] font-mono opacity-70">{s.sigerd_code || s.rne || '---'}</span>
-                </button>
-              ))}
+              {courseStudents.map((s: any) => {
+                const sExcuse = activeExcusesMap[s.id];
+                const sExcuseColor = sExcuse?.color || 'amber';
+                const sExcuseBadgeBg = sExcuseColor === 'rose' ? 'bg-rose-500' : sExcuseColor === 'indigo' ? 'bg-indigo-600' : sExcuseColor === 'emerald' ? 'bg-emerald-600' : sExcuseColor === 'purple' ? 'bg-purple-600' : 'bg-amber-500';
+
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setFolderStudentId(s.id)}
+                    className={`w-full py-2 px-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      folderStudentId === s.id
+                        ? 'bg-brand-blue text-white border-brand-blue shadow-md'
+                        : sExcuse
+                        ? 'bg-amber-500/10 dark:bg-amber-950/30 border-amber-400 text-text-main hover:border-amber-500'
+                        : 'bg-brand-bg text-text-main border-border-main hover:border-brand-blue'
+                    }`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-1.5 truncate">
+                      <span>{getStudentFullName(s)}</span>
+                      {specialNotesMap[s.id] && (
+                        <Pin size={11} className="text-amber-600 fill-amber-500 shrink-0 rotate-45" title={specialNotesMap[s.id]} />
+                      )}
+                      {sExcuse && (
+                        <span className={`px-1.5 py-0.2 rounded text-[8px] font-black text-white shrink-0 ${sExcuseBadgeBg}`} title={`Excusa: ${sExcuse.message}`}>
+                          EXCUSA ({sExcuse.hoursRemaining}h)
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[10px] font-mono opacity-70 shrink-0">{s.sigerd_code || s.rne || '---'}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -2982,6 +3221,44 @@ export const ClassroomManager = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* EXCUSA MÉDICA O DE AUSENCIA VIGENTE (DESDE MÓDULO DE COMUNICADOS) */}
+                  {activeExcusesMap[folderStudentId] && (() => {
+                    const exc = activeExcusesMap[folderStudentId];
+                    return (
+                      <div className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-400 text-xs flex items-start justify-between gap-3 shadow-sm animate-in fade-in duration-150">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <Clock size={18} />
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-black text-amber-900 dark:text-amber-200 text-[11px] uppercase tracking-wider">
+                                {exc.motive}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white font-black text-[9px] uppercase tracking-wider">
+                                Vigente: {exc.hoursRemaining}h restantes
+                              </span>
+                            </div>
+                            <p className="text-xs text-text-main font-semibold leading-relaxed">
+                              "{exc.message}"
+                            </p>
+                            <p className="text-[10px] text-text-muted font-medium">
+                              Registrada por: <strong>{exc.senderName}</strong> • Vigente hasta: {new Date(exc.validUntil).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedExcuseModalData(exc)}
+                          className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-amber-100 text-amber-900 dark:text-amber-200 border border-amber-300 rounded-xl font-black text-[10px] uppercase tracking-wider shrink-0 transition-all cursor-pointer"
+                        >
+                          Ver Detalle
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* NOTA DEL ALUMNO (SOLO SI FUE REGISTRADA EN EL HISTORIAL) */}
                   {specialNotesMap[folderStudentId] && (
@@ -3217,6 +3494,89 @@ export const ClassroomManager = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedSpecialNoteModalStudentId(null)}
+                  className="px-5 py-2 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL DE DETALLE DE EXCUSA MÉDICA / COMUNICADO ACTIVO */}
+      {selectedExcuseModalData && (() => {
+        const excuse = selectedExcuseModalData;
+        const student = courseStudents.find((s: any) => s.id === excuse.studentId);
+        const studentName = excuse.studentName || (student ? getStudentFullName(student) : 'Estudiante');
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-surface border border-border-main rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-border-main pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold">
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-text-main">
+                      Detalle de Excusa Activa
+                    </h3>
+                    <p className="text-[10px] text-text-muted">Generada desde el Módulo de Comunicaciones</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExcuseModalData(null)}
+                  className="p-1.5 text-text-muted hover:text-text-main hover:bg-brand-bg rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3 rounded-2xl bg-brand-bg border border-border-main flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      Estudiante:
+                    </span>
+                    <span className="text-xs font-black text-brand-blue">
+                      {studentName}
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-amber-500 text-white font-black text-[10px] uppercase tracking-wider shadow-xs">
+                    {excuse.hoursRemaining}h restantes
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-400/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                      Motivo: {excuse.motive}
+                    </span>
+                    <span className="text-[10px] text-text-muted font-mono">
+                      Emisión: {new Date(excuse.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-text-main leading-relaxed whitespace-pre-wrap">
+                    {excuse.message}
+                  </p>
+                </div>
+
+                <div className="text-[11px] text-text-muted space-y-1 px-1">
+                  <p>
+                    <strong>Remitente:</strong> {excuse.senderName}
+                  </p>
+                  <p>
+                    <strong>Válida hasta:</strong> {new Date(excuse.validUntil).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-border-main">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExcuseModalData(null)}
                   className="px-5 py-2 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md"
                 >
                   Cerrar
