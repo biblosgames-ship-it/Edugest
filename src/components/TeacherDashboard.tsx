@@ -390,14 +390,69 @@ export const TeacherDashboard = ({
     );
   }, []);
 
+  const getCourseIsMorning = useCallback(
+    (course: any) => {
+      if (!course) return true;
+      const cTanda = (course?.tanda || '').toLowerCase();
+      if (cTanda.includes('ves') || cTanda.includes('tar')) return false;
+      if (cTanda.includes('mat') || cTanda.includes('mañ')) return true;
+
+      // Si no tiene tanda explícita, revisar las horas de sus clases programadas
+      const courseEntries = (state.schedule || []).filter(
+        (e: any) => String(e.course_id || e.courseId) === String(course.id)
+      );
+      if (courseEntries.length > 0) {
+        const mornCount = courseEntries.filter((e: any) => {
+          const m = toMins(e.start_time || e.startTime);
+          return m > 0 && m < 780;
+        }).length;
+        const vespCount = courseEntries.filter((e: any) => {
+          const m = toMins(e.start_time || e.startTime);
+          return m >= 780;
+        }).length;
+        if (mornCount > 0 || vespCount > 0) {
+          return mornCount >= vespCount;
+        }
+      }
+
+      // Revisar si en levelSchedules hay horario configurado para este nivel
+      const lNorm = (course.level || '').toLowerCase().substring(0, 3);
+      const lvlScheds = (state.levelSchedules || []).filter((ls: any) => {
+        const lsLvl = (ls.level || '').toLowerCase();
+        return !lNorm || lsLvl.includes(lNorm) || lNorm.includes(lsLvl.substring(0, 3));
+      });
+      if (lvlScheds.length === 1) {
+        const s = (lvlScheds[0].shift || '').toLowerCase();
+        return !s.includes('ves') && !s.includes('tar');
+      }
+
+      // Si el centro en general no tiene tanda vespertina, es matutino
+      const hasAnyVesp =
+        (state.courses || []).some((c: any) => {
+          const t = (c.tanda || '').toLowerCase();
+          return t.includes('ves') || t.includes('tar');
+        }) ||
+        (state.levelSchedules || []).some((ls: any) => {
+          const s = (ls.shift || '').toLowerCase();
+          return s.includes('ves') || s.includes('tar');
+        }) ||
+        (state.schedule || []).some((e: any) => {
+          const m = toMins(e.start_time || '');
+          return m >= 780;
+        });
+
+      if (!hasAnyVesp) return true;
+
+      const cLevel = (course?.level || '').toLowerCase();
+      return !cLevel.includes('secun');
+    },
+    [state.schedule, state.levelSchedules, state.courses]
+  );
+
   const getSlotsForCourse = useCallback(
     (course: any) => {
       if (!course) return [];
-      const cTanda = (course?.tanda || '').toLowerCase();
-      const cLevel = (course?.level || '').toLowerCase();
-      const courseIsMorning = cTanda
-        ? !cTanda.includes('ves') && !cTanda.includes('tar')
-        : !cLevel.includes('secun');
+      const courseIsMorning = getCourseIsMorning(course);
       const courseShiftName = courseIsMorning ? 'Matutina' : 'Vespertina';
       const courseOfficial = findOfficialSchedule(state.levelSchedules, course?.level, courseShiftName);
 
@@ -673,11 +728,61 @@ export const TeacherDashboard = ({
       isCourseSecondCycle,
       state.levelSchedules,
       state.breakPreferences,
-      state.fixedEvents
+      state.fixedEvents,
+      getCourseIsMorning
     ]
   );
 
-  // Horario del docente para el día de hoy con recreos integrados
+  // Obtener los cursos que dicta el docente
+  const myCourses = useMemo(() => {
+    if (!selectedTeacherId) return [];
+
+    const courseIds = new Set<string>();
+
+    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
+
+    state.schedule.forEach((s: any) => {
+      if (selectedYear) {
+        if (hasExplicitYearEntries) {
+          if (s.school_year !== selectedYear) return;
+        } else {
+          if (s.school_year && s.school_year !== selectedYear) return;
+        }
+      }
+
+      const tId = s.teacherId || s.teacher_id;
+      const cId = s.courseId || s.course_id;
+      if (
+        (isSameTeacher(tId, selectedTeacherId) ||
+          tId === selectedTeacherId ||
+          (!tId &&
+            (state.assignments || []).some(
+              (a: any) =>
+                (isSameTeacher(a.teacher_id, selectedTeacherId) ||
+                  isSameTeacher(a.teacherId, selectedTeacherId) ||
+                  a.teacher_id === selectedTeacherId ||
+                  a.teacherId === selectedTeacherId) &&
+                (a.course_id === cId || a.courseId === cId) &&
+                a.subject_id === s.subject_id
+            ))) &&
+        cId
+      ) {
+        courseIds.add(cId);
+      }
+    });
+
+    state.assignments.forEach((a: any) => {
+      const tId = a.teacherId || a.teacher_id;
+      const cId = a.courseId || a.course_id;
+      if ((isSameTeacher(tId, selectedTeacherId) || tId === selectedTeacherId) && cId) {
+        courseIds.add(cId);
+      }
+    });
+
+    return state.courses.filter((c) => courseIds.has(c.id));
+  }, [selectedTeacherId, selectedYear, state.schedule, state.assignments, state.courses, isSameTeacher]);
+
+  // Horario del docente para el día de hoy con recreos integrados acorde con el horario oficial
   const teacherTodaySchedule = useMemo(() => {
     if (!selectedTeacherId) return [];
     const normCurrentDay = normalize(currentDay);
@@ -705,8 +810,8 @@ export const TeacherDashboard = ({
             (state.assignments || []).some(
               (a: any) =>
                 (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId) || a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) &&
-                (a.course_id === entry.course_id || a.courseId === entry.course_id) &&
-                a.subject_id === entry.subject_id
+                (String(a.course_id || a.courseId) === String(entry.course_id || entry.courseId)) &&
+                String(a.subject_id || a.subjectId) === String(entry.subject_id || entry.subjectId)
             ));
 
         if (!matchesTeacher) return false;
@@ -724,12 +829,27 @@ export const TeacherDashboard = ({
         const courseId = entry.course_id || entry.courseId;
 
         const tb = state.timeBlocks.find((b) => b.id === tbId);
-        const sub = state.subjects.find((s) => s.id === subId);
-        const course = state.courses.find((c) => c.id === courseId);
-        const room = state.rooms.find((r) => r.id === (entry.room_id || entry.roomId));
+        const sub = state.subjects.find((s) => String(s.id) === String(subId));
+        const course = state.courses.find((c) => String(c.id) === String(courseId));
+        const room = state.rooms.find((r) => String(r.id) === String(entry.room_id || entry.roomId));
 
-        const sTime = entry.start_time || entry.startTime || tb?.startTime || tb?.start_time || '';
-        const eTime = entry.end_time || entry.endTime || tb?.endTime || tb?.end_time || '';
+        // Alineación precisa con los slots del curso
+        let sTime = entry.start_time || entry.startTime || tb?.startTime || tb?.start_time || '';
+        let eTime = entry.end_time || entry.endTime || tb?.endTime || tb?.end_time || '';
+
+        if (course) {
+          const courseSlots = getSlotsForCourse(course);
+          const nonBreakSlots = courseSlots.filter((s: any) => !s.isBreak);
+          const rawMins = toMins(sTime);
+          const matchedSlot = nonBreakSlots.find((s: any) => {
+            if (s.id && tbId && String(s.id) === String(tbId)) return true;
+            return Math.abs(toMins(s.start) - rawMins) <= 25;
+          });
+          if (matchedSlot) {
+            sTime = matchedSlot.start;
+            eTime = matchedSlot.end;
+          }
+        }
 
         const start = toMins(sTime);
         const end = toMins(eTime);
@@ -744,6 +864,7 @@ export const TeacherDashboard = ({
           room,
           isNow,
           startMinutes: start,
+          endMinutes: end,
           sTime,
           eTime
         };
@@ -758,43 +879,87 @@ export const TeacherDashboard = ({
         return true;
       });
 
-    // Si no hay clases hoy, retornar vacío
-    if (normTodayClasses.length === 0) return [];
-
-    // Determinar tanda
-    const isMorning = normTodayClasses.some((c) => c.startMinutes < 780);
-
-    // Buscar recreo en breakPreferences
-    const firstRelevantBreak = (state.breakPreferences || []).find((bp: any) => {
-      const rawMins = toMins(bp.startTime || bp.start_time);
-      const isBpMorning = rawMins >= 420 && rawMins < 780;
-      return isMorning === isBpMorning;
+    // Cursos relevantes para determinar recreos oficiales del docente
+    const todayCoursesMap = new Map<string, any>();
+    normTodayClasses.forEach((c: any) => {
+      if (c.course?.id) todayCoursesMap.set(String(c.course.id), c.course);
     });
 
-    let bStart = firstRelevantBreak
-      ? toMins(firstRelevantBreak.startTime || firstRelevantBreak.start_time)
-      : isMorning
-        ? 600
-        : 955; // 10:00 AM o 03:55 PM
-    if (!isMorning && bStart > 0 && bStart < 420) bStart += 720;
-    const bDuration = firstRelevantBreak
-      ? Number(firstRelevantBreak.durationMinutes || firstRelevantBreak.duration_minutes) || 20
-      : 20;
-    const bEnd = bStart + bDuration;
+    if (todayCoursesMap.size === 0 && myCourses.length > 0) {
+      myCourses.forEach((c: any) => todayCoursesMap.set(String(c.id), c));
+    }
 
-    const breakItem = {
-      id: 'today_recess',
-      isBreak: true,
-      label: 'RECREO GENERAL',
-      sTime: fromMins(bStart),
-      eTime: fromMins(bEnd),
-      startMinutes: bStart,
-      isNow: currentTimeMinutes >= bStart && currentTimeMinutes < bEnd,
-      durationMinutes: bDuration,
-      sub: { name: '🔔 RECREO' }
-    } as any;
+    const relevantCourses = Array.from(todayCoursesMap.values());
 
-    return [...normTodayClasses, breakItem].sort((a, b) => a.startMinutes - b.startMinutes);
+    // Extraer todos los recreos y descansos oficiales calculados de los cursos
+    const breakItemsMap = new Map<string, any>();
+
+    relevantCourses.forEach((c: any) => {
+      const cSlots = getSlotsForCourse(c);
+      const cBreaks = cSlots.filter((s: any) => s.isBreak);
+      cBreaks.forEach((b: any) => {
+        const bStartM = toMins(b.start);
+        const bEndM = toMins(b.end);
+        const key = `${b.start}_${b.end}`;
+        if (!breakItemsMap.has(key)) {
+          const dur = bEndM - bStartM;
+          breakItemsMap.set(key, {
+            id: `break_${key}`,
+            isBreak: true,
+            label: b.label || 'RECREO',
+            sTime: b.start,
+            eTime: b.end,
+            startMinutes: bStartM,
+            endMinutes: bEndM,
+            durationMinutes: dur > 0 ? dur : 30,
+            isNow: currentTimeMinutes >= bStartM && currentTimeMinutes < bEndM,
+            sub: { name: `🔔 ${b.label || 'RECREO'}` }
+          });
+        }
+      });
+    });
+
+    // Respaldo directo en caso de que ningún curso tenga slots con break
+    if (breakItemsMap.size === 0 && (state.breakPreferences || []).length > 0) {
+      const isMorning = normTodayClasses.length > 0
+        ? normTodayClasses.some((c: any) => c.startMinutes < 780)
+        : true;
+
+      const fallbackBP = (state.breakPreferences || []).find((bp: any) => {
+        const rawMins = toMins(bp.startTime || bp.start_time);
+        const isBpMorning = rawMins >= 420 && rawMins < 780;
+        return isMorning === isBpMorning;
+      }) || state.breakPreferences[0];
+
+      if (fallbackBP) {
+        let bStart = toMins(fallbackBP.startTime || fallbackBP.start_time);
+        if (!isMorning && bStart > 0 && bStart < 420) bStart += 720;
+        const bDuration = Number(fallbackBP.durationMinutes || fallbackBP.duration_minutes) || 30;
+        const bEnd = bStart + bDuration;
+        const key = `${fromMins(bStart)}_${fromMins(bEnd)}`;
+        breakItemsMap.set(key, {
+          id: `break_${key}`,
+          isBreak: true,
+          label: fallbackBP.name || 'RECREO',
+          sTime: fromMins(bStart),
+          eTime: fromMins(bEnd),
+          startMinutes: bStart,
+          endMinutes: bEnd,
+          durationMinutes: bDuration,
+          isNow: currentTimeMinutes >= bStart && currentTimeMinutes < bEnd,
+          sub: { name: `🔔 ${fallbackBP.name || 'RECREO'}` }
+        });
+      }
+    }
+
+    const breakItems = Array.from(breakItemsMap.values());
+
+    // Si hoy no hay clases presenciales registradas, retornar vacío para el timeline diario
+    if (normTodayClasses.length === 0) {
+      return [];
+    }
+
+    return [...normTodayClasses, ...breakItems].sort((a, b) => a.startMinutes - b.startMinutes);
   }, [
     selectedTeacherId,
     state.schedule,
@@ -806,7 +971,9 @@ export const TeacherDashboard = ({
     currentTimeMinutes,
     state.breakPreferences,
     selectedYear,
-    isSameTeacher
+    isSameTeacher,
+    getSlotsForCourse,
+    myCourses
   ]);
 
   const activeClassNow = useMemo(() => {
@@ -825,14 +992,17 @@ export const TeacherDashboard = ({
     if (currentClass) {
       const endMins = currentClass.endMinutes || getMinutes(currentClass.eTime);
       const minsLeft = endMins - currentTimeMinutes;
+      const nextItem = teacherTodaySchedule.find(
+        (c) => (c.startMinutes || getMinutes(c.sTime)) >= endMins
+      );
       return {
         type: 'current',
         minsLeft: Math.max(1, minsLeft),
         currentSubject: currentClass.sub?.name || 'Materia Actual',
         currentCourse: `${currentClass.course?.grade || ''} ${currentClass.course?.section || ''}`.trim(),
-        nextSubject: nextClass?.sub?.name || null,
-        nextCourse: nextClass ? `${nextClass.course?.grade || ''} ${nextClass.course?.section || ''}`.trim() : null,
-        nextTime: nextClass?.sTime || null
+        nextSubject: nextItem?.isBreak ? (nextItem.label || 'Recreo') : (nextClass?.sub?.name || null),
+        nextCourse: nextItem?.isBreak ? 'Receso Escolar' : (nextClass ? `${nextClass.course?.grade || ''} ${nextClass.course?.section || ''}`.trim() : null),
+        nextTime: nextItem?.sTime || nextClass?.sTime || null
       };
     }
 
@@ -951,14 +1121,8 @@ export const TeacherDashboard = ({
     });
     const teacherCourses = state.courses.filter((c: any) => teacherCourseIds.has(c.id));
 
-    const mornCourses = teacherCourses.filter((c: any) => {
-      const t = (c.tanda || '').toLowerCase();
-      return t.includes('mat') || t.includes('mañ') || (!t.includes('ves') && !t.includes('tar') && !(c.level || '').toLowerCase().includes('secun'));
-    });
-    const vespCourses = teacherCourses.filter((c: any) => {
-      const t = (c.tanda || '').toLowerCase();
-      return t.includes('ves') || t.includes('tar') || (!t.includes('mat') && !t.includes('mañ') && (c.level || '').toLowerCase().includes('secun'));
-    });
+    const mornCourses = teacherCourses.filter((c: any) => getCourseIsMorning(c));
+    const vespCourses = teacherCourses.filter((c: any) => !getCourseIsMorning(c));
 
     const getPrimaryCourse = (list: any[]) => {
       if (list.length === 0) return null;
@@ -1078,43 +1242,9 @@ export const TeacherDashboard = ({
     state.assignments,
     state.rooms,
     isSameTeacher,
-    getSlotsForCourse
+    getSlotsForCourse,
+    getCourseIsMorning
   ]);
-
-  // Obtener los cursos que dicta el docente
-  const myCourses = useMemo(() => {
-    if (!selectedTeacherId) return [];
-
-    const courseIds = new Set<string>();
-
-    const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);
-
-    state.schedule.forEach((s: any) => {
-      if (selectedYear) {
-        if (hasExplicitYearEntries) {
-          if (s.school_year !== selectedYear) return;
-        } else {
-          if (s.school_year && s.school_year !== selectedYear) return;
-        }
-      }
-
-      const tId = s.teacherId || s.teacher_id;
-      const cId = s.courseId || s.course_id;
-      if ((isSameTeacher(tId, selectedTeacherId) || tId === selectedTeacherId || (!tId && (state.assignments || []).some((a: any) => (isSameTeacher(a.teacher_id, selectedTeacherId) || isSameTeacher(a.teacherId, selectedTeacherId) || a.teacher_id === selectedTeacherId || a.teacherId === selectedTeacherId) && (a.course_id === cId || a.courseId === cId) && a.subject_id === s.subject_id))) && cId) {
-        courseIds.add(cId);
-      }
-    });
-
-    state.assignments.forEach((a: any) => {
-      const tId = a.teacherId || a.teacher_id;
-      const cId = a.courseId || a.course_id;
-      if ((isSameTeacher(tId, selectedTeacherId) || tId === selectedTeacherId) && cId) {
-        courseIds.add(cId);
-      }
-    });
-
-    return state.courses.filter((c) => courseIds.has(c.id));
-  }, [selectedTeacherId, selectedYear, state.schedule, state.assignments, state.courses, isSameTeacher]);
 
   // Horario del curso que está inspeccionando el docente con recreos completos y horas libres
   const selectedCourseSchedule = useMemo(() => {
@@ -1932,7 +2062,7 @@ export const TeacherDashboard = ({
                     {(() => {
                       const currentRecess = teacherTodaySchedule.find((c) => c.isBreak && c.isNow);
                       if (currentRecess) {
-                        return `🔔 ¡ESTÁS EN RECREO ACTUALMENTE! (${currentRecess.sTime} - ${currentRecess.eTime})`;
+                        return `🔔 ¡ESTÁS EN RECREO ACTUALMENTE! (${format12h(currentRecess.sTime)} - ${format12h(currentRecess.eTime)})`;
                       }
                       return teacherTodaySchedule.length > 0 &&
                         currentTimeMinutes >
