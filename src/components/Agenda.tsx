@@ -116,14 +116,18 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [view, setView] = useState<any>('month');
   const [date, setDate] = useState(new Date());
-  const [mobileViewMode, setMobileViewMode] = useState<'calendar' | 'list'>('calendar');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-
   const userRole = profile?.role || 'student';
   const isSuperAdmin = !!profile?.is_superadmin;
-  const isReadOnly = readOnly || (userRole !== 'admin' && userRole !== 'coordinator' && !isSuperAdmin);
-  const canManageEphemerides = userRole === 'admin' || userRole === 'coordinator' || isSuperAdmin;
+  const isStaffAdmin = userRole === 'admin' || userRole === 'coordinator' || isSuperAdmin;
+  const isReadOnly = readOnly || !isStaffAdmin;
+  const canManageEphemerides = isStaffAdmin;
   const centerColor = center?.primary_color || '#4f46e5';
+
+  // Solo administradores/coordinadores en PC pueden ver la vista de calendario mensual/semanal
+  const [mobileViewMode, setMobileViewMode] = useState<'calendar' | 'list'>(() => {
+    return isStaffAdmin ? 'calendar' : 'list';
+  });
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const [newActivity, setNewActivity] = useState({
     title: '',
@@ -135,16 +139,24 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
     suspends_classes: false
   });
 
+  // Filtrar estrictamente por privacidad de rol
   const events = (state.activities || [])
     .filter((a) => {
       const type = a.type || 'event';
-      if (a.is_global || type === 'ephemeris') return true;
-      if (userRole === 'admin' || userRole === 'coordinator') {
-        return true;
+      const isEphem = a.is_global || type === 'ephemeris';
+
+      // Efemérides y feriados son siempre visibles para todos
+      if (isEphem) return true;
+
+      // Administradores ven todo
+      if (isStaffAdmin) return true;
+
+      // Incidencias, reuniones pedagógicas y de equipo de gestión son PRIVADAS y NO deben salir a alumnos, padres o terceros
+      if (type === 'incident' || type === 'meeting' || type === 'pedagogical_group') {
+        return false;
       }
-      if (userRole === 'teacher') {
-        return type === 'event' || type === 'pedagogical_group';
-      }
+
+      // Solo actividades y eventos institucionales públicos
       return type === 'event';
     })
     .map((a) => {
@@ -368,24 +380,28 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
             Actividades del Centro
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#e11d48]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Incidencia
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#0891b2]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            R. Equipo Gestión
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Reunión Pedagógica
-          </span>
-        </div>
+        {isStaffAdmin && (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#e11d48]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Incidencia
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#0891b2]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                R. Equipo Gestión
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Reunión Pedagógica
+              </span>
+            </div>
+          </>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#1e3a8a] border border-[#60a5fa]"></div>
           <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
@@ -413,55 +429,61 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
 
       {/* SELECTOR VISTA MÓVIL / ESCRITORIO: CALENDARIO VS LISTA DE ACTIVIDADES */}
       <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100 flex-wrap">
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit">
-          <button
-            type="button"
-            onClick={() => setMobileViewMode('calendar')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              mobileViewMode === 'calendar'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <CalendarIcon size={14} /> Calendario
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileViewMode('list')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              mobileViewMode === 'list'
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Clock size={14} /> Lista de Eventos ({events.length})
-          </button>
-        </div>
-
-        {mobileViewMode === 'list' && (
-          <div className="flex items-center gap-1 overflow-x-auto max-w-full pb-1 custom-scrollbar">
-            {[
-              { id: 'all', label: 'Todos' },
-              { id: 'no_classes', label: '🚫 Sin Docencia' },
-              { id: 'patriotic', label: '🇩🇴 Patrias' },
-              { id: 'ephemeris', label: '🏫 MINERD' },
-              { id: 'activities', label: '⭐ Centro' }
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setCategoryFilter(f.id)}
-                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                  categoryFilter === f.id
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+        {isStaffAdmin ? (
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit">
+            <button
+              type="button"
+              onClick={() => setMobileViewMode('calendar')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                mobileViewMode === 'calendar'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <CalendarIcon size={14} /> Calendario Mensual
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileViewMode('list')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                mobileViewMode === 'list'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Clock size={14} /> Lista ({events.length})
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-700 flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
+              <Clock size={14} className="text-indigo-600" /> Listado de Actividades y Efemérides ({events.length})
+            </span>
           </div>
         )}
+
+        <div className="flex items-center gap-1 overflow-x-auto max-w-full pb-1 custom-scrollbar">
+          {[
+            { id: 'all', label: 'Todos' },
+            { id: 'no_classes', label: '🚫 Sin Docencia' },
+            { id: 'patriotic', label: '🇩🇴 Fechas Patrias' },
+            { id: 'ephemeris', label: '🏫 MINERD' },
+            { id: 'activities', label: '⭐ Centro' }
+          ].map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setCategoryFilter(f.id)}
+              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                categoryFilter === f.id
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {mobileViewMode === 'list' ? (

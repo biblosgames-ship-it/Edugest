@@ -1001,7 +1001,15 @@ export const StudentDashboard = ({
   const upcomingActivities = useMemo(() => {
     const todayStr = currentTime.toISOString().split('T')[0];
     return (state.activities || [])
-      .filter((act) => act.date >= todayStr)
+      .filter((act) => {
+        if (act.date < todayStr) return false;
+        const type = act.type || 'event';
+        // Ocultar incidencias, reuniones de gestión o pedagógicas en la vista de alumnos y familias
+        if (type === 'incident' || type === 'meeting' || type === 'pedagogical_group') {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
   }, [state.activities, currentTime]);

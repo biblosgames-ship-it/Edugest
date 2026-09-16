@@ -1231,11 +1231,19 @@ export const TeacherDashboard = ({
     isSameTeacher
   ]);
 
-  // Próximas actividades del centro
+  // Próximas actividades del centro (excluyendo incidencias privadas de gestión)
   const upcomingActivities = useMemo(() => {
     const todayStr = currentTime.toISOString().split('T')[0];
     return (state.activities || [])
-      .filter((act) => act.date >= todayStr)
+      .filter((act) => {
+        if (act.date < todayStr) return false;
+        const type = act.type || 'event';
+        // En la agenda general, no mostrar incidencias privadas
+        if (type === 'incident' || type === 'meeting') {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
   }, [state.activities, currentTime]);
@@ -2073,24 +2081,83 @@ export const TeacherDashboard = ({
                       Sin eventos próximos programados.
                     </p>
                   ) : (
-                    upcomingActivities.map((act) => (
-                      <div
-                        key={act.id}
-                        className="p-3 bg-slate-50 border border-slate-100 rounded-xl"
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[70%]">
-                            {act.title}
+                    upcomingActivities.map((act) => {
+                      const isNoClasses =
+                        !!act.suspends_classes ||
+                        String(act.title || '').toLowerCase().includes('feriado') ||
+                        String(act.description || '').toLowerCase().includes('[no_docencia]');
+                      const isPatriotic =
+                        String(act.title || '').toLowerCase().includes('patria') ||
+                        String(act.title || '').toLowerCase().includes('duarte') ||
+                        String(act.title || '').toLowerCase().includes('independencia');
+                      const isEphem = act.is_global || act.type === 'ephemeris';
+
+                      return (
+                        <div
+                          key={act.id}
+                          className={`p-3 rounded-xl border transition-all ${
+                            isNoClasses
+                              ? 'bg-rose-50/80 border-rose-200'
+                              : isPatriotic
+                              ? 'bg-blue-50/80 border-blue-200'
+                              : isEphem
+                              ? 'bg-sky-50/80 border-sky-200'
+                              : 'bg-purple-50/50 border-purple-150'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                              {isNoClasses ? (
+                                <span className="text-[10px]">🚫</span>
+                              ) : isPatriotic ? (
+                                <span className="text-[10px]">🇩🇴</span>
+                              ) : isEphem ? (
+                                <img
+                                  src="/minerd_logo.webp"
+                                  alt="MINERD"
+                                  className="w-3 h-3 rounded object-contain bg-white shrink-0"
+                                />
+                              ) : (
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0"></span>
+                              )}
+                              <p
+                                className={`text-[10px] font-black uppercase truncate ${
+                                  isNoClasses
+                                    ? 'text-rose-950'
+                                    : isPatriotic
+                                    ? 'text-blue-950'
+                                    : isEphem
+                                    ? 'text-sky-950'
+                                    : 'text-slate-900'
+                                }`}
+                              >
+                                {act.title}
+                              </p>
+                            </div>
+                            <span
+                              className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${
+                                isNoClasses
+                                  ? 'bg-rose-200 text-rose-800'
+                                  : isPatriotic
+                                  ? 'bg-blue-200 text-blue-800'
+                                  : isEphem
+                                  ? 'bg-sky-200 text-sky-800'
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}
+                            >
+                              {act.date.split('-').reverse().slice(0, 2).join('/')}
+                            </span>
+                          </div>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+                            {isNoClasses
+                              ? 'SUSPENSIÓN DE DOCENCIA'
+                              : act.startTime && act.endTime
+                              ? `${act.startTime} - ${act.endTime}`
+                              : 'Todo el día'}
                           </p>
-                          <span className="text-[8px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
-                            {act.date.split('-').reverse().slice(0, 2).join('/')}
-                          </span>
                         </div>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
-                          {act.startTime} - {act.endTime}
-                        </p>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
