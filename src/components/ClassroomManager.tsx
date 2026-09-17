@@ -1176,6 +1176,42 @@ export const ClassroomManager = () => {
     });
   };
 
+  // Navegar verticalmente entre estudiantes al pulsar Enter, Flecha Abajo o Flecha Arriba
+  const handlePartialKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, studentIdx: number, activityId: string) => {
+    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        const prevIdx = studentIdx - 1;
+        if (prevIdx >= 0) {
+          const prevInput = document.querySelector<HTMLInputElement>(`input[data-partial-act="${activityId}"][data-student-idx="${prevIdx}"]`);
+          if (prevInput) {
+            prevInput.focus();
+            prevInput.select();
+          }
+        }
+        return;
+      }
+
+      e.preventDefault();
+      const nextIdx = studentIdx + 1;
+      const nextInput = document.querySelector<HTMLInputElement>(`input[data-partial-act="${activityId}"][data-student-idx="${nextIdx}"]`);
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIdx = studentIdx - 1;
+      if (prevIdx >= 0) {
+        const prevInput = document.querySelector<HTMLInputElement>(`input[data-partial-act="${activityId}"][data-student-idx="${prevIdx}"]`);
+        if (prevInput) {
+          prevInput.focus();
+          prevInput.select();
+        }
+      }
+    }
+  };
+
   // Guardar calificaciones del período y sincronizar con el Registro Digital Oficial
   const handleSavePartials = async () => {
     setIsSavingPartials(true);
@@ -2441,8 +2477,12 @@ export const ClassroomManager = () => {
                                         type="number"
                                         min={0}
                                         max={100}
+                                        data-partial-act={act.id}
+                                        data-student-idx={idx}
                                         value={studentScores[act.id] ?? ''}
                                         onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
+                                        onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
+                                        onFocus={(e) => e.target.select()}
                                         className="w-12 text-center py-0.5 rounded-lg border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-1 focus:ring-brand-blue"
                                       />
                                     </td>

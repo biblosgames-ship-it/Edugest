@@ -508,12 +508,31 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, studentIdx: number, key: string) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        const prevIdx = studentIdx - 1;
+        if (prevIdx >= 0) {
+          const prevKey = `${students[prevIdx].id}_${key}`;
+          inputRefs.current[prevKey]?.focus();
+          inputRefs.current[prevKey]?.select();
+        }
+        return;
+      }
+      e.preventDefault();
       const nextIdx = studentIdx + 1;
       if (nextIdx < students.length) {
         const nextKey = `${students[nextIdx].id}_${key}`;
         inputRefs.current[nextKey]?.focus();
         inputRefs.current[nextKey]?.select();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIdx = studentIdx - 1;
+      if (prevIdx >= 0) {
+        const prevKey = `${students[prevIdx].id}_${key}`;
+        inputRefs.current[prevKey]?.focus();
+        inputRefs.current[prevKey]?.select();
       }
     }
   };
@@ -1818,6 +1837,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   value={grades[`${s.id}_${kVal}`] || ''}
                                   onChange={(e) => handleGradeChange(s.id, kVal, e.target.value)}
                                   onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
+                                  onFocus={(e) => e.target.select()}
                                   className="w-9 h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
                                   disabled={!isEditable}
@@ -1833,6 +1853,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   value={grades[`${s.id}_${kRec}`] || ''}
                                   onChange={(e) => handleGradeChange(s.id, kRec, e.target.value)}
                                   onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
+                                  onFocus={(e) => e.target.select()}
                                   className="w-8 h-8 bg-transparent text-center text-[9px] text-text-muted outline-none focus:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
                                   disabled={!isEditable}
@@ -1861,10 +1882,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             {/* COMPLETIVO: 50/50 */}
                             <td className="p-0 border-r border-border-main bg-amber-50/10 text-center">
                               <input
+                                ref={(el) => {
+                                  inputRefs.current[`${s.id}_comp`] = el;
+                                }}
                                 type="text"
                                 maxLength={3}
                                 value={grades[`${s.id}_comp`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
+                                onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-amber-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="EX"
                                 disabled={!isEditable}
@@ -1873,10 +1899,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             {/* EXTRAORDINARIO: 30/70 */}
                             <td className="p-0 border-r border-border-main bg-orange-50/10 text-center">
                               <input
+                                ref={(el) => {
+                                  inputRefs.current[`${s.id}_extra`] = el;
+                                }}
                                 type="text"
                                 maxLength={3}
                                 value={grades[`${s.id}_extra`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
+                                onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-orange-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="EX"
                                 disabled={!isEditable}
@@ -1885,10 +1916,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             {/* ESPECIAL 1 */}
                             <td className="p-0 border-r border-border-main bg-rose-50/10 text-center">
                               <input
+                                ref={(el) => {
+                                  inputRefs.current[`${s.id}_esp1`] = el;
+                                }}
                                 type="text"
                                 maxLength={3}
                                 value={grades[`${s.id}_esp1`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
+                                onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-rose-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={!isEditable}
                               />
@@ -1896,10 +1932,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             {/* ESPECIAL 2 */}
                             <td className="p-0 border-r border-border-main bg-rose-100/10 text-center">
                               <input
+                                ref={(el) => {
+                                  inputRefs.current[`${s.id}_esp2`] = el;
+                                }}
                                 type="text"
                                 maxLength={3}
                                 value={grades[`${s.id}_esp2`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
+                                onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-rose-900 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={!isEditable}
                               />
@@ -1908,10 +1949,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         ) : (
                           <td className="p-0 bg-rose-50/10 text-center border-r border-border-main">
                             <input
+                              ref={(el) => {
+                                inputRefs.current[`${s.id}_final_rec`] = el;
+                              }}
                               type="text"
                               maxLength={3}
                               value={grades[`${s.id}_final_rec`] || ''}
                               onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
+                              onFocus={(e) => e.target.select()}
                               className="w-full h-8 bg-transparent text-center text-rose-600 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={!isEditable}
                             />
