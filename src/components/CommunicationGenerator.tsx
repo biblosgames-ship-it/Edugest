@@ -16,7 +16,8 @@ import {
   AlertCircle,
   GraduationCap,
   MessageSquare,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
@@ -37,11 +38,21 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     'coordinator',
     'director',
     'directora',
+    'secretaria',
+    'secretario',
+    'secretaría',
     'psicologia',
     'orientacion',
-    'finance'
+    'finance',
+    'management'
   ].includes(userRole);
   const isStudent = userRole === 'student';
+
+  // Inline quick reply state for Inbox
+  const [replyingCommId, setReplyingCommId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replyMotive, setReplyMotive] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   // Form State
   const [motives, setMotives] = useState<string[]>([
@@ -309,24 +320,106 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
 
   // Reply handler from Inbox
   const handleReply = (comm: any) => {
-    setActiveTab('compose');
-    setSelectedMotive(`Re: ${comm.motive || 'Comunicación'}`);
-    setMessageText('');
+    handleToggleReply(comm);
+  };
 
-    if (isTeacher) {
-      if (comm.target_student_ids && comm.target_student_ids.length > 0) {
-        setTeacherTargetMode('student_parent');
-        const stId = comm.target_student_ids[0];
-        setSelectedStudentId(stId);
-        const st = state.students.find((s) => s.id === stId);
-        if (st && st.course_id) setSelectedCourseId(st.course_id);
-      } else {
-        setTeacherTargetMode('management');
-      }
-    } else if (isParent) {
+  // Toggle inline reply directly in Inbox without navigating away to compose panel
+  const handleToggleReply = (comm: any) => {
+    if (replyingCommId === comm.id) {
+      setReplyingCommId(null);
+      setReplyText('');
+      setReplyMotive('');
+    } else {
+      setReplyingCommId(comm.id);
+      setReplyMotive(`Re: ${comm.motive || 'Comunicado'}`);
+      setReplyText('');
+    }
+  };
+
+  // Send inline reply directly back to sender without leaving inbox
+  const handleSendInlineReply = async (comm: any) => {
+    if (!replyText.trim()) {
+      alert('Por favor escribe el contenido de la respuesta.');
+      return;
+    }
+
+    const centerId = profile?.center_id || center?.id;
+    if (!centerId) {
+      alert('Error: Identificador del centro no disponible.');
+      return;
+    }
+
+    setIsSendingReply(true);
+    try {
+      let targetRoles: string[] = [];
+      let targetCourses: string[] = comm.target_courses || [];
+      let targetTeachers: string[] = [];
+      let targetStudentIds: string[] = comm.target_student_ids || [];
+      let targetParentIds: string[] = comm.target_parent_ids || [];
+      let targetUserIds: string[] = [];
+
       if (comm.sender_id) {
-        setParentTeacherTarget(comm.sender_id);
+        targetUserIds.push(comm.sender_id);
       }
+
+      // Check if original sender was a teacher
+      const teacherObj = (state.teachers || []).find(
+        (t: any) =>
+          t.id === comm.sender_id ||
+          t.teacher_id === comm.sender_id ||
+          (t.user_id && t.user_id === comm.sender_id)
+      );
+
+      if (teacherObj) {
+        targetTeachers.push(teacherObj.id);
+        targetRoles.push('Docentes');
+      } else if (comm.target_student_ids && comm.target_student_ids.length > 0) {
+        if (comm.sender_id) targetParentIds.push(comm.sender_id);
+        targetRoles.push('Padres');
+      } else {
+        if (comm.sender_id) targetParentIds.push(comm.sender_id);
+      }
+
+      const roleSuffix =
+        profile?.role === 'secretaria' || profile?.role === 'secretario'
+          ? ' (Secretaría)'
+          : isAdminOrManagement
+            ? ' (Dirección/Gestión)'
+            : isTeacher
+              ? ' (Docente)'
+              : isParent
+                ? ' (Tutor)'
+                : '';
+
+      await dataService.saveCommunication({
+        center_id: centerId,
+        sender_id: profile.id,
+        sender_name: `${profile.full_name || 'Personal'}${roleSuffix}`,
+        motive: replyMotive.trim() || `Re: ${comm.motive || 'Comunicado'}`,
+        message: replyText.trim(),
+        target_roles: targetRoles,
+        target_courses: targetCourses,
+        target_teachers: Array.from(new Set(targetTeachers)),
+        target_student_ids: Array.from(new Set(targetStudentIds)),
+        target_student_name: comm.target_student_name,
+        target_parent_ids: Array.from(new Set(targetParentIds)),
+        target_user_ids: Array.from(new Set(targetUserIds))
+      });
+
+      setSuccessNotice(`Respuesta enviada exitosamente a ${comm.sender_name}`);
+      setReplyingCommId(null);
+      setReplyText('');
+      setReplyMotive('');
+      await fetchCommunications();
+
+      setTimeout(() => {
+        setSuccessNotice(null);
+      }, 3500);
+    } catch (error: any) {
+      console.error('Error enviando respuesta directa:', error);
+      alert('Hubo un error al enviar la respuesta: ' + (error?.message || 'Intente nuevamente'));
+    } finally {
+      setIsSendingReply(false);
     }
   };
 
@@ -723,11 +816,15 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                   <div className="flex items-center justify-between pt-2">
                     <button
                       type="button"
-                      onClick={() => handleReply(comm)}
-                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer"
+                      onClick={() => handleToggleReply(comm)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                        replyingCommId === comm.id
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                      }`}
                     >
                       <Reply size={14} />
-                      Responder
+                      {replyingCommId === comm.id ? 'Ocultar respuesta' : 'Responder'}
                     </button>
 
                     {isAdminOrManagement && (
@@ -741,6 +838,90 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                       </button>
                     )}
                   </div>
+
+                  {/* CAJA DE RESPUESTA DIRECTA EN LA MISMA BANDEJA */}
+                  {replyingCommId === comm.id && (
+                    <div className="mt-3 pt-4 border-t border-indigo-100 bg-indigo-50/50 -mx-6 -mb-6 p-6 rounded-b-3xl space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                            <Reply size={14} />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-indigo-950 uppercase tracking-tight">
+                              Respuesta para: <span className="text-indigo-600 font-extrabold">{comm.sender_name}</span>
+                            </span>
+                            {comm.target_student_name && (
+                              <p className="text-[10px] font-bold text-amber-700">
+                                🎓 Estudiante relacionado: {comm.target_student_name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReplyingCommId(null)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition-colors cursor-pointer"
+                          title="Cerrar"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                          Asunto / Motivo
+                        </label>
+                        <input
+                          type="text"
+                          value={replyMotive}
+                          onChange={(e) => setReplyMotive(e.target.value)}
+                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          placeholder="Asunto de la respuesta..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                          Tu Mensaje de Respuesta
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder={`Escribe aquí tu respuesta para ${comm.sender_name}...`}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none leading-relaxed"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingCommId(null);
+                            setReplyText('');
+                          }}
+                          className="px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-500 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSendingReply || !replyText.trim()}
+                          onClick={() => handleSendInlineReply(comm)}
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                        >
+                          {isSendingReply ? (
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <SendHorizontal size={14} />
+                          )}
+                          <span>Enviar Respuesta</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -235,7 +235,9 @@ export const Sidebar = ({
                               ? 'Finanzas'
                               : userData?.role === 'coordinator'
                                 ? 'Coordinador'
-                                : userData?.role || 'Usuario'}
+                                : userData?.role === 'secretaria' || userData?.role === 'secretario'
+                                  ? 'Secretaría'
+                                  : userData?.role || 'Usuario'}
                 </p>
               </div>
             </div>

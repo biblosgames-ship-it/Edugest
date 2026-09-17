@@ -502,6 +502,9 @@ export const dataService = {
 
     // Preparar roles y etiquetas directas codificadas de forma segura
     const directTags: string[] = [];
+    if (Array.isArray(data.target_user_ids)) {
+      data.target_user_ids.forEach((uid: string) => uid && directTags.push(`USER:${uid}`));
+    }
     if (Array.isArray(data.target_student_ids)) {
       data.target_student_ids.forEach((sid: string) => sid && directTags.push(`STUDENT:${sid}`));
     }
@@ -670,6 +673,7 @@ export const dataService = {
     // Desempaquetar etiquetas de destinatarios directos en rawComms
     rawComms.forEach((c: any) => {
       const roles = Array.isArray(c.target_roles) ? c.target_roles : [];
+      const uIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('USER:')).map((r: string) => r.replace('USER:', ''));
       const sIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('STUDENT:')).map((r: string) => r.replace('STUDENT:', ''));
       const pIds = roles.filter((r: string) => typeof r === 'string' && r.startsWith('PARENT:')).map((r: string) => r.replace('PARENT:', ''));
       const sName = roles.find((r: string) => typeof r === 'string' && r.startsWith('STUDENT_NAME:'))?.replace('STUDENT_NAME:', '');
@@ -677,6 +681,7 @@ export const dataService = {
       const excuseColor = roles.find((r: string) => typeof r === 'string' && r.startsWith('EXCUSE_COLOR:'))?.replace('EXCUSE_COLOR:', '');
       const durationHours = roles.find((r: string) => typeof r === 'string' && r.startsWith('DURATION_HOURS:'))?.replace('DURATION_HOURS:', '');
 
+      c.target_user_ids = Array.from(new Set([...(c.target_user_ids || []), ...uIds]));
       c.target_student_ids = Array.from(new Set([...(c.target_student_ids || []), ...sIds]));
       c.target_parent_ids = Array.from(new Set([...(c.target_parent_ids || []), ...pIds]));
       if (sName && !c.target_student_name) c.target_student_name = sName;
@@ -694,6 +699,7 @@ export const dataService = {
 
       c.target_roles = roles.filter((r: string) =>
         typeof r === 'string' &&
+        !r.startsWith('USER:') &&
         !r.startsWith('STUDENT:') &&
         !r.startsWith('PARENT:') &&
         !r.startsWith('STUDENT_NAME:') &&
@@ -703,7 +709,21 @@ export const dataService = {
       );
     });
 
-    if (role === 'admin' || role === 'coordinator' || role === 'management_teacher') {
+    const adminLikeRoles = [
+      'admin',
+      'coordinator',
+      'management_teacher',
+      'director',
+      'directora',
+      'secretaria',
+      'secretario',
+      'secretaría',
+      'finance',
+      'psicologia',
+      'orientacion',
+      'management'
+    ];
+    if (adminLikeRoles.includes((role || '').toLowerCase())) {
       return rawComms;
     }
 
@@ -768,6 +788,7 @@ export const dataService = {
 
       return rawComms.filter((c: any) => {
         if (c.sender_id === userId) return true;
+        if ((c.target_user_ids || []).includes(userId)) return true;
 
         const isDirectTeacher =
           (c.target_teachers || []).includes(userId) ||
@@ -862,6 +883,7 @@ export const dataService = {
 
     return rawComms.filter((c: any) => {
       if (c.sender_id === userId) return true;
+      if ((c.target_user_ids || []).includes(userId)) return true;
 
       // Mensajes personales directos
       const cStudentIds = c.target_student_ids || [];

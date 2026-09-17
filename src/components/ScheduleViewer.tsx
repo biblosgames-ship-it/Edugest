@@ -2153,7 +2153,7 @@ export const ScheduleViewer = () => {
                   }
                 }
 
-                return `${(sub?.name || 'Materia').toUpperCase()}\n(${courseName})\n[${timeStr}]${overlapTag}`;
+                return `${(sub?.name || 'Materia').toUpperCase()}\n(${courseName})${overlapTag}`;
               }).join('\n---\n');
             });
             return [timeLabel, ...dayCols];
@@ -3494,41 +3494,22 @@ export const ScheduleViewer = () => {
                                       )}
                                     </div>
 
-                                      {/* Horas exactas según la distribución del curso / nivel */}
-                                      {exactTimes.start && (
-                                        <div className="text-[9px] font-semibold text-slate-500 mt-1 flex items-center gap-1">
-                                          <Clock size={10} className="text-slate-400 shrink-0" />
-                                          <span>
-                                            {format12h(exactTimes.start)} - {format12h(exactTimes.end)}
-                                          </span>
-                                        </div>
-                                      )}
-
                                       {filterType === 'teacher' ? (
-                                        <div className="mt-1 flex items-center justify-between gap-1 border-t border-slate-100 pt-1">
-                                          <p className="text-[9px] text-emerald-600 font-black uppercase tracking-tighter">
+                                        <div className="mt-1 border-t border-slate-100 pt-1">
+                                          <p className="text-[9px] text-emerald-600 font-black uppercase tracking-tighter truncate">
                                             {courseName}
                                           </p>
-                                          {course?.level && (
-                                            <span className="text-[7.5px] font-bold text-slate-400 uppercase bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                                              {isCourseFirstCycle(course)
-                                                ? '1er Ciclo'
-                                                : isCourseSecondCycle(course)
-                                                  ? '2do Ciclo'
-                                                  : course.level.substring(0, 4)}
-                                            </span>
-                                          )}
                                         </div>
                                       ) : filterType === 'course' ? (
-                                        <p className="text-[9px] text-indigo-600 font-black mt-1 uppercase tracking-tighter">
+                                        <p className="text-[9px] text-indigo-600 font-black mt-1 uppercase tracking-tighter truncate">
                                           {teacher?.name || 'Docente'}
                                         </p>
                                       ) : (
                                         <div className="mt-1 flex flex-col gap-0.5 border-t border-slate-100 pt-1">
-                                          <p className="text-[9px] text-emerald-600 font-black uppercase tracking-tighter">
+                                          <p className="text-[9px] text-emerald-600 font-black uppercase tracking-tighter truncate">
                                             {courseName}
                                           </p>
-                                          <p className="text-[9px] text-indigo-600 font-black uppercase tracking-tighter">
+                                          <p className="text-[9px] text-indigo-600 font-black uppercase tracking-tighter truncate">
                                             {teacher?.name || 'Docente'}
                                           </p>
                                         </div>
