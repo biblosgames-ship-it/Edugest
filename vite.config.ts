@@ -14,10 +14,12 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'Edugest2.png'],
         workbox: {
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // Aumenta el límite a 5 MB
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB
           skipWaiting: true,
           clientsClaim: true,
-          cleanupOutdatedCaches: true
+          cleanupOutdatedCaches: true,
+          navigateFallback: '/index.html',
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}']
         },
         manifest: {
           name: 'Edugest',

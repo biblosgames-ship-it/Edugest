@@ -3,6 +3,12 @@ import { supabase } from '../lib/supabase';
 import graduatedList from '../data/graduated_2025_students.json';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
 import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesManager';
+import {
+  saveCachedProfile,
+  getCachedProfile,
+  saveStateSnapshot,
+  getStateSnapshot
+} from '../utils/offlineSync';
 
 export const normalizeNameString = (name: string): string => {
   if (!name) return '';
@@ -14,6 +20,19 @@ export const normalizeNameString = (name: string): string => {
     .replace(/\s+/g, ' ');
 };
 
+export interface CycleTimeBlockConfig {
+  id: string; // `${level}__${cycle}__${shift}`
+  level: string;
+  cycle: string;
+  shift: string;
+  slots: Array<{
+    label: string;
+    start: string;
+    end: string;
+    isBreak: boolean;
+  }>;
+}
+
 export interface AppState {
   courses: any[];
   subjects: any[];
@@ -21,6 +40,7 @@ export interface AppState {
   assignments: any[];
   rooms: any[];
   timeBlocks: any[];
+  cycleTimeBlocks?: CycleTimeBlockConfig[]; // NUEVO: Bloques horarios personalizados por ciclo/nivel
   schedule: any[];
   academicRequirements: any[];
   teacherPreferences: any[];
@@ -79,6 +99,8 @@ interface AppContextType {
   setAvoidDeporteDuringAnyBreak: (val: boolean) => void;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
   loadAllGrades: () => Promise<any[]>;
+  saveCycleTimeBlocks: (level: string, cycle: string, shift: string, slots: any[]) => Promise<void>;
+  deleteCycleTimeBlocks: (configId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -91,6 +113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assignments: [],
     rooms: [],
     timeBlocks: [],
+    cycleTimeBlocks: [],
     schedule: [],
     academicRequirements: [],
     teacherPreferences: [],
@@ -178,6 +201,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const performFetch = async () => {
         setState((prev) => ({ ...prev, loading: true }));
+
+        // 0. Si no hay conexión a internet, cargar directamente el snapshot escolar de IndexedDB
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          try {
+            const snapshot = await getStateSnapshot(targetCid);
+            if (snapshot) {
+              console.log('[AppContext] Modo offline: snapshot cargado con éxito para centro:', targetCid);
+              setState((prev) => ({
+                ...prev,
+                ...snapshot,
+                loading: false
+              }));
+              return;
+            }
+          } catch (offlineErr) {
+            console.warn('[AppContext] Error al leer snapshot offline:', offlineErr);
+          }
+        }
+
         try {
           let currentFetchYear = selectedYear;
           let resolvedSyResData: any[] | null = null;
@@ -890,8 +932,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return !fetchedKeys.has(key);
           });
 
+          // Reconstrucción de bloques horarios personalizados por ciclo/nivel
+          const customBlocksKey = targetCid ? `edugest_cycle_blocks_${targetCid}` : 'edugest_cycle_blocks_default';
+          let localCycleConfigs: CycleTimeBlockConfig[] = [];
+          try {
+            localCycleConfigs = JSON.parse(localStorage.getItem(customBlocksKey) || '[]');
+          } catch {}
+
+          const dbCycleBlocksMap: Record<string, CycleTimeBlockConfig> = {};
+          (blockRes.data || []).forEach((tb: any) => {
+            if (tb.day && tb.day.includes('::')) {
+              const parts = tb.day.split('::');
+              const bLevel = parts[0];
+              const bCycle = parts[1];
+              const bShift = parts[2];
+              const bLabel = parts[3] || 'Hora';
+              const bIsBreak = parts[4] === '1';
+              const cId = `${bLevel}__${bCycle}__${bShift}`;
+              if (!dbCycleBlocksMap[cId]) {
+                dbCycleBlocksMap[cId] = {
+                  id: cId,
+                  level: bLevel,
+                  cycle: bCycle,
+                  shift: bShift,
+                  slots: []
+                };
+              }
+              dbCycleBlocksMap[cId].slots.push({
+                label: bLabel,
+                start: (tb.start_time || '').substring(0, 5),
+                end: (tb.end_time || '').substring(0, 5),
+                isBreak: bIsBreak
+              });
+            }
+          });
+
+          const mergedCycleConfigsMap = new Map<string, CycleTimeBlockConfig>();
+          localCycleConfigs.forEach((c) => mergedCycleConfigsMap.set(c.id, c));
+          Object.values(dbCycleBlocksMap).forEach((c) => {
+            c.slots.sort((a, b) => a.start.localeCompare(b.start));
+            mergedCycleConfigsMap.set(c.id, c);
+          });
+          const finalCycleTimeBlocks = Array.from(mergedCycleConfigsMap.values());
+          try {
+            localStorage.setItem(customBlocksKey, JSON.stringify(finalCycleTimeBlocks));
+          } catch {}
+
           setState((prev) => {
-            return {
+            const nextState = {
               ...prev,
               courses: coursesUnified,
               subjects: sRes.data || [],
@@ -907,6 +995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               schoolYears: syRes.data || [],
               rooms: roomRes.data || [],
               timeBlocks: blockRes.data || [],
+              cycleTimeBlocks: finalCycleTimeBlocks,
               schedule: [...scheduleUnified, ...localCustomToInclude],
               attendanceRecords: [],
               performanceAlerts: performanceAlertsUnified,
@@ -969,6 +1058,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               })(),
               loading: false
             };
+
+            // Guardar copia local offline de forma asíncrona
+            saveStateSnapshot(targetCid, nextState).catch((snapshotErr) => {
+              console.warn('[AppContext] Error al guardar snapshot offline:', snapshotErr);
+            });
+
+            return nextState;
           });
 
           lastFetchedYearRef.current = currentFetchYear;
@@ -983,7 +1079,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         } catch (error: any) {
-          console.error('Error fetching dashboard data:', error);
+          console.error('Error fetching dashboard data, intentando cargar snapshot offline:', error);
+          try {
+            const snapshot = await getStateSnapshot(targetCid);
+            if (snapshot) {
+              console.log('[AppContext] Snapshot offline cargado con éxito para centro:', targetCid);
+              setState((prev) => ({
+                ...prev,
+                ...snapshot,
+                loading: false
+              }));
+              return;
+            }
+          } catch {}
           setState((prev) => ({ ...prev, loading: false }));
         }
       };
@@ -1060,6 +1168,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!user) {
         setProfile(null);
         setCenter(null);
+        return;
+      }
+
+      // 0. Modo Offline: Si no hay conexión, usar inmediatamente el perfil guardado en caché
+      const cached = getCachedProfile(user.id);
+      if (typeof navigator !== 'undefined' && !navigator.onLine && cached) {
+        console.log('[AppContext] Modo offline: usando perfil en caché local para usuario', user.id);
+        setProfile(cached);
+        if (cached.center_id) {
+          try {
+            const saved = localStorage.getItem('edugens_active_center');
+            if (saved) setCenter(JSON.parse(saved));
+          } catch {}
+        }
         return;
       }
 
@@ -1151,6 +1273,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           email: user.email
         };
         setProfile(finalProfile);
+        if (finalProfile && finalProfile.center_id) {
+          saveCachedProfile(finalProfile);
+        }
 
         if (finalProfile.center_id) {
           const { data: centData } = await supabase
@@ -1171,7 +1296,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setState((prev) => ({ ...prev, loading: false }));
         }
       } catch (err) {
-        console.error('Error loading profile:', err);
+        console.error('Error loading profile, intentando fallback de caché local:', err);
+        const cached = getCachedProfile(user.id);
+        if (cached) {
+          console.log('[AppContext] Perfil recuperado de caché tras error');
+          setProfile(cached);
+          if (cached.center_id) {
+            try {
+              const saved = localStorage.getItem('edugens_active_center');
+              if (saved) setCenter(JSON.parse(saved));
+            } catch {}
+          }
+        }
         setState((prev) => ({ ...prev, loading: false }));
       }
     };
@@ -1400,6 +1536,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshData(undefined, true);
   };
 
+  const saveCycleTimeBlocks = async (level: string, cycle: string, shift: string, slots: any[]) => {
+    const cid = profile?.center_id;
+    const configId = `${level}__${cycle}__${shift}`;
+    const newConfig: CycleTimeBlockConfig = {
+      id: configId,
+      level,
+      cycle,
+      shift,
+      slots: slots.map((s, idx) => ({
+        label: s.label || `${idx + 1}ra Hora`,
+        start: (s.start || '').substring(0, 5),
+        end: (s.end || '').substring(0, 5),
+        isBreak: !!s.isBreak
+      }))
+    };
+
+    const storageKey = cid ? `edugest_cycle_blocks_${cid}` : 'edugest_cycle_blocks_default';
+    let currentConfigs: CycleTimeBlockConfig[] = [];
+    try {
+      currentConfigs = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    } catch {}
+
+    const updatedConfigs = [
+      ...currentConfigs.filter((c) => c.id !== configId),
+      newConfig
+    ];
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updatedConfigs));
+    } catch {}
+
+    setState((prev) => ({
+      ...prev,
+      cycleTimeBlocks: updatedConfigs
+    }));
+
+    if (cid) {
+      try {
+        const prefix = `${level}::${cycle}::${shift}::`;
+        const { data: existingRows } = await supabase
+          .from('time_blocks')
+          .select('id, day')
+          .eq('center_id', cid);
+
+        const idsToDelete = (existingRows || [])
+          .filter((r: any) => r.day && r.day.startsWith(prefix))
+          .map((r: any) => r.id);
+
+        if (idsToDelete.length > 0) {
+          await supabase.from('time_blocks').delete().in('id', idsToDelete);
+        }
+
+        const rowsToInsert = newConfig.slots.map((s) => ({
+          center_id: cid,
+          day: `${level}::${cycle}::${shift}::${s.label}::${s.isBreak ? '1' : '0'}`,
+          start_time: s.start.length === 5 ? s.start + ':00' : s.start,
+          end_time: s.end.length === 5 ? s.end + ':00' : s.end
+        }));
+
+        if (rowsToInsert.length > 0) {
+          await supabase.from('time_blocks').insert(rowsToInsert);
+        }
+      } catch (err) {
+        console.warn('[AppContext] Sincronización de bloques en time_blocks:', err);
+      }
+    }
+  };
+
+  const deleteCycleTimeBlocks = async (configId: string) => {
+    const cid = profile?.center_id;
+    const storageKey = cid ? `edugest_cycle_blocks_${cid}` : 'edugest_cycle_blocks_default';
+    let currentConfigs: CycleTimeBlockConfig[] = [];
+    try {
+      currentConfigs = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    } catch {}
+
+    const toDelete = currentConfigs.find((c) => c.id === configId);
+    const updatedConfigs = currentConfigs.filter((c) => c.id !== configId);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updatedConfigs));
+    } catch {}
+
+    setState((prev) => ({
+      ...prev,
+      cycleTimeBlocks: updatedConfigs
+    }));
+
+    if (cid && toDelete) {
+      try {
+        const prefix = `${toDelete.level}::${toDelete.cycle}::${toDelete.shift}::`;
+        const { data: existingRows } = await supabase
+          .from('time_blocks')
+          .select('id, day')
+          .eq('center_id', cid);
+
+        const idsToDelete = (existingRows || [])
+          .filter((r: any) => r.day && r.day.startsWith(prefix))
+          .map((r: any) => r.id);
+
+        if (idsToDelete.length > 0) {
+          await supabase.from('time_blocks').delete().in('id', idsToDelete);
+        }
+      } catch (err) {
+        console.warn('[AppContext] Error al eliminar bloques en time_blocks:', err);
+      }
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1412,6 +1655,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedYear,
         setSelectedYear,
         refreshData,
+        saveCycleTimeBlocks,
+        deleteCycleTimeBlocks,
         loadAllGrades: async () => {
           const targetCid = center?.id || profile?.center_id;
           if (!targetCid) return [];

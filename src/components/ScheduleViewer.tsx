@@ -29,7 +29,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SEO } from './SEO';
 
-import { scheduleService, isEntryLocked } from '../services/scheduleService';
+import {
+  scheduleService,
+  isEntryLocked,
+  findCycleTimeBlocks,
+  getSlotsFromCycleConfig,
+  calculateCleanSlotDurations
+} from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 
 export const ScheduleViewer = () => {
@@ -917,6 +923,21 @@ export const ScheduleViewer = () => {
     const isC1 = isCourseFirstCycle(course);
     const isC2 = isCourseSecondCycle(course);
 
+    // 0. Prioridad MÁXIMA: Estructura de Bloques y Horas por Ciclo del Centro
+    const customCycleBlocks = findCycleTimeBlocks(
+      state.cycleTimeBlocks,
+      course,
+      courseShiftName,
+      isC1,
+      isC2
+    );
+    if (customCycleBlocks) {
+      const cSlots = getSlotsFromCycleConfig(customCycleBlocks);
+      if (cSlots && cSlots.length > 0) {
+        return cSlots;
+      }
+    }
+
     const isBreakInShift = (timeStr: string, isMorn: boolean) => {
       const rawMins = toMins(timeStr);
       const isBpMorning = rawMins >= 420 && rawMins < 780;
@@ -1038,33 +1059,6 @@ export const ScheduleViewer = () => {
       });
     }
 
-    const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-      if (totalMins <= 0 || preferredCount <= 0) return [];
-      let count = preferredCount;
-      const limit = maxCount || 6;
-      // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
-      // 1. Si el conteo hace que las clases duren menos de 35 min, reducir el número de bloques.
-      while (count > 1 && totalMins / count < 35) {
-        count--;
-      }
-      // 2. Si el conteo hace que las clases duren más de 50 min, solo aumentar si no supera el límite
-      // y si al dividir en más bloques cada uno sigue teniendo al menos 35 minutos.
-      while (totalMins / count > 50 && count < limit) {
-        if (totalMins / (count + 1) < 35) {
-          break;
-        }
-        count++;
-      }
-      const base = Math.floor(totalMins / count);
-      let rem = totalMins - base * count;
-      const durs = new Array(count).fill(base);
-      for (let idx = 0; idx < count && rem > 0; idx++) {
-        durs[idx] += 1;
-        rem -= 1;
-      }
-      return durs;
-    };
-
     // CÁLCULO DINÁMICO ANTES DEL RECREO
     const preWindow = Math.max(0, bStart - classStart);
     let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
@@ -1072,7 +1066,7 @@ export const ScheduleViewer = () => {
       preCountLocal = Math.max(1, Math.floor(preWindow / 35));
     }
     const maxPreCount = isSecundaria ? 3 : 6;
-    const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPreCount);
+    const preDurs = calculateCleanSlotDurations(preWindow, preCountLocal, maxPreCount);
     preCountLocal = preDurs.length;
 
     let currTimePre = classStart;
@@ -1140,7 +1134,7 @@ export const ScheduleViewer = () => {
       postCountLocal = Math.max(1, Math.floor(postWindow / 35));
     }
     const maxPostCount = isSecundaria ? 3 : 6;
-    const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPostCount);
+    const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPostCount);
     postCountLocal = postDurs.length;
     for (let i = 0; i < postDurs.length; i++) {
       let dur = postDurs[i];
@@ -1157,7 +1151,7 @@ export const ScheduleViewer = () => {
     }
 
     return slots;
-  }, [findOfficialSchedule, isCourseFirstCycle, isCourseSecondCycle, state.levelSchedules, state.breakPreferences, state.fixedEvents, filterType, isMorning]);
+  }, [findOfficialSchedule, isCourseFirstCycle, isCourseSecondCycle, state.levelSchedules, state.breakPreferences, state.fixedEvents, state.cycleTimeBlocks, filterType, isMorning]);
 
   const timeSlots = useMemo(() => {
     let startT = isMorning ? 480 : 840; // 08:00 o 14:00

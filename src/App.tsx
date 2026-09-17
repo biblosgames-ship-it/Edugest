@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { useStats } from './hooks/useStats';
 import { useNotifications } from './hooks/useNotifications';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 const ROLE_FALLBACKS: Record<string, string[]> = {
   admin: [
@@ -786,6 +787,7 @@ export default function App() {
   return (
     <AppProvider>
       <Toaster position="top-right" />
+      <OfflineIndicator />
       <AppContent />
     </AppProvider>
   );

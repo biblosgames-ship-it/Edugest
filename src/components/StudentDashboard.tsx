@@ -29,6 +29,11 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
 import { getSubjectTheme } from '../utils/subjectColors';
+import {
+  findCycleTimeBlocks,
+  getSlotsFromCycleConfig,
+  calculateCleanSlotDurations
+} from '../services/scheduleService';
 
 export const StudentDashboard = ({
   userData: profile,
@@ -757,135 +762,129 @@ export const StudentDashboard = ({
     if (!isMorning && (bStart <= startT || bStart >= endT)) bStart = 955;
     const bEnd = bStart + (Number(bPref.durationMinutes || bPref.duration_minutes) || masterBPref.durationMinutes);
 
-    const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
-      const feName = (fe.name || '').toLowerCase();
-      return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-    });
+    // 0. Prioridad MÁXIMA: Estructura de Bloques y Horas por Ciclo del Centro
+    let slots: any[] = [];
+    const customCycleBlocks = findCycleTimeBlocks(
+      state.cycleTimeBlocks,
+      course,
+      isMorning ? 'Matutina' : 'Vespertina',
+      isFirstCycle,
+      isSecondCycle
+    );
+    if (customCycleBlocks) {
+      const cSlots = getSlotsFromCycleConfig(customCycleBlocks);
+      if (cSlots && cSlots.length > 0) {
+        slots = cSlots;
+      }
+    }
 
-    let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
-    const slots: any[] = [];
-
-    if (isMorning && dbActoEvent) {
-      const feEndMins = toMinsLocal(dbActoEvent.end_time);
-      if (feEndMins > 0) classStart = feEndMins;
-
-      slots.push({
-        start: dbActoEvent.start_time,
-        end: dbActoEvent.end_time,
-        isBreak: true,
-        label: dbActoEvent.name
+    if (slots.length === 0) {
+      const dbActoEvent = (state.fixedEvents || []).find((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        return feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
       });
-    }
 
-    const isSecundaria = (course.level || '').toLowerCase().includes('secun');
-    const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
+      let classStart = official?.start_time ? startT : isMorning && startT <= 480 ? 480 : startT;
 
-    const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-      if (totalMins <= 0 || preferredCount <= 0) return [];
-      let count = preferredCount;
-      const limit = maxCount || 6;
-      while (count > 1 && totalMins / count < 35) {
-        count--;
-      }
-      while (totalMins / count > 50 && count < limit) {
-        if (totalMins / (count + 1) < 35) {
-          break;
-        }
-        count++;
-      }
-      const base = Math.floor(totalMins / count);
-      let rem = totalMins - base * count;
-      const durs = new Array(count).fill(base);
-      for (let idx = 0; idx < count && rem > 0; idx++) {
-        durs[idx] += 1;
-        rem -= 1;
-      }
-      return durs;
-    };
+      if (isMorning && dbActoEvent) {
+        const feEndMins = toMinsLocal(dbActoEvent.end_time);
+        if (feEndMins > 0) classStart = feEndMins;
 
-    const preWindow = Math.max(0, bStart - classStart);
-    let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
-    if (preWindow / preCountLocal < 35) {
-      preCountLocal = Math.max(1, Math.floor(preWindow / 35));
-    }
-    const maxPre = isSecundaria ? 3 : 6;
-    const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPre);
-    preCountLocal = preDurs.length;
-
-    let currTimePre = classStart;
-    for (let i = 0; i < preCountLocal; i++) {
-      let dur = preDurs[i];
-      let sTime = currTimePre;
-      let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
-      currTimePre = eTime;
-
-      slots.push({
-        start: fromMinsLocal(sTime) + ':00',
-        end: fromMinsLocal(eTime) + ':00',
-        isBreak: false,
-        label: `${i + 1}ra Hora`
-      });
-    }
-
-    slots.push({ start: fromMinsLocal(bStart) + ':00', end: fromMinsLocal(bEnd) + ':00', isBreak: true, label: 'RECREO' });
-
-    let currTimePost = bEnd;
-    const levelNorm = (course?.level || '').toLowerCase();
-    const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
-      const feName = (fe.name || '').toLowerCase();
-      const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
-      const feStartMins = toMinsLocal(fe.start_time);
-      if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
-
-      const feLevel = (fe.level || '').toLowerCase();
-      const feCycle = (fe.cycle || '').toLowerCase();
-      const levelMatch =
-        !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
-      const cycleMatch =
-        !feCycle ||
-        feCycle.includes('gen') ||
-        feCycle.includes('todo') ||
-        (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
-        (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
-      return levelMatch && cycleMatch;
-    });
-
-    postFixedEvents.forEach((fe: any) => {
-      const feEndMins = toMinsLocal(fe.end_time);
-      if (feEndMins > currTimePost) {
-        const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
-        const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
         slots.push({
-          start: sFormatted,
-          end: eFormatted,
+          start: dbActoEvent.start_time,
+          end: dbActoEvent.end_time,
           isBreak: true,
-          label: fe.name
+          label: dbActoEvent.name
         });
-        currTimePost = Math.max(currTimePost, feEndMins);
       }
-    });
 
-    const postWindow = Math.max(0, endT - currTimePost);
-    let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
-    if (postWindow / postCountLocal < 35) {
-      postCountLocal = Math.max(1, Math.floor(postWindow / 35));
-    }
-    const maxPost = isSecundaria ? 3 : 6;
-    const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPost);
-    postCountLocal = postDurs.length;
+      const isSecundaria = (course.level || '').toLowerCase().includes('secun');
+      const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
 
-    for (let i = 0; i < postCountLocal; i++) {
-      let dur = postDurs[i];
-      let sTime = currTimePost;
-      let eTime = i === postCountLocal - 1 ? endT : sTime + dur;
-      currTimePost = eTime;
+      const preWindow = Math.max(0, bStart - classStart);
+      let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
+      if (preWindow / preCountLocal < 35) {
+        preCountLocal = Math.max(1, Math.floor(preWindow / 35));
+      }
+      const maxPre = isSecundaria ? 3 : 6;
+      const preDurs = calculateCleanSlotDurations(preWindow, preCountLocal, maxPre);
+      preCountLocal = preDurs.length;
 
-      slots.push({
-        start: fromMinsLocal(sTime) + ':00',
-        end: fromMinsLocal(eTime) + ':00',
-        isBreak: false,
-        label: `${preCountLocal + i + 1}ra Hora`
+      let currTimePre = classStart;
+      for (let i = 0; i < preCountLocal; i++) {
+        let dur = preDurs[i];
+        let sTime = currTimePre;
+        let eTime = i === preCountLocal - 1 ? bStart : sTime + dur;
+        currTimePre = eTime;
+
+        slots.push({
+          start: fromMinsLocal(sTime) + ':00',
+          end: fromMinsLocal(eTime) + ':00',
+          isBreak: false,
+          label: `${i + 1}ra Hora`
+        });
+      }
+
+      slots.push({ start: fromMinsLocal(bStart) + ':00', end: fromMinsLocal(bEnd) + ':00', isBreak: true, label: 'RECREO' });
+
+      let currTimePost = bEnd;
+      const levelNorm = (course?.level || '').toLowerCase();
+      const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
+        const feName = (fe.name || '').toLowerCase();
+        const isActo = feName.includes('acto') || feName.includes('bandera') || feName.includes('apertura');
+        const feStartMins = toMinsLocal(fe.start_time);
+        if (isActo || feStartMins < bStart - 5 || feStartMins >= endT) return false;
+
+        const feLevel = (fe.level || '').toLowerCase();
+        const feCycle = (fe.cycle || '').toLowerCase();
+        const levelMatch =
+          !feLevel || feLevel.includes('gen') || feLevel.includes('todo') || feLevel.substring(0, 3) === levelNorm.substring(0, 3) || levelNorm.includes(feLevel.substring(0, 3));
+        const cycleMatch =
+          !feCycle ||
+          feCycle.includes('gen') ||
+          feCycle.includes('todo') ||
+          (isFirstCycle && (feCycle.includes('primer') || feCycle.includes('1'))) ||
+          (isSecondCycle && (feCycle.includes('segundo') || feCycle.includes('2')));
+        return levelMatch && cycleMatch;
       });
+
+      postFixedEvents.forEach((fe: any) => {
+        const feEndMins = toMinsLocal(fe.end_time);
+        if (feEndMins > currTimePost) {
+          const sFormatted = fe.start_time.length === 5 ? fe.start_time + ':00' : fe.start_time;
+          const eFormatted = fe.end_time.length === 5 ? fe.end_time + ':00' : fe.end_time;
+          slots.push({
+            start: sFormatted,
+            end: eFormatted,
+            isBreak: true,
+            label: fe.name
+          });
+          currTimePost = Math.max(currTimePost, feEndMins);
+        }
+      });
+
+      const postWindow = Math.max(0, endT - currTimePost);
+      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+      if (postWindow / postCountLocal < 35) {
+        postCountLocal = Math.max(1, Math.floor(postWindow / 35));
+      }
+      const maxPost = isSecundaria ? 3 : 6;
+      const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPost);
+      postCountLocal = postDurs.length;
+
+      for (let i = 0; i < postCountLocal; i++) {
+        let dur = postDurs[i];
+        let sTime = currTimePost;
+        let eTime = i === postCountLocal - 1 ? endT : sTime + dur;
+        currTimePost = eTime;
+
+        slots.push({
+          start: fromMinsLocal(sTime) + ':00',
+          end: fromMinsLocal(eTime) + ':00',
+          isBreak: false,
+          label: `${preCountLocal + i + 1}ra Hora`
+        });
+      }
     }
 
     const hasExplicitYearEntries = selectedYear && state.schedule.some((s: any) => s.school_year === selectedYear);

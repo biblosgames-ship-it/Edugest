@@ -425,6 +425,130 @@ export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
   });
 };
 
+export const findCycleTimeBlocks = (
+  cycleTimeBlocks: any[] | undefined,
+  course: any,
+  shiftName: string,
+  isC1?: boolean,
+  isC2?: boolean
+) => {
+  if (!cycleTimeBlocks || cycleTimeBlocks.length === 0 || !course) return null;
+
+  const courseShift = (shiftName || '').toLowerCase();
+  const levelNorm = (course?.level || '').toLowerCase().trim();
+
+  const firstCycle = isC1 !== undefined ? isC1 : isFirstCycleCourse(course);
+  const secondCycle = isC2 !== undefined ? isC2 : isSecondCycleCourse(course);
+
+  const matchShift = (cfg: any) => {
+    const s = (cfg.shift || '').toLowerCase();
+    if (!s || s === 'ambas' || s.includes('amb')) return true;
+    return s.substring(0, 3) === courseShift.substring(0, 3) || courseShift.includes(s.substring(0, 3));
+  };
+
+  const matchLevel = (cfg: any): 'exact' | 'general' | 'none' => {
+    const l = (cfg.level || '').toLowerCase().trim();
+    if (!l || l === 'general' || l.includes('todo')) return 'general';
+    if (
+      l.substring(0, 3) === levelNorm.substring(0, 3) ||
+      levelNorm.includes(l.substring(0, 3)) ||
+      l.includes(levelNorm.substring(0, 3))
+    ) {
+      return 'exact';
+    }
+    return 'none';
+  };
+
+  const matchCycle = (cfg: any): 'exact' | 'general' | 'none' => {
+    const c = (cfg.cycle || '').toLowerCase().trim();
+    if (!c || c === 'general' || c.includes('todo')) return 'general';
+    if (firstCycle && (c.includes('primer') || c.includes('1er') || c.includes('1'))) return 'exact';
+    if (secondCycle && (c.includes('segundo') || c.includes('2do') || c.includes('2'))) return 'exact';
+    return 'none';
+  };
+
+  const matchingConfigs = cycleTimeBlocks.filter((cfg: any) => {
+    if (!matchShift(cfg)) return false;
+    const lMatch = matchLevel(cfg);
+    const cMatch = matchCycle(cfg);
+    return lMatch !== 'none' && cMatch !== 'none';
+  });
+
+  if (matchingConfigs.length === 0) return null;
+
+  matchingConfigs.sort((a: any, b: any) => {
+    const score = (cfg: any) => {
+      const l = matchLevel(cfg) === 'exact' ? 2 : 1;
+      const c = matchCycle(cfg) === 'exact' ? 2 : 1;
+      return l * 2 + c;
+    };
+    return score(b) - score(a);
+  });
+
+  return matchingConfigs[0];
+};
+
+export const getSlotsFromCycleConfig = (config: any) => {
+  if (!config || !config.slots || config.slots.length === 0) return null;
+  let periodIdx = 1;
+  return config.slots.map((s: any) => {
+    const isBreak = !!s.isBreak;
+    const rawStart = (s.start || '').trim();
+    const rawEnd = (s.end || '').trim();
+    const start = rawStart.length === 5 ? `${rawStart}:00` : rawStart;
+    const end = rawEnd.length === 5 ? `${rawEnd}:00` : rawEnd;
+    const label = s.label || (isBreak ? 'RECREO' : `${periodIdx}ra Hora`);
+    if (!isBreak) periodIdx++;
+    return {
+      start,
+      end,
+      isBreak,
+      label
+    };
+  });
+};
+
+export const calculateCleanSlotDurations = (
+  totalMins: number,
+  preferredCount: number,
+  maxCount?: number
+) => {
+  if (totalMins <= 0 || preferredCount <= 0) return [];
+  let count = preferredCount;
+  const limit = maxCount || 6;
+  while (count > 1 && totalMins / count < 35) {
+    count--;
+  }
+  while (totalMins / count > 50 && count < limit) {
+    if (totalMins / (count + 1) < 35) {
+      break;
+    }
+    count++;
+  }
+
+  // Si totalMins es múltiplo de 5, garantizamos que cada bloque sea múltiplo exacto de 5 min (evitando 9:32, etc.)
+  if (totalMins % 5 === 0) {
+    const rawPerSlot = totalMins / count;
+    const base5 = Math.floor(rawPerSlot / 5) * 5;
+    const durs = new Array(count).fill(base5);
+    let rem5 = totalMins - base5 * count; // Múltiplo exacto de 5
+    for (let idx = 0; idx < count && rem5 > 0; idx++) {
+      durs[idx] += 5;
+      rem5 -= 5;
+    }
+    return durs;
+  }
+
+  const base = Math.floor(totalMins / count);
+  let rem = totalMins - base * count;
+  const durs = new Array(count).fill(base);
+  for (let idx = 0; idx < count && rem > 0; idx++) {
+    durs[idx] += 1;
+    rem -= 1;
+  }
+  return durs;
+};
+
 export const scheduleService = {
   generateSchedule: async (
     state: any,
@@ -443,7 +567,8 @@ export const scheduleService = {
       teacherPreferences,
       breakPreferences,
       fixedEvents,
-      levelSchedules
+      levelSchedules,
+      cycleTimeBlocks
     } = state;
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
@@ -493,6 +618,15 @@ export const scheduleService = {
       const isFirstCycle = isFirstCycleCourse(course);
       const isSecondCycle = isSecondCycleCourse(course);
 
+      // 0. Prioridad Máxima: Bloques de hora personalizados por ciclo del centro
+      const customCycle = findCycleTimeBlocks(cycleTimeBlocks || state.cycleTimeBlocks, course, shift, isFirstCycle, isSecondCycle);
+      if (customCycle) {
+        const cSlots = getSlotsFromCycleConfig(customCycle);
+        if (cSlots && cSlots.length > 0) {
+          return cSlots.map((s: any, i: number) => ({ ...s, originalIdx: i }));
+        }
+      }
+
       let startT = official?.start_time ? toMins(official.start_time) : (isMorning ? 480 : 840);
       if (!isMorning && startT < 720 && startT > 0) startT += 720;
       let endT = official?.end_time ? toMins(official.end_time) : (isMorning ? 720 : 1095);
@@ -531,36 +665,7 @@ export const scheduleService = {
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-        if (totalMins <= 0 || preferredCount <= 0) return [];
-        let count = preferredCount;
-        const limit = maxCount || 6;
-
-        // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
-        // 1. Si el conteo hace que las clases duren menos de 35 min, reducir el número de bloques.
-        while (count > 1 && totalMins / count < 35) {
-          count--;
-        }
-        // 2. Si el conteo hace que las clases duren más de 50 min, solo aumentar si no supera el límite
-        // y si al dividir en más bloques cada uno sigue teniendo al menos 35 minutos.
-        while (totalMins / count > 50 && count < limit) {
-          if (totalMins / (count + 1) < 35) {
-            break;
-          }
-          count++;
-        }
-
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
-        }
-        return durs;
-      };
-
-      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 35 y 50 minutos por clase)
+      // CÁLCULO FLEXIBLE Y DINÁMICO ANTES DEL RECREO (entre 35 y 50 minutos por clase, redondeo limpio a múltiplos de 5 min)
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
       if (preWindow / preCount < 35) {
@@ -568,7 +673,7 @@ export const scheduleService = {
       }
 
       const maxPre = isSecundaria ? 3 : 6;
-      const preDurs = calculateSlotDurations(preWindow, preCount, maxPre);
+      const preDurs = calculateCleanSlotDurations(preWindow, preCount, maxPre);
       preCount = preDurs.length;
 
       let currTimePre = classStart;
@@ -630,7 +735,7 @@ export const scheduleService = {
         postCount = Math.max(1, Math.floor(postWindow / 35));
       }
       const maxPost = isSecundaria ? 3 : 6;
-      const postDurs = calculateSlotDurations(postWindow, postCount, maxPost);
+      const postDurs = calculateCleanSlotDurations(postWindow, postCount, maxPost);
       postCount = postDurs.length;
 
       for (let i = 0; i < postCount; i++) {
@@ -1296,7 +1401,8 @@ export const scheduleService = {
       courses: allCourses,
       assignments: allAssignments,
       levelSchedules,
-      breakPreferences
+      breakPreferences,
+      cycleTimeBlocks
     } = state;
 
     // 1. Identificar cursos (Lógica ultra-permisiva)
@@ -1362,6 +1468,15 @@ export const scheduleService = {
       const isFirstCycle = isFirstCycleCourse(course);
       const isSecondCycle = isSecondCycleCourse(course);
 
+      // 0. Prioridad Máxima: Bloques de hora personalizados por ciclo del centro
+      const customCycle = findCycleTimeBlocks(cycleTimeBlocks || state.cycleTimeBlocks, course, shift, isFirstCycle, isSecondCycle);
+      if (customCycle) {
+        const cSlots = getSlotsFromCycleConfig(customCycle);
+        if (cSlots && cSlots.length > 0) {
+          return cSlots;
+        }
+      }
+
       let startT = official?.start_time ? toMins(official.start_time) : (isMorning ? 480 : 840);
       if (!isMorning && startT < 720 && startT > 0) startT += 720;
       let endT = official?.end_time ? toMins(official.end_time) : (isMorning ? 720 : 1095);
@@ -1400,30 +1515,6 @@ export const scheduleService = {
       const isSecundaria = levelNorm.includes('secun');
       const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-        if (totalMins <= 0 || preferredCount <= 0) return [];
-        let count = preferredCount;
-        const limit = maxCount || 6;
-        // Regla general: Cada bloque debe durar en un rango entre 35 y 50 minutos.
-        while (count > 1 && totalMins / count < 35) {
-          count--;
-        }
-        while (totalMins / count > 50 && count < limit) {
-          if (totalMins / (count + 1) < 35) {
-            break;
-          }
-          count++;
-        }
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
-        }
-        return durs;
-      };
-
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
       if (preWindow / preCount < 35) {
@@ -1431,7 +1522,7 @@ export const scheduleService = {
       }
 
       const maxPre = isSecundaria ? 3 : 6;
-      const preDurs = calculateSlotDurations(preWindow, preCount, maxPre);
+      const preDurs = calculateCleanSlotDurations(preWindow, preCount, maxPre);
       preCount = preDurs.length;
 
       let currTimePre = classStart;
@@ -1442,13 +1533,13 @@ export const scheduleService = {
         currTimePre = eTime;
 
         slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
+          start: fromMins(sTime),
+          end: fromMins(eTime),
           isBreak: false,
           label: `${i + 1}ra Hora`
         });
       }
-      slots.push({ start: fromMins(bStart) + ':00', end: fromMins(bEnd) + ':00', isBreak: true, label: 'RECREO' });
+      slots.push({ start: fromMins(bStart), end: fromMins(bEnd), isBreak: true, label: 'RECREO' });
 
       let currTimePost = bEnd;
       const postFixedEvents = (state.fixedEvents || []).filter((fe: any) => {
@@ -1491,7 +1582,7 @@ export const scheduleService = {
         postCount = Math.max(1, Math.floor(postWindow / 35));
       }
       const maxPost = isSecundaria ? 3 : 6;
-      const postDurs = calculateSlotDurations(postWindow, postCount, maxPost);
+      const postDurs = calculateCleanSlotDurations(postWindow, postCount, maxPost);
       postCount = postDurs.length;
 
       for (let i = 0; i < postCount; i++) {
@@ -1501,8 +1592,8 @@ export const scheduleService = {
         currTimePost = eTime;
 
         slots.push({
-          start: fromMins(sTime) + ':00',
-          end: fromMins(eTime) + ':00',
+          start: fromMins(sTime),
+          end: fromMins(eTime),
           isBreak: false,
           label: `${preCount + i + 1}ra Hora`
         });
@@ -2700,6 +2791,14 @@ export const scheduleService = {
 
     const getCourseSlots = (cObj: any) => {
       const isMorningCourse = shift === 'Matutina' || (cObj.tanda || '').toLowerCase().includes('mat');
+      const customCycle = findCycleTimeBlocks(state.cycleTimeBlocks, cObj, isMorningCourse ? 'Matutina' : 'Vespertina');
+      if (customCycle) {
+        const cSlots = getSlotsFromCycleConfig(customCycle);
+        if (cSlots && cSlots.length > 0) {
+          return cSlots.filter((s: any) => !s.isBreak);
+        }
+      }
+
       const official = findOfficialSchedule(levelSchedules, cObj.level, isMorningCourse ? 'Matutina' : 'Vespertina');
       let sT = toMins(official?.start_time || (isMorningCourse ? '08:00' : '14:00'));
       let eT = toMins(official?.end_time || (isMorningCourse ? '12:00' : '18:15'));
@@ -2721,7 +2820,7 @@ export const scheduleService = {
       const preW = Math.max(0, bStartM - cStart);
       let preC = isSec ? 3 : (preW >= 115 ? 3 : 2);
       if (preW / preC < 35) preC = Math.max(1, Math.floor(preW / 35));
-      const preDurs = calculateSlotDurations(preW, preC, isSec ? 3 : 6);
+      const preDurs = calculateCleanSlotDurations(preW, preC, isSec ? 3 : 6);
       preC = preDurs.length;
 
       const sList: any[] = [];
@@ -2736,7 +2835,7 @@ export const scheduleService = {
       const postW = Math.max(0, eT - cur);
       let postC = isSec ? 3 : Math.max(1, totalT - preC);
       if (postW / postC < 35) postC = Math.max(1, Math.floor(postW / 35));
-      const postDurs = calculateSlotDurations(postW, postC, isSec ? 3 : 6);
+      const postDurs = calculateCleanSlotDurations(postW, postC, isSec ? 3 : 6);
       for (let i = 0; i < postDurs.length; i++) {
         let dur = postDurs[i];
         let e = i === postDurs.length - 1 ? eT : cur + dur;
@@ -2756,36 +2855,52 @@ export const scheduleService = {
           label: s.label || `${idx + 1}ra Hora`
         }));
     } else {
-      const preDurs = calculateSlotDurations(preWindow, preCount);
-      preCount = preDurs.length;
-
-      let currTimePre = classStart;
-      for (let i = 0; i < preCount; i++) {
-        let dur = preDurs[i];
-        let sTime = currTimePre;
-        let eTime = i === preCount - 1 ? bStart : sTime + dur;
-        currTimePre = eTime;
-        slotTimes.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
-          label: `${i + 1}ra Hora`
-        });
+      const customCycle = findCycleTimeBlocks(state.cycleTimeBlocks, course, effectiveTargetShift);
+      if (customCycle) {
+        const cSlots = getSlotsFromCycleConfig(customCycle);
+        if (cSlots && cSlots.length > 0) {
+          slotTimes = cSlots
+            .filter((s: any) => !s.isBreak)
+            .map((s: any, idx: number) => ({
+              start: s.start,
+              end: s.end,
+              label: s.label || `${idx + 1}ra Hora`
+            }));
+        }
       }
 
-      let currTimePost = bEnd;
-      const postWindow = Math.max(0, endT - currTimePost);
-      let postCount = Math.max(1, targetTotal - preCount);
-      const postDurs = calculateSlotDurations(postWindow, postCount);
-      for (let i = 0; i < postDurs.length; i++) {
-        let dur = postDurs[i];
-        let sTime = currTimePost;
-        let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
-        currTimePost = eTime;
-        slotTimes.push({
-          start: fromMins(sTime),
-          end: fromMins(eTime),
-          label: `${preCount + i + 1}ra Hora`
-        });
+      if (slotTimes.length === 0) {
+        const preDurs = calculateCleanSlotDurations(preWindow, preCount);
+        preCount = preDurs.length;
+
+        let currTimePre = classStart;
+        for (let i = 0; i < preCount; i++) {
+          let dur = preDurs[i];
+          let sTime = currTimePre;
+          let eTime = i === preCount - 1 ? bStart : sTime + dur;
+          currTimePre = eTime;
+          slotTimes.push({
+            start: fromMins(sTime),
+            end: fromMins(eTime),
+            label: `${i + 1}ra Hora`
+          });
+        }
+
+        let currTimePost = bEnd;
+        const postWindow = Math.max(0, endT - currTimePost);
+        let postCount = Math.max(1, targetTotal - preCount);
+        const postDurs = calculateCleanSlotDurations(postWindow, postCount);
+        for (let i = 0; i < postDurs.length; i++) {
+          let dur = postDurs[i];
+          let sTime = currTimePost;
+          let eTime = i === postDurs.length - 1 ? endT : sTime + dur;
+          currTimePost = eTime;
+          slotTimes.push({
+            start: fromMins(sTime),
+            end: fromMins(eTime),
+            label: `${preCount + i + 1}ra Hora`
+          });
+        }
       }
     }
 
@@ -3149,7 +3264,7 @@ export const scheduleService = {
   ) => {
     const centerId = profile.center_id;
     const schoolYear = year || state.currentYear || '2026-2027';
-    const { courses: allCourses, assignments: allAssignments, subjects: allSubjects, levelSchedules, breakPreferences } = state;
+    const { courses: allCourses, assignments: allAssignments, subjects: allSubjects, levelSchedules, breakPreferences, cycleTimeBlocks } = state;
 
     let effectiveTargetShift = shift;
     if (targetCourseId) {
@@ -3249,6 +3364,17 @@ export const scheduleService = {
 
       const cTanda = (course?.tanda || '').toLowerCase();
       const isMorning = cTanda ? (!cTanda.includes('ves') && !cTanda.includes('tar')) : shiftBase === 'mat';
+      const shiftName = isMorning ? 'Matutina' : 'Vespertina';
+
+      // 0. Prioridad Máxima: Bloques de hora personalizados por ciclo del centro
+      const customCycle = findCycleTimeBlocks(cycleTimeBlocks || state.cycleTimeBlocks, course, shiftName);
+      if (customCycle) {
+        const cSlots = getSlotsFromCycleConfig(customCycle);
+        if (cSlots && cSlots.length > 0) {
+          return cSlots.filter((s: any) => !s.isBreak);
+        }
+      }
+
       const official = (levelSchedules || []).find(
         (ls: any) =>
           ls.level === course?.level &&
@@ -3273,11 +3399,12 @@ export const scheduleService = {
       const slots: any[] = [];
       const preWindow = Math.max(0, bStart - startT);
       let preCount = preWindow >= 85 ? 3 : preWindow < 50 ? 1 : 2;
-      const preDur = Math.floor(preWindow / preCount);
+      const preDurs = calculateCleanSlotDurations(preWindow, preCount);
 
       let currPre = startT;
-      for (let i = 0; i < preCount; i++) {
-        let e = i === preCount - 1 ? bStart : currPre + preDur;
+      for (let i = 0; i < preDurs.length; i++) {
+        let dur = preDurs[i];
+        let e = i === preDurs.length - 1 ? bStart : currPre + dur;
         slots.push({
           start: fromMins(currPre),
           end: fromMins(e),
@@ -3289,16 +3416,17 @@ export const scheduleService = {
 
       const postWindow = Math.max(0, endT - bEnd);
       let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
-      const postDur = Math.floor(postWindow / postCount);
+      const postDurs = calculateCleanSlotDurations(postWindow, postCount);
 
       let currPost = bEnd;
-      for (let i = 0; i < postCount; i++) {
-        let e = i === postCount - 1 ? endT : currPost + postDur;
+      for (let i = 0; i < postDurs.length; i++) {
+        let dur = postDurs[i];
+        let e = i === postDurs.length - 1 ? endT : currPost + dur;
         slots.push({
           start: fromMins(currPost),
           end: fromMins(e),
           isBreak: false,
-          label: `${preCount + i + 1}ra Hora`
+          label: `${preDurs.length + i + 1}ra Hora`
         });
         currPost = e;
       }

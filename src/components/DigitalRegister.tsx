@@ -253,10 +253,22 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return (allStudents || []).filter((s) => s.course_id === selectedCourseId);
   }, [allStudents, selectedCourseId]);
 
-  // Sincronizar notas de la caché al estado local para edición
+  // Sincronizar notas de la caché al estado local para edición evitando sobrescribir cambios en progreso
+  const currentScopeRef = useRef<string>('');
+  const activeScope = `${selectedCourseId}_${selectedSubjectId}`;
+
   useEffect(() => {
-    setLocalGrades(loadedGrades);
-  }, [loadedGrades]);
+    if (currentScopeRef.current !== activeScope) {
+      currentScopeRef.current = activeScope;
+      setLocalGrades(loadedGrades || {});
+      return;
+    }
+    setLocalGrades((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return loadedGrades || {};
+      // Mantener las notas locales ya digitadas y rellenar las no editadas desde la caché
+      return { ...(loadedGrades || {}), ...prev };
+    });
+  }, [loadedGrades, activeScope]);
 
   const grades = localGrades;
 
@@ -286,8 +298,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return Math.round(sum / config.competencies.length);
   };
 
-  // Importar promedios de Mi Aula bajo demanda
-  const handleImportFromMiAula = () => {
+  // Importar promedios de Mi Aula bajo demanda (desde LocalStorage y Supabase)
+  const handleImportFromMiAula = async () => {
     if (!selectedCourseId || !selectedSubjectId) {
       alert('Seleccione un curso y asignatura primero.');
       return;
@@ -299,18 +311,86 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     let importedCount = 0;
     const newGrades = { ...localGrades };
 
-    // Iterar por cada periodo P1, P2, P3, P4
-    config.periods.forEach((p) => {
-      const scopeKey = `edugens_partials_${centerId}_${year}_${teacherId}_${selectedCourseId}_${selectedSubjectId}_${p}`;
-      const savedData = localStorage.getItem(scopeKey);
-      if (!savedData) return;
+    for (const p of config.periods) {
+      const pL = p.toLowerCase();
+      let scores: any = null;
+      let activities: any = null;
+      let calcMode: string = 'average';
 
-      try {
-        const { scores, activities } = JSON.parse(savedData);
-        if (!scores || !activities) return;
+      // 1. Probar lectura desde localStorage con claves flexibles
+      const scopeKeysToTry = [
+        `edugens_partials_${centerId}_${year}_${teacherId}_${selectedCourseId}_${selectedSubjectId}_${p}`,
+        profile?.id ? `edugens_partials_${centerId}_${year}_${profile.id}_${selectedCourseId}_${selectedSubjectId}_${p}` : '',
+        profile?.teacher_id ? `edugens_partials_${centerId}_${year}_${profile.teacher_id}_${selectedCourseId}_${selectedSubjectId}_${p}` : '',
+        `edugens_partials_${centerId}_${year}_default_teacher_${selectedCourseId}_${selectedSubjectId}_${p}`
+      ].filter(Boolean);
 
-        const pL = p.toLowerCase();
+      for (const key of scopeKeysToTry) {
+        const localSaved = localStorage.getItem(key);
+        if (localSaved) {
+          try {
+            const parsed = JSON.parse(localSaved);
+            if (parsed && parsed.scores && parsed.activities) {
+              scores = parsed.scores;
+              activities = parsed.activities;
+              calcMode = parsed.calcMode || 'average';
+              break;
+            }
+          } catch {}
+        }
+      }
 
+      // Si no está por clave directa, buscar por coincidencia de curso_asignatura_periodo en localStorage
+      if (!scores) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('edugens_partials_') && k.endsWith(`_${selectedCourseId}_${selectedSubjectId}_${p}`)) {
+            const val = localStorage.getItem(k);
+            if (val) {
+              try {
+                const parsed = JSON.parse(val);
+                if (parsed && parsed.scores && parsed.activities) {
+                  scores = parsed.scores;
+                  activities = parsed.activities;
+                  calcMode = parsed.calcMode || 'average';
+                  break;
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+
+      // 2. Si no hay datos en localStorage para este período, consultar Supabase en la nube
+      if (!scores) {
+        try {
+          let query = supabase
+            .from('student_partial_activities')
+            .select('*')
+            .eq('course_id', selectedCourseId)
+            .eq('subject_id', selectedSubjectId)
+            .eq('period', p)
+            .eq('school_year', year)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+
+          if (centerId && centerId !== 'default_center') {
+            query = query.eq('center_id', centerId);
+          }
+
+          const { data, error } = await query;
+          if (!error && data && data.length > 0 && data[0].scores) {
+            scores = data[0].scores.scores;
+            activities = data[0].scores.activities;
+            calcMode = data[0].scores.calcMode || 'average';
+          }
+        } catch (cloudErr) {
+          console.warn(`Error al consultar nube para período ${p}:`, cloudErr);
+        }
+      }
+
+      // 3. Procesar cálculo de notas
+      if (scores && activities) {
         students.forEach((student: any) => {
           const studentScores = scores[student.id] || {};
 
@@ -321,22 +401,25 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               .filter((v: any) => typeof v === 'number' && !isNaN(v));
 
             if (validVals.length > 0) {
-              const compAvg = Math.round(validVals.reduce((a: number, b: number) => a + b, 0) / validVals.length);
-              newGrades[`${student.id}_${comp.id}_${pL}`] = String(compAvg);
+              let compScore = 0;
+              if (calcMode === 'sum') {
+                compScore = Math.min(100, Math.round(validVals.reduce((a: number, b: number) => a + b, 0)));
+              } else {
+                compScore = Math.round(validVals.reduce((a: number, b: number) => a + b, 0) / validVals.length);
+              }
+              newGrades[`${student.id}_${comp.id}_${pL}`] = String(compScore);
               importedCount++;
             }
           });
         });
-      } catch (e) {
-        console.error('Error importing partials for period', p, e);
       }
-    });
+    }
 
     if (importedCount > 0) {
       setLocalGrades(newGrades);
       setShowSaveStatus('success');
       setTimeout(() => setShowSaveStatus('idle'), 3000);
-      alert(`¡Se han importado exitosamente ${importedCount} notas desde Mi Aula! Recuerda pulsar "GUARDAR".`);
+      alert(`¡Se han importado exitosamente ${importedCount} notas desde Mi Aula (nube y local)! Recuerda pulsar "GUARDAR".`);
     } else {
       alert('No se encontraron parciales registrados en Mi Aula para este curso, asignatura y docente.');
     }

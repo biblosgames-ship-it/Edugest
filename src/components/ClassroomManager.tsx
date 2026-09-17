@@ -46,6 +46,7 @@ import {
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
+import { enqueueSyncAction } from '../utils/offlineSync';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -508,8 +509,36 @@ export const ClassroomManager = () => {
     let isMounted = true;
 
     // 1. Carga inmediata desde localStorage o reset para evitar que persista en memoria el curso/periodo previo
-    const saved = localStorage.getItem(storageScopeKey);
+    let saved = localStorage.getItem(storageScopeKey);
     let loadedFromLocal = false;
+
+    // Fallback: si no está con la key exacta, buscar variantes con profile.teacher_id / profile.id / default_teacher
+    if (!saved) {
+      const centerId = profile?.center_id || center?.id || 'default_center';
+      const year = selectedYear || '2026-2027';
+      const alternates = [profile?.teacher_id, profile?.id, 'default_teacher'].filter(Boolean);
+      for (const alt of alternates) {
+        const altKey = `edugens_partials_${centerId}_${year}_${alt}_${selectedCourseId}_${selectedSubjectId}_${selectedPeriod}`;
+        const val = localStorage.getItem(altKey);
+        if (val) {
+          saved = val;
+          break;
+        }
+      }
+      if (!saved) {
+        // Búsqueda genérica por sufijo curso_asignatura_periodo
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('edugens_partials_') && k.endsWith(`_${selectedCourseId}_${selectedSubjectId}_${selectedPeriod}`)) {
+            const val = localStorage.getItem(k);
+            if (val) {
+              saved = val;
+              break;
+            }
+          }
+        }
+      }
+    }
 
     if (saved) {
       try {
@@ -546,20 +575,24 @@ export const ClassroomManager = () => {
           .eq('course_id', selectedCourseId)
           .eq('subject_id', selectedSubjectId)
           .eq('period', selectedPeriod)
-          .eq('school_year', year);
+          .eq('school_year', year)
+          .order('updated_at', { ascending: false })
+          .limit(1);
 
         if (centerId) {
           query = query.eq('center_id', centerId);
         }
 
-        const { data, error } = await query.maybeSingle();
+        const { data, error } = await query;
 
         if (!isMounted) return;
 
-        if (!error && data && data.scores) {
-          const cloudScores = data.scores.scores || {};
-          const cloudActivities = data.scores.activities || getDefaultActivities();
-          const cloudMode = data.scores.calcMode || 'average';
+        const row = data && data.length > 0 ? data[0] : null;
+
+        if (!error && row && row.scores) {
+          const cloudScores = row.scores.scores || {};
+          const cloudActivities = row.scores.activities || getDefaultActivities();
+          const cloudMode = row.scores.calcMode || 'average';
 
           setPartialScores(cloudScores);
           setCompetencyActivities(cloudActivities);
@@ -577,8 +610,8 @@ export const ClassroomManager = () => {
             centerId: centerId,
             year: year
           }));
-        } else if (!loadedFromLocal) {
-          // Si no hay datos en la nube ni en local para este curso/periodo, mantenerlo limpio
+        } else if (!error && (!data || data.length === 0) && !loadedFromLocal) {
+          // Solo si Supabase respondió explícitamente sin registros Y no había nada local
           setPartialScores({});
           setCompetencyActivities(getDefaultActivities());
           setCompetencyCalcMode('average');
@@ -856,40 +889,63 @@ export const ClassroomManager = () => {
 
       // 3. Guardar en Supabase: 1 Checkpoint Maestro de Pase de Lista + Solo Excepciones
       // Esto ahorra un 95% de almacenamiento en la base de datos (<1 MB por año por centro)
-      try {
-        await supabase
-          .from('attendance_records')
-          .delete()
-          .eq('course_id', selectedCourseId)
-          .eq('date', selectedDate);
+      const checkpointRecord = {
+        center_id: centerId,
+        student_id: null,
+        course_id: selectedCourseId,
+        date: selectedDate,
+        status: 'presente',
+        notes: 'PASE_COMPLETO',
+        recorded_by: profile?.id || null
+      };
 
-        // Registro de confirmación de que el docente pasó la lista completa de ese curso/día
-        const checkpointRecord = {
-          center_id: centerId,
-          student_id: null,
-          course_id: selectedCourseId,
-          date: selectedDate,
-          status: 'presente',
-          notes: 'PASE_COMPLETO',
-          recorded_by: profile?.id || null
-        };
+      const recordsToInsert = [checkpointRecord, ...exceptionRecords];
 
-        const recordsToInsert = [checkpointRecord, ...exceptionRecords];
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await enqueueSyncAction({
+          type: 'attendance',
+          payload: {
+            courseId: selectedCourseId,
+            date: selectedDate,
+            recordsToInsert
+          },
+          centerId,
+          description: `Asistencia curso (${selectedDate})`
+        });
+      } else {
+        try {
+          await supabase
+            .from('attendance_records')
+            .delete()
+            .eq('course_id', selectedCourseId)
+            .eq('date', selectedDate);
 
-        const { error: insertErr } = await supabase
-          .from('attendance_records')
-          .insert(recordsToInsert);
+          const { error: insertErr } = await supabase
+            .from('attendance_records')
+            .insert(recordsToInsert);
 
-        if (insertErr) {
-          console.warn('Supabase sparse insert fallback:', insertErr);
-          for (const rec of recordsToInsert) {
-            try {
-              await supabase.from('attendance_records').insert([rec]);
-            } catch {}
+          if (insertErr) {
+            console.warn('Supabase sparse insert fallback:', insertErr);
+            for (const rec of recordsToInsert) {
+              try {
+                await supabase.from('attendance_records').insert([rec]);
+              } catch {}
+            }
           }
+        } catch (e) {
+          console.warn('Supabase attendance save error, guardando en cola offline:', e);
+          await enqueueSyncAction({
+            type: 'attendance',
+            payload: {
+              courseId: selectedCourseId,
+              date: selectedDate,
+              recordsToInsert
+            },
+            centerId,
+            description: `Asistencia curso (${selectedDate})`
+          });
         }
-      } catch (e) {
-        console.warn('Supabase attendance save error:', e);
       }
 
       // 4. Notificar a toda la app que la asistencia fue actualizada
@@ -1107,6 +1163,7 @@ export const ClassroomManager = () => {
       localStorage.setItem(storageScopeKey, JSON.stringify({
         scores: updatedScores,
         activities: competencyActivities,
+        calcMode: competencyCalcMode,
         period: selectedPeriod,
         subjectId: selectedSubjectId,
         courseId: selectedCourseId,
@@ -1124,11 +1181,11 @@ export const ClassroomManager = () => {
     setIsSavingPartials(true);
     try {
       const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
-      const centerId = profile?.center_id || targetCourse?.center_id;
+      const centerId = profile?.center_id || targetCourse?.center_id || center?.id;
       const year = selectedYear || '2026-2027';
-      const periodKey = selectedPeriod.toLowerCase(); // 'p1', 'p2', 'p3', 'p4'
 
-      localStorage.setItem(storageScopeKey, JSON.stringify({
+      // 1. Guardar de inmediato en localStorage (múltiples claves para evitar fallos de identidad)
+      const payloadData = {
         scores: partialScores,
         activities: competencyActivities,
         calcMode: competencyCalcMode,
@@ -1139,77 +1196,174 @@ export const ClassroomManager = () => {
         centerId: centerId,
         year: year,
         updatedAt: new Date().toISOString()
-      }));
+      };
 
-      if (centerId && selectedCourseId && selectedSubjectId) {
-        try {
-          await supabase.from('student_partial_activities').upsert([
-            {
-              center_id: centerId,
-              course_id: selectedCourseId,
-              subject_id: selectedSubjectId,
-              period: selectedPeriod,
-              school_year: year,
-              competency_id: 'all',
-              activity_name: 'Desglose de Parciales',
-              scores: { scores: partialScores, activities: competencyActivities, calcMode: competencyCalcMode },
-              updated_at: new Date().toISOString()
+      localStorage.setItem(storageScopeKey, JSON.stringify(payloadData));
+      if (profile?.id && profile?.teacher_id && profile.id !== profile.teacher_id) {
+        const altKey = `edugens_partials_${centerId || 'default_center'}_${year}_${profile.id}_${selectedCourseId}_${selectedSubjectId}_${selectedPeriod}`;
+        localStorage.setItem(altKey, JSON.stringify(payloadData));
+      }
+
+      // 2. Preparar notas por competencia para student_grades
+      const competencyGrades: any[] = [];
+      courseStudents.forEach((s: any) => {
+        const sScores = partialScores[s.id] || {};
+
+        activeCompetencies.forEach((comp) => {
+          const acts = competencyActivities[comp.id] || [];
+          const validScores = acts
+            .map((a) => sScores[a.id])
+            .filter((v) => typeof v === 'number' && !isNaN(v));
+
+          if (validScores.length > 0) {
+            let compGrade: number;
+            if (competencyCalcMode === 'sum') {
+              compGrade = Math.min(100, Math.round(validScores.reduce((a, b) => a + b, 0)));
+            } else {
+              compGrade = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
             }
-          ], { onConflict: 'center_id,course_id,subject_id,period,school_year' });
-        } catch (e) {
-          console.warn('Error saving partial breakdown:', e);
-        }
 
-        try {
-          const gradeUpserts = courseStudents.map((s: any) => {
-            const sScores = partialScores[s.id] || {};
-            const compValues: number[] = [];
-
-            activeCompetencies.forEach((comp) => {
-              const acts = competencyActivities[comp.id] || [];
-              const validScores = acts
-                .map((a) => sScores[a.id])
-                .filter((v) => typeof v === 'number' && !isNaN(v));
-
-              if (validScores.length > 0) {
-                if (competencyCalcMode === 'sum') {
-                  const sumVal = Math.min(100, validScores.reduce((a, b) => a + b, 0));
-                  compValues.push(sumVal);
-                } else {
-                  const avgVal = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
-                  compValues.push(avgVal);
-                }
-              }
-            });
-
-            const finalGrade = compValues.length > 0
-              ? Math.round(compValues.reduce((a, b) => a + b, 0) / compValues.length)
-              : null;
-
-            return {
+            competencyGrades.push({
               center_id: centerId,
               student_id: s.id,
               course_id: selectedCourseId,
               subject_id: selectedSubjectId,
+              period: selectedPeriod,
+              competency_id: comp.id,
+              grade: compGrade,
               school_year: year,
-              [periodKey]: finalGrade
-            };
-          });
-
-          if (gradeUpserts.length > 0) {
-            await supabase.from('student_grades').upsert(gradeUpserts, {
-              onConflict: 'center_id,student_id,course_id,subject_id,school_year'
+              updated_at: new Date().toISOString()
             });
           }
-        } catch (e) {
-          console.warn('Error syncing student_grades:', e);
+        });
+      });
+
+      const scoresPayload = { scores: partialScores, activities: competencyActivities, calcMode: competencyCalcMode };
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      if (isOffline) {
+        // Encolar acciones offline
+        await enqueueSyncAction({
+          type: 'partial_activities',
+          payload: {
+            centerId,
+            courseId: selectedCourseId,
+            subjectId: selectedSubjectId,
+            period: selectedPeriod,
+            schoolYear: year,
+            scoresData: scoresPayload,
+            activityName: 'Desglose de Parciales'
+          },
+          centerId,
+          description: `Desglose de parciales (${selectedPeriod})`
+        });
+
+        if (competencyGrades.length > 0) {
+          await enqueueSyncAction({
+            type: 'grades',
+            payload: competencyGrades,
+            centerId,
+            description: `Calificaciones sincronizadas de parciales (${competencyGrades.length} registros)`
+          });
+        }
+
+        toast.success('Guardado localmente (sin internet). Se sincronizará al reconectar.');
+      } else if (centerId && selectedCourseId && selectedSubjectId) {
+        // 3. Persistir en student_partial_activities sin depender exclusivamente de índices ON CONFLICT
+        try {
+          let checkQuery = supabase
+            .from('student_partial_activities')
+            .select('id')
+            .eq('course_id', selectedCourseId)
+            .eq('subject_id', selectedSubjectId)
+            .eq('period', selectedPeriod)
+            .eq('school_year', year);
+
+          if (centerId) {
+            checkQuery = checkQuery.eq('center_id', centerId);
+          }
+
+          const { data: existingRows, error: fetchErr } = await checkQuery;
+
+          if (!fetchErr && existingRows && existingRows.length > 0) {
+            const primaryId = existingRows[0].id;
+            const { error: updateErr } = await supabase
+              .from('student_partial_activities')
+              .update({
+                scores: scoresPayload,
+                activity_name: 'Desglose de Parciales',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', primaryId);
+
+            if (updateErr) throw updateErr;
+
+            if (existingRows.length > 1) {
+              const dupIds = existingRows.slice(1).map((r: any) => r.id);
+              await supabase.from('student_partial_activities').delete().in('id', dupIds);
+            }
+          } else {
+            const { error: insertErr } = await supabase
+              .from('student_partial_activities')
+              .insert([{
+                center_id: centerId,
+                course_id: selectedCourseId,
+                subject_id: selectedSubjectId,
+                period: selectedPeriod,
+                school_year: year,
+                competency_id: 'all',
+                activity_name: 'Desglose de Parciales',
+                scores: scoresPayload,
+                updated_at: new Date().toISOString()
+              }]);
+
+            if (insertErr) throw insertErr;
+          }
+        } catch (partialErr: any) {
+          console.warn('[ClassroomManager] Error al guardar student_partial_activities en nube, encolando offline:', partialErr);
+          await enqueueSyncAction({
+            type: 'partial_activities',
+            payload: {
+              centerId,
+              courseId: selectedCourseId,
+              subjectId: selectedSubjectId,
+              period: selectedPeriod,
+              schoolYear: year,
+              scoresData: scoresPayload,
+              activityName: 'Desglose de Parciales'
+            },
+            centerId,
+            description: `Desglose de parciales (${selectedPeriod})`
+          });
+        }
+
+        // 4. Sincronizar calificaciones por competencia con student_grades (Registro Digital)
+        if (competencyGrades.length > 0) {
+          try {
+            const { error: gradeErr } = await supabase
+              .from('student_grades')
+              .upsert(competencyGrades, {
+                onConflict: 'student_id,course_id,subject_id,period,competency_id'
+              });
+
+            if (gradeErr) throw gradeErr;
+          } catch (gradeSyncErr: any) {
+            console.warn('[ClassroomManager] Error al sincronizar student_grades en nube, encolando offline:', gradeSyncErr);
+            await enqueueSyncAction({
+              type: 'grades',
+              payload: competencyGrades,
+              centerId,
+              description: `Calificaciones sincronizadas de parciales (${competencyGrades.length} registros)`
+            });
+          }
         }
       }
 
       setSavePartialsSuccess(true);
       setTimeout(() => setSavePartialsSuccess(false), 3000);
-    } catch (e) {
-      alert('Error al guardar parciales');
+    } catch (e: any) {
+      console.error('Error al guardar parciales:', e);
+      alert('Hubo un inconveniente al guardar parciales. Los datos se mantendrán seguros en este navegador.');
     } finally {
       setIsSavingPartials(false);
     }

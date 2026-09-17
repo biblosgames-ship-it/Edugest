@@ -36,6 +36,11 @@ import { useNotifications } from '../hooks/useNotifications';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText } from './LinkifiedText';
 import { getSubjectTheme } from '../utils/subjectColors';
+import {
+  findCycleTimeBlocks,
+  getSlotsFromCycleConfig,
+  calculateCleanSlotDurations
+} from '../services/scheduleService';
 
 const toMins = (val: string) => {
   if (!val) return 0;
@@ -476,6 +481,21 @@ export const TeacherDashboard = ({
       const isC1 = isCourseFirstCycle(course);
       const isC2 = isCourseSecondCycle(course);
 
+      // 0. Prioridad MÁXIMA: Estructura de Bloques y Horas por Ciclo del Centro
+      const customCycleBlocks = findCycleTimeBlocks(
+        state.cycleTimeBlocks,
+        course,
+        courseShiftName,
+        isC1,
+        isC2
+      );
+      if (customCycleBlocks) {
+        const cSlots = getSlotsFromCycleConfig(customCycleBlocks);
+        if (cSlots && cSlots.length > 0) {
+          return cSlots;
+        }
+      }
+
       const isBreakInShift = (timeStr: string, isMorn: boolean) => {
         const rawMins = toMins(timeStr);
         const isBpMorning = rawMins >= 420 && rawMins < 780;
@@ -606,29 +626,6 @@ export const TeacherDashboard = ({
         });
       }
 
-      const calculateSlotDurations = (totalMins: number, preferredCount: number, maxCount?: number) => {
-        if (totalMins <= 0 || preferredCount <= 0) return [];
-        let count = preferredCount;
-        const limit = maxCount || 6;
-        while (count > 1 && totalMins / count < 35) {
-          count--;
-        }
-        while (totalMins / count > 50 && count < limit) {
-          if (totalMins / (count + 1) < 35) {
-            break;
-          }
-          count++;
-        }
-        const base = Math.floor(totalMins / count);
-        let rem = totalMins - base * count;
-        const durs = new Array(count).fill(base);
-        for (let idx = 0; idx < count && rem > 0; idx++) {
-          durs[idx] += 1;
-          rem -= 1;
-        }
-        return durs;
-      };
-
       // CÁLCULO DINÁMICO ANTES DEL RECREO
       const preWindow = Math.max(0, bStart - classStart);
       let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : preWindow >= 115 ? 3 : 2;
@@ -636,7 +633,7 @@ export const TeacherDashboard = ({
         preCountLocal = Math.max(1, Math.floor(preWindow / 35));
       }
       const maxPreCount = isSecundaria ? 3 : 6;
-      const preDurs = calculateSlotDurations(preWindow, preCountLocal, maxPreCount);
+      const preDurs = calculateCleanSlotDurations(preWindow, preCountLocal, maxPreCount);
       preCountLocal = preDurs.length;
 
       let currTimePre = classStart;
@@ -704,7 +701,7 @@ export const TeacherDashboard = ({
         postCountLocal = Math.max(1, Math.floor(postWindow / 35));
       }
       const maxPostCount = isSecundaria ? 3 : 6;
-      const postDurs = calculateSlotDurations(postWindow, postCountLocal, maxPostCount);
+      const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPostCount);
       postCountLocal = postDurs.length;
       for (let i = 0; i < postCountLocal; i++) {
         let dur = postDurs[i];
@@ -729,6 +726,7 @@ export const TeacherDashboard = ({
       state.levelSchedules,
       state.breakPreferences,
       state.fixedEvents,
+      state.cycleTimeBlocks,
       getCourseIsMorning
     ]
   );

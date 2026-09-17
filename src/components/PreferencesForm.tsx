@@ -12,7 +12,10 @@ import {
   Coffee,
   ThermometerSnowflake,
   Pencil,
-  Loader2
+  Loader2,
+  Plus,
+  Sparkles,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -30,7 +33,98 @@ export const PreferencesForm = () => {
   } = usePreferences();
 
   const { teachers: allTeachers } = useTeachers();
-  const { state, profile, refreshData, addPriorityPreference, deletePriorityPreference, setAvoidDeporteDuringAnyBreak } = useApp();
+  const {
+    state,
+    profile,
+    refreshData,
+    addPriorityPreference,
+    deletePriorityPreference,
+    setAvoidDeporteDuringAnyBreak,
+    saveCycleTimeBlocks,
+    deleteCycleTimeBlocks
+  } = useApp();
+
+  // Estado para la Matriz de Bloques de Ciclo (Horarios Personalizados)
+  const [cycleBlockLevel, setCycleBlockLevel] = useState<string>('Primario');
+  const [cycleBlockCycle, setCycleBlockCycle] = useState<string>('Primer Ciclo');
+  const [cycleBlockShift, setCycleBlockShift] = useState<string>('Matutina');
+  const [cycleSlots, setCycleSlots] = useState<Array<{ label: string; start: string; end: string; isBreak: boolean }>>([
+    { label: '1ra Hora', start: '08:00', end: '08:45', isBreak: false },
+    { label: '2da Hora', start: '08:45', end: '09:30', isBreak: false },
+    { label: 'RECREO', start: '09:30', end: '10:00', isBreak: true },
+    { label: '3ra Hora', start: '10:00', end: '10:45', isBreak: false },
+    { label: '4ta Hora', start: '10:45', end: '11:30', isBreak: false },
+    { label: '5ta Hora', start: '11:30', end: '12:15', isBreak: false },
+    { label: '6ta Hora', start: '12:15', end: '13:00', isBreak: false }
+  ]);
+  const [isSavingCycleBlocks, setIsSavingCycleBlocks] = useState(false);
+
+  // Sincronizar editor si ya existe una configuración guardada para el nivel/ciclo/tanda seleccionado
+  useEffect(() => {
+    const currentConfigs = state.cycleTimeBlocks || [];
+    const configId = `${cycleBlockLevel}__${cycleBlockCycle}__${cycleBlockShift}`;
+    const found = currentConfigs.find((c: any) => c.id === configId);
+    if (found && found.slots && found.slots.length > 0) {
+      setCycleSlots(found.slots);
+    }
+  }, [cycleBlockLevel, cycleBlockCycle, cycleBlockShift, state.cycleTimeBlocks]);
+
+  const applyCyclePreset = (minutes: number) => {
+    const isMorn = cycleBlockShift === 'Matutina';
+    const baseStart = isMorn ? 480 : 840; // 08:00 o 14:00
+    const toTimeStr = (m: number) => {
+      const hh = Math.floor(m / 60).toString().padStart(2, '0');
+      const mm = (m % 60).toString().padStart(2, '0');
+      return `${hh}:${mm}`;
+    };
+
+    let cur = baseStart;
+    const newSlots: Array<{ label: string; start: string; end: string; isBreak: boolean }> = [];
+
+    // Pre-recreo: 2 horas
+    const preCount = minutes >= 50 ? 2 : 2;
+    for (let i = 0; i < preCount; i++) {
+      const s = cur;
+      const e = cur + minutes;
+      newSlots.push({ label: `${i + 1}ra Hora`, start: toTimeStr(s), end: toTimeStr(e), isBreak: false });
+      cur = e;
+    }
+
+    // Recreo (30 min en mañana, 25 min en tarde)
+    const breakDur = isMorn ? 30 : 25;
+    const breakStart = cur;
+    const breakEnd = cur + breakDur;
+    newSlots.push({ label: 'RECREO', start: toTimeStr(breakStart), end: toTimeStr(breakEnd), isBreak: true });
+    cur = breakEnd;
+
+    // Post-recreo: 3 o 4 horas
+    const postCount = minutes >= 50 ? 3 : 4;
+    for (let i = 0; i < postCount; i++) {
+      const s = cur;
+      const e = cur + minutes;
+      newSlots.push({ label: `${preCount + i + 1}ra Hora`, start: toTimeStr(s), end: toTimeStr(e), isBreak: false });
+      cur = e;
+    }
+
+    setCycleSlots(newSlots);
+  };
+
+  const handleSaveCycleBlocks = async () => {
+    if (cycleSlots.length === 0) {
+      alert('Debes definir al menos una hora o bloque');
+      return;
+    }
+    setIsSavingCycleBlocks(true);
+    try {
+      await saveCycleTimeBlocks(cycleBlockLevel, cycleBlockCycle, cycleBlockShift, cycleSlots);
+      alert('✓ Estructura de horas guardada exitosamente para ' + cycleBlockLevel + ' - ' + cycleBlockCycle + ' (' + cycleBlockShift + ')');
+      await refreshData(undefined, true);
+    } catch (e: any) {
+      alert('Error guardando bloques: ' + (e.message || e));
+    } finally {
+      setIsSavingCycleBlocks(false);
+    }
+  };
 
   // Estado para Preferencias de Docente
   const [teacherPref, setTeacherPref] = useState({
@@ -914,6 +1008,304 @@ export const PreferencesForm = () => {
           </div>
         </div>
       </section>
+
+      {/* SECCIÓN 4.5: ESTRUCTURA DE BLOQUES Y HORAS POR CICLO (RANGOS PERSONALIZADOS) */}
+      <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-2xl space-y-8">
+        <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+          <div className="w-12 h-12 bg-sky-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-sky-100">
+            <Clock size={24} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-800 tracking-tight">
+              Estructura de Bloques y Horas por Ciclo
+            </h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+              Define los rangos exactos de cada hora y recreo sin cálculos automáticos incómodos
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Lado izquierdo: Selector y Editor de Bloques */}
+          <div className="lg:col-span-8 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div>
+                <label className={labelClass}>Nivel</label>
+                <select
+                  value={cycleBlockLevel}
+                  onChange={(e) => setCycleBlockLevel(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="Inicial">Inicial</option>
+                  <option value="Primario">Primario</option>
+                  <option value="Secundario">Secundario</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Ciclo</label>
+                <select
+                  value={cycleBlockCycle}
+                  onChange={(e) => setCycleBlockCycle(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="General">General (Todo el Nivel)</option>
+                  <option value="Primer Ciclo">Primer Ciclo</option>
+                  <option value="Segundo Ciclo">Segundo Ciclo</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Tanda</label>
+                <select
+                  value={cycleBlockShift}
+                  onChange={(e) => setCycleBlockShift(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="Matutina">Matutina</option>
+                  <option value="Vespertina">Vespertina</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Botones de Plantilla Rápida */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mr-1">
+                Plantillas rápidas:
+              </span>
+              <button
+                type="button"
+                onClick={() => applyCyclePreset(45)}
+                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles size={13} /> 45 min (Estándar MINERD)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyCyclePreset(50)}
+                className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles size={13} /> 50 min (Politécnico / Secundaria)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyCyclePreset(40)}
+                className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles size={13} /> 40 min
+              </button>
+            </div>
+
+            {/* Tabla de Bloques */}
+            <div className="space-y-2 border border-slate-100 rounded-2xl overflow-hidden shadow-inner p-3 bg-slate-50/50">
+              <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-1">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-4">Nombre / Etiqueta</div>
+                <div className="col-span-3">Hora Inicio</div>
+                <div className="col-span-3">Hora Fin</div>
+                <div className="col-span-1 text-center">Tipo</div>
+              </div>
+
+              {cycleSlots.map((slot, idx) => (
+                <div
+                  key={idx}
+                  className={`grid grid-cols-1 sm:grid-cols-12 gap-2 items-center p-2.5 rounded-xl border transition-all ${
+                    slot.isBreak
+                      ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                      : 'bg-white border-slate-200/70 text-slate-800 shadow-sm'
+                  }`}
+                >
+                  <div className="col-span-1 text-center font-bold text-xs text-slate-400 sm:block hidden">
+                    {idx + 1}
+                  </div>
+                  <div className="col-span-4">
+                    <input
+                      type="text"
+                      value={slot.label}
+                      onChange={(e) => {
+                        const copy = [...cycleSlots];
+                        copy[idx].label = e.target.value;
+                        setCycleSlots(copy);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-transparent border border-slate-200 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-indigo-500"
+                      placeholder="Ej: 1ra Hora"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="time"
+                      value={slot.start}
+                      onChange={(e) => {
+                        const copy = [...cycleSlots];
+                        copy[idx].start = e.target.value;
+                        setCycleSlots(copy);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="time"
+                      value={slot.end}
+                      onChange={(e) => {
+                        const copy = [...cycleSlots];
+                        copy[idx].end = e.target.value;
+                        setCycleSlots(copy);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-1 flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const copy = [...cycleSlots];
+                        copy[idx].isBreak = !copy[idx].isBreak;
+                        if (copy[idx].isBreak && !copy[idx].label.toLowerCase().includes('recreo')) {
+                          copy[idx].label = 'RECREO';
+                        }
+                        setCycleSlots(copy);
+                      }}
+                      className={`p-1.5 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
+                        slot.isBreak
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      title={slot.isBreak ? 'Es Recreo (clic para cambiar a clase)' : 'Es Clase (clic para cambiar a recreo)'}
+                    >
+                      {slot.isBreak ? 'Rec' : 'Clas'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCycleSlots(cycleSlots.filter((_, i) => i !== idx));
+                      }}
+                      className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors cursor-pointer"
+                      title="Eliminar bloque"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const last = cycleSlots[cycleSlots.length - 1];
+                  const newStart = last ? last.end : '08:00';
+                  const [h, m] = newStart.split(':').map(Number);
+                  const endMins = (h || 8) * 60 + (m || 0) + 45;
+                  const newEnd = `${Math.floor(endMins / 60).toString().padStart(2, '0')}:${(endMins % 60).toString().padStart(2, '0')}`;
+                  setCycleSlots([
+                    ...cycleSlots,
+                    { label: `${cycleSlots.length + 1}ra Hora`, start: newStart, end: newEnd, isBreak: false }
+                  ]);
+                }}
+                className="w-full py-2.5 mt-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={14} /> Añadir otra hora o bloque
+              </button>
+            </div>
+
+            <button
+              type="button"
+              disabled={isSavingCycleBlocks}
+              onClick={handleSaveCycleBlocks}
+              className="w-full py-4 bg-sky-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-sky-700 transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <Save size={18} /> {isSavingCycleBlocks ? 'Guardando...' : `Guardar Estructura para ${cycleBlockLevel} - ${cycleBlockCycle}`}
+            </button>
+          </div>
+
+          {/* Lado derecho: Lista de Configuraciones Registradas */}
+          <div className="lg:col-span-4 bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Estructuras Guardadas
+            </h4>
+
+            {(state.cycleTimeBlocks || []).length > 0 ? (
+              <div className="space-y-3">
+                {(state.cycleTimeBlocks || []).map((cfg: any) => (
+                  <div
+                    key={cfg.id}
+                    className="p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 space-y-2 hover:border-sky-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
+                          {cfg.shift}
+                        </span>
+                        <h5 className="text-xs font-black text-slate-800 mt-1">
+                          {cfg.level} • {cfg.cycle}
+                        </h5>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          {cfg.slots?.length || 0} bloques configurados
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCycleBlockLevel(cfg.level);
+                            setCycleBlockCycle(cfg.cycle);
+                            setCycleBlockShift(cfg.shift);
+                            if (cfg.slots && cfg.slots.length > 0) {
+                              setCycleSlots(cfg.slots);
+                            }
+                          }}
+                          className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors text-xs font-bold cursor-pointer"
+                          title="Cargar en editor"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm(`¿Eliminar la estructura de horas de ${cfg.level} - ${cfg.cycle} (${cfg.shift})?`)) {
+                              await deleteCycleTimeBlocks(cfg.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg transition-colors cursor-pointer"
+                          title="Eliminar estructura"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Vista previa pequeña de horas */}
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
+                      {(cfg.slots || []).slice(0, 6).map((s: any, idx: number) => (
+                        <span
+                          key={idx}
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                            s.isBreak ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {s.start}-{s.end}
+                        </span>
+                      ))}
+                      {(cfg.slots || []).length > 6 && (
+                        <span className="text-[9px] text-slate-400 font-bold px-1 py-0.5">
+                          +{cfg.slots.length - 6} más
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-slate-400 text-xs italic space-y-2">
+                <Clock size={24} className="mx-auto text-slate-300" />
+                <p>No hay estructuras personalizadas guardadas.</p>
+                <p className="text-[10px] text-slate-400">
+                  El sistema usa el cálculo automático redondeado a múltiplos de 5 min.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* SECCIÓN 5: EVENTOS FIJOS INSTITUCIONALES */}
       <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-2xl space-y-8">
         <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
