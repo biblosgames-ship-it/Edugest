@@ -15,7 +15,12 @@ export const OfflineIndicator: React.FC = () => {
 
   useEffect(() => {
     // 1. Cargar conteo inicial de cambios pendientes
-    getPendingSyncCount().then(setPendingCount);
+    getPendingSyncCount().then((count) => {
+      setPendingCount(count);
+      if (count > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
+        processSyncQueue();
+      }
+    });
 
     // 2. Escuchar cambios de estado de red
     const handleOnline = () => {

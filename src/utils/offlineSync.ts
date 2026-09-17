@@ -391,4 +391,16 @@ if (typeof window !== 'undefined') {
       processSyncQueue();
     }, 2000);
   });
+
+  // Si arranca la app con conexión, procesar cola pendiente de sesiones previas
+  if (navigator.onLine) {
+    setTimeout(() => {
+      getPendingSyncCount().then((count) => {
+        if (count > 0) {
+          console.log(`[OfflineSync] Procesando ${count} acciones pendientes de sesión previa...`);
+          processSyncQueue();
+        }
+      });
+    }, 2500);
+  }
 }
