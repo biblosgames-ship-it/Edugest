@@ -792,7 +792,10 @@ export const useFinance = (options?: {
     try {
       const { data, error } = await supabase
         .from('finance_ledger_categories')
-        .upsert({ ...category, center_id: currentCenterId })
+        .upsert(
+          { ...category, center_id: currentCenterId },
+          { onConflict: 'center_id, name, type' }
+        )
         .select();
 
       if (error) throw error;

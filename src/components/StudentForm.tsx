@@ -403,7 +403,7 @@ export const StudentForm = ({
         first_name: student.names,
         last_name: `${student.firstSurname} ${student.secondSurname}`.trim(),
         sex: student.sex,
-        birth_date: student.birthDate,
+        birth_date: student.birthDate ? student.birthDate : null,
         course_id: selectedGradeId,
         status: 'Active',
         school_year: selectedYear || customSchoolYear || '2026-2027',

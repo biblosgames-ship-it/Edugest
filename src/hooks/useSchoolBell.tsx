@@ -49,9 +49,9 @@ export const useSchoolBell = () => {
   const [soundStyle, setSoundStyleState] = useState<SoundStyle>(() => {
     try {
       const saved = localStorage.getItem('edugens_school_bell_style');
-      return (saved as SoundStyle) || 'chime';
+      return (saved as SoundStyle) || 'traditional';
     } catch {
-      return 'chime';
+      return 'traditional';
     }
   });
 

@@ -300,6 +300,26 @@ export const StudentDashboard = ({
     }
   }, [selectedCourseId, allCourses, selectedYear, profile?.center_id]);
 
+  // Actualizar enlaces fijos de plataforma cuando el estudiante filtra por materia
+  useEffect(() => {
+    if (!course?.id) return;
+    let isCancelled = false;
+    dataService.getPlatformLinks(
+      course.id,
+      selectedSubjectFilter !== 'ALL' ? selectedSubjectFilter : null
+    ).then((linksData) => {
+      if (!isCancelled) {
+        setCoursePlatformLinks(linksData);
+      }
+    }).catch((err) => {
+      console.error('[StudentDashboard] Error updating platform links for subject:', err);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [course?.id, selectedSubjectFilter]);
+
   const parseTaskPeriod = (t: any): string => {
     if (t.period && ['P1', 'P2', 'P3', 'P4'].includes(t.period.toUpperCase())) {
       return t.period.toUpperCase();
@@ -1763,7 +1783,9 @@ export const StudentDashboard = ({
               <div className="flex items-center justify-between">
                 <span className="text-[9px] font-black uppercase tracking-widest text-indigo-900 flex items-center gap-1.5">
                   <Globe size={13} className="text-indigo-600" />
-                  Accesos Directos de Clase (Docente)
+                  {selectedSubjectFilter !== 'ALL'
+                    ? `Accesos Directos • ${availableTaskSubjects.find((s: any) => s.id === selectedSubjectFilter)?.name || 'Materia'}`
+                    : 'Accesos Directos de Clase (Docente)'}
                 </span>
                 <span className="text-[9px] text-indigo-600 font-bold">1 Clic</span>
               </div>

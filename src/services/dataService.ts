@@ -176,6 +176,7 @@ export const dataService = {
 
     const studentPayload = {
       ...data,
+      birth_date: data.birth_date ? data.birth_date : null,
       school_year: schoolYear || data.school_year || '2026-2027',
       created_at: data.created_at || new Date().toISOString(),
       family_id: data.family_id || undefined
@@ -224,9 +225,15 @@ export const dataService = {
   },
 
   async updateStudent(id: string, data: any, extra: any, schoolYear: string) {
+    const updatePayload = {
+      ...data,
+      birth_date: data.birth_date ? data.birth_date : null,
+      school_year: schoolYear,
+      family_id: data.family_id || undefined
+    };
     const { error } = await supabase
       .from('students')
-      .update({ ...data, school_year: schoolYear, family_id: data.family_id || undefined })
+      .update(updatePayload)
       .eq('id', id);
     if (error) throw error;
 
@@ -349,7 +356,9 @@ export const dataService = {
     other_url?: string;
     other_label?: string;
   }) {
-    const key = `platform_links_${params.course_id}_${params.subject_id || 'all'}`;
+    const isSpecificSubject = Boolean(params.subject_id && params.subject_id !== 'ALL' && params.subject_id !== 'all');
+    const cleanSubjectId = isSpecificSubject ? params.subject_id : null;
+    const key = `platform_links_${params.course_id}_${cleanSubjectId || 'general'}`;
     const payload = {
       classroom_url: params.classroom_url || '',
       meet_url: params.meet_url || '',
@@ -363,19 +372,26 @@ export const dataService = {
 
     // 1. Intentar en course_platform_links
     try {
-      const { data: existing, error: selErr } = await supabase
+      let selQuery = supabase
         .from('course_platform_links')
         .select('id')
-        .eq('course_id', params.course_id)
-        .eq('teacher_id', params.teacher_id)
-        .limit(1);
+        .eq('course_id', params.course_id);
+
+      if (cleanSubjectId) {
+        selQuery = selQuery.eq('subject_id', cleanSubjectId);
+      } else {
+        selQuery = selQuery.is('subject_id', null);
+      }
+
+      const { data: existing, error: selErr } = await selQuery.limit(1);
 
       if (!selErr && existing && existing.length > 0) {
         await supabase
           .from('course_platform_links')
           .update({
             ...payload,
-            subject_id: params.subject_id || null
+            subject_id: cleanSubjectId,
+            teacher_id: params.teacher_id
           })
           .eq('id', existing[0].id);
         return;
@@ -383,7 +399,7 @@ export const dataService = {
         const { error: insErr } = await supabase.from('course_platform_links').insert([{
           center_id: params.center_id,
           course_id: params.course_id,
-          subject_id: params.subject_id || null,
+          subject_id: cleanSubjectId,
           teacher_id: params.teacher_id,
           ...payload
         }]);
@@ -393,11 +409,12 @@ export const dataService = {
 
     // 2. Respaldo transparente en announcements
     try {
+      const annTitle = `__PLATFORM_LINKS__:${params.course_id}:${cleanSubjectId || 'general'}`;
       const { data: existingAnn } = await supabase
         .from('announcements')
         .select('id')
         .eq('course_id', params.course_id)
-        .eq('title', `__PLATFORM_LINKS__:${params.course_id}`)
+        .eq('title', annTitle)
         .limit(1);
 
       const content = `__PLATFORM_LINKS__:${JSON.stringify(payload)}`;
@@ -406,17 +423,17 @@ export const dataService = {
           .from('announcements')
           .update({
             content,
-            subject_id: params.subject_id || null
+            subject_id: cleanSubjectId
           })
           .eq('id', existingAnn[0].id);
       } else {
         await supabase.from('announcements').insert([{
           center_id: params.center_id,
           course_id: params.course_id,
-          subject_id: params.subject_id || null,
+          subject_id: cleanSubjectId,
           sender_id: params.teacher_id,
           sender_role: 'teacher',
-          title: `__PLATFORM_LINKS__:${params.course_id}`,
+          title: annTitle,
           content
         }]);
       }
@@ -426,18 +443,22 @@ export const dataService = {
   },
 
   async getPlatformLinks(courseId: string, subjectId?: string | null) {
-    const key = `platform_links_${courseId}_${subjectId || 'all'}`;
+    const isSpecificSubject = Boolean(subjectId && subjectId !== 'ALL' && subjectId !== 'all');
+    const cleanSubjectId = isSpecificSubject ? subjectId : null;
+    const key = `platform_links_${courseId}_${cleanSubjectId || 'general'}`;
     let cached: any = null;
     try {
-      const raw = localStorage.getItem(`edugens_${key}`) || localStorage.getItem(`edugens_platform_links_${courseId}_all`);
+      const raw = localStorage.getItem(`edugens_${key}`);
       if (raw) cached = JSON.parse(raw);
     } catch (e) {}
 
-    // Intentar desde course_platform_links
+    // 1. Intentar desde course_platform_links
     try {
       let query = supabase.from('course_platform_links').select('*').eq('course_id', courseId);
-      if (subjectId) {
-        query = query.or(`subject_id.eq.${subjectId},subject_id.is.null`);
+      if (cleanSubjectId) {
+        query = query.eq('subject_id', cleanSubjectId);
+      } else {
+        query = query.is('subject_id', null);
       }
       const { data, error } = await query.order('updated_at', { ascending: false }).limit(1);
       if (!error && data && data.length > 0) {
@@ -455,13 +476,14 @@ export const dataService = {
       }
     } catch (e) {}
 
-    // Intentar desde announcements
+    // 2. Intentar desde announcements con título específico
     try {
+      const annTitle = `__PLATFORM_LINKS__:${courseId}:${cleanSubjectId || 'general'}`;
       const { data: annData } = await supabase
         .from('announcements')
         .select('*')
         .eq('course_id', courseId)
-        .like('title', `__PLATFORM_LINKS__:%`)
+        .eq('title', annTitle)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -476,6 +498,23 @@ export const dataService = {
         }
       }
     } catch (e) {}
+
+    // 3. Fallback retrocompatible sólo si no era específico de una asignatura
+    if (!cleanSubjectId) {
+      try {
+        const { data: fallbackAnn } = await supabase
+          .from('announcements')
+          .select('*')
+          .eq('course_id', courseId)
+          .eq('title', `__PLATFORM_LINKS__:${courseId}`)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (fallbackAnn && fallbackAnn.length > 0) {
+          const parsed = JSON.parse(fallbackAnn[0].content.substring('__PLATFORM_LINKS__:'.length));
+          return parsed;
+        }
+      } catch (e) {}
+    }
 
     return cached || { classroom_url: '', meet_url: '', other_url: '', other_label: 'Plataforma Alterna' };
   },
@@ -745,7 +784,7 @@ export const dataService = {
         if (activeCenterId) {
           const { data: siblingTeachers } = await supabase
             .from('teachers')
-            .select('id, name, full_name')
+            .select('id, name')
             .eq('center_id', activeCenterId);
 
           const teacherNames = new Set<string>();
@@ -754,12 +793,11 @@ export const dataService = {
           (siblingTeachers || []).forEach((st: any) => {
             if (candidateTeacherIds.has(st.id)) {
               if (st.name) teacherNames.add(st.name);
-              if (st.full_name) teacherNames.add(st.full_name);
             }
           });
 
           (siblingTeachers || []).forEach((st: any) => {
-            const sName = st.name || st.full_name;
+            const sName = st.name;
             for (const tName of teacherNames) {
               if (areTeacherNamesMatching(sName, tName)) {
                 candidateTeacherIds.add(st.id);
@@ -823,19 +861,30 @@ export const dataService = {
     try {
       const { data: prof } = await supabase
         .from('profiles')
-        .select('course_code, course_id, student_id, parent_course_ids')
+        .select('course_code, course_id, parent_course_ids')
         .eq('id', userId)
         .maybeSingle();
 
       const ids = new Set<string>();
       if (prof?.course_code) ids.add(prof.course_code);
       if (prof?.course_id) ids.add(prof.course_id);
-      if (prof?.student_id) {
-        userStudentId = prof.student_id;
-        linkedStudentIds.add(prof.student_id);
-      }
       if (Array.isArray(prof?.parent_course_ids)) {
         prof.parent_course_ids.forEach((cid: string) => cid && ids.add(cid));
+      }
+
+      if (isStudent) {
+        try {
+          const { data: stRec } = await supabase
+            .from('students')
+            .select('id, course_id')
+            .eq('profile_id', userId)
+            .maybeSingle();
+          if (stRec?.id) {
+            userStudentId = stRec.id;
+            linkedStudentIds.add(stRec.id);
+            if (stRec.course_id) ids.add(stRec.course_id);
+          }
+        } catch (_) {}
       }
 
       try {
@@ -978,11 +1027,14 @@ export const dataService = {
   },
 
   async getAnnouncements(courseId: string) {
-    const { data, error } = await supabase
-      .from('announcements')
-      .select('*')
-      .or(`course_id.eq.${courseId},course_id.eq.all`)
-      .order('created_at', { ascending: false });
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId || '');
+    let query = supabase.from('announcements').select('*');
+    if (isUUID) {
+      query = query.or(`course_id.eq.${courseId},course_id.is.null`);
+    } else if (courseId && courseId !== 'all') {
+      query = query.eq('course_id', courseId);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) {
       console.error('Error getting announcements:', error);
       return [];

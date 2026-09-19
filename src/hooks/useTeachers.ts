@@ -214,7 +214,7 @@ export const useTeachers = () => {
       // 2. Buscar registros vinculados por ID o por nombre antiguo en staff y teachers del centro
       const [staffRes, teachersRes] = await Promise.all([
         supabase.from('staff').select('id, full_name, name').eq('center_id', centerId),
-        supabase.from('teachers').select('id, name, full_name').eq('center_id', centerId)
+        supabase.from('teachers').select('id, name').eq('center_id', centerId)
       ]);
 
       const matchedStaffIds = new Set<string>();
@@ -230,7 +230,7 @@ export const useTeachers = () => {
           }
         });
         (teachersRes.data || []).forEach((t: any) => {
-          if (normalizeNameString(t.name || t.full_name || '') === oldName) {
+          if (normalizeNameString(t.name || '') === oldName) {
             matchedTeacherIds.add(t.id);
           }
         });
@@ -279,7 +279,7 @@ export const useTeachers = () => {
       // 2. Obtener registros existentes en el centro para buscar duplicados
       const [staffRes, teachersRes] = await Promise.all([
         supabase.from('staff').select('id, full_name, name').eq('center_id', centerId),
-        supabase.from('teachers').select('id, name, full_name').eq('center_id', centerId)
+        supabase.from('teachers').select('id, name').eq('center_id', centerId)
       ]);
 
       const idsToDelete = new Set<string>();
@@ -292,7 +292,7 @@ export const useTeachers = () => {
           }
         });
         (teachersRes.data || []).forEach((t: any) => {
-          if (normalizeNameString(t.name || t.full_name || '') === targetName) {
+          if (normalizeNameString(t.name || '') === targetName) {
             idsToDelete.add(t.id);
           }
         });

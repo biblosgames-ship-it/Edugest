@@ -231,6 +231,10 @@ export const ClassroomManager = () => {
     }
   }, [availableSubjects, selectedSubjectId]);
 
+  const currentSubjectObj = useMemo(() => {
+    return availableSubjects.find((s: any) => s.id === selectedSubjectId);
+  }, [availableSubjects, selectedSubjectId]);
+
   // Clave de scope estricto: centro_año_docente_curso_asignatura_periodo
   const storageScopeKey = useMemo(() => {
     const centerId = profile?.center_id || center?.id || 'default_center';
@@ -1803,13 +1807,13 @@ export const ClassroomManager = () => {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 bg-surface p-4 rounded-3xl border border-border-main shadow-md">
             <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 type="text"
                 placeholder="Buscar por alumno o RNE..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 rounded-2xl border border-border-main bg-brand-bg text-xs font-medium focus:ring-2 focus:ring-brand-blue outline-none"
+                className="w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
 
@@ -1838,11 +1842,11 @@ export const ClassroomManager = () => {
           )}
 
           {/* LISTADO DE ALUMNOS */}
-          <div className="bg-surface rounded-3xl border border-border-main shadow-xl overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-900/60 border-b border-border-main text-[10px] font-black text-text-muted uppercase tracking-widest">
+                  <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">
                     <th className="px-4 py-2.5">#</th>
                     <th className="px-4 py-2.5">Estudiante</th>
                     <th className="px-4 py-2.5">Cód. SIGERD / RNE</th>
@@ -2217,7 +2221,7 @@ export const ClassroomManager = () => {
                 placeholder="Nombre de la actividad (Ej. Quiz 1)..."
                 value={newActivityName}
                 onChange={(e) => setNewActivityName(e.target.value)}
-                className="px-4 py-2 rounded-2xl border border-border-main bg-brand-bg text-xs outline-none focus:ring-2 focus:ring-brand-blue min-w-[220px]"
+                className="px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 min-w-[220px]"
               />
               <button
                 onClick={handleAddActivity}
@@ -2483,7 +2487,7 @@ export const ClassroomManager = () => {
                                         onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
                                         onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
                                         onFocus={(e) => e.target.select()}
-                                        className="w-12 text-center py-0.5 rounded-lg border border-border-main bg-brand-bg font-mono font-bold text-xs outline-none focus:ring-1 focus:ring-brand-blue"
+                                        className="w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs"
                                       />
                                     </td>
                                   ))
@@ -2554,27 +2558,38 @@ export const ClassroomManager = () => {
 
             {/* BANNER DE ACCESOS Y ENLACES FIJOS */}
             <div className="bg-gradient-to-r from-indigo-50/70 via-slate-50 to-blue-50/70 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 p-5 rounded-3xl border border-indigo-100/60 dark:border-white/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-300">
                   <Globe size={15} className="text-indigo-600" />
-                  Enlaces Fijos del Docente para Estudiantes y Padres
+                  <span>Enlaces Fijos {currentSubjectObj ? `• ${currentSubjectObj.name}` : 'del Curso'}</span>
+                  {currentSubjectObj && (
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] normal-case font-bold tracking-normal">
+                      Exclusivos para esta materia
+                    </span>
+                  )}
                 </div>
                 <span className="text-[10px] text-text-muted font-bold">
-                  Visibles con 1 clic en el portal del alumno
+                  {currentSubjectObj 
+                    ? `Visibles al alumno cuando entra a ${currentSubjectObj.name}`
+                    : 'Visibles con 1 clic en el portal del alumno'}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 {/* Google Classroom */}
-                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                      <GraduationCap size={18} />
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+                      <GraduationCap size={20} />
                     </div>
-                    <div className="truncate">
-                      <p className="text-[10px] font-black uppercase text-text-muted">Google Classroom</p>
-                      <p className="text-xs font-bold text-text-main truncate">
-                        {platformLinks.classroom_url ? 'Enlace activo' : 'No configurado'}
+                    <div className="truncate min-w-0">
+                      <p className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Google Classroom</p>
+                      <p className="text-xs font-bold truncate">
+                        {platformLinks.classroom_url ? (
+                          <span className="text-emerald-600 dark:text-emerald-400">Enlace activo</span>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 italic">No configurado</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -2583,7 +2598,7 @@ export const ClassroomManager = () => {
                       href={platformLinks.classroom_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-colors shrink-0"
+                      className="p-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 rounded-xl transition-colors shrink-0"
                       title="Abrir Classroom"
                     >
                       <ExternalLink size={14} />
@@ -2595,23 +2610,27 @@ export const ClassroomManager = () => {
                         setTempLinks({ ...platformLinks });
                         setShowLinksModal(true);
                       }}
-                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                      className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 shrink-0 cursor-pointer transition-colors"
                     >
-                      + Añadir
+                      + Configurar
                     </button>
                   )}
                 </div>
 
                 {/* Google Meet / Videollamada */}
-                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-                      <Video size={18} />
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                      <Video size={20} />
                     </div>
-                    <div className="truncate">
-                      <p className="text-[10px] font-black uppercase text-text-muted">Videollamada / Meet</p>
-                      <p className="text-xs font-bold text-text-main truncate">
-                        {platformLinks.meet_url ? 'Enlace activo' : 'No configurado'}
+                    <div className="truncate min-w-0">
+                      <p className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">Videollamada / Meet</p>
+                      <p className="text-xs font-bold truncate">
+                        {platformLinks.meet_url ? (
+                          <span className="text-emerald-600 dark:text-emerald-400">Enlace activo</span>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 italic">No configurado</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -2620,7 +2639,7 @@ export const ClassroomManager = () => {
                       href={platformLinks.meet_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-colors shrink-0"
+                      className="p-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-600 dark:text-emerald-300 rounded-xl transition-colors shrink-0"
                       title="Abrir Videollamada"
                     >
                       <ExternalLink size={14} />
@@ -2632,25 +2651,29 @@ export const ClassroomManager = () => {
                         setTempLinks({ ...platformLinks });
                         setShowLinksModal(true);
                       }}
-                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                      className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 shrink-0 cursor-pointer transition-colors"
                     >
-                      + Añadir
+                      + Configurar
                     </button>
                   )}
                 </div>
 
                 {/* Plataforma Alterna / Drive */}
-                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/80 rounded-2xl border border-border-main shadow-sm">
+                <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center shrink-0">
-                      <Globe size={18} />
+                    <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0 border border-violet-500/20">
+                      <Globe size={20} />
                     </div>
-                    <div className="truncate">
-                      <p className="text-[10px] font-black uppercase text-text-muted">
+                    <div className="truncate min-w-0">
+                      <p className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                         {platformLinks.other_label || 'Plataforma Alterna'}
                       </p>
-                      <p className="text-xs font-bold text-text-main truncate">
-                        {platformLinks.other_url ? 'Enlace activo' : 'No configurado'}
+                      <p className="text-xs font-bold truncate">
+                        {platformLinks.other_url ? (
+                          <span className="text-emerald-600 dark:text-emerald-400">Enlace activo</span>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500 italic">No configurado</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -2659,7 +2682,7 @@ export const ClassroomManager = () => {
                       href={platformLinks.other_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-xl transition-colors shrink-0"
+                      className="p-2 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/60 dark:hover:bg-violet-900/80 text-violet-600 dark:text-violet-300 rounded-xl transition-colors shrink-0"
                       title="Abrir Plataforma Alterna"
                     >
                       <ExternalLink size={14} />
@@ -2671,9 +2694,9 @@ export const ClassroomManager = () => {
                         setTempLinks({ ...platformLinks });
                         setShowLinksModal(true);
                       }}
-                      className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0 cursor-pointer"
+                      className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 shrink-0 cursor-pointer transition-colors"
                     >
-                      + Añadir
+                      + Configurar
                     </button>
                   )}
                 </div>
@@ -2738,7 +2761,7 @@ export const ClassroomManager = () => {
                 <select
                   value={taskFilterSubjectId}
                   onChange={(e) => setTaskFilterSubjectId(e.target.value)}
-                  className="bg-surface border border-border-main text-text-main text-xs font-bold px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
+                  className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-bold px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
                   <option value="ALL">TODAS MIS ASIGNATURAS</option>
                   {availableSubjects.map((s: any) => (
@@ -2749,13 +2772,13 @@ export const ClassroomManager = () => {
 
               {/* Buscador de tareas */}
               <div className="relative min-w-[220px] flex-1 max-w-sm">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={15} />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                 <input
                   type="text"
                   placeholder="Buscar tarea por título o descripción..."
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-surface border border-border-main rounded-xl text-xs text-text-main font-medium placeholder-text-muted outline-none focus:ring-2 focus:ring-brand-blue"
+                  className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
@@ -2909,56 +2932,63 @@ export const ClassroomManager = () => {
 
           {/* MODAL PARA CONFIGURAR ENLACES FIJOS */}
           {showLinksModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-surface w-full max-w-lg rounded-3xl border border-border-main shadow-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white flex items-center justify-between">
+            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-6 text-white flex items-center justify-between border-b border-white/10">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center">
                       <Settings size={20} />
                     </div>
                     <div>
-                      <h3 className="font-black text-base uppercase tracking-tight">Enlaces Fijos de Clase</h3>
-                      <p className="text-xs text-indigo-200">Visibles para alumnos y padres en su portal</p>
+                      <h3 className="font-black text-base uppercase tracking-tight text-white">
+                        Enlaces Fijos {currentSubjectObj ? `• ${currentSubjectObj.name}` : 'de Clase'}
+                      </h3>
+                      <p className="text-xs text-indigo-200">
+                        {currentSubjectObj 
+                          ? `Exclusivos para ${currentSubjectObj.name} en este curso (se muestran al alumno en su materia)` 
+                          : 'Visibles para alumnos y padres en su portal de Mi Aula'}
+                      </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowLinksModal(false)}
-                    className="text-white/70 hover:text-white p-1 rounded-xl hover:bg-white/10 cursor-pointer"
+                    className="text-white/70 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
                   >
                     <X size={20} />
                   </button>
                 </div>
 
-                <form onSubmit={handleSavePlatformLinks} className="p-6 space-y-4 text-xs font-bold">
+                <form onSubmit={handleSavePlatformLinks} className="p-6 space-y-4">
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
-                      Google Classroom (Link permanente del curso / clase)
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      Google Classroom {currentSubjectObj ? `(${currentSubjectObj.name})` : '(Link de clase)'}
                     </label>
                     <input
                       type="url"
                       placeholder="https://classroom.google.com/c/..."
                       value={tempLinks.classroom_url}
                       onChange={(e) => setTempLinks({ ...tempLinks, classroom_url: e.target.value })}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all shadow-inner"
                     />
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Pega aquí el enlace de la clase o invitación de Classroom para esta materia.</p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
-                      Google Meet / Videollamada (Enlace recurrente)
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      Google Meet / Videollamada {currentSubjectObj ? `(${currentSubjectObj.name})` : ''}
                     </label>
                     <input
                       type="url"
                       placeholder="https://meet.google.com/..."
                       value={tempLinks.meet_url}
                       onChange={(e) => setTempLinks({ ...tempLinks, meet_url: e.target.value })}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all shadow-inner"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       Plataforma Alterna o Carpeta Drive (URL)
                     </label>
                     <input
@@ -2966,12 +2996,12 @@ export const ClassroomManager = () => {
                       placeholder="https://drive.google.com/drive/folders/..."
                       value={tempLinks.other_url}
                       onChange={(e) => setTempLinks({ ...tempLinks, other_url: e.target.value })}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all shadow-inner"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       Nombre o Etiqueta de la Plataforma Alterna
                     </label>
                     <input
@@ -2979,24 +3009,24 @@ export const ClassroomManager = () => {
                       placeholder="Ej: Carpeta de Recursos en Drive / Padlet / Moodle"
                       value={tempLinks.other_label}
                       onChange={(e) => setTempLinks({ ...tempLinks, other_label: e.target.value })}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all shadow-inner"
                     />
                   </div>
 
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setShowLinksModal(false)}
-                      className="px-4 py-2.5 rounded-xl border border-border-main text-text-muted hover:text-text-main font-black uppercase tracking-wider text-[10px] cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={isSavingLinks}
-                      className="px-5 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                      className="px-6 py-2.5 bg-brand-blue hover:bg-indigo-700 text-white rounded-xl font-black uppercase tracking-wider text-xs flex items-center gap-2 shadow-lg shadow-brand-blue/30 disabled:opacity-50 cursor-pointer transition-all active:scale-95"
                     >
-                      {isSavingLinks ? 'Guardando...' : 'Guardar Enlaces'}
+                      {isSavingLinks ? 'Guardando...' : `Guardar Enlaces ${currentSubjectObj ? `(${currentSubjectObj.name})` : ''}`}
                     </button>
                   </div>
                 </form>
@@ -3006,15 +3036,15 @@ export const ClassroomManager = () => {
 
           {/* MODAL PARA CREAR O EDITAR TAREA */}
           {showTaskModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-              <div className="bg-surface w-full max-w-2xl rounded-3xl border border-border-main shadow-2xl overflow-hidden my-8">
-                <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 p-6 text-white flex items-center justify-between">
+            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-8">
+                <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 p-6 text-white flex items-center justify-between border-b border-white/10">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
                       <BookOpen size={24} />
                     </div>
                     <div>
-                      <h3 className="font-black text-lg uppercase tracking-tight">
+                      <h3 className="font-black text-lg uppercase tracking-tight text-white">
                         {editingTask ? 'Editar Tarea' : 'Nueva Tarea / Asignación'}
                       </h3>
                       <p className="text-xs text-indigo-100">
@@ -3037,7 +3067,7 @@ export const ClassroomManager = () => {
                 <form onSubmit={handleSaveTask} className="p-6 md:p-8 space-y-6">
                   {/* Título */}
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       Título de la Asignación *
                     </label>
                     <input
@@ -3045,7 +3075,7 @@ export const ClassroomManager = () => {
                       placeholder="Ej: Informe de Lectura - Capítulo 3"
                       value={taskFormData.title}
                       onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
-                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
                       required
                     />
                   </div>
@@ -3053,13 +3083,13 @@ export const ClassroomManager = () => {
                   {/* Periodo, Asignatura y Fecha de Entrega */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                         Período Escolar *
                       </label>
                       <select
                         value={taskFormData.period}
                         onChange={(e) => setTaskFormData({ ...taskFormData, period: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold cursor-pointer"
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
                         required
                       >
                         <option value="P1">Período 1 (P1)</option>
@@ -3070,13 +3100,13 @@ export const ClassroomManager = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                         Materia Asociada
                       </label>
                       <select
                         value={taskFormData.subject_id}
                         onChange={(e) => setTaskFormData({ ...taskFormData, subject_id: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold cursor-pointer"
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
                       >
                         <option value="">GENERAL / TODAS</option>
                         {availableSubjects.map((s: any) => (
@@ -3086,21 +3116,21 @@ export const ClassroomManager = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                         Fecha y Hora Límite
                       </label>
                       <input
                         type="datetime-local"
                         value={taskFormData.due_date}
                         onChange={(e) => setTaskFormData({ ...taskFormData, due_date: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-bold"
+                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                       />
                     </div>
                   </div>
 
                   {/* Instrucciones / Descripción */}
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       Instrucciones y Criterios de Evaluación
                     </label>
                     <textarea
@@ -3108,7 +3138,7 @@ export const ClassroomManager = () => {
                       value={taskFormData.description}
                       onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
                       rows={4}
-                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-border-main rounded-2xl outline-none focus:ring-2 focus:ring-brand-blue text-xs text-text-main font-medium leading-relaxed resize-none"
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-relaxed resize-none transition-all"
                     />
                     {taskFormData.description && parseTextWithLinks(taskFormData.description).some((p) => p.type === 'link') && (
                       <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900">
@@ -3118,14 +3148,14 @@ export const ClassroomManager = () => {
                   </div>
 
                   {/* Recursos Multimedia y Enlaces */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-border-main space-y-4">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
                       Recursos Adicionales (Opcional)
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="block text-[9px] font-black uppercase text-text-muted">
+                        <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
                           Enlace Drive / PDF / Web
                         </label>
                         <input
@@ -3133,12 +3163,12 @@ export const ClassroomManager = () => {
                           placeholder="https://drive.google.com/..."
                           value={taskFormData.link_url}
                           onChange={(e) => setTaskFormData({ ...taskFormData, link_url: e.target.value })}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="block text-[9px] font-black uppercase text-text-muted">
+                        <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
                           Vídeo de YouTube o Foto
                         </label>
                         <input
@@ -3146,13 +3176,13 @@ export const ClassroomManager = () => {
                           placeholder="https://youtube.com/watch?v=..."
                           value={taskFormData.media_url}
                           onChange={(e) => setTaskFormData({ ...taskFormData, media_url: e.target.value })}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-black uppercase text-text-muted">
+                      <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
                         Acceso Directo a Google Classroom (para entrega en Classroom)
                       </label>
                       <input
@@ -3160,20 +3190,20 @@ export const ClassroomManager = () => {
                         placeholder="https://classroom.google.com/c/..."
                         value={taskFormData.classroom_url}
                         onChange={(e) => setTaskFormData({ ...taskFormData, classroom_url: e.target.value })}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-border-main rounded-xl text-xs text-text-main font-medium outline-none focus:ring-2 focus:ring-brand-blue"
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                   </div>
 
                   {/* Botones de acción */}
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-main">
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => {
                         setShowTaskModal(false);
                         setEditingTask(null);
                       }}
-                      className="px-5 py-3 rounded-2xl border border-border-main text-text-muted hover:text-text-main font-black uppercase tracking-wider text-xs cursor-pointer"
+                      className="px-5 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
                     >
                       Cancelar
                     </button>

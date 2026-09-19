@@ -19,7 +19,8 @@ import {
   FolderOpen,
   User,
   Sparkles,
-  School
+  School,
+  Globe
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
@@ -85,6 +86,43 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
   // Modal de detalle de tarea
   const [selectedTaskForModal, setSelectedTaskForModal] = useState<any | null>(null);
+
+  // Enlaces fijos de la materia seleccionada o curso
+  const [activeSubjectLinks, setActiveSubjectLinks] = useState<{
+    classroom_url?: string;
+    meet_url?: string;
+    other_url?: string;
+    other_label?: string;
+  } | null>(null);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+
+  // Cargar enlaces fijos del docente para la materia seleccionada
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchLinks = async () => {
+      const targetCourseId = course?.id || selectedCourseId;
+      if (!targetCourseId) return;
+      setLoadingLinks(true);
+      try {
+        const links = await dataService.getPlatformLinks(
+          targetCourseId,
+          selectedSubjectId !== 'ALL' ? selectedSubjectId : null
+        );
+        if (!isCancelled) {
+          setActiveSubjectLinks(links);
+        }
+      } catch (err) {
+        console.error('[StudentTasksModule] Error loading platform links:', err);
+      } finally {
+        if (!isCancelled) setLoadingLinks(false);
+      }
+    };
+
+    fetchLinks();
+    return () => {
+      isCancelled = true;
+    };
+  }, [course?.id, selectedCourseId, selectedSubjectId]);
 
   // Cargar cursos del centro
   useEffect(() => {
@@ -598,6 +636,96 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
             </button>
           </div>
         </div>
+
+        {/* ENLACES FIJOS DEL DOCENTE PARA ESTA MATERIA */}
+        {activeSubjectLinks && (activeSubjectLinks.classroom_url || activeSubjectLinks.meet_url || activeSubjectLinks.other_url) && (
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-purple-50/70 border border-indigo-100 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Globe size={13} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-wider text-indigo-950">
+                  {selectedSubjectId === 'ALL'
+                    ? 'Enlaces y Aulas Virtuales del Curso'
+                    : `Accesos Fijos • ${activeSubjectData?.subject?.name || 'Materia'}`}
+                </span>
+                {activeSubjectData?.teacher && (
+                  <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
+                    (Prof. {activeSubjectData.teacher.name || activeSubjectData.teacher.full_name})
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-indigo-700 bg-white/90 px-2.5 py-0.5 rounded-full border border-indigo-200/60 shadow-xs self-start sm:self-auto">
+                Acceso directo con 1 clic
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {activeSubjectLinks.classroom_url && (
+                <a
+                  href={activeSubjectLinks.classroom_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3.5 bg-white hover:bg-amber-50/60 border border-slate-200/90 hover:border-amber-300 rounded-2xl flex items-center justify-between transition-all group shadow-xs hover:shadow-md cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20">
+                      <GraduationCap size={18} />
+                    </div>
+                    <div className="truncate text-left">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Aula Virtual</p>
+                      <p className="text-xs font-black text-slate-900 group-hover:text-amber-700 truncate">Google Classroom</p>
+                    </div>
+                  </div>
+                  <ExternalLink size={14} className="text-slate-400 group-hover:text-amber-600 shrink-0 ml-2" />
+                </a>
+              )}
+
+              {activeSubjectLinks.meet_url && (
+                <a
+                  href={activeSubjectLinks.meet_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3.5 bg-white hover:bg-emerald-50/60 border border-slate-200/90 hover:border-emerald-300 rounded-2xl flex items-center justify-between transition-all group shadow-xs hover:shadow-md cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                      <Video size={18} />
+                    </div>
+                    <div className="truncate text-left">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Clase en Vivo</p>
+                      <p className="text-xs font-black text-slate-900 group-hover:text-emerald-700 truncate">Google Meet</p>
+                    </div>
+                  </div>
+                  <ExternalLink size={14} className="text-slate-400 group-hover:text-emerald-600 shrink-0 ml-2" />
+                </a>
+              )}
+
+              {activeSubjectLinks.other_url && (
+                <a
+                  href={activeSubjectLinks.other_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3.5 bg-white hover:bg-purple-50/60 border border-slate-200/90 hover:border-purple-300 rounded-2xl flex items-center justify-between transition-all group shadow-xs hover:shadow-md cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0 border border-purple-500/20">
+                      <Globe size={18} />
+                    </div>
+                    <div className="truncate text-left">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Recursos / Plataforma</p>
+                      <p className="text-xs font-black text-slate-900 group-hover:text-purple-700 truncate">
+                        {activeSubjectLinks.other_label || 'Plataforma Alterna'}
+                      </p>
+                    </div>
+                  </div>
+                  <ExternalLink size={14} className="text-slate-400 group-hover:text-purple-600 shrink-0 ml-2" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* BARRA DE FILTROS Y BÚSQUEDA */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">

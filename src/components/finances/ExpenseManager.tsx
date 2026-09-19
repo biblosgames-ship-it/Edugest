@@ -114,7 +114,12 @@ export const LedgerManager = () => {
       const seedDefaults = async () => {
         try {
           for (const cat of defaultCats) {
-            if (!categories.some((c: any) => c.name === cat.name && c.type === cat.type)) {
+            const exists = (categories || []).some(
+              (c: any) =>
+                (c.name || '').trim().toUpperCase() === cat.name.trim().toUpperCase() &&
+                c.type === cat.type
+            );
+            if (!exists) {
               await saveLedgerCategory(cat);
             }
           }

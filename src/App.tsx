@@ -31,6 +31,7 @@ import { InvitationForm } from './components/InvitationForm';
 import { CenterRegistrationForm } from './components/CenterRegistrationForm';
 import { FacilityDashboard } from './components/facility/FacilityDashboard';
 import { ClassroomManager } from './components/ClassroomManager';
+import { DigitalContractSigner } from './components/DigitalContractSigner';
 import { AppProvider, useApp, useSupabase } from './context/AppContext';
 import {
   LayoutDashboard,
@@ -236,6 +237,14 @@ function AppContent() {
       }
     }
   }, [profile, activeView, allowed, isAuthReady, isSuperAdmin]);
+
+  const contractToken = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('contract') || new URLSearchParams(window.location.search).get('token')
+    : null;
+
+  if (contractToken) {
+    return <DigitalContractSigner token={contractToken} />;
+  }
 
   if (!isAuthReady) {
     return (

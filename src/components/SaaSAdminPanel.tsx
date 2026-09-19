@@ -25,7 +25,10 @@ import {
   Printer,
   Building2,
   School,
-  UserPlus
+  UserPlus,
+  FileText,
+  ExternalLink,
+  Send
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -53,6 +56,12 @@ import {
   SaaSPlan,
   SaaSPayment
 } from '../services/saasAdminService';
+import {
+  createContract,
+  getAllContracts,
+  deleteContract,
+  SaaSContract
+} from '../services/contractService';
 import { SchoolEphemeridesManager } from './SchoolEphemeridesManager';
 
 export const SaaSAdminPanel: React.FC = () => {
@@ -80,8 +89,27 @@ export const SaaSAdminPanel: React.FC = () => {
   const [isPaying, setIsPaying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups' | 'ephemerides'
+    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups' | 'ephemerides' | 'contracts'
   >('licenses');
+
+  // Digital Contracts State
+  const [contracts, setContracts] = useState<SaaSContract[]>([]);
+  const [isCreatingContract, setIsCreatingContract] = useState(false);
+  const [contractCenterId, setContractCenterId] = useState('');
+  const [contractCenterName, setContractCenterName] = useState('');
+  const [contractEmail, setContractEmail] = useState('');
+  const [contractPlanName, setContractPlanName] = useState('Estándar');
+  const [contractPrice, setContractPrice] = useState(150);
+  const [contractCycle, setContractCycle] = useState<'Mensual' | 'Anual'>('Mensual');
+  const [contractCurrency, setContractCurrency] = useState<'USD' | 'DOP'>('USD');
+  const [contractMaxStudents, setContractMaxStudents] = useState(500);
+  const [contractMaxTeachers, setContractMaxTeachers] = useState(50);
+  const [contractSupport247, setContractSupport247] = useState(false);
+  const [contractPaymentFilter, setContractPaymentFilter] = useState(false);
+  const [contractAdMode, setContractAdMode] = useState<'ad_free' | 'sponsored' | 'co_sponsored'>('ad_free');
+  const [contractInflation, setContractInflation] = useState(25);
+  const [isSubmittingContract, setIsSubmittingContract] = useState(false);
+  const [generatedContractUrl, setGeneratedContractUrl] = useState('');
 
   // Backup / Import State
   const [importTargetId, setImportTargetId] = useState('');
@@ -221,16 +249,18 @@ export const SaaSAdminPanel: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [newStats, newLicenses, newPlans, newPayments] = await Promise.all([
+      const [newStats, newLicenses, newPlans, newPayments, newContracts] = await Promise.all([
         getDashboardStats(),
         getLicenses(),
         getPlans(),
-        getPayments()
+        getPayments(),
+        getAllContracts()
       ]);
       setStats(newStats);
       setLicenses(newLicenses);
       setPlans(newPlans);
       setPayments(newPayments);
+      setContracts(newContracts);
     } catch (error: any) {
       console.error('Error fetching SaaS data:', error);
       if (error.name === 'AbortError' || error.message?.includes('Lock was stolen')) {
@@ -912,6 +942,12 @@ soporte@edugest.net`;
             className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'ephemerides' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <span>🇩🇴</span> Efemérides MINERD
+          </button>
+          <button
+            onClick={() => setActiveTab('contracts')}
+            className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'contracts' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <FileText size={18} /> Contratos Digitales
           </button>
         </div>
 
@@ -1939,7 +1975,426 @@ soporte@edugest.net`;
               <SchoolEphemeridesManager />
             </div>
           )}
+
+          {/* TAB: CONTRATOS DIGITALES SAAS */}
+          {activeTab === 'contracts' && (
+            <div className="animate-fade-in space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Contratos Digitales SaaS ({contracts.length})
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Genera, envía y audita los acuerdos legales firmados electrónicamente por los directores
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsCreatingContract(true);
+                    setGeneratedContractUrl('');
+                  }}
+                  className="px-4 py-2.5 bg-brand-blue text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-600 transition-all shadow-md shadow-brand-blue/20 cursor-pointer"
+                >
+                  <Plus size={16} /> Generar Nuevo Contrato
+                </button>
+              </div>
+
+              {/* LISTA DE CONTRATOS */}
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                      <tr>
+                        <th className="p-4">Centro Educativo</th>
+                        <th className="p-4">Plan y Precio</th>
+                        <th className="p-4">Add-ons Premium</th>
+                        <th className="p-4">Estado</th>
+                        <th className="p-4">Fecha de Firma</th>
+                        <th className="p-4 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+                      {contracts.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-slate-400">
+                            No se han generado contratos digitales todavía. Haz clic en "Generar Nuevo Contrato" para crear el primero.
+                          </td>
+                        </tr>
+                      ) : (
+                        contracts.map((c) => {
+                          const signatureUrl = `${window.location.origin}/?contract=${c.token}`;
+                          const isSigned = c.status === 'signed';
+
+                          return (
+                            <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="p-4">
+                                <div className="font-bold text-slate-900">{c.center_name}</div>
+                                <div className="text-[11px] text-slate-400">{c.director_email}</div>
+                              </td>
+                              <td className="p-4">
+                                <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg">
+                                  {c.plan_name}
+                                </span>
+                                <div className="text-slate-900 font-black mt-1">
+                                  {c.currency === 'USD' ? 'US$' : 'RD$'} {Number(c.price).toLocaleString()} / {c.billing_cycle}
+                                </div>
+                              </td>
+                              <td className="p-4 space-y-1">
+                                {c.has_support_24_7 && (
+                                  <span className="inline-block text-[10px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md mr-1">
+                                    24/7
+                                  </span>
+                                )}
+                                {c.has_payment_filter && (
+                                  <span className="inline-block text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md mr-1">
+                                    Filtro Pagos
+                                  </span>
+                                )}
+                                <span className="inline-block text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                                  {c.ad_mode === 'ad_free' ? 'Ad-Free' : 'Patrocinado'}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                {isSigned ? (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                                    <CheckCircle2 size={13} /> Firmado
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                                    <Clock size={13} /> Pendiente
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 text-xs text-slate-500">
+                                {c.signed_at ? (
+                                  <div>
+                                    <div className="font-bold text-slate-700">{new Date(c.signed_at).toLocaleDateString()}</div>
+                                    <div className="text-[10px] text-slate-400">{c.director_name}</div>
+                                  </div>
+                                ) : (
+                                  <span className="italic text-slate-400">Sin firmar</span>
+                                )}
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(signatureUrl);
+                                      toast.success('¡Enlace de firma copiado al portapapeles!');
+                                    }}
+                                    className="p-2 text-slate-500 hover:text-brand-blue hover:bg-slate-100 rounded-xl transition-all"
+                                    title="Copiar enlace de firma"
+                                  >
+                                    <Copy size={16} />
+                                  </button>
+                                  <a
+                                    href={signatureUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-all"
+                                    title="Ver contrato"
+                                  >
+                                    <ExternalLink size={16} />
+                                  </a>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`¿Eliminar el contrato de "${c.center_name}"?`)) {
+                                        try {
+                                          await deleteContract(c.id);
+                                          setContracts(contracts.filter((x) => x.id !== c.id));
+                                          toast.success('Contrato eliminado');
+                                        } catch (e: any) {
+                                          toast.error('Error al eliminar: ' + e.message);
+                                        }
+                                      }
+                                    }}
+                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                    title="Eliminar contrato"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* MODAL: GENERAR CONTRATO DIGITAL */}
+        {isCreatingContract && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-xl w-full p-8 space-y-6 animate-scale-up my-8 text-left">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Generar Contrato Digital</h3>
+                    <p className="text-xs text-slate-400">Prepara los términos y envía el enlace de firma al director</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingContract(false)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-xl px-2 py-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {generatedContractUrl ? (
+                <div className="space-y-5 text-center">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto">
+                    <CheckCircle2 size={36} />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-lg font-bold text-slate-900">¡Contrato Generado con Éxito!</h4>
+                    <p className="text-xs text-slate-500">
+                      Comparte el siguiente enlace con el Director para que lo revise y firme digitalmente:
+                    </p>
+                  </div>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3">
+                    <input
+                      type="text"
+                      readOnly
+                      value={generatedContractUrl}
+                      className="w-full bg-transparent text-xs font-bold text-indigo-700 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedContractUrl);
+                        toast.success('¡Enlace copiado!');
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 shrink-0"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <div className="flex gap-3">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent('Estimado Director, adjunto el enlace para la revisión y firma digital del contrato de servicio de Edugens: ' + generatedContractUrl)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                    >
+                      <Send size={16} /> Enviar por WhatsApp
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingContract(false)}
+                      className="px-6 py-3 border border-slate-200 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!contractCenterName.trim() || !contractEmail.trim()) {
+                      toast.error('Por favor completa el nombre del centro y correo');
+                      return;
+                    }
+
+                    try {
+                      setIsSubmittingContract(true);
+                      const newContract = await createContract({
+                        center_id: contractCenterId || null,
+                        center_name: contractCenterName,
+                        director_email: contractEmail,
+                        plan_name: contractPlanName,
+                        max_students: contractMaxStudents,
+                        max_teachers: contractMaxTeachers,
+                        price: contractPrice,
+                        billing_cycle: contractCycle,
+                        currency: contractCurrency,
+                        has_support_24_7: contractSupport247,
+                        has_payment_filter: contractPaymentFilter,
+                        ad_mode: contractAdMode,
+                        inflation_clause_rate: contractInflation
+                      });
+
+                      setContracts([newContract, ...contracts]);
+                      const url = `${window.location.origin}/?contract=${newContract.token}`;
+                      setGeneratedContractUrl(url);
+                      toast.success('Contrato creado exitosamente');
+                    } catch (err: any) {
+                      toast.error('Error al crear contrato: ' + err.message);
+                    } finally {
+                      setIsSubmittingContract(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-700">Seleccionar Centro Existente (Opcional)</label>
+                    <select
+                      value={contractCenterId}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        setContractCenterId(selId);
+                        const found = licenses.find((l) => l.used_by_center === selId);
+                        if (found) {
+                          if (found.center_name) setContractCenterName(found.center_name);
+                          if (found.linked_email) setContractEmail(found.linked_email);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                    >
+                      <option value="">-- Escribir datos manualmente o elegir centro --</option>
+                      {licenses.filter((l) => l.used_by_center).map((l) => (
+                        <option key={l.id} value={l.used_by_center!}>
+                          {l.center_name || 'Centro'} ({l.linked_email || 'Sin correo'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Nombre del Colegio *</label>
+                      <input
+                        type="text"
+                        required
+                        value={contractCenterName}
+                        onChange={(e) => setContractCenterName(e.target.value)}
+                        placeholder="Ej. Colegio Cristiano Génesis"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Correo del Director *</label>
+                      <input
+                        type="email"
+                        required
+                        value={contractEmail}
+                        onChange={(e) => setContractEmail(e.target.value)}
+                        placeholder="director@colegio.edu.do"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Plan</label>
+                      <select
+                        value={contractPlanName}
+                        onChange={(e) => setContractPlanName(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      >
+                        <option value="Básico">Básico</option>
+                        <option value="Estándar">Estándar</option>
+                        <option value="Institucional">Institucional</option>
+                        <option value="Personalizado">Personalizado</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Precio</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={contractPrice}
+                        onChange={(e) => setContractPrice(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">Moneda y Ciclo</label>
+                      <div className="flex gap-1">
+                        <select
+                          value={contractCurrency}
+                          onChange={(e: any) => setContractCurrency(e.target.value)}
+                          className="w-1/2 px-2 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                        >
+                          <option value="USD">USD</option>
+                          <option value="DOP">DOP</option>
+                        </select>
+                        <select
+                          value={contractCycle}
+                          onChange={(e: any) => setContractCycle(e.target.value)}
+                          className="w-1/2 px-2 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                        >
+                          <option value="Mensual">Mes</option>
+                          <option value="Anual">Año</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* OPCIONES PREMIUM */}
+                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-2.5">
+                    <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider block">
+                      Opciones y Servicios Premium
+                    </span>
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contractSupport247}
+                        onChange={(e) => setContractSupport247(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Soporte Prioritario 24/7 (SLA Express)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contractPaymentFilter}
+                        onChange={(e) => setContractPaymentFilter(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Filtro de Calificaciones por Solvencia de Colegiaturas</span>
+                    </label>
+
+                    <div className="pt-1">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Modalidad de Publicidad:</label>
+                      <select
+                        value={contractAdMode}
+                        onChange={(e: any) => setContractAdMode(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                      >
+                        <option value="ad_free">100% Libre de Publicidad (Ad-Free)</option>
+                        <option value="sponsored">Plan Bonificado con Patrocinio Educativo</option>
+                        <option value="co_sponsored">Publicidad Co-patrocinada del Colegio</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingContract(false)}
+                      className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingContract}
+                      className="px-6 py-2.5 bg-brand-blue hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-blue/20 flex items-center gap-2 cursor-pointer"
+                    >
+                      {isSubmittingContract ? 'Generando...' : 'Generar Contrato y Enlace'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* MODAL: EDITAR PAGO */}
         {editingPayment && (

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, BellOff, Volume2, Play, Sparkles, Clock, Check, Settings2, X, ShieldAlert } from 'lucide-react';
 import { useSchoolBell } from '../hooks/useSchoolBell';
-import { SoundStyle } from '../utils/schoolBellAudio';
+import { SoundStyle, playSchoolBellSound } from '../utils/schoolBellAudio';
 
 export const SchoolBellControl = () => {
   const {
@@ -155,38 +155,65 @@ export const SchoolBellControl = () => {
               <span className="text-[9px] text-indigo-400 font-bold">100% Offline (Web Audio)</span>
             </label>
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {[
                 {
+                  id: 'traditional' as SoundStyle,
+                  label: '🔔 Timbre Tradicional Duro',
+                  badge: 'Para Altavoces / PA',
+                  desc: 'Campana industrial de golpeo continuo y penetrante para el colegio'
+                },
+                {
+                  id: 'buzzer' as SoundStyle,
+                  label: '⚡ Chicharra Clásica',
+                  badge: 'Colegio / Taller',
+                  desc: 'Zumbador estridente clásico de cambio de hora'
+                },
+                {
                   id: 'chime' as SoundStyle,
-                  label: 'Campana Armónica',
-                  desc: 'Chime suave Westminster'
+                  label: '🎵 Campana Westminster',
+                  badge: 'Suave',
+                  desc: 'Chime melódico armónico de 4 notas'
                 },
                 {
                   id: 'whistle' as SoundStyle,
-                  label: 'Pito Deportivo',
-                  desc: 'Silbato triple rotación'
+                  label: '📢 Pito Deportivo',
+                  badge: 'Rotación',
+                  desc: 'Silbato triple para recreos y deportes'
                 },
                 {
                   id: 'bell' as SoundStyle,
-                  label: 'Timbre Clásico',
-                  desc: 'Repique eléctrico escolar'
+                  label: '🔕 Timbre Sutil',
+                  badge: 'Oficina',
+                  desc: 'Repique electrónico suave de baja intensidad'
                 }
               ].map((s) => {
                 const isSelected = soundStyle === s.id;
                 return (
                   <button
                     key={s.id}
-                    onClick={() => setSoundStyle(s.id)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    onClick={() => {
+                      setSoundStyle(s.id);
+                      playSchoolBellSound(s.id, volume);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative group ${
                       isSelected
-                        ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30'
-                        : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
+                        ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/40'
+                        : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
                     }`}
                   >
-                    <div className="font-bold text-xs uppercase">{s.label}</div>
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <span className="font-bold text-xs uppercase tracking-tight truncate">{s.label}</span>
+                      <span
+                        className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-700/80 text-slate-400'
+                        }`}
+                      >
+                        {s.badge}
+                      </span>
+                    </div>
                     <div
-                      className={`text-[9px] mt-1 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}
+                      className={`text-[9px] leading-relaxed ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}
                     >
                       {s.desc}
                     </div>
@@ -267,64 +294,62 @@ export const SchoolBellControl = () => {
 
   return (
     <>
-      {/* Botón Principal en el Menú / Sidebar */}
-      <div className="relative">
+      {/* Botón Principal en el Menú / Sidebar (Formato Compacto de 1 Línea) */}
+      <div className="relative px-1">
         <div
-          className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all duration-300 ${
+          className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl border transition-all duration-300 ${
             isBellEnabled
-              ? 'bg-gradient-to-r from-indigo-900/50 to-indigo-800/40 border-indigo-500/50 text-white shadow-lg shadow-indigo-950/40'
-              : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/10'
+              ? 'bg-gradient-to-r from-indigo-900/50 to-indigo-800/40 border-indigo-500/50 text-white shadow-md shadow-indigo-950/30'
+              : 'bg-white/5 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10'
           }`}
         >
           {/* Lado Izquierdo: Clic abre modal de configuración */}
           <button
             onClick={() => setIsOpenModal(true)}
-            className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
+            className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer group"
             title="Configurar Timbre Escolar y Horarios"
           >
             <div
-              className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
+              className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-all ${
                 isBellEnabled
-                  ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/40 animate-pulse'
+                  ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/40 animate-pulse'
                   : 'bg-white/10 text-slate-400 group-hover:text-white'
               }`}
             >
-              {isBellEnabled ? <Bell size={14} /> : <BellOff size={14} />}
+              {isBellEnabled ? <Bell size={11} /> : <BellOff size={11} />}
             </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black uppercase tracking-tight">
-                  {isBellEnabled ? 'Timbre Escolar' : 'Timbre'}
-                </span>
-                {isBellEnabled && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                )}
-              </div>
-              <p className="text-[9px] font-medium text-slate-400 truncate">
+            <div className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
+              <span className="text-[10px] font-black uppercase tracking-tight text-white/90 shrink-0">
+                Timbre:
+              </span>
+              <span className="text-[9px] font-semibold text-slate-400 truncate">
                 {!isBellEnabled
-                  ? 'Desactivado (Silencio)'
+                  ? 'Inactivo'
                   : nextRotation?.isWeekend
-                    ? 'Sin clases hoy (Fin de sem.)'
+                    ? 'Fin de sem.'
                     : nextRotation?.isSchoolDay
-                      ? `Próx: ${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
-                      : `Próx: ${nextRotation?.timeFormatted || 'Lunes'}`}
-              </p>
+                      ? `${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
+                      : `${nextRotation?.timeFormatted || 'Lunes'}`}
+              </span>
+              {isBellEnabled && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+              )}
             </div>
           </button>
 
-          {/* Lado Derecho: Toggle Switch Directo */}
+          {/* Lado Derecho: Toggle Switch Directo Compacto */}
           <button
             onClick={toggleBell}
             aria-label={isBellEnabled ? 'Desactivar timbre' : 'Activar timbre'}
-            className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer flex items-center shrink-0 ml-2 ${
+            className={`w-7 h-4 rounded-full p-0.5 transition-colors cursor-pointer flex items-center shrink-0 ml-1.5 ${
               isBellEnabled ? 'bg-indigo-500' : 'bg-slate-700'
             }`}
             title={isBellEnabled ? 'Desactivar Alarma' : 'Activar Alarma de Rotación'}
           >
             <div
-              className={`w-4 h-4 bg-white rounded-full transition-transform shadow-md ${
-                isBellEnabled ? 'translate-x-4' : 'translate-x-0'
+              className={`w-3 h-3 bg-white rounded-full transition-transform shadow-sm ${
+                isBellEnabled ? 'translate-x-3' : 'translate-x-0'
               }`}
             />
           </button>

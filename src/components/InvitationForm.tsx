@@ -46,7 +46,8 @@ export const InvitationForm = () => {
           await supabase.from('profiles').upsert({
             id: user.id,
             email: user.email,
-            center_id: targetCenterId
+            center_id: targetCenterId,
+            role: role || 'pending'
           });
         } catch (upsertErr) {
           console.warn('RLS bridge upsert warning:', upsertErr);
