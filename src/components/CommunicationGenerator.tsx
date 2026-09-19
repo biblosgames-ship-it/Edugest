@@ -17,7 +17,10 @@ import {
   GraduationCap,
   MessageSquare,
   Clock,
-  X
+  X,
+  AlertTriangle,
+  ShieldAlert,
+  PhoneCall
 } from 'lucide-react';
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
@@ -55,7 +58,16 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
   const [isSendingReply, setIsSendingReply] = useState(false);
 
   // Form State
-  const [motives, setMotives] = useState<string[]>([
+  const defaultParentMotives = useMemo(() => [
+    'Consulta Pedagógica / Académica',
+    'Duda sobre Tarea o Asignación',
+    'Solicitud de Cita con Docente',
+    'Seguimiento de Rendimiento',
+    'Aviso a Dirección / Orientación',
+    'Mensaje General'
+  ], []);
+
+  const defaultStaffMotives = useMemo(() => [
     'Excusa Médica / Ausencia',
     'Rendimiento Académico',
     'Seguimiento / Conducta',
@@ -64,11 +76,53 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     'Tarea o Asignación',
     'Felicitación / Reconocimiento',
     'Comunicado General'
-  ]);
+  ], []);
+
+  const [motives, setMotives] = useState<string[]>(() => {
+    return (isParent || isStudent) ? defaultParentMotives : defaultStaffMotives;
+  });
   const [newMotiveCustom, setNewMotiveCustom] = useState('');
-  const [selectedMotive, setSelectedMotive] = useState(motives[0]);
+  const [selectedMotive, setSelectedMotive] = useState<string>(() => {
+    return (isParent || isStudent) ? defaultParentMotives[0] : defaultStaffMotives[0];
+  });
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
+
+  // Estados para la pantalla flotante / modal de política de excusas
+  const [showExcuseModal, setShowExcuseModal] = useState<boolean>(false);
+  const [hasAcknowledgedExcusePolicy, setHasAcknowledgedExcusePolicy] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('edugens_ack_excuse_policy') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Mantener motivos actualizados según el rol activo
+  useEffect(() => {
+    if (isParent || isStudent) {
+      setMotives(defaultParentMotives);
+      setSelectedMotive((prev) => defaultParentMotives.includes(prev) ? prev : defaultParentMotives[0]);
+    } else {
+      setMotives(defaultStaffMotives);
+      setSelectedMotive((prev) => defaultStaffMotives.includes(prev) ? prev : defaultStaffMotives[0]);
+    }
+  }, [isParent, isStudent, defaultParentMotives, defaultStaffMotives]);
+
+  // Al pasar a la pestaña 'compose', abrir pantalla flotante si es padre o alumno y no la ha cerrado
+  useEffect(() => {
+    if ((isParent || isStudent) && activeTab === 'compose' && !hasAcknowledgedExcusePolicy) {
+      setShowExcuseModal(true);
+    }
+  }, [isParent, isStudent, activeTab, hasAcknowledgedExcusePolicy]);
+
+  // Detección en tiempo real de palabras clave de excusa en el texto del mensaje
+  const containsExcuseKeyword = useMemo(() => {
+    if (!isParent && !isStudent) return false;
+    const lower = (messageText + ' ' + (selectedMotive || '')).toLowerCase();
+    const keywords = ['excusa', 'ausenc', 'falta', 'no asist', 'enferm', 'médic', 'medico', 'reposo', 'doctor', 'licencia', 'gripe', 'fiebre'];
+    return keywords.some((k) => lower.includes(k));
+  }, [messageText, selectedMotive, isParent, isStudent]);
 
   // Excuse specific states
   const [excuseDurationType, setExcuseDurationType] = useState<'12h' | '24h' | '48h' | '3d' | '5d' | 'custom'>('12h');
@@ -440,6 +494,23 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     if (!messageText.trim()) {
       alert('Por favor escribe el contenido del mensaje.');
       return;
+    }
+
+    if (isParent || isStudent) {
+      const lower = (messageText + ' ' + (selectedMotive || '')).toLowerCase();
+      const hasExcuseWord = ['excusa', 'ausenc', 'falta', 'no asist', 'enferm', 'médic', 'medico', 'reposo', 'doctor', 'licencia', 'gripe', 'fiebre'].some((w) => lower.includes(w));
+      if (hasExcuseWord) {
+        const confirmSend = window.confirm(
+          'AVISO OBLIGATORIO DEL CENTRO EDUCATIVO:\n\n' +
+          'Este medio NO es una vía para mandar una excusa escolar.\n' +
+          'Las excusas NO se aplican ni son válidas si son enviadas en mensajes de texto o notas de audio.\n\n' +
+          'Para reportar o justificar una ausencia debe LLAMAR DIRECTAMENTE AL CENTRO EDUCATIVO.\n\n' +
+          '¿Desea enviar este mensaje sabiendo que NO justifica la inasistencia?'
+        );
+        if (!confirmSend) {
+          return;
+        }
+      }
     }
 
     const centerId = profile?.center_id || center?.id;
@@ -881,6 +952,22 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                         />
                       </div>
 
+                      {(isParent || isStudent) && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-center justify-between gap-2 text-amber-900 dark:text-amber-200 text-[11px] font-bold">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                            <span>Aviso: Las excusas no son válidas por mensaje ni audio. Debe llamar al centro.</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowExcuseModal(true)}
+                            className="text-[10px] text-amber-700 dark:text-amber-300 underline font-black uppercase shrink-0 cursor-pointer"
+                          >
+                            Ver Política
+                          </button>
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
                           Tu Mensaje de Respuesta
@@ -932,22 +1019,30 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
       {/* TAB 2: NUEVO MENSAJE (COMPOSE) */}
       {activeTab === 'compose' && (
         <form onSubmit={handleSendMessage} className="space-y-6">
-          {/* BANNER INFORMATIVO PARA PADRES (SOLO MENSAJE, NO LLAMADAS) */}
-          {isParent && (
-            <div className="p-5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-3xl flex items-start gap-4 shadow-sm">
-              <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center shrink-0">
-                <AlertCircle size={20} />
+          {/* BANNER INSTITUCIONAL DE ALERTA: PROHIBICIÓN DE EXCUSAS POR MENSAJERÍA */}
+          {(isParent || isStudent) && (
+            <div className="p-5 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-950 dark:text-amber-200">
+                    Aviso Importante: Las excusas NO se reciben por mensajería
+                  </h4>
+                  <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed font-medium">
+                    Las inasistencias comunicadas por texto o notas de voz <strong>no se aplican</strong>. Para reportar o justificar una falta debe <strong>llamar directamente al centro educativo</strong>.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
-                  Canal Oficial por Mensajería Escrita
-                </h4>
-                <p className="text-xs text-amber-800 leading-relaxed">
-                  Para respetar la docencia activa de los maestros en el aula y los horarios pedagógicos,
-                  la comunicación se realiza <strong>exclusivamente vía mensaje escrito</strong> dentro de la plataforma.
-                  El docente recibirá tu notificación y podrá responderte a través de este mismo buzón.
-                </p>
-              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowExcuseModal(true)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm shrink-0 cursor-pointer self-start sm:self-auto active:scale-95"
+              >
+                Ver Política de Excusas
+              </button>
             </div>
           )}
 
@@ -1416,8 +1511,8 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                 </button>
               </div>
 
-              {/* OPCIONES ESPECÍFICAS DE VIGENCIA Y COLOR PARA EXCUSAS MÉDICAS / AUSENCIAS */}
-              {((selectedMotive || '').toLowerCase().includes('excus') || (selectedMotive || '').toLowerCase().includes('ausenc')) && (
+              {/* OPCIONES ESPECÍFICAS DE VIGENCIA Y COLOR PARA EXCUSAS MÉDICAS / AUSENCIAS (SOLO PERSONAL / GESTIÓN) */}
+              {!isParent && !isStudent && ((selectedMotive || '').toLowerCase().includes('excus') || (selectedMotive || '').toLowerCase().includes('ausenc')) && (
                 <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50/50 border-2 border-amber-200 rounded-2xl space-y-3.5 mt-3 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1527,17 +1622,44 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-                Contenido del Mensaje *
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  Contenido del Mensaje *
+                </label>
+                {(isParent || isStudent) && (
+                  <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1">
+                    <AlertTriangle size={12} />
+                    No válido para excusas de asistencia
+                  </span>
+                )}
+              </div>
               <textarea
                 rows={5}
                 required
                 value={messageText}
+                onFocus={() => {
+                  if ((isParent || isStudent) && !hasAcknowledgedExcusePolicy) {
+                    setShowExcuseModal(true);
+                  }
+                }}
                 onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Escribe de manera respetuosa y detallada el mensaje..."
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs md:text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none leading-relaxed"
+                placeholder={
+                  isParent || isStudent
+                    ? "Escribe de manera respetuosa tu consulta pedagógica o mensaje institucional (Recuerda que para reportar ausencias debes llamar al centro)..."
+                    : "Escribe de manera respetuosa y detallada el mensaje..."
+                }
+                className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs md:text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none leading-relaxed"
               />
+
+              {/* ALERTA EN TIEMPO REAL SI SE DETECTAN PALABRAS DE EXCUSA */}
+              {(isParent || isStudent) && containsExcuseKeyword && (
+                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl flex items-start gap-2.5 animate-in fade-in">
+                  <AlertCircle size={16} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-rose-900 dark:text-rose-200 font-semibold leading-snug">
+                    <strong>Atención:</strong> Has redactado términos relacionados con ausencias o excusas médicas. Recuerda que este mensaje <strong>no justificará la inasistencia en el registro escolar</strong>. Debes llamar directamente al centro educativo.
+                  </p>
+                </div>
+              )}
             </div>
 
             <button
@@ -1633,6 +1755,103 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* PANTALLA FLOTANTE: POLÍTICA INSTITUCIONAL SOBRE EXCUSAS DE ASISTENCIA */}
+      {showExcuseModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] border border-amber-200 dark:border-amber-500/30 shadow-2xl overflow-hidden animate-scale-up">
+            {/* Header del modal */}
+            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 p-6 sm:p-7 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white border border-white/30 shrink-0 shadow-sm">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-100 bg-black/20 px-2.5 py-0.5 rounded-full inline-block mb-1">
+                    Aviso Institucional Obligatorio
+                  </span>
+                  <h3 className="font-black text-lg uppercase tracking-tight text-white leading-tight">
+                    Política de Excusas Escolares
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExcuseModal(false);
+                  setHasAcknowledgedExcusePolicy(true);
+                  try {
+                    sessionStorage.setItem('edugens_ack_excuse_policy', 'true');
+                  } catch (e) {}
+                }}
+                className="text-white/80 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                title="Cerrar advertencia"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Contenido explicativo del modal */}
+            <div className="p-6 sm:p-8 space-y-5 text-slate-700 dark:text-slate-200 text-xs sm:text-sm">
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/60 rounded-2xl flex items-start gap-3.5">
+                <ShieldAlert size={24} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-black text-amber-950 dark:text-amber-200 text-xs uppercase tracking-wider">
+                    Este medio NO es una vía para mandar excusas
+                  </p>
+                  <p className="text-amber-900 dark:text-amber-300 text-xs font-semibold leading-relaxed">
+                    Las excusas o justificaciones de inasistencia <strong>NO se aplican ni son válidas</strong> si son enviadas por mensajes de texto, audios o comunicados en esta plataforma.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 leading-relaxed">
+                <p className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider">
+                  ¿Cómo debe reportar una ausencia de su hijo/a?
+                </p>
+                
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0 font-black">
+                      <PhoneCall size={18} />
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-900 dark:text-white text-xs uppercase">
+                        Llamar directamente al Centro Educativo
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Debe comunicarse vía telefónica con la Dirección o Secretaría del centro para que la falta sea justificada en el registro oficial.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">
+                  Este buzón de mensajería está habilitado <strong>únicamente</strong> para consultas pedagógicas, seguimiento académico de tareas y coordinación con los docentes.
+                </p>
+              </div>
+
+              {/* Botón obligatorio de cierre y confirmación */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExcuseModal(false);
+                    setHasAcknowledgedExcusePolicy(true);
+                    try {
+                      sessionStorage.setItem('edugens_ack_excuse_policy', 'true');
+                    } catch (e) {}
+                  }}
+                  className="w-full py-4 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-amber-600/30 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.98]"
+                >
+                  <CheckCircle2 size={18} />
+                  <span>Entendido y de acuerdo (Cerrar y continuar)</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
