@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';

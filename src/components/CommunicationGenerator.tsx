@@ -21,8 +21,97 @@ import {
   AlertTriangle,
   ShieldAlert,
   PhoneCall,
-  Edit3
+  Edit3,
+  Filter
 } from 'lucide-react';
+
+export type MotiveCategory = 'ALL' | 'EXCUSES' | 'ANNOUNCEMENTS' | 'TASKS' | 'GRADES' | 'MEETINGS' | 'OTHER';
+
+export const MOTIVE_CATEGORIES: { id: MotiveCategory; label: string; icon: string; match: (motive: string) => boolean }[] = [
+  {
+    id: 'ALL',
+    label: 'Todos',
+    icon: '💬',
+    match: () => true
+  },
+  {
+    id: 'EXCUSES',
+    label: 'Excusas y Ausencias',
+    icon: '🩺',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      return s.includes('excusa') || s.includes('ausencia') || s.includes('médica') || s.includes('falta') || s.includes('enfermedad');
+    }
+  },
+  {
+    id: 'ANNOUNCEMENTS',
+    label: 'Comunicados Generales',
+    icon: '📢',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      return s.includes('general') || s.includes('comunicado') || s.includes('aviso') || s.includes('felicitaci') || s.includes('informativo');
+    }
+  },
+  {
+    id: 'TASKS',
+    label: 'Tareas y Asignaciones',
+    icon: '📚',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      return s.includes('tarea') || s.includes('asignaci') || s.includes('trabajo') || s.includes('proyecto');
+    }
+  },
+  {
+    id: 'GRADES',
+    label: 'Rendimiento y Notas',
+    icon: '📊',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      return s.includes('rendimiento') || s.includes('calificaci') || s.includes('nota') || s.includes('académic') || s.includes('boletín');
+    }
+  },
+  {
+    id: 'MEETINGS',
+    label: 'Citas y Reuniones',
+    icon: '🤝',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      return s.includes('cita') || s.includes('reunión') || s.includes('convocatoria') || s.includes('entrevista');
+    }
+  },
+  {
+    id: 'OTHER',
+    label: 'Otros Motivos',
+    icon: '📌',
+    match: (m: string) => {
+      const s = (m || '').toLowerCase();
+      const isKnown =
+        s.includes('excusa') || s.includes('ausencia') || s.includes('médica') || s.includes('falta') || s.includes('enfermedad') ||
+        s.includes('tarea') || s.includes('asignaci') || s.includes('trabajo') || s.includes('proyecto') ||
+        s.includes('rendimiento') || s.includes('calificaci') || s.includes('nota') || s.includes('académic') || s.includes('boletín') ||
+        s.includes('cita') || s.includes('reunión') || s.includes('convocatoria') || s.includes('entrevista') ||
+        s.includes('general') || s.includes('comunicado') || s.includes('aviso') || s.includes('felicitaci') || s.includes('informativo');
+      return !isKnown;
+    }
+  }
+];
+
+export const getMotiveBadgeStyle = (motive: string) => {
+  const s = (motive || '').toLowerCase();
+  if (s.includes('excusa') || s.includes('ausencia') || s.includes('médica') || s.includes('falta')) {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  if (s.includes('tarea') || s.includes('asignaci')) {
+    return 'bg-purple-50 text-purple-700 border-purple-200';
+  }
+  if (s.includes('rendimiento') || s.includes('calificaci') || s.includes('nota') || s.includes('académic')) {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+  if (s.includes('cita') || s.includes('reunión') || s.includes('convocatoria')) {
+    return 'bg-sky-50 text-sky-700 border-sky-200';
+  }
+  return 'bg-indigo-50 text-indigo-700 border-indigo-150';
+};
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
   const { state, center, selectedYear } = useApp();
@@ -30,7 +119,8 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
   const [communications, setCommunications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMotiveFilter] = useState('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<MotiveCategory>('ALL');
+  const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
 
   // Role helpers
   const userRole = (profile?.role || '').toLowerCase();
@@ -728,11 +818,20 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     }
   };
 
-  // Filter messages based on search query and motive
+  // Toggle expanded message
+  const toggleExpand = (id: string) => {
+    setExpandedMessages((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Filter messages based on search query and motive category
   const filterList = (list: any[]) => {
     return list.filter((comm) => {
-      const matchesMotive = selectedMotiveFilter === 'ALL' || comm.motive === selectedMotiveFilter;
-      if (!matchesMotive) return false;
+      if (selectedCategory !== 'ALL') {
+        const catDef = MOTIVE_CATEGORIES.find((c) => c.id === selectedCategory);
+        if (catDef && !catDef.match(comm.motive || '')) {
+          return false;
+        }
+      }
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -744,8 +843,8 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     });
   };
 
-  const displayedInbox = useMemo(() => filterList(inboxComms), [inboxComms, searchQuery, selectedMotiveFilter]);
-  const displayedSent = useMemo(() => filterList(sentComms), [sentComms, searchQuery, selectedMotiveFilter]);
+  const displayedInbox = useMemo(() => filterList(inboxComms), [inboxComms, searchQuery, selectedCategory]);
+  const displayedSent = useMemo(() => filterList(sentComms), [sentComms, searchQuery, selectedCategory]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 animate-fade-in">
@@ -856,6 +955,51 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
         )}
       </div>
 
+      {/* BARRA DE FILTROS POR CATEGORÍA / RAZÓN */}
+      {activeTab !== 'compose' && (
+        <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider shrink-0 flex items-center gap-1 pl-1">
+            <Filter size={12} className="text-indigo-600" />
+            Clasificar:
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {MOTIVE_CATEGORIES.map((cat) => {
+              const currentList = activeTab === 'inbox' ? inboxComms : sentComms;
+              const count =
+                cat.id === 'ALL'
+                  ? currentList.length
+                  : currentList.filter((c) => cat.match(c.motive || '')).length;
+
+              if (cat.id !== 'ALL' && count === 0) return null;
+              const isActive = selectedCategory === cat.id;
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/70'
+                  }`}
+                >
+                  <span className="text-xs">{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* SUCCESS NOTICE BANNER */}
       {successNotice && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-800 text-sm font-bold animate-fade-in shadow-sm">
@@ -866,7 +1010,7 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
 
       {/* TAB 1: BANDEJA DE ENTRADA (INBOX) */}
       {activeTab === 'inbox' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {isLoading ? (
             <div className="bg-white p-12 rounded-3xl border border-slate-150 text-center text-slate-400">
               <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -879,60 +1023,83 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
               </div>
               <h3 className="text-base font-black text-slate-700">No hay mensajes recibidos</h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
-                {searchQuery
-                  ? 'No se encontraron mensajes que coincidan con la búsqueda.'
+                {searchQuery || selectedCategory !== 'ALL'
+                  ? 'No se encontraron mensajes que coincidan con los filtros seleccionados.'
                   : 'Tu bandeja de entrada está al día. Cuando un docente, padre o directivo te envíe un mensaje, aparecerá aquí.'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {displayedInbox.map((comm) => (
                 <div
                   key={comm.id}
-                  className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs hover:border-indigo-200 transition-all space-y-4"
+                  className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all space-y-3"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  {/* Encabezado compacto */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase rounded-full tracking-wider border border-indigo-150">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                        {(comm.sender_name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs sm:text-sm font-bold text-slate-900">
+                        {comm.sender_name}
+                      </span>
+                      <span
+                        className={`px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full tracking-wider border ${getMotiveBadgeStyle(
+                          comm.motive
+                        )}`}
+                      >
                         {comm.motive || 'Comunicado'}
                       </span>
                       {comm.target_student_name && (
-                        <span className="px-3 py-1 bg-amber-50 text-amber-800 text-[10px] font-black uppercase rounded-full tracking-wider border border-amber-200 flex items-center gap-1">
-                          <GraduationCap size={12} />
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-black uppercase rounded-full tracking-wider border border-amber-200 flex items-center gap-1">
+                          <GraduationCap size={11} />
                           Alumno: {comm.target_student_name}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold">
-                      <Calendar size={13} />
-                      <span>{new Date(comm.created_at).toLocaleString()}</span>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold shrink-0">
+                      <Calendar size={12} />
+                      <span>
+                        {new Date(comm.created_at).toLocaleString([], {
+                          dateStyle: 'short',
+                          timeStyle: 'short'
+                        })}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <p className="text-xs text-slate-500 font-semibold flex items-center gap-2">
-                      <span className="text-slate-400">De:</span>
-                      <strong className="text-slate-800 font-bold text-sm">{comm.sender_name}</strong>
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
-                    <p className="text-xs md:text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {/* Mensaje compacto con vista previa y expansión */}
+                  <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 text-xs sm:text-sm text-slate-700">
+                    <p
+                      className={`${
+                        expandedMessages[comm.id] ? '' : 'line-clamp-2'
+                      } whitespace-pre-wrap leading-relaxed`}
+                    >
                       {comm.message}
                     </p>
+                    {comm.message && comm.message.length > 130 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(comm.id)}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 mt-1 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        {expandedMessages[comm.id] ? 'Ver menos ▲' : 'Ver mensaje completo ▼'}
+                      </button>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center justify-between pt-1">
                     <button
                       type="button"
                       onClick={() => handleToggleReply(comm)}
-                      className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
                         replyingCommId === comm.id
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-indigo-600 text-white shadow-xs'
                           : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
                       }`}
                     >
-                      <Reply size={14} />
+                      <Reply size={13} />
                       {replyingCommId === comm.id ? 'Ocultar respuesta' : 'Responder'}
                     </button>
 
@@ -940,17 +1107,17 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                       <button
                         type="button"
                         onClick={() => handleDelete(comm.id)}
-                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
                         title="Eliminar mensaje"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={15} />
                       </button>
                     )}
                   </div>
 
                   {/* CAJA DE RESPUESTA DIRECTA EN LA MISMA BANDEJA */}
                   {replyingCommId === comm.id && (
-                    <div className="mt-3 pt-4 border-t border-indigo-100 bg-indigo-50/50 -mx-6 -mb-6 p-6 rounded-b-3xl space-y-3 animate-fade-in">
+                    <div className="mt-2 pt-3 border-t border-indigo-100 bg-indigo-50/50 -mx-4 -mb-4 p-4 rounded-b-2xl space-y-3 animate-fade-in">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
@@ -1732,34 +1899,23 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {displayedSent.map((comm) => (
                 <div
                   key={comm.id}
-                  className="bg-white p-6 rounded-3xl border border-slate-150 shadow-xs space-y-4"
+                  className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all space-y-3"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase rounded-full tracking-wider border border-indigo-150">
+                      <span
+                        className={`px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full tracking-wider border ${getMotiveBadgeStyle(
+                          comm.motive
+                        )}`}
+                      >
                         {comm.motive || 'Mensaje'}
                       </span>
-                      {comm.target_student_name && (
-                        <span className="px-3 py-1 bg-amber-50 text-amber-800 text-[10px] font-black uppercase rounded-full tracking-wider border border-amber-200 flex items-center gap-1">
-                          <GraduationCap size={12} />
-                          Alumno: {comm.target_student_name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold">
-                      <Clock size={13} />
-                      <span>{new Date(comm.created_at).toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-xs text-slate-500 font-semibold">
-                    <p>
-                      <span className="text-slate-400">Destinatarios:</span>{' '}
-                      <span className="text-slate-700 font-bold">
+                      <span className="text-xs text-slate-700 font-bold">
+                        <span className="text-slate-400 font-normal">Para:</span>{' '}
                         {comm.target_student_name
                           ? `Tutor de ${comm.target_student_name}`
                           : comm.target_teachers && comm.target_teachers.length > 0
@@ -1770,13 +1926,35 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                           ? `Roles: ${comm.target_roles.join(', ')}`
                           : 'Comunidad'}
                       </span>
-                    </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold shrink-0">
+                      <Clock size={12} />
+                      <span>
+                        {new Date(comm.created_at).toLocaleString([], {
+                          dateStyle: 'short',
+                          timeStyle: 'short'
+                        })}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
-                    <p className="text-xs md:text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 text-xs sm:text-sm text-slate-700">
+                    <p
+                      className={`${
+                        expandedMessages[comm.id] ? '' : 'line-clamp-2'
+                      } whitespace-pre-wrap leading-relaxed`}
+                    >
                       {comm.message}
                     </p>
+                    {comm.message && comm.message.length > 130 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(comm.id)}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 mt-1 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        {expandedMessages[comm.id] ? 'Ver menos ▲' : 'Ver mensaje completo ▼'}
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex justify-end items-center gap-2 pt-1">
