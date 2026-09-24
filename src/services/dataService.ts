@@ -981,6 +981,62 @@ export const dataService = {
     }
   },
 
+  async updateCommunication(id: string, updates: { motive?: string; message?: string }) {
+    try {
+      const payload: any = {
+        updated_at: new Date().toISOString()
+      };
+      if (updates.motive !== undefined) payload.motive = updates.motive;
+      if (updates.message !== undefined) payload.message = updates.message;
+
+      const { error } = await supabase.from('communications').update(payload).eq('id', id);
+      if (error) throw error;
+      window.dispatchEvent(new CustomEvent('edugens_notifications_updated'));
+    } catch (err: any) {
+      const isMissingTable =
+        err.code === '42P01' ||
+        err.code === 'PGRST205' ||
+        (err.message &&
+          err.message.includes('communications') &&
+          err.message.includes('schema cache')) ||
+        (err.message && err.message.includes('relation "communications" does not exist'));
+      if (isMissingTable) {
+        // Fallback: update in announcements
+        const { data: ann } = await supabase
+          .from('announcements')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (ann && ann.content && ann.content.startsWith('__COM_DATA__:')) {
+          try {
+            const parsed = JSON.parse(ann.content.replace('__COM_DATA__:', ''));
+            if (updates.motive) parsed.motive = updates.motive;
+            if (updates.message) parsed.message = updates.message;
+            await supabase
+              .from('announcements')
+              .update({
+                title: updates.motive || ann.title,
+                content: `__COM_DATA__:${JSON.stringify(parsed)}`
+              })
+              .eq('id', id);
+          } catch (e) {}
+        } else {
+          await supabase
+            .from('announcements')
+            .update({
+              ...(updates.motive ? { title: updates.motive } : {}),
+              ...(updates.message ? { content: updates.message } : {})
+            })
+            .eq('id', id);
+        }
+        window.dispatchEvent(new CustomEvent('edugens_notifications_updated'));
+      } else {
+        throw err;
+      }
+    }
+  },
+
   async deleteCommunication(id: string) {
     try {
       const { error } = await supabase.from('communications').delete().eq('id', id);

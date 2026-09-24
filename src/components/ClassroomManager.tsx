@@ -58,7 +58,15 @@ const getDefaultActivities = (): Record<string, Array<{ id: string; name: string
   'c4': [{ id: 'act_c4_1', name: 'Actividad 1', maxScore: 100 }],
 });
 
-export const ClassroomManager = () => {
+export interface ClassroomManagerProps {
+  initialTab?: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder';
+  onTabChange?: (tab: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder') => void;
+}
+
+export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
+  initialTab = 'attendance',
+  onTabChange
+}) => {
   const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
   const { isSameTeacher } = useTeacherIdentity();
@@ -95,7 +103,19 @@ export const ClassroomManager = () => {
   // Estados de vista
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  const handleTabChange = (tab: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder') => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
+
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(false);
@@ -178,7 +198,19 @@ export const ClassroomManager = () => {
 
   const [showTaskModal, setShowTaskModal] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
-  const [taskFormData, setTaskFormData] = useState({
+  const [taskFormData, setTaskFormData] = useState<{
+    title: string;
+    description: string;
+    period: string;
+    subject_id: string;
+    due_date: string;
+    media_url: string;
+    link_url: string;
+    classroom_url: string;
+    linkToPartial: boolean;
+    linkedCompetencyId: string;
+    linkedMaxScore: number;
+  }>({
     title: '',
     description: '',
     period: 'P1',
@@ -186,9 +218,28 @@ export const ClassroomManager = () => {
     due_date: '',
     media_url: '',
     link_url: '',
-    classroom_url: ''
+    classroom_url: '',
+    linkToPartial: false,
+    linkedCompetencyId: 'c1',
+    linkedMaxScore: 100
   });
   const [isSavingTask, setIsSavingTask] = useState<boolean>(false);
+
+  // Estados para corrección y evaluación de tareas
+  const [selectedTaskForGrading, setSelectedTaskForGrading] = useState<any | null>(null);
+  const [taskGradingState, setTaskGradingState] = useState<Record<string, {
+    status: 'completed' | 'pending' | 'uncompleted';
+    score?: number | string;
+    feedback?: string;
+  }>>({});
+  const [gradingSearch, setGradingSearch] = useState<string>('');
+  const [gradingStatusFilter, setGradingStatusFilter] = useState<'all' | 'completed' | 'pending' | 'uncompleted'>('all');
+  const [bulkGradeValue, setBulkGradeValue] = useState<string>('');
+  const [isSavingGrading, setIsSavingGrading] = useState<boolean>(false);
+  const [gradingSuccess, setGradingSuccess] = useState<boolean>(false);
+  const [gradingIsLinkedToPartial, setGradingIsLinkedToPartial] = useState<boolean>(false);
+  const [gradingCompetencyId, setGradingCompetencyId] = useState<string>('c1');
+  const [gradingMaxScore, setGradingMaxScore] = useState<number>(100);
 
   // Asignaturas del curso seleccionado (personalizadas por docente y curso)
   const availableSubjects = useMemo(() => {
@@ -1216,6 +1267,123 @@ export const ClassroomManager = () => {
     }
   };
 
+  // Pegar calificaciones en Calificaciones Parciales directamente desde Excel o Google Sheets (por columna o cuadrícula)
+  const handlePartialPaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    startStudentIdx: number,
+    currentActivityId: string
+  ) => {
+    const pasteData = e.clipboardData.getData('text');
+    if (!pasteData) return;
+
+    const rawLines = pasteData.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    const hasMultipleRows = rawLines.length > 1;
+    const hasMultipleCols = rawLines.some((line) => line.includes('\t'));
+
+    if (!hasMultipleRows && !hasMultipleCols) {
+      return; // Dejar que el navegador pegue normalmente si es un solo valor
+    }
+
+    e.preventDefault();
+
+    // Obtener actividades ordenadas de todas las competencias activas
+    const allActivities: any[] = [];
+    activeCompetencies.forEach((comp) => {
+      const acts = competencyActivities[comp.id] || [];
+      allActivities.push(...acts);
+    });
+
+    const startActIdx = allActivities.findIndex((a) => a.id === currentActivityId);
+
+    setPartialScores((prev) => {
+      const updatedScores = { ...prev };
+
+      rawLines.forEach((line, rowOffset) => {
+        const studentIdx = startStudentIdx + rowOffset;
+        if (studentIdx >= courseStudents.length) return;
+        const student = courseStudents[studentIdx];
+        if (!student) return;
+
+        const cols = line.split('\t');
+        const studentActScores = { ...(updatedScores[student.id] || {}) };
+
+        cols.forEach((colVal, colOffset) => {
+          const actIdx = (startActIdx >= 0 ? startActIdx : 0) + colOffset;
+          if (actIdx < allActivities.length) {
+            const targetAct = allActivities[actIdx];
+            const cleanVal = colVal.trim().replace(',', '.');
+            const num = parseFloat(cleanVal);
+            if (!isNaN(num)) {
+              studentActScores[targetAct.id] = Math.max(0, Math.min(100, Math.round(num)));
+            }
+          }
+        });
+
+        updatedScores[student.id] = studentActScores;
+      });
+
+      // Guardar en localStorage de forma persistente
+      const storageKey = `partial_scores_${selectedCourseId}_${selectedSubjectId}_${selectedPeriod}`;
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          scores: updatedScores,
+          activities: competencyActivities,
+          calcMode: competencyCalcMode,
+          period: selectedPeriod,
+          subjectId: selectedSubjectId,
+          courseId: selectedCourseId,
+          teacherId: profile?.teacher_id || profile?.id,
+          centerId: profile?.center_id || center?.id,
+          year: selectedYear || '2026-2027',
+          updatedAt: new Date().toISOString()
+        })
+      );
+
+      return updatedScores;
+    });
+  };
+
+  // Pegar calificaciones en el modal de evaluación de tareas desde Excel
+  const handleTaskGradingPaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    startIdx: number,
+    studentList: any[]
+  ) => {
+    const pasteData = e.clipboardData.getData('text');
+    if (!pasteData) return;
+
+    const rawLines = pasteData.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    if (rawLines.length <= 1) return;
+
+    e.preventDefault();
+
+    setTaskGradingState((prev) => {
+      const updated = { ...prev };
+      const maxScore = Number(gradingMaxScore) || 100;
+
+      rawLines.forEach((line, offset) => {
+        const studentIdx = startIdx + offset;
+        if (studentIdx >= studentList.length) return;
+        const student = studentList[studentIdx];
+        if (!student) return;
+
+        const firstCol = line.split('\t')[0].trim().replace(',', '.');
+        const numVal = parseFloat(firstCol);
+        if (!isNaN(numVal)) {
+          const clamped = Math.max(0, Math.min(maxScore, Math.round(numVal)));
+          updated[student.id] = {
+            ...(updated[student.id] || {}),
+            score: clamped,
+            status: 'completed'
+          };
+        }
+      });
+
+      return updated;
+    });
+  };
+
   // Guardar calificaciones del período y sincronizar con el Registro Digital Oficial
   const handleSavePartials = async () => {
     setIsSavingPartials(true);
@@ -1458,8 +1626,22 @@ export const ClassroomManager = () => {
     return 'P1';
   };
 
+  const parseTaskPartialLink = (t: any): { linked: boolean; competencyId: string; maxScore: number } => {
+    try {
+      const desc = t?.description || '';
+      const match = desc.match(/<!--partial_link:({.*?})-->/);
+      if (match && match[1]) {
+        return JSON.parse(match[1]);
+      }
+    } catch (e) {}
+    return { linked: false, competencyId: 'c1', maxScore: 100 };
+  };
+
   const getCleanDescription = (desc: string = ''): string => {
-    return desc.replace(/<!--period:P[1-4]-->\s*/gi, '').trim();
+    return (desc || '')
+      .replace(/<!--period:P[1-4]-->\s*/gi, '')
+      .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+      .trim();
   };
 
   // AISLAMIENTO POR DOCENTE: solo tareas de este maestro o de materias asignadas a él
@@ -1552,13 +1734,17 @@ export const ClassroomManager = () => {
       due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
       media_url: '',
       link_url: '',
-      classroom_url: platformLinks.classroom_url || ''
+      classroom_url: platformLinks.classroom_url || '',
+      linkToPartial: false,
+      linkedCompetencyId: 'c1',
+      linkedMaxScore: 100
     });
     setShowTaskModal(true);
   };
 
   const handleOpenEditTask = (task: any) => {
     setEditingTask(task);
+    const partialLink = parseTaskPartialLink(task);
     setTaskFormData({
       title: task.title || '',
       description: getCleanDescription(task.description || ''),
@@ -1567,7 +1753,10 @@ export const ClassroomManager = () => {
       due_date: task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '',
       media_url: task.media_url || '',
       link_url: task.link_url || '',
-      classroom_url: task.classroom_url || ''
+      classroom_url: task.classroom_url || '',
+      linkToPartial: partialLink.linked,
+      linkedCompetencyId: partialLink.competencyId || 'c1',
+      linkedMaxScore: partialLink.maxScore || 100
     });
     setShowTaskModal(true);
   };
@@ -1587,12 +1776,23 @@ export const ClassroomManager = () => {
     try {
       const centerId = profile?.center_id || center?.id;
       const teacherId = profile?.teacher_id || profile?.id;
+
+      let finalDescription = taskFormData.description.trim();
+      if (taskFormData.linkToPartial) {
+        const meta = JSON.stringify({
+          linked: true,
+          competencyId: taskFormData.linkedCompetencyId || 'c1',
+          maxScore: Number(taskFormData.linkedMaxScore) || 100
+        });
+        finalDescription = `<!--partial_link:${meta}-->\n${finalDescription}`;
+      }
+
       const payload: any = {
         center_id: centerId,
         course_id: selectedCourseId,
         subject_id: taskFormData.subject_id || null,
         title: taskFormData.title.trim(),
-        description: taskFormData.description.trim(),
+        description: finalDescription,
         period: taskFormData.period,
         due_date: taskFormData.due_date ? new Date(taskFormData.due_date).toISOString() : null,
         media_url: taskFormData.media_url.trim() || null,
@@ -1600,15 +1800,38 @@ export const ClassroomManager = () => {
         classroom_url: taskFormData.classroom_url.trim() || null
       };
 
+      let savedTaskId = editingTask?.id;
       if (editingTask?.id) {
         await dataService.updateTask(editingTask.id, payload);
         alert('¡Tarea actualizada correctamente!');
       } else {
-        await dataService.addTask({
+        const created = await dataService.addTask({
           ...payload,
           teacher_id: teacherId
         });
+        savedTaskId = (created as any)?.id;
         alert('¡Tarea creada y publicada con éxito!');
+      }
+
+      // Si está vinculada a parciales, asegurar actividad en competencyActivities
+      if (taskFormData.linkToPartial) {
+        const compId = taskFormData.linkedCompetencyId || 'c1';
+        const targetActId = `task_act_${savedTaskId || Date.now()}`;
+        const updatedActivities = { ...competencyActivities };
+        const compActs = updatedActivities[compId] ? [...updatedActivities[compId]] : [];
+        const foundIdx = compActs.findIndex((a) => a.id === targetActId || a.name.toLowerCase() === taskFormData.title.trim().toLowerCase());
+        const actData = {
+          id: targetActId,
+          name: taskFormData.title.trim(),
+          maxScore: Number(taskFormData.linkedMaxScore) || 100
+        };
+        if (foundIdx >= 0) {
+          compActs[foundIdx] = actData;
+        } else {
+          compActs.push(actData);
+        }
+        updatedActivities[compId] = compActs;
+        setCompetencyActivities(updatedActivities);
       }
 
       setShowTaskModal(false);
@@ -1634,6 +1857,256 @@ export const ClassroomManager = () => {
       console.error('Error al eliminar tarea:', err);
       alert(`Error al eliminar la tarea: ${err.message || err}`);
     }
+  };
+
+  // Estadísticas de evaluación de una tarea (porcentaje de cumplimiento)
+  const getTaskStats = useCallback((task: any) => {
+    if (!task) return { total: 0, completed: 0, percentage: 0, average: 0, isLinked: false, competencyLabel: '', compId: 'c1', maxScore: 100 };
+    const centerId = profile?.center_id || center?.id || 'default_center';
+    const storageKey = `edugens_task_grades_${centerId}_${task.id}`;
+    let saved: Record<string, { status: string; score?: any }> = {};
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) {}
+
+    const partialLink = parseTaskPartialLink(task);
+    const isLinked = partialLink.linked;
+    const compId = partialLink.competencyId || 'c1';
+    const compLabel = activeCompetencies.find((c) => c.id === compId)?.label || compId.toUpperCase();
+
+    const targetActId = `task_act_${task.id}`;
+    let completed = 0;
+    let totalScore = 0;
+    let scoredCount = 0;
+
+    courseStudents.forEach((s: any) => {
+      const localRecord = saved[s.id];
+      const partialScore = isLinked ? (partialScores[s.id]?.[targetActId] ?? partialScores[s.id]?.[task.id]) : undefined;
+      const hasValidPartial = typeof partialScore === 'number' && !isNaN(partialScore);
+      const isCompletedLocally = localRecord?.status === 'completed' || (localRecord?.score !== undefined && localRecord?.score !== '');
+
+      if (hasValidPartial || isCompletedLocally) {
+        completed++;
+        const sVal = hasValidPartial ? partialScore : Number(localRecord?.score);
+        if (!isNaN(sVal)) {
+          totalScore += sVal;
+          scoredCount++;
+        }
+      }
+    });
+
+    const total = courseStudents.length;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const average = scoredCount > 0 ? Math.round(totalScore / scoredCount) : 0;
+
+    return { total, completed, percentage, average, isLinked, competencyLabel, compId, maxScore: partialLink.maxScore || 100 };
+  }, [courseStudents, partialScores, activeCompetencies, profile?.center_id, center?.id]);
+
+  // Abrir modal de corrección y calificaciones de tarea
+  const handleOpenGradeTask = (task: any) => {
+    setSelectedTaskForGrading(task);
+    const centerId = profile?.center_id || center?.id || 'default_center';
+    const storageKey = `edugens_task_grades_${centerId}_${task.id}`;
+    const partialLink = parseTaskPartialLink(task);
+
+    setGradingIsLinkedToPartial(partialLink.linked);
+    setGradingCompetencyId(partialLink.competencyId || 'c1');
+    setGradingMaxScore(partialLink.maxScore || 100);
+
+    let savedGrades: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) savedGrades = JSON.parse(raw);
+    } catch (e) {}
+
+    const targetActId = `task_act_${task.id}`;
+    const initialState: Record<string, { status: 'completed' | 'pending' | 'uncompleted'; score?: number | string; feedback?: string }> = {};
+
+    courseStudents.forEach((s: any) => {
+      const local = savedGrades[s.id];
+      const pScore = partialScores[s.id]?.[targetActId] ?? partialScores[s.id]?.[task.id];
+      const hasPartialScore = typeof pScore === 'number' && !isNaN(pScore);
+
+      if (hasPartialScore) {
+        initialState[s.id] = {
+          status: 'completed',
+          score: pScore,
+          feedback: local?.feedback || ''
+        };
+      } else if (local) {
+        initialState[s.id] = {
+          status: local.status || (local.score !== undefined && local.score !== '' ? 'completed' : 'pending'),
+          score: local.score !== undefined ? local.score : '',
+          feedback: local.feedback || ''
+        };
+      } else {
+        initialState[s.id] = {
+          status: 'pending',
+          score: '',
+          feedback: ''
+        };
+      }
+    });
+
+    setTaskGradingState(initialState);
+    setGradingSearch('');
+    setGradingStatusFilter('all');
+    setBulkGradeValue('');
+  };
+
+  // Guardar correcciones y notas de tarea
+  const handleSaveTaskGrading = async () => {
+    if (!selectedTaskForGrading) return;
+    setIsSavingGrading(true);
+    try {
+      const centerId = profile?.center_id || center?.id || 'default_center';
+      const year = selectedYear || '2026-2027';
+      const storageKey = `edugens_task_grades_${centerId}_${selectedTaskForGrading.id}`;
+
+      // 1. Guardar en almacenamiento de calificaciones de tareas
+      localStorage.setItem(storageKey, JSON.stringify(taskGradingState));
+
+      // 2. Si está vinculado a Calificaciones Parciales
+      if (gradingIsLinkedToPartial) {
+        const targetActId = `task_act_${selectedTaskForGrading.id}`;
+        const compId = gradingCompetencyId || 'c1';
+
+        // Asegurar que la actividad esté en competencyActivities
+        const updatedActivities = { ...competencyActivities };
+        const existingActs = updatedActivities[compId] ? [...updatedActivities[compId]] : [];
+        const actIndex = existingActs.findIndex((a) => a.id === targetActId);
+
+        const newActData = {
+          id: targetActId,
+          name: selectedTaskForGrading.title,
+          maxScore: Number(gradingMaxScore) || 100
+        };
+
+        if (actIndex >= 0) {
+          existingActs[actIndex] = newActData;
+        } else {
+          existingActs.push(newActData);
+        }
+        updatedActivities[compId] = existingActs;
+        setCompetencyActivities(updatedActivities);
+
+        // Actualizar partialScores con las notas ingresadas
+        const updatedScores = { ...partialScores };
+        courseStudents.forEach((s: any) => {
+          const rec = taskGradingState[s.id];
+          if (rec && rec.score !== undefined && rec.score !== '') {
+            const num = Number(rec.score);
+            if (!isNaN(num)) {
+              if (!updatedScores[s.id]) updatedScores[s.id] = {};
+              updatedScores[s.id][targetActId] = Math.min(Number(gradingMaxScore) || 100, Math.max(0, num));
+            }
+          }
+        });
+        setPartialScores(updatedScores);
+
+        // Guardar en almacenamiento local de parciales
+        const partialPeriod = parseTaskPeriod(selectedTaskForGrading) || selectedPeriod || 'P1';
+        const targetSubjectId = selectedTaskForGrading.subject_id || selectedSubjectId;
+
+        const partialPayloadData = {
+          scores: updatedScores,
+          activities: updatedActivities,
+          calcMode: competencyCalcMode,
+          period: partialPeriod,
+          subjectId: targetSubjectId,
+          courseId: selectedCourseId,
+          teacherId: profile?.teacher_id || profile?.id,
+          centerId: centerId,
+          year: year,
+          updatedAt: new Date().toISOString()
+        };
+
+        const targetScopeKey = `edugens_partials_${centerId}_${year}_${profile?.teacher_id || profile?.id}_${selectedCourseId}_${targetSubjectId}_${partialPeriod}`;
+        localStorage.setItem(targetScopeKey, JSON.stringify(partialPayloadData));
+
+        // Actualizar la descripción de la tarea con los metadatos de vinculación parcial
+        const clean = getCleanDescription(selectedTaskForGrading.description);
+        const meta = JSON.stringify({
+          linked: true,
+          competencyId: compId,
+          maxScore: Number(gradingMaxScore) || 100
+        });
+        const newDesc = `<!--partial_link:${meta}-->\n${clean}`;
+        await dataService.updateTask(selectedTaskForGrading.id, {
+          description: newDesc,
+          period: partialPeriod
+        });
+        await loadTasksAndLinks();
+
+        // Si tenemos conexión, sincronizar con Supabase student_partial_activities
+        if (typeof navigator !== 'undefined' && navigator.onLine && centerId && selectedCourseId && targetSubjectId) {
+          try {
+            await supabase.from('student_partial_activities').upsert({
+              center_id: centerId,
+              course_id: selectedCourseId,
+              subject_id: targetSubjectId,
+              period: partialPeriod,
+              school_year: year,
+              competency_id: compId,
+              activity_name: selectedTaskForGrading.title,
+              max_score: Number(gradingMaxScore) || 100,
+              scores: {
+                scores: updatedScores,
+                activities: updatedActivities,
+                calcMode: competencyCalcMode
+              },
+              updated_at: new Date().toISOString()
+            });
+          } catch (cloudErr) {
+            console.warn('Error al sincronizar parciales en la nube:', cloudErr);
+          }
+        }
+      }
+
+      setGradingSuccess(true);
+      toast.success('¡Corrección y notas guardadas correctamente!');
+      setTimeout(() => {
+        setGradingSuccess(false);
+        setSelectedTaskForGrading(null);
+      }, 1000);
+    } catch (err: any) {
+      console.error('Error al guardar corrección de tarea:', err);
+      toast.error(`Error al guardar: ${err.message || err}`);
+    } finally {
+      setIsSavingGrading(false);
+    }
+  };
+
+  const handleMarkAllCompleted = () => {
+    setTaskGradingState((prev) => {
+      const updated = { ...prev };
+      courseStudents.forEach((s: any) => {
+        updated[s.id] = {
+          ...updated[s.id],
+          status: 'completed'
+        };
+      });
+      return updated;
+    });
+  };
+
+  const handleApplyBulkGrade = () => {
+    const val = Number(bulkGradeValue);
+    if (isNaN(val)) return;
+    const clamped = Math.min(Number(gradingMaxScore) || 100, Math.max(0, val));
+    setTaskGradingState((prev) => {
+      const updated = { ...prev };
+      courseStudents.forEach((s: any) => {
+        updated[s.id] = {
+          ...updated[s.id],
+          status: 'completed',
+          score: clamped
+        };
+      });
+      return updated;
+    });
+    setBulkGradeValue('');
   };
 
   const handleSavePlatformLinks = async (e: React.FormEvent) => {
@@ -1790,7 +2263,7 @@ export const ClassroomManager = () => {
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => handleTabChange(tab.id as any)}
             className={`flex items-center gap-2 px-5 py-3 rounded-2xl border-2 transition-all cursor-pointer ${
               activeTab === tab.id
                 ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/30 scale-[1.02]'
@@ -2486,6 +2959,7 @@ export const ClassroomManager = () => {
                                         value={studentScores[act.id] ?? ''}
                                         onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
                                         onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
+                                        onPaste={(e) => handlePartialPaste(e, idx, act.id)}
                                         onFocus={(e) => e.target.select()}
                                         className="w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs"
                                       />
@@ -2896,6 +3370,47 @@ export const ClassroomManager = () => {
                           </a>
                         )}
                       </div>
+
+                      {/* Estadísticas de Cumplimiento / Alumnos que hicieron la tarea */}
+                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-border-main/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <div className="flex items-center gap-1.5 text-text-main">
+                            <CheckCircle2 size={14} className={getTaskStats(t).completed > 0 ? "text-emerald-500" : "text-slate-400"} />
+                            <span className="text-[11px] font-black uppercase tracking-tight">
+                              Cumplimiento: <span className="text-brand-blue">{getTaskStats(t).completed}</span> de {getTaskStats(t).total} alumnos
+                            </span>
+                          </div>
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                            getTaskStats(t).percentage === 100 
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                              : getTaskStats(t).percentage > 0 
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' 
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                          }`}>
+                            {getTaskStats(t).percentage}%
+                          </span>
+                        </div>
+
+                        {/* Barra de progreso */}
+                        <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${
+                              getTaskStats(t).percentage === 100
+                                ? 'bg-emerald-500'
+                                : getTaskStats(t).percentage >= 50
+                                ? 'bg-brand-blue'
+                                : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${getTaskStats(t).percentage}%` }}
+                          />
+                        </div>
+
+                        {getTaskStats(t).isLinked && (
+                          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-indigo-500 pt-0.5">
+                            <Award size={11} /> Vinculada a Parciales ({getTaskStats(t).competencyLabel})
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="pt-3 border-t border-border-main/60 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -2908,6 +3423,14 @@ export const ClassroomManager = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGradeTask(t)}
+                          className="px-3.5 py-1.5 bg-brand-blue hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+                          title="Corregir y calificar alumnos en esta tarea"
+                        >
+                          <Award size={12} /> Corregir ({getTaskStats(t).percentage}%)
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleOpenEditTask(t)}
@@ -3147,6 +3670,64 @@ export const ClassroomManager = () => {
                     )}
                   </div>
 
+                  {/* Vinculación con Calificaciones Parciales */}
+                  <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Award size={18} className="text-indigo-600 dark:text-indigo-400" />
+                        <div>
+                          <label className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block">
+                            Vincular a Calificación Parcial
+                          </label>
+                          <p className="text-[10px] text-text-muted font-medium">
+                            Permite calificar la tarea y transferir automáticamente la nota a Calificaciones Parciales.
+                          </p>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={taskFormData.linkToPartial || false}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, linkToPartial: e.target.checked })}
+                        className="w-5 h-5 text-indigo-600 rounded-lg cursor-pointer accent-brand-blue"
+                      />
+                    </div>
+
+                    {taskFormData.linkToPartial && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-indigo-100 dark:border-indigo-900/60">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
+                            Competencia a Evaluar
+                          </label>
+                          <select
+                            value={taskFormData.linkedCompetencyId || 'c1'}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, linkedCompetencyId: e.target.value })}
+                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                          >
+                            {activeCompetencies.map((comp) => (
+                              <option key={comp.id} value={comp.id}>
+                                {comp.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
+                            Puntuación Máxima
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={taskFormData.linkedMaxScore || 100}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, linkedMaxScore: Number(e.target.value) || 100 })}
+                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Recursos Multimedia y Enlaces */}
                   <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
@@ -3229,6 +3810,446 @@ export const ClassroomManager = () => {
               </div>
             </div>
           )}
+
+          {/* MODAL PARA CORREGIR Y EVALUAR TAREA (PORCENTAJE DE CUMPLIMIENTO) */}
+          {selectedTaskForGrading && (() => {
+            const totalStudents = courseStudents.length;
+            const completedCount = courseStudents.filter((s: any) => {
+              const rec = taskGradingState[s.id];
+              return rec?.status === 'completed' || (rec?.score !== undefined && rec?.score !== '');
+            }).length;
+            const currentPercentage = totalStudents > 0 ? Math.round((completedCount / totalStudents) * 100) : 0;
+            const scoresList = courseStudents
+              .map((s: any) => Number(taskGradingState[s.id]?.score))
+              .filter((v: number) => !isNaN(v) && v > 0);
+            const averageScore = scoresList.length > 0 ? Math.round(scoresList.reduce((a, b) => a + b, 0) / scoresList.length) : 0;
+
+            const filteredStudents = courseStudents.filter((s: any) => {
+              if (gradingSearch.trim()) {
+                const q = gradingSearch.toLowerCase().trim();
+                const fullName = `${s.first_name || ''} ${s.last_name || ''} ${s.name || ''}`.toLowerCase();
+                const rne = (s.rne || '').toLowerCase();
+                const num = String(s.order_number || '');
+                if (!fullName.includes(q) && !rne.includes(q) && num !== q) return false;
+              }
+              if (gradingStatusFilter !== 'all') {
+                const st = taskGradingState[s.id]?.status || 'pending';
+                if (st !== gradingStatusFilter) return false;
+              }
+              return true;
+            });
+
+            return (
+              <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 animate-fade-in overflow-y-auto">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+                  {/* Encabezado del modal */}
+                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-6 text-white flex items-center justify-between border-b border-white/10 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                        <Award size={24} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 rounded-lg text-[9px] font-black uppercase tracking-wider font-mono">
+                            {parseTaskPeriod(selectedTaskForGrading)}
+                          </span>
+                          <span className="text-[10px] font-bold text-indigo-200 uppercase">
+                            {selectedCourseObj ? `${selectedCourseObj.level} ${selectedCourseObj.grade} "${selectedCourseObj.section}"` : 'Curso'}
+                          </span>
+                        </div>
+                        <h3 className="font-black text-lg md:text-xl uppercase tracking-tight text-white line-clamp-1">
+                          Corregir: {selectedTaskForGrading.title}
+                        </h3>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTaskForGrading(null)}
+                      className="text-white/70 hover:text-white p-2 rounded-xl hover:bg-white/10 cursor-pointer transition-colors"
+                    >
+                      <X size={22} />
+                    </button>
+                  </div>
+
+                  {/* Cuerpo scrollable */}
+                  <div className="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+                    {/* Tarjetas de Métricas de Cumplimiento */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-indigo-500/10 dark:bg-indigo-950/40 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/50">
+                        <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block tracking-wider">
+                          % Cumplimiento
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-indigo-600 dark:text-indigo-300">
+                            {currentPercentage}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-indigo-200/50 dark:bg-indigo-900/60 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              currentPercentage === 100
+                                ? 'bg-emerald-500'
+                                : currentPercentage >= 50
+                                ? 'bg-indigo-600'
+                                : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${currentPercentage}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-emerald-500/10 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/50">
+                        <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block tracking-wider">
+                          Entregadas / Con Nota
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-300">
+                            {completedCount}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500">/ {totalStudents}</span>
+                        </div>
+                        <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 block mt-1">
+                          Alumnos evaluados
+                        </span>
+                      </div>
+
+                      <div className="bg-amber-500/10 dark:bg-amber-950/40 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50">
+                        <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 block tracking-wider">
+                          Pendientes
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-amber-600 dark:text-amber-300">
+                            {Math.max(0, totalStudents - completedCount)}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500">alumnos</span>
+                        </div>
+                        <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400 block mt-1">
+                          Sin corregir o entregar
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-100 dark:bg-slate-800/80 p-4 rounded-2xl border border-border-main">
+                        <span className="text-[10px] font-black uppercase text-text-muted block tracking-wider">
+                          Promedio del Aula
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-text-main">
+                            {averageScore > 0 ? averageScore : '-'}
+                          </span>
+                          <span className="text-xs font-bold text-text-muted">/ {gradingMaxScore} pts</span>
+                        </div>
+                        <span className="text-[9px] font-medium text-text-muted block mt-1">
+                          Calificación media
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Configuración de Vinculación con Calificaciones Parciales */}
+                    <div className="p-4 bg-indigo-50/70 dark:bg-slate-800/60 rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Award size={18} className="text-indigo-600 dark:text-indigo-400" />
+                          <div>
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block">
+                              Vincular calificaciones con Registro de Parciales
+                            </span>
+                            <p className="text-[10px] text-text-muted font-medium">
+                              Al guardar, las notas de cada estudiante se transferirán directamente a la pestaña de Calificaciones Parciales.
+                            </p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={gradingIsLinkedToPartial}
+                          onChange={(e) => setGradingIsLinkedToPartial(e.target.checked)}
+                          className="w-5 h-5 text-indigo-600 rounded-lg cursor-pointer accent-brand-blue"
+                        />
+                      </div>
+
+                      {gradingIsLinkedToPartial && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-indigo-200/60 dark:border-indigo-900/50">
+                          <div>
+                            <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 mb-1">
+                              Competencia a Asignar en Parciales
+                            </label>
+                            <select
+                              value={gradingCompetencyId}
+                              onChange={(e) => setGradingCompetencyId(e.target.value)}
+                              className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              {activeCompetencies.map((comp) => (
+                                <option key={comp.id} value={comp.id}>
+                                  {comp.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300 mb-1">
+                              Puntuación Máxima de la Tarea
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={gradingMaxScore}
+                              onChange={(e) => setGradingMaxScore(Number(e.target.value) || 100)}
+                              className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Barra de Búsqueda y Acciones Rápidas */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-surface p-3 rounded-2xl border border-border-main shadow-xs">
+                      <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                          <input
+                            type="text"
+                            placeholder="Buscar alumno o RNE..."
+                            value={gradingSearch}
+                            onChange={(e) => setGradingSearch(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 bg-brand-bg border border-border-main rounded-xl text-xs font-semibold text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <select
+                          value={gradingStatusFilter}
+                          onChange={(e: any) => setGradingStatusFilter(e.target.value)}
+                          className="px-3 py-2 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-muted outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value="all">Todos ({totalStudents})</option>
+                          <option value="completed">Entregados ({completedCount})</option>
+                          <option value="pending">Pendientes ({totalStudents - completedCount})</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleMarkAllCompleted}
+                          className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
+                          title="Marcar a todos los alumnos como Entregado"
+                        >
+                          <CheckCircle2 size={13} /> Marcar Todos Entregados
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max={gradingMaxScore}
+                            placeholder="Pts"
+                            value={bulkGradeValue}
+                            onChange={(e) => setBulkGradeValue(e.target.value)}
+                            className="w-16 px-2 py-2 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-center text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyBulkGrade}
+                            disabled={!bulkGradeValue}
+                            className="px-3 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider disabled:opacity-50 transition-all cursor-pointer"
+                            title="Asignar esta nota a todos los alumnos"
+                          >
+                            Asignar a Todos
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tabla de Alumnos para Calificar */}
+                    <div className="border border-border-main rounded-2xl overflow-hidden shadow-xs">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
+                            <th className="py-2.5 px-3 w-12 text-center">No.</th>
+                            <th className="py-2.5 px-3">Estudiante</th>
+                            <th className="py-2.5 px-3 w-48 text-center">Estado de Entrega</th>
+                            <th className="py-2.5 px-3 w-28 text-center">Calificación (/{gradingMaxScore})</th>
+                            <th className="py-2.5 px-3 min-w-[160px]">Observación / Feedback</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-main text-xs bg-surface">
+                          {filteredStudents.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-text-muted">
+                                No se encontraron alumnos con los filtros seleccionados.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredStudents.map((s: any, idx: number) => {
+                              const studentOrder = s.order_number || idx + 1;
+                              const studentName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.name || 'Estudiante';
+                              const currentRec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
+                              const isCompleted = currentRec.status === 'completed' || (currentRec.score !== undefined && currentRec.score !== '');
+
+                              return (
+                                <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                  <td className="py-2 px-3 font-mono font-bold text-center text-text-muted">
+                                    {studentOrder}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="font-bold text-text-main line-clamp-1">{studentName}</div>
+                                    {s.rne && <div className="text-[10px] text-text-muted font-mono">{s.rne}</div>}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTaskGradingState((prev) => ({
+                                            ...prev,
+                                            [s.id]: {
+                                              ...prev[s.id],
+                                              status: 'completed'
+                                            }
+                                          }));
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                          isCompleted
+                                            ? 'bg-emerald-500 text-white shadow-xs'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-emerald-50 hover:text-emerald-600'
+                                        }`}
+                                      >
+                                        ✓ Entregado
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTaskGradingState((prev) => ({
+                                            ...prev,
+                                            [s.id]: {
+                                              ...prev[s.id],
+                                              status: 'pending',
+                                              score: ''
+                                            }
+                                          }));
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                          currentRec.status === 'pending' && !currentRec.score
+                                            ? 'bg-amber-500 text-white shadow-xs'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-amber-50 hover:text-amber-600'
+                                        }`}
+                                      >
+                                        ⏳ Pendiente
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTaskGradingState((prev) => ({
+                                            ...prev,
+                                            [s.id]: {
+                                              ...prev[s.id],
+                                              status: 'uncompleted',
+                                              score: 0
+                                            }
+                                          }));
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                          currentRec.status === 'uncompleted'
+                                            ? 'bg-rose-500 text-white shadow-xs'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-rose-50 hover:text-rose-600'
+                                        }`}
+                                      >
+                                        ✗ No
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={gradingMaxScore}
+                                      value={currentRec.score !== undefined ? currentRec.score : ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value === '' ? '' : Math.min(Number(gradingMaxScore) || 100, Math.max(0, Number(e.target.value)));
+                                        setTaskGradingState((prev) => ({
+                                          ...prev,
+                                          [s.id]: {
+                                            ...prev[s.id],
+                                            score: val,
+                                            status: val !== '' ? 'completed' : prev[s.id]?.status || 'pending'
+                                          }
+                                        }));
+                                      }}
+                                      placeholder="-"
+                                      onPaste={(e) => handleTaskGradingPaste(e, idx, filteredStudents)}
+                                      onFocus={(e) => e.target.select()}
+                                      className="w-16 p-1.5 text-center font-black rounded-xl border border-border-main bg-brand-bg text-text-main text-xs outline-none focus:ring-2 focus:ring-indigo-500 mx-auto"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <input
+                                      type="text"
+                                      placeholder="Observación opcional..."
+                                      value={currentRec.feedback || ''}
+                                      onChange={(e) => {
+                                        const txt = e.target.value;
+                                        setTaskGradingState((prev) => ({
+                                          ...prev,
+                                          [s.id]: {
+                                            ...prev[s.id],
+                                            feedback: txt
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full p-1.5 rounded-xl border border-border-main bg-brand-bg text-text-main text-xs outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-text-muted/60"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Pie del modal con botones de acción */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-border-main flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-muted">
+                      <CheckCircle2 size={16} className={currentPercentage > 0 ? "text-emerald-500" : "text-slate-400"} />
+                      <span>{completedCount} de {totalStudents} alumnos evaluados ({currentPercentage}%)</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskForGrading(null)}
+                        className="px-4 py-2.5 rounded-2xl border border-border-main text-text-main hover:bg-surface font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
+                      >
+                        Cerrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveTaskGrading}
+                        disabled={isSavingGrading}
+                        className="px-6 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-wider text-xs flex items-center gap-2 shadow-lg shadow-brand-blue/30 disabled:opacity-50 cursor-pointer transition-all"
+                      >
+                        {isSavingGrading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Guardando...
+                          </>
+                        ) : gradingSuccess ? (
+                          <>
+                            <Check size={16} />
+                            ¡Guardado con Éxito!
+                          </>
+                        ) : (
+                          <>
+                            <Save size={16} />
+                            Guardar Correcciones y Calificaciones
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

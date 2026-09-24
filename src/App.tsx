@@ -170,6 +170,7 @@ function AppContent() {
   const { user, profile, isAuthReady } = useSupabase();
   const { isSubscriptionExpired, center } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
+  const [classroomTab, setClassroomTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>('attendance');
   const [dataView, setDataView] = useState('course');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
@@ -192,6 +193,19 @@ function AppContent() {
 
   const isParentRole = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
   const isStudentOrParent = profile?.role === 'student' || isParentRole;
+
+  // Manejo de cambio de vista con acceso directo inteligente a tareas de Mi Aula para docentes
+  const handleViewChange = (view: string) => {
+    if (view === 'tasks' && !isStudentOrParent) {
+      setClassroomTab('tasks');
+      setActiveView('classroom');
+      return;
+    }
+    if (view === 'classroom' && activeView !== 'classroom') {
+      setClassroomTab('attendance');
+    }
+    setActiveView(view);
+  };
 
   // Obtener paneles permitidos (del perfil o por defecto según su rol)
   const rawAllowed =
@@ -237,6 +251,14 @@ function AppContent() {
       }
     }
   }, [profile, activeView, allowed, isAuthReady, isSuperAdmin]);
+
+  // Redirigir a Mi Aula (pestaña tareas) si un docente intenta acceder directamente a la vista de tareas
+  useEffect(() => {
+    if (isAuthReady && profile && !isStudentOrParent && activeView === 'tasks') {
+      setClassroomTab('tasks');
+      setActiveView('classroom');
+    }
+  }, [activeView, isStudentOrParent, isAuthReady, profile]);
 
   const contractToken = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('contract') || new URLSearchParams(window.location.search).get('token')
@@ -434,7 +456,7 @@ function AppContent() {
     },
     {
       id: 'tasks',
-      label: isStudentOrParent ? 'Tareas' : 'Asignar Tareas',
+      label: isStudentOrParent ? 'Tareas' : 'Tareas y Asignaciones',
       icon: BookOpen
     },
     {
@@ -461,8 +483,8 @@ function AppContent() {
     <div className="flex h-screen bg-brand-bg overflow-hidden transition-colors duration-300">
       <Sidebar
         navItems={filteredNavItems}
-        activeView={activeView}
-        onViewChange={setActiveView}
+        activeView={!isStudentOrParent && activeView === 'classroom' && classroomTab === 'tasks' ? 'tasks' : activeView}
+        onViewChange={handleViewChange}
         userData={profile || { email: user?.email, role: 'student' }}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -541,7 +563,7 @@ function AppContent() {
               {isStudentOrParent ? (
                 <StudentDashboard userData={profile} onViewChange={setActiveView} />
               ) : profile?.role === 'teacher' ? (
-                <TeacherDashboard userData={profile} onViewChange={setActiveView} />
+                <TeacherDashboard userData={profile} onViewChange={handleViewChange} />
               ) : (
                 <Dashboard />
               )}
@@ -554,7 +576,10 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'classroom' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <ClassroomManager />
+              <ClassroomManager
+                initialTab={classroomTab}
+                onTabChange={(tab) => setClassroomTab(tab)}
+              />
             </div>
           </div>
         )}

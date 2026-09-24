@@ -537,6 +537,40 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     }
   };
 
+  // Pegar calificaciones en columna directamente desde Excel o Google Sheets
+  const handleGradePaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    startStudentIdx: number,
+    baseKey: string
+  ) => {
+    const pasteData = e.clipboardData.getData('text');
+    if (!pasteData) return;
+
+    const rawLines = pasteData.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    if (rawLines.length <= 1) return; // Un solo valor se maneja con el pegado nativo
+
+    e.preventDefault();
+
+    setLocalGrades((prev) => {
+      const updated = { ...prev };
+      rawLines.forEach((line, offset) => {
+        const studentIdx = startStudentIdx + offset;
+        if (studentIdx >= students.length) return;
+        const student = students[studentIdx];
+        if (!student) return;
+
+        // Si la fila incluye varias columnas (tabs), tomamos la primera
+        const firstCol = line.split('\t')[0].trim().replace(',', '.');
+        const numVal = parseInt(firstCol, 10);
+
+        if (!isNaN(numVal) && numVal >= 0 && numVal <= 100) {
+          updated[`${student.id}_${baseKey}`] = numVal.toString();
+        }
+      });
+      return updated;
+    });
+  };
+
   const printGradesPDF = () => {
     if (!selectedCourse || !selectedSubject) return;
 
@@ -1837,6 +1871,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   value={grades[`${s.id}_${kVal}`] || ''}
                                   onChange={(e) => handleGradeChange(s.id, kVal, e.target.value)}
                                   onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
+                                  onPaste={(e) => handleGradePaste(e, idx, kVal)}
                                   onFocus={(e) => e.target.select()}
                                   className="w-9 h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
@@ -1853,6 +1888,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   value={grades[`${s.id}_${kRec}`] || ''}
                                   onChange={(e) => handleGradeChange(s.id, kRec, e.target.value)}
                                   onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
+                                  onPaste={(e) => handleGradePaste(e, idx, kRec)}
                                   onFocus={(e) => e.target.select()}
                                   className="w-8 h-8 bg-transparent text-center text-[9px] text-text-muted outline-none focus:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
@@ -1890,6 +1926,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 value={grades[`${s.id}_comp`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
+                                onPaste={(e) => handleGradePaste(e, idx, 'comp')}
                                 onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-amber-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="EX"
@@ -1907,6 +1944,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 value={grades[`${s.id}_extra`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
+                                onPaste={(e) => handleGradePaste(e, idx, 'extra')}
                                 onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-orange-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="EX"
@@ -1924,6 +1962,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 value={grades[`${s.id}_esp1`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
+                                onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
                                 onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-rose-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={!isEditable}
@@ -1940,6 +1979,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 value={grades[`${s.id}_esp2`] || ''}
                                 onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
+                                onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
                                 onFocus={(e) => e.target.select()}
                                 className="w-full h-8 bg-transparent text-center text-rose-900 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={!isEditable}
@@ -1957,6 +1997,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                               value={grades[`${s.id}_final_rec`] || ''}
                               onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
+                              onPaste={(e) => handleGradePaste(e, idx, 'final_rec')}
                               onFocus={(e) => e.target.select()}
                               className="w-full h-8 bg-transparent text-center text-rose-600 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={!isEditable}

@@ -20,7 +20,8 @@ import {
   X,
   AlertTriangle,
   ShieldAlert,
-  PhoneCall
+  PhoneCall,
+  Edit3
 } from 'lucide-react';
 
 export const CommunicationGenerator = ({ userData: profile }: { userData: any }) => {
@@ -56,6 +57,12 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
   const [replyText, setReplyText] = useState('');
   const [replyMotive, setReplyMotive] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
+
+  // Edit sent communication state
+  const [editingComm, setEditingComm] = useState<any | null>(null);
+  const [editMotive, setEditMotive] = useState('');
+  const [editMessage, setEditMessage] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Form State
   const defaultParentMotives = useMemo(() => [
@@ -687,6 +694,37 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
     } catch (error) {
       console.error('Error al eliminar mensaje:', error);
       alert('No se pudo eliminar el mensaje.');
+    }
+  };
+
+  // Open edit modal for communication
+  const handleOpenEdit = (comm: any) => {
+    setEditingComm(comm);
+    setEditMotive(comm.motive || '');
+    setEditMessage(comm.message || '');
+  };
+
+  // Save edited communication
+  const handleSaveEdit = async () => {
+    if (!editingComm) return;
+    if (!editMessage.trim()) {
+      alert('El texto del mensaje no puede estar vacío.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await dataService.updateCommunication(editingComm.id, {
+        motive: editMotive.trim() || editingComm.motive,
+        message: editMessage.trim()
+      });
+      await fetchCommunications();
+      setEditingComm(null);
+    } catch (err: any) {
+      console.error('Error al actualizar el comunicado:', err);
+      alert('No se pudo actualizar el mensaje: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -1741,7 +1779,17 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
                     </p>
                   </div>
 
-                  <div className="flex justify-end pt-1">
+                  <div className="flex justify-end items-center gap-2 pt-1">
+                    {(comm.sender_id === profile?.id || isAdminOrManagement) && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(comm)}
+                        className="px-3 py-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Edit3 size={14} />
+                        Editar mensaje
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDelete(comm.id)}
@@ -1755,6 +1803,106 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL: EDITAR MENSAJE ENVIADO */}
+      {editingComm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-3xl border border-border-main shadow-2xl overflow-hidden animate-scale-up">
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-6 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white border border-white/30 shrink-0">
+                  <Edit3 size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-white leading-tight">
+                    Editar Mensaje Enviado
+                  </h3>
+                  <p className="text-xs text-indigo-100 font-medium">
+                    Corrige errores ortográficos o detalles del comunicado
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingComm(null)}
+                className="text-white/80 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                title="Cerrar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-3.5 rounded-2xl border border-indigo-150 dark:border-indigo-800/40 flex items-start gap-2.5">
+                <Info size={18} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">
+                  Al guardar, el mensaje corregido se actualizará automáticamente tanto en tu historial de enviados como en la bandeja de entrada de los destinatarios.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-text-muted mb-1.5">
+                  Asunto / Motivo
+                </label>
+                <input
+                  type="text"
+                  value={editMotive}
+                  onChange={(e) => setEditMotive(e.target.value)}
+                  placeholder="Motivo del comunicado..."
+                  className="w-full px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-xs sm:text-sm font-semibold text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-black uppercase text-text-muted">
+                    Contenido del Mensaje
+                  </label>
+                  <span className="text-[10px] text-text-muted font-mono">
+                    {editMessage.length} caracteres
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  value={editMessage}
+                  onChange={(e) => setEditMessage(e.target.value)}
+                  placeholder="Escribe el contenido corregido..."
+                  className="w-full p-4 bg-brand-bg border border-border-main rounded-xl text-xs sm:text-sm font-medium text-text-main outline-none focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingComm(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2.5 text-xs font-bold text-text-muted hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit || !editMessage.trim()}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      Guardar Cambios
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
