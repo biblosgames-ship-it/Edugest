@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Key,
   Shield,
@@ -31,6 +31,7 @@ import {
   Send
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import {
   generateLicenses,
   getLicenses,
@@ -51,10 +52,12 @@ import {
   updatePayment,
   createCenterWithLinkedEmail,
   updateCenterLinkedEmail,
+  getAllUsersForBroadcast,
   SaaSProductKey,
   SaaSStats,
   SaaSPlan,
-  SaaSPayment
+  SaaSPayment,
+  SaaSUserEmailRecord
 } from '../services/saasAdminService';
 import {
   createContract,
@@ -89,8 +92,14 @@ export const SaaSAdminPanel: React.FC = () => {
   const [isPaying, setIsPaying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups' | 'ephemerides' | 'contracts'
+    'licenses' | 'centers' | 'security' | 'plans' | 'payments' | 'support' | 'backups' | 'ephemerides' | 'contracts' | 'broadcast'
   >('licenses');
+
+  // User Emails / Broadcast State
+  const [broadcastUsers, setBroadcastUsers] = useState<SaaSUserEmailRecord[]>([]);
+  const [broadcastRoleFilter, setBroadcastRoleFilter] = useState<string>('all');
+  const [broadcastSearchQuery, setBroadcastSearchQuery] = useState<string>('');
+  const [isLoadingBroadcast, setIsLoadingBroadcast] = useState(false);
 
   // Digital Contracts State
   const [contracts, setContracts] = useState<SaaSContract[]>([]);
@@ -276,6 +285,110 @@ export const SaaSAdminPanel: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const fetchBroadcastUsers = async () => {
+    setIsLoadingBroadcast(true);
+    try {
+      const data = await getAllUsersForBroadcast();
+      setBroadcastUsers(data);
+    } catch (err: any) {
+      console.error('Error fetching broadcast users:', err);
+      toast.error('Error al cargar la base de correos: ' + err.message);
+    } finally {
+      setIsLoadingBroadcast(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'broadcast' && broadcastUsers.length === 0) {
+      fetchBroadcastUsers();
+    }
+  }, [activeTab]);
+
+  const filteredBroadcastUsers = useMemo(() => {
+    return broadcastUsers.filter((u) => {
+      if (broadcastRoleFilter !== 'all') {
+        if (broadcastRoleFilter === 'admin' && u.role !== 'admin' && u.role !== 'creator') return false;
+        if (broadcastRoleFilter === 'teacher' && u.role !== 'teacher' && u.role !== 'coordinator') return false;
+        if (broadcastRoleFilter === 'student' && u.role !== 'student') return false;
+        if (broadcastRoleFilter === 'parent' && u.role !== 'parent') return false;
+      }
+      if (broadcastSearchQuery.trim()) {
+        const q = broadcastSearchQuery.toLowerCase().trim();
+        const matchesEmail = u.email.toLowerCase().includes(q);
+        const matchesName = (u.full_name || '').toLowerCase().includes(q);
+        const matchesCenter = (u.center_name || '').toLowerCase().includes(q);
+        const matchesRole = u.role.toLowerCase().includes(q);
+        if (!matchesEmail && !matchesName && !matchesCenter && !matchesRole) return false;
+      }
+      return true;
+    });
+  }, [broadcastUsers, broadcastRoleFilter, broadcastSearchQuery]);
+
+  const handleExportBroadcastExcel = () => {
+    if (filteredBroadcastUsers.length === 0) {
+      toast.error('No hay usuarios en la lista para exportar');
+      return;
+    }
+
+    const rows = filteredBroadcastUsers.map((u) => ({
+      'Correo Electrónico': u.email,
+      'Nombre Completo': u.full_name || 'Sin especificar',
+      'Rol': u.role.toUpperCase(),
+      'Centro Educativo': u.center_name || 'Sin Centro',
+      'Teléfono': u.phone || 'N/A',
+      'Estado': u.is_active ? 'Activo' : 'Inactivo',
+      'Fecha Registro': u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Correos');
+    const filterTag = broadcastRoleFilter !== 'all' ? `_${broadcastRoleFilter}` : '_Todos';
+    XLSX.writeFile(wb, `Edugest_Correos_Usuarios${filterTag}.xlsx`);
+    toast.success('¡Archivo Excel (.xlsx) descargado exitosamente!');
+  };
+
+  const handleExportBroadcastCSV = () => {
+    if (filteredBroadcastUsers.length === 0) {
+      toast.error('No hay usuarios en la lista para exportar');
+      return;
+    }
+
+    const rows = filteredBroadcastUsers.map((u) => ({
+      'Correo Electrónico': u.email,
+      'Nombre Completo': u.full_name || 'Sin especificar',
+      'Rol': u.role.toUpperCase(),
+      'Centro Educativo': u.center_name || 'Sin Centro',
+      'Teléfono': u.phone || 'N/A',
+      'Estado': u.is_active ? 'Activo' : 'Inactivo'
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Correos');
+    const filterTag = broadcastRoleFilter !== 'all' ? `_${broadcastRoleFilter}` : '_Todos';
+    XLSX.writeFile(wb, `Edugest_Correos_Usuarios${filterTag}.csv`, { bookType: 'csv' });
+    toast.success('¡Archivo CSV (.csv) descargado exitosamente!');
+  };
+
+  const handleCopyBroadcastEmails = () => {
+    const emails = Array.from(
+      new Set(
+        filteredBroadcastUsers
+          .map((u) => u.email.trim())
+          .filter((e) => e && e.includes('@'))
+      )
+    );
+
+    if (emails.length === 0) {
+      toast.error('No hay correos disponibles para copiar');
+      return;
+    }
+
+    navigator.clipboard.writeText(emails.join(', '));
+    toast.success(`¡${emails.length} correos copiados al portapapeles!`);
+  };
 
   useEffect(() => {
     if (!selectedLicenseForBilling) return;
@@ -948,6 +1061,12 @@ soporte@edugest.net`;
             className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'contracts' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <FileText size={18} /> Contratos Digitales
+          </button>
+          <button
+            onClick={() => setActiveTab('broadcast')}
+            className={`flex-none px-6 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'broadcast' ? 'text-brand-blue border-b-2 border-brand-blue bg-blue-50/30' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <Mail size={18} /> Base de Correos (Boletín / Tips)
           </button>
         </div>
 
@@ -2392,6 +2511,295 @@ soporte@edugest.net`;
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: BASE DE CORREOS Y DIFUSIÓN */}
+        {activeTab === 'broadcast' && (
+          <div className="animate-fade-in space-y-6">
+            {/* Header & Actions */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 border border-slate-200 p-6 rounded-3xl">
+              <div>
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-100 text-brand-blue flex items-center justify-center shadow-xs">
+                    <Mail size={20} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-800">
+                    Base de Correos y Contactos para Difusión
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 max-w-2xl">
+                  Descarga y gestiona los correos electrónicos de los usuarios registrados para enviar
+                  actualizaciones, novedades de versión, consejos de la aplicación o comunicados oficiales.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={fetchBroadcastUsers}
+                  disabled={isLoadingBroadcast}
+                  className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Refrescar lista desde la base de datos"
+                >
+                  <RefreshCw size={14} className={isLoadingBroadcast ? 'animate-spin' : ''} />
+                  <span>Refrescar</span>
+                </button>
+
+                <button
+                  onClick={handleCopyBroadcastEmails}
+                  className="px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Copiar correos separados por coma para pegar en CCO"
+                >
+                  <Copy size={14} className="text-indigo-600" />
+                  <span>Copiar Correos</span>
+                </button>
+
+                <button
+                  onClick={handleExportBroadcastCSV}
+                  className="px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Descargar archivo en formato CSV"
+                >
+                  <FileText size={14} className="text-emerald-600" />
+                  <span>CSV</span>
+                </button>
+
+                <button
+                  onClick={handleExportBroadcastExcel}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Descargar archivo completo en Excel (.xlsx)"
+                >
+                  <Download size={14} />
+                  <span>Descargar Excel (.xlsx)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Total Registrados
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-800">
+                    {broadcastUsers.length}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">con correo</span>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Directores y Admins
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-indigo-600">
+                    {broadcastUsers.filter((u) => u.role === 'admin' || u.role === 'creator').length}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">gestores</span>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Docentes / Maestros
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-emerald-600">
+                    {broadcastUsers.filter((u) => u.role === 'teacher' || u.role === 'coordinator').length}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">profesores</span>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Padres y Alumnos
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-amber-600">
+                    {broadcastUsers.filter((u) => u.role === 'parent' || u.role === 'student').length}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">comunidad</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recommendations Box */}
+            <div className="bg-blue-50/70 border border-blue-100 p-4 rounded-2xl flex items-start gap-3">
+              <span className="text-xl">💡</span>
+              <div className="text-xs text-blue-900 leading-relaxed">
+                <strong>Consejo para envíos de novedades o consejos:</strong> Para enviar correos directamente desde
+                tu cuenta de Gmail u Outlook sin costo, haz clic en <strong>Copiar Correos</strong> y pégalos en el
+                campo <strong>CCO (Copia Oculta)</strong> para proteger la privacidad entre destinatarios. Si deseas hacer
+                campañas profesionales con diseño y estadísticas, descarga el archivo <strong>Excel o CSV</strong> y
+                cárgalo en plataformas como Brevo, Mailchimp o SendGrid.
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Role filter buttons */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'Todos', count: broadcastUsers.length },
+                  {
+                    id: 'admin',
+                    label: 'Directores / Admins',
+                    count: broadcastUsers.filter((u) => u.role === 'admin' || u.role === 'creator').length
+                  },
+                  {
+                    id: 'teacher',
+                    label: 'Docentes',
+                    count: broadcastUsers.filter((u) => u.role === 'teacher' || u.role === 'coordinator').length
+                  },
+                  {
+                    id: 'parent',
+                    label: 'Padres / Tutores',
+                    count: broadcastUsers.filter((u) => u.role === 'parent').length
+                  },
+                  {
+                    id: 'student',
+                    label: 'Estudiantes',
+                    count: broadcastUsers.filter((u) => u.role === 'student').length
+                  }
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setBroadcastRoleFilter(f.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${broadcastRoleFilter === f.id ? 'bg-brand-blue text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    {f.label} ({f.count})
+                  </button>
+                ))}
+              </div>
+
+              {/* Search box */}
+              <div className="relative min-w-[260px]">
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Buscar por correo, nombre o centro..."
+                  value={broadcastSearchQuery}
+                  onChange={(e) => setBroadcastSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-brand-blue transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Correo Electrónico
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Nombre Completo
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Rol
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Centro Educativo
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Teléfono
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                        Estado
+                      </th>
+                      <th className="py-3 px-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-right">
+                        Copiar
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {isLoadingBroadcast ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400 text-xs font-bold">
+                          <RefreshCw className="animate-spin inline-block mr-2" size={16} />
+                          Cargando usuarios y correos registrados...
+                        </td>
+                      </tr>
+                    ) : filteredBroadcastUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">
+                          No se encontraron usuarios con los filtros seleccionados
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBroadcastUsers.map((u) => {
+                        const roleBadgeColor =
+                          u.role === 'admin' || u.role === 'creator'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            : u.role === 'teacher' || u.role === 'coordinator'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : u.role === 'parent'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : u.role === 'student'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-slate-50 text-slate-600 border-slate-200';
+
+                        return (
+                          <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 text-xs font-bold text-slate-800">
+                              <span className="select-all font-mono">{u.email}</span>
+                            </td>
+                            <td className="py-3 px-4 text-xs font-medium text-slate-600">
+                              {u.full_name || <span className="text-slate-300 italic">No especificado</span>}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${roleBadgeColor}`}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-xs font-medium text-slate-600">
+                              {u.center_name || 'Sin Centro'}
+                            </td>
+                            <td className="py-3 px-4 text-xs font-mono text-slate-500">
+                              {u.phone || '—'}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {u.is_active ? 'Activo' : 'Inactivo'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(u.email);
+                                  toast.success(`Copiado: ${u.email}`);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                title="Copiar correo individual"
+                              >
+                                <Copy size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table footer with stats */}
+              <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-bold">
+                <span>
+                  Mostrando {filteredBroadcastUsers.length} de {broadcastUsers.length} contactos
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  Edugest Cloud Communications
+                </span>
+              </div>
             </div>
           </div>
         )}

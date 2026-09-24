@@ -25,7 +25,9 @@ import {
   Sparkles,
   RotateCcw,
   Layers,
-  Search
+  Search,
+  Download,
+  Mail
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -332,6 +334,44 @@ export const AdminDashboard = () => {
     );
   }, [users, userSearchQuery]);
 
+  const handleExportUserEmailsExcel = () => {
+    if (filteredDirectoryUsers.length === 0) {
+      toast.error('No hay usuarios para exportar');
+      return;
+    }
+
+    const rows = filteredDirectoryUsers.map((u) => ({
+      'Correo Electrónico': u.email || '',
+      'Nombre Completo': u.full_name || 'Sin especificar',
+      'Rol': (u.role || 'pending').toUpperCase(),
+      'Teléfono': u.phone || 'N/A',
+      'Estado': u.is_active ? 'Activo' : 'Inactivo',
+      'Fecha Registro': u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Correos');
+    const centerSlug = center?.name ? center.name.replace(/[^a-zA-Z0-9]/g, '_') : 'Centro';
+    XLSX.writeFile(wb, `Correos_Usuarios_${centerSlug}.xlsx`);
+    toast.success('¡Archivo de correos descargado con éxito!');
+  };
+
+  const handleCopyUserEmails = () => {
+    const emails = filteredDirectoryUsers
+      .map((u) => u.email?.trim())
+      .filter((email): email is string => !!email && email.includes('@'));
+
+    if (emails.length === 0) {
+      toast.error('No se encontraron correos para copiar');
+      return;
+    }
+
+    const uniqueEmails = Array.from(new Set(emails));
+    navigator.clipboard.writeText(uniqueEmails.join(', '));
+    toast.success(`¡${uniqueEmails.length} correos copiados al portapapeles!`);
+  };
+
   const filteredPanels = useMemo(() => {
     if (!permissionFilter.trim()) return AVAILABLE_PANELS;
     const q = permissionFilter.toLowerCase().trim();
@@ -535,6 +575,26 @@ export const AdminDashboard = () => {
                       className="pl-9 pr-4 py-2 bg-brand-bg rounded-xl border border-border-main text-xs text-text-main font-bold outline-none focus:border-indigo-500 w-64"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyUserEmails}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-brand-bg hover:bg-surface border border-border-main rounded-xl text-xs font-bold text-text-main transition-colors cursor-pointer"
+                    title="Copiar lista de correos filtrados al portapapeles para CCO"
+                  >
+                    <Copy size={13} className="text-indigo-600" />
+                    <span>Copiar Correos</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportUserEmailsExcel}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                    title="Descargar lista de correos en Excel (.xlsx)"
+                  >
+                    <Download size={13} />
+                    <span>Descargar Excel</span>
+                  </button>
 
                   {isSuperAdmin && (
                     <label className="flex items-center gap-2 cursor-pointer bg-brand-bg border border-border-main px-4 py-2 rounded-xl text-xs font-bold text-text-main hover:bg-surface transition-colors">

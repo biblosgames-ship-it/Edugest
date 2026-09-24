@@ -388,3 +388,73 @@ export const updateCenterLinkedEmail = async (
     console.warn('Error vinculando perfil existente:', err.message);
   }
 };
+
+export interface SaaSUserEmailRecord {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  phone: string | null;
+  center_id: string | null;
+  center_name?: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export const getAllUsersForBroadcast = async (): Promise<SaaSUserEmailRecord[]> => {
+  // Obtener perfiles registrados
+  const { data: profiles, error: pErr } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, phone, center_id, is_active, created_at')
+    .order('created_at', { ascending: false });
+
+  if (pErr) throw new Error(pErr.message);
+
+  // Mapear centros para incluir los nombres
+  const { data: centers } = await supabase.from('centers').select('id, name');
+  const centerMap = new Map((centers || []).map((c: any) => [c.id, c.name]));
+
+  // Obtener también los correos vinculados de licencias para no omitir directores
+  const { data: licenses } = await supabase
+    .from('saas_licenses')
+    .select('linked_email, used_by_center');
+
+  const existingEmails = new Set<string>();
+  const results: SaaSUserEmailRecord[] = [];
+
+  for (const p of profiles || []) {
+    if (p.email && p.email.includes('@')) {
+      const cleanEmail = p.email.toLowerCase().trim();
+      existingEmails.add(cleanEmail);
+      results.push({
+        ...p,
+        email: cleanEmail,
+        center_name: p.center_id ? centerMap.get(p.center_id) || 'Centro No Asignado' : 'Sin Centro'
+      });
+    }
+  }
+
+  // Agregar correos de directores vinculados en saas_licenses si no estuvieran en profiles
+  if (licenses) {
+    for (const lic of licenses) {
+      if (lic.linked_email && lic.linked_email.includes('@')) {
+        const clean = lic.linked_email.toLowerCase().trim();
+        if (!existingEmails.has(clean)) {
+          results.push({
+            id: 'lic-' + clean,
+            email: clean,
+            full_name: 'Director / Administrador',
+            role: 'admin',
+            phone: null,
+            center_id: lic.used_by_center,
+            center_name: lic.used_by_center ? centerMap.get(lic.used_by_center) || 'Centro Educativo' : 'Sin Centro',
+            is_active: true
+          });
+          existingEmails.add(clean);
+        }
+      }
+    }
+  }
+
+  return results;
+};
