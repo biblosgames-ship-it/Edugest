@@ -65,6 +65,13 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       category: 'educational'
     },
     {
+      title: 'Día de Nuestra Señora de las Mercedes',
+      date: `${y1}-09-24`,
+      description: 'Festividad de la patrona del pueblo dominicano. Feriado Nacional Oficial. No laborable y sin docencia escolar.',
+      category: 'holiday',
+      suspends_classes: true
+    },
+    {
       title: 'Día de los Derechos de la Niñez',
       date: `${y1}-09-29`,
       description: 'Conmemoración de la protección integral de los derechos fundamentales de niños, niñas y adolescentes.',
@@ -123,6 +130,20 @@ export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): E
       title: 'Cierre del Primer Período / Vacaciones de Navidad',
       date: `${y1}-12-22`,
       description: 'Conclusión de la primera etapa del año lectivo e inicio del receso escolar navideño.',
+      category: 'holiday',
+      suspends_classes: true
+    },
+    {
+      title: 'Día de Navidad',
+      date: `${y1}-12-25`,
+      description: 'Conmemoración de la Natividad de Jesús. Feriado Nacional Oficial. Sin docencia.',
+      category: 'holiday',
+      suspends_classes: true
+    },
+    {
+      title: 'Año Nuevo',
+      date: `${y2}-01-01`,
+      description: 'Primer día del Año Nuevo. Feriado Nacional Oficial. Sin docencia.',
       category: 'holiday',
       suspends_classes: true
     },

@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { playSchoolBellSound, SoundStyle } from '../utils/schoolBellAudio';
+import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesManager';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 export interface BellSlot {
@@ -34,11 +36,18 @@ const DEFAULT_SCHEDULE_VESPERTINA: BellSlot[] = [
 ];
 
 export const useSchoolBell = () => {
-  const { state } = useApp();
+  const { state, center, selectedYear } = useApp();
 
-  // Estado del timbre guardado en localStorage
+  // Estado del timbre guardado en localStorage y sincronizado con el centro escolar
   const [isBellEnabled, setIsBellEnabled] = useState<boolean>(() => {
     try {
+      if (center?.id) {
+        const centerSpecific = localStorage.getItem(`edugens_school_bell_enabled_${center.id}`);
+        if (centerSpecific !== null) return JSON.parse(centerSpecific);
+      }
+      if (center?.bell_settings?.is_enabled !== undefined) {
+        return !!center.bell_settings.is_enabled;
+      }
       const saved = localStorage.getItem('edugens_school_bell_enabled');
       return saved !== null ? JSON.parse(saved) : true; // Por defecto activo
     } catch {
@@ -48,6 +57,13 @@ export const useSchoolBell = () => {
 
   const [soundStyle, setSoundStyleState] = useState<SoundStyle>(() => {
     try {
+      if (center?.id) {
+        const centerSpecific = localStorage.getItem(`edugens_school_bell_style_${center.id}`);
+        if (centerSpecific) return centerSpecific as SoundStyle;
+      }
+      if (center?.bell_settings?.sound_style) {
+        return center.bell_settings.sound_style as SoundStyle;
+      }
       const saved = localStorage.getItem('edugens_school_bell_style');
       return (saved as SoundStyle) || 'traditional';
     } catch {
@@ -57,6 +73,13 @@ export const useSchoolBell = () => {
 
   const [volume, setVolumeState] = useState<number>(() => {
     try {
+      if (center?.id) {
+        const centerSpecific = localStorage.getItem(`edugens_school_bell_volume_${center.id}`);
+        if (centerSpecific) return Number(centerSpecific);
+      }
+      if (center?.bell_settings?.volume !== undefined) {
+        return Number(center.bell_settings.volume);
+      }
       const saved = localStorage.getItem('edugens_school_bell_volume');
       return saved ? Number(saved) : 0.9;
     } catch {
@@ -67,29 +90,98 @@ export const useSchoolBell = () => {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const lastTriggeredMinuteRef = useRef<string>('');
 
+  // Sincronizar automáticamente si el centro tiene configuración institucional en la nube
+  useEffect(() => {
+    if (center?.bell_settings) {
+      if (center.bell_settings.sound_style) {
+        setSoundStyleState(center.bell_settings.sound_style as SoundStyle);
+        localStorage.setItem('edugens_school_bell_style', center.bell_settings.sound_style);
+        if (center.id) {
+          localStorage.setItem(`edugens_school_bell_style_${center.id}`, center.bell_settings.sound_style);
+        }
+      }
+      if (center.bell_settings.volume !== undefined) {
+        const volNum = Number(center.bell_settings.volume);
+        setVolumeState(volNum);
+        localStorage.setItem('edugens_school_bell_volume', String(volNum));
+        if (center.id) {
+          localStorage.setItem(`edugens_school_bell_volume_${center.id}`, String(volNum));
+        }
+      }
+      if (center.bell_settings.is_enabled !== undefined) {
+        const enBool = !!center.bell_settings.is_enabled;
+        setIsBellEnabled(enBool);
+        localStorage.setItem('edugens_school_bell_enabled', JSON.stringify(enBool));
+        if (center.id) {
+          localStorage.setItem(`edugens_school_bell_enabled_${center.id}`, JSON.stringify(enBool));
+        }
+      }
+    }
+  }, [center?.id, center?.bell_settings]);
+
   const toggleBell = useCallback(() => {
     setIsBellEnabled((prev) => {
       const next = !prev;
       localStorage.setItem('edugens_school_bell_enabled', JSON.stringify(next));
+      if (center?.id) {
+        localStorage.setItem(`edugens_school_bell_enabled_${center.id}`, JSON.stringify(next));
+        try {
+          supabase.from('centers').update({
+            bell_settings: {
+              sound_style: soundStyle,
+              volume: volume,
+              is_enabled: next,
+              updated_at: new Date().toISOString()
+            }
+          }).eq('id', center.id).then(() => {}).catch(() => {});
+        } catch {}
+      }
+
       if (next) {
         toast.success('🔔 Timbre Escolar Activado', { duration: 2500 });
-        // Desbloquear AudioContext con el clic del usuario
         playSchoolBellSound(soundStyle, volume * 0.4);
       } else {
         toast('🔕 Timbre Escolar Desactivado', { duration: 2500 });
       }
       return next;
     });
-  }, [soundStyle, volume]);
+  }, [soundStyle, volume, center?.id]);
 
   const setSoundStyle = (style: SoundStyle) => {
     setSoundStyleState(style);
     localStorage.setItem('edugens_school_bell_style', style);
+    if (center?.id) {
+      localStorage.setItem(`edugens_school_bell_style_${center.id}`, style);
+      try {
+        supabase.from('centers').update({
+          bell_settings: {
+            sound_style: style,
+            volume: volume,
+            is_enabled: isBellEnabled,
+            updated_at: new Date().toISOString()
+          }
+        }).eq('id', center.id).then(() => {}).catch(() => {});
+      } catch {}
+    }
+    toast.success('Tipo de sonido guardado permanentemente', { duration: 2000 });
   };
 
   const setVolume = (vol: number) => {
     setVolumeState(vol);
     localStorage.setItem('edugens_school_bell_volume', String(vol));
+    if (center?.id) {
+      localStorage.setItem(`edugens_school_bell_volume_${center.id}`, String(vol));
+      try {
+        supabase.from('centers').update({
+          bell_settings: {
+            sound_style: soundStyle,
+            volume: vol,
+            is_enabled: isBellEnabled,
+            updated_at: new Date().toISOString()
+          }
+        }).eq('id', center.id).then(() => {}).catch(() => {});
+      } catch {}
+    }
   };
 
   const testSound = useCallback(() => {
@@ -193,14 +285,110 @@ export const useSchoolBell = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Determinar si hoy es día escolar (Lunes a Viernes)
+  // Fecha actual local en formato YYYY-MM-DD y MM-DD
+  const todayYMD = useMemo(() => {
+    const y = currentTime.getFullYear();
+    const m = String(currentTime.getMonth() + 1).padStart(2, '0');
+    const d = String(currentTime.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [currentTime]);
+
+  const todayMD = useMemo(() => {
+    const m = String(currentTime.getMonth() + 1).padStart(2, '0');
+    const d = String(currentTime.getDate()).padStart(2, '0');
+    return `${m}-${d}`;
+  }, [currentTime]);
+
   const dayOfWeek = currentTime.getDay(); // 0 = Domingo, 6 = Sábado
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  const isSchoolDay = !isWeekend;
+
+  // Detección inteligente de días feriados, asuetos, fines de semana y suspensión de docencia
+  const noSchoolInfo = useMemo<{ isNoSchool: boolean; reason: string }>(() => {
+    if (isWeekend) {
+      const dayName = dayOfWeek === 6 ? 'Sábado' : 'Domingo';
+      return { isNoSchool: true, reason: `Fin de semana (${dayName}) • Sin clases hoy` };
+    }
+
+    // 1. Días feriados oficiales inamovibles de la República Dominicana (por MM-DD)
+    const DOMINICAN_NATIONAL_HOLIDAYS: Record<string, string> = {
+      '01-01': 'Año Nuevo (Feriado Nacional)',
+      '01-06': 'Día de los Santos Reyes (Feriado)',
+      '01-21': 'Día de Nuestra Señora de la Altagracia (Feriado Nacional)',
+      '01-26': 'Natalicio de Juan Pablo Duarte (Feriado Nacional)',
+      '02-27': 'Día de la Independencia Nacional (Fiesta Patria)',
+      '05-01': 'Día Internacional del Trabajo (Feriado)',
+      '08-16': 'Día de la Restauración de la República (Feriado Nacional)',
+      '09-24': 'Día de Nuestra Señora de las Mercedes (Feriado Nacional)',
+      '11-06': 'Día de la Constitución Dominicana (Feriado)',
+      '12-25': 'Día de Navidad (Feriado Nacional)'
+    };
+
+    if (DOMINICAN_NATIONAL_HOLIDAYS[todayMD]) {
+      return {
+        isNoSchool: true,
+        reason: `${DOMINICAN_NATIONAL_HOLIDAYS[todayMD]} • Sin docencia hoy`
+      };
+    }
+
+    // 2. Verificar actividades o eventos institucionales registrados en la base de datos del centro
+    const activities = state.activities || [];
+    const todayAct = activities.find((a: any) => {
+      if (a.date !== todayYMD) return false;
+      const t = String(a.title || '').toLowerCase();
+      const d = String(a.description || '').toLowerCase();
+      return (
+        a.suspends_classes === true ||
+        a.category === 'holiday' ||
+        t.includes('feriado') ||
+        t.includes('asueto') ||
+        t.includes('no docencia') ||
+        t.includes('sin docencia') ||
+        t.includes('suspensión') ||
+        d.includes('[no_docencia]') ||
+        d.includes('feriado') ||
+        d.includes('sin docencia')
+      );
+    });
+
+    if (todayAct) {
+      return {
+        isNoSchool: true,
+        reason: `${todayAct.title || 'Día No Laborable'} • Clases suspendidas`
+      };
+    }
+
+    // 3. Verificar efemérides y feriados oficiales del calendario escolar MINERD
+    const minerdList = getDefaultMinerdEphemerides(selectedYear || '2026-2027');
+    const todayMinerd = minerdList.find((e) => {
+      if (e.date !== todayYMD) return false;
+      const t = e.title.toLowerCase();
+      const d = (e.description || '').toLowerCase();
+      return (
+        e.suspends_classes === true ||
+        e.category === 'holiday' ||
+        t.includes('feriado') ||
+        t.includes('asueto') ||
+        d.includes('feriado') ||
+        d.includes('sin docencia')
+      );
+    });
+
+    if (todayMinerd) {
+      return {
+        isNoSchool: true,
+        reason: `${todayMinerd.title} • Feriado escolar (Sin docencia)`
+      };
+    }
+
+    return { isNoSchool: false, reason: '' };
+  }, [isWeekend, dayOfWeek, todayMD, todayYMD, state.activities, selectedYear]);
+
+  // Si hoy no hay clases (fin de semana, feriado, asueto o suspensión), NO es día escolar
+  const isSchoolDay = !noSchoolInfo.isNoSchool;
 
   // Comprobar si corresponde timbrar en el minuto actual
   useEffect(() => {
-    // Si el timbre está desactivado o es fin de semana (Sábado/Domingo), NO timbrar
+    // Si el timbre está desactivado o NO hay clases (feriado, asueto, fin de semana), NUNCA timbrar
     if (!isBellEnabled || !isSchoolDay) return;
 
     // Si el centro solo opera en horario matutino, desactivar el timbre al finalizar la última hora
@@ -269,7 +457,7 @@ export const useSchoolBell = () => {
         { duration: 8000 }
       );
     }
-  }, [currentTime, isBellEnabled, isSchoolDay, bellSlots, soundStyle, volume]);
+  }, [currentTime, isBellEnabled, isSchoolDay, bellSlots, soundStyle, volume, hasAfternoonShift]);
 
   // Calcular la próxima rotación
   const nextRotation = useMemo(() => {
@@ -277,18 +465,19 @@ export const useSchoolBell = () => {
 
     const firstSlot = bellSlots[0];
 
-    // Si es fin de semana (Sábado o Domingo)
-    if (isWeekend) {
-      const dayName = dayOfWeek === 6 ? 'Sábado' : 'Domingo';
+    // Si hoy no hay clases (feriado, asueto, fin de semana)
+    if (noSchoolInfo.isNoSchool) {
       return {
         isSchoolDay: false,
-        isWeekend: true,
+        isWeekend: isWeekend,
+        isHoliday: !isWeekend,
+        holidayName: noSchoolInfo.reason,
         slot: firstSlot,
         diffSeconds: 0,
         minsLeft: 0,
         secsLeft: 0,
-        timeFormatted: `Lunes a las ${firstSlot.time}`,
-        statusText: `Fin de semana (${dayName}) • Sin clases hoy`
+        timeFormatted: isWeekend ? `Lunes a las ${firstSlot.time}` : `Próximo día escolar a las ${firstSlot.time}`,
+        statusText: noSchoolInfo.reason
       };
     }
 
@@ -332,12 +521,15 @@ export const useSchoolBell = () => {
         ? (isFriday ? 'Fin de jornada semanal (Matutina)' : 'Jornada Matutina concluida • Timbre inactivo')
         : (isFriday ? 'Fin de jornada semanal' : 'Jornada de hoy concluida')
     };
-  }, [currentTime, isWeekend, dayOfWeek, bellSlots, hasAfternoonShift]);
+  }, [currentTime, isWeekend, dayOfWeek, bellSlots, hasAfternoonShift, noSchoolInfo]);
 
   return {
     isBellEnabled,
     isSchoolDay,
     isWeekend,
+    isHoliday: !isWeekend && noSchoolInfo.isNoSchool,
+    noSchoolReason: noSchoolInfo.reason,
+    isNoSchool: noSchoolInfo.isNoSchool,
     toggleBell,
     soundStyle,
     setSoundStyle,

@@ -109,7 +109,9 @@ export const SchoolBellControl = () => {
           {isBellEnabled && nextRotation && (
             <div
               className={`p-4 rounded-2xl flex items-center justify-between gap-3 border ${
-                nextRotation.isWeekend
+                nextRotation.isHoliday
+                  ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                  : nextRotation.isWeekend
                   ? 'bg-slate-800/60 border-slate-700 text-slate-300'
                   : 'bg-gradient-to-r from-emerald-950/30 to-slate-900 border-emerald-500/30'
               }`}
@@ -117,19 +119,33 @@ export const SchoolBellControl = () => {
               <div className="flex items-center gap-2.5">
                 <Clock
                   size={16}
-                  className={nextRotation.isWeekend ? 'text-slate-400' : 'text-emerald-400 animate-pulse'}
+                  className={
+                    nextRotation.isHoliday
+                      ? 'text-amber-400'
+                      : nextRotation.isWeekend
+                      ? 'text-slate-400'
+                      : 'text-emerald-400 animate-pulse'
+                  }
                 />
                 <div>
                   <span
                     className={`text-[10px] font-bold uppercase tracking-wider block ${
-                      nextRotation.isWeekend ? 'text-amber-400' : 'text-emerald-400'
+                      nextRotation.isHoliday
+                        ? 'text-amber-300'
+                        : nextRotation.isWeekend
+                        ? 'text-amber-400'
+                        : 'text-emerald-400'
                     }`}
                   >
-                    {nextRotation.isWeekend ? 'Fin de Semana (Sin Clases Hoy)' : 'Próxima Rotación'}
+                    {nextRotation.isHoliday
+                      ? 'Feriado / Sin Docencia Hoy'
+                      : nextRotation.isWeekend
+                      ? 'Fin de Semana (Sin Clases Hoy)'
+                      : 'Próxima Rotación'}
                   </span>
                   <span className="text-xs font-bold text-white">
-                    {nextRotation.isWeekend
-                      ? `Próxima jornada escolar: ${nextRotation.timeFormatted}`
+                    {nextRotation.isHoliday || nextRotation.isWeekend
+                      ? (nextRotation.holidayName || nextRotation.statusText)
                       : `${nextRotation.slot.label} (${nextRotation.slot.time})`}
                   </span>
                 </div>
@@ -137,12 +153,14 @@ export const SchoolBellControl = () => {
               <div className="text-right">
                 <span
                   className={`text-xs font-mono font-black px-2.5 py-1 rounded-lg border ${
-                    nextRotation.isWeekend
+                    nextRotation.isHoliday
+                      ? 'text-amber-300 bg-amber-950/80 border-amber-500/30'
+                      : nextRotation.isWeekend
                       ? 'text-slate-300 bg-slate-800 border-slate-700'
                       : 'text-emerald-400 bg-emerald-950/80 border-emerald-500/30'
                   }`}
                 >
-                  {nextRotation.isWeekend ? 'Lunes' : `en ${nextRotation.timeFormatted}`}
+                  {nextRotation.isHoliday ? 'En Pausa' : nextRotation.isWeekend ? 'Lunes' : `en ${nextRotation.timeFormatted}`}
                 </span>
               </div>
             </div>
@@ -326,14 +344,19 @@ export const SchoolBellControl = () => {
               <span className="text-[9px] font-semibold text-slate-400 truncate">
                 {!isBellEnabled
                   ? 'Inactivo'
-                  : nextRotation?.isWeekend
-                    ? 'Fin de sem.'
-                    : nextRotation?.isSchoolDay
-                      ? `${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
-                      : `${nextRotation?.timeFormatted || 'Lunes'}`}
+                  : nextRotation?.isHoliday
+                    ? 'Feriado hoy'
+                    : nextRotation?.isWeekend
+                      ? 'Fin de sem.'
+                      : nextRotation?.isSchoolDay
+                        ? `${nextRotation.slot.time} (${nextRotation.minsLeft}m)`
+                        : `${nextRotation?.timeFormatted || 'Lunes'}`}
               </span>
-              {isBellEnabled && (
+              {isBellEnabled && nextRotation?.isSchoolDay && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+              )}
+              {isBellEnabled && nextRotation?.isHoliday && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="En pausa por día feriado"></span>
               )}
             </div>
           </button>
