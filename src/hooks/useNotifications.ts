@@ -74,7 +74,27 @@ export const useNotifications = () => {
       setLoading(true);
       const data = await dataService.getCommunications(userId, role, centerId);
       const dismissed = getDismissedCommIds(userId);
-      const active = (data || []).filter((c: any) => c?.id && !dismissed.has(String(c.id)));
+      const dismissedBeforeStr = userId ? localStorage.getItem(`edugens_dismissed_before_${userId}`) : null;
+      const dismissedBeforeMs = dismissedBeforeStr ? new Date(dismissedBeforeStr).getTime() : 0;
+      const now = Date.now();
+
+      const active = (data || [])
+        .filter((c: any) => {
+          if (!c?.id) return false;
+          // 1. Descartadas explícitamente por ID
+          if (dismissed.has(String(c.id))) return false;
+          // 2. Comunicados anteriores a la fecha en que se pulsó "Limpiar todas"
+          if (dismissedBeforeMs > 0 && c.created_at && new Date(c.created_at).getTime() <= dismissedBeforeMs) {
+            return false;
+          }
+          // 3. Excusas o avisos con fecha de validez expirada
+          if (c.valid_until && new Date(c.valid_until).getTime() < now) {
+            return false;
+          }
+          return true;
+        })
+        .slice(0, 5); // Mostrar como máximo las últimas 5 notificaciones siempre
+
       setCommunications(active);
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -145,6 +165,11 @@ export const useNotifications = () => {
   const dismissAll = useCallback(async () => {
     const ids = communications.map((c) => String(c.id));
     saveDismissedCommIds(ids, userId);
+    if (userId) {
+      try {
+        localStorage.setItem(`edugens_dismissed_before_${userId}`, new Date().toISOString());
+      } catch (e) {}
+    }
     setCommunications([]);
     try {
       await Promise.all(ids.map((id) => dataService.dismissCommunication(id, userId || '')));

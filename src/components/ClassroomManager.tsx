@@ -2924,10 +2924,20 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             title={getStudentFullName(s)}
                           >
                             {hideStudentNames ? (
-                              <div className="flex items-center justify-center">
+                              <div className="flex items-center justify-center gap-1">
                                 <span className="inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue font-black font-mono text-[11px] border border-indigo-100 dark:border-indigo-900">
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
+                                {specialNotesMap[s.id] && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSpecialNoteModal(s.id)}
+                                    className="text-amber-600 hover:text-amber-700 hover:scale-125 transition-transform cursor-pointer inline-flex items-center p-0.5 shrink-0"
+                                    title={specialNotesMap[s.id]}
+                                  >
+                                    <Pin size={12} className="fill-amber-500 text-amber-600 rotate-45" />
+                                  </button>
+                                )}
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
@@ -2935,6 +2945,16 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
                                 <span className="truncate text-xs">{getStudentFullName(s)}</span>
+                                {specialNotesMap[s.id] && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSpecialNoteModal(s.id)}
+                                    className="text-amber-600 hover:text-amber-700 hover:scale-125 transition-transform cursor-pointer inline-flex items-center p-0.5 shrink-0"
+                                    title={specialNotesMap[s.id]}
+                                  >
+                                    <Pin size={12} className="fill-amber-500 text-amber-600 rotate-45" />
+                                  </button>
+                                )}
                               </div>
                             )}
                           </td>
@@ -4090,7 +4110,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                     {studentOrder}
                                   </td>
                                   <td className="py-2 px-3">
-                                    <div className="font-bold text-text-main line-clamp-1">{studentName}</div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-text-main line-clamp-1">{studentName}</span>
+                                      {specialNotesMap[s.id] && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openSpecialNoteModal(s.id)}
+                                          className="text-amber-600 hover:text-amber-700 hover:scale-125 transition-transform cursor-pointer inline-flex items-center p-0.5 shrink-0"
+                                          title={specialNotesMap[s.id]}
+                                        >
+                                          <Pin size={12} className="fill-amber-500 text-amber-600 rotate-45" />
+                                        </button>
+                                      )}
+                                    </div>
                                     {s.rne && <div className="text-[10px] text-text-muted font-mono">{s.rne}</div>}
                                   </td>
                                   <td className="py-2 px-3">

@@ -40,6 +40,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
     rne: '',
     courseName: '',
     schoolYear: selectedYear || '2025-2026',
+    tutorPrefix: 'Hijo(a) de los señores:',
     tutorName: '',
 
     // Conducta
@@ -102,7 +103,8 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         directorName: centerData?.director_name || '',
         directorTitle: centerData?.director_sex === 'M' ? 'Director General' : 'Directora General',
         adminName: defaultAdminName,
-        adminTitle: 'Encargada de Administración y Caja'
+        adminTitle: 'Encargada de Administración y Caja',
+        tutorPrefix: 'Hijo(a) de los señores:'
       };
 
       if (!studentId) {
@@ -118,23 +120,52 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         const course = state.courses.find((c) => c.id === student.course_id);
 
         let parentsName = '';
+        let tutorPrefix = 'Hijo(a) de los señores:';
+
         if (student.family && student.family.length > 0) {
-          const tutor = student.family.find(
-            (f: any) =>
-              !['madre', 'padre'].includes((f.relation || f.role || '').toLowerCase().trim()) &&
-              (f.name || '').trim() !== ''
+          const validMembers = student.family.filter(
+            (f: any) => f && f.name && f.name.trim().length > 0
           );
-          const parents = student.family.filter(
-            (f: any) =>
-              (f.relation || f.role)?.toLowerCase().includes('madre') ||
-              (f.relation || f.role)?.toLowerCase().includes('padre')
-          );
-          if (tutor) {
-            parentsName = tutor.name;
-          } else if (parents.length > 0) {
-            parentsName = parents.map((p: any) => p.name).join(' y ');
-          } else {
-            parentsName = student.family[0].name;
+
+          const father = validMembers.find((f: any) => {
+            const rel = (f.relation || f.role || '').toLowerCase().trim();
+            return rel.includes('padre') || rel.includes('papá') || rel.includes('papa');
+          });
+
+          const mother = validMembers.find((f: any) => {
+            const rel = (f.relation || f.role || '').toLowerCase().trim();
+            return rel.includes('madre') || rel.includes('mamá') || rel.includes('mama');
+          });
+
+          if (father && mother) {
+            tutorPrefix = 'Hijo(a) de los señores:';
+            parentsName = `${father.name.trim()} y ${mother.name.trim()}`;
+          } else if (mother && !father) {
+            tutorPrefix = 'Hijo(a) de la señora:';
+            parentsName = mother.name.trim();
+          } else if (father && !mother) {
+            tutorPrefix = 'Hijo(a) del señor:';
+            parentsName = father.name.trim();
+          } else if (validMembers.length > 1) {
+            tutorPrefix = 'Hijo(a) de los señores:';
+            parentsName = `${validMembers[0].name.trim()} y ${validMembers[1].name.trim()}`;
+          } else if (validMembers.length === 1) {
+            const single = validMembers[0];
+            const rel = (single.relation || single.role || '').toLowerCase().trim();
+            const isFemale =
+              rel.includes('madre') ||
+              rel.includes('mamá') ||
+              rel.includes('mama') ||
+              rel.includes('tutora') ||
+              rel.includes('abuela') ||
+              rel.includes('tía') ||
+              rel.includes('tia') ||
+              rel.includes('hermana') ||
+              rel.includes('señora') ||
+              rel.includes('femenin');
+
+            tutorPrefix = isFemale ? 'Hijo(a) de la señora:' : 'Hijo(a) del señor:';
+            parentsName = single.name.trim();
           }
         }
 
@@ -167,6 +198,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
             `${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`.trim(),
           rne: student.sigerd_code || student.student_code || student.rne || '',
           courseName: courseDisplay,
+          tutorPrefix,
           tutorName: parentsName,
           enrollmentFee: defaultEnrollment,
           monthlyFee: defaultMonthly,
@@ -251,7 +283,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         let introYOffset = 95 + (splitIntro.length * 7);
 
         // 5. Datos del Estudiante (Párrafo fluido)
-        const studentDataText = `${formData.studentName}, Código del Sigerd No.: ${formData.rne} del Grado ${formData.courseName}, Año Escolar: ${formData.schoolYear}. Hijo(a) de los señores: ${formData.tutorName}.`;
+        const studentDataText = `${formData.studentName}, Código del Sigerd No.: ${formData.rne} del Grado ${formData.courseName}, Año Escolar: ${formData.schoolYear}. ${formData.tutorPrefix} ${formData.tutorName}.`;
         const splitStudentData = doc.splitTextToSize(studentDataText, 175);
         doc.text(splitStudentData, 20, introYOffset);
 
@@ -307,7 +339,7 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
         let introYOffset = 95 + (splitIntro.length * 7);
 
         // 5. Datos del Estudiante
-        const studentDataText = `${formData.studentName}, del Grado ${formData.courseName}. Hijo(a) de los señores: ${formData.tutorName}.`;
+        const studentDataText = `${formData.studentName}, del Grado ${formData.courseName}. ${formData.tutorPrefix} ${formData.tutorName}.`;
         const splitStudentData = doc.splitTextToSize(studentDataText, 175);
         doc.text(splitStudentData, 20, introYOffset);
 
@@ -505,6 +537,90 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-5">
+              {/* Estudiante y Padres Section */}
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                    <User size={14} />
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Datos del Estudiante y Padres / Tutor
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                      Nombre del Estudiante
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.studentName}
+                      onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
+                      placeholder="Nombre del estudiante"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                        Código SIGERD / RNE
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.rne}
+                        onChange={(e) => setFormData({ ...formData, rne: e.target.value })}
+                        placeholder="Ej: 0012345"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                        Grado / Curso
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.courseName}
+                        onChange={(e) => setFormData({ ...formData, courseName: e.target.value })}
+                        placeholder="Ej: 3ro de Primaria"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                        Prefijo Padres / Tutor
+                      </label>
+                      <select
+                        value={formData.tutorPrefix}
+                        onChange={(e) => setFormData({ ...formData, tutorPrefix: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+                      >
+                        <option value="Hijo(a) de los señores:">Hijo(a) de los señores:</option>
+                        <option value="Hijo(a) de la señora:">Hijo(a) de la señora:</option>
+                        <option value="Hijo(a) del señor:">Hijo(a) del señor:</option>
+                        <option value="Hijo(a) de:">Hijo(a) de:</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                        Nombre(s) Padres / Tutor
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.tutorName}
+                        onChange={(e) => setFormData({ ...formData, tutorName: e.target.value })}
+                        placeholder="Ej: Juan Pérez y María García"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {certificateType === 'conduct-balance' ? (
                 <>
               {/* Conducta Section */}
@@ -783,12 +899,13 @@ const ConductBalanceCertificate: React.FC<ConductBalanceCertificateProps> = ({
                   <>
                     <strong>{formData.studentName}</strong>, Código del Sigerd No.:{' '}
                     <strong>{formData.rne}</strong> del Grado <strong>{formData.courseName}</strong>,
-                    Año Escolar: <strong>{formData.schoolYear}</strong>. Hijo(a) de los señores:{' '}
+                    Año Escolar: <strong>{formData.schoolYear}</strong>. {formData.tutorPrefix}{' '}
                     <strong>{formData.tutorName}</strong>.
                   </>
                 ) : (
                   <>
-                    <strong>{formData.studentName}</strong>, del Grado <strong>{formData.courseName}</strong>. Hijo(a) de los señores:{' '}
+                    <strong>{formData.studentName}</strong>, del Grado <strong>{formData.courseName}</strong>.{' '}
+                    {formData.tutorPrefix}{' '}
                     <strong>{formData.tutorName}</strong>.
                   </>
                 )}
