@@ -200,24 +200,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const performFetch = async () => {
-        setState((prev) => ({ ...prev, loading: true }));
-
-        // 0. Si no hay conexión a internet, cargar directamente el snapshot escolar de IndexedDB
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          try {
-            const snapshot = await getStateSnapshot(targetCid);
-            if (snapshot) {
-              console.log('[AppContext] Modo offline: snapshot cargado con éxito para centro:', targetCid);
-              setState((prev) => ({
-                ...prev,
-                ...snapshot,
-                loading: false
-              }));
+        // 0. Estrategia Stale-While-Revalidate: si hay snapshot local en IndexedDB,
+        // hidratamos de inmediato para renderizado instantáneo (0ms) sin congelar la pantalla.
+        let hasLoadedFromSnapshot = false;
+        try {
+          const snapshot = await getStateSnapshot(targetCid);
+          if (snapshot) {
+            console.log('[AppContext] Stale-While-Revalidate: snapshot cargado para renderizado instantáneo:', targetCid);
+            setState((prev) => ({
+              ...prev,
+              ...snapshot,
+              loading: false
+            }));
+            hasLoadedFromSnapshot = true;
+            // Si estamos sin conexión, finalizar aquí
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
               return;
             }
-          } catch (offlineErr) {
-            console.warn('[AppContext] Error al leer snapshot offline:', offlineErr);
           }
+        } catch (snapshotErr) {
+          console.warn('[AppContext] Error al leer snapshot inicial:', snapshotErr);
+        }
+
+        // Si no había snapshot en caché (primera visita), activar estado de carga normal
+        if (!hasLoadedFromSnapshot) {
+          setState((prev) => ({ ...prev, loading: true }));
         }
 
         try {
@@ -262,6 +269,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return { data: allRows, error: null };
           };
 
+          // --- FASE 1A: METADATOS ESENCIALES RÁPIDOS (Centro, Licencia y Años Lectivos) ---
+          const [centRes, licRes, syRes] = await Promise.all([
+            supabase.from('centers').select('*').eq('id', targetCid).single(),
+            supabase
+              .from('saas_licenses')
+              .select('*, plan:saas_plans(*)')
+              .eq('used_by_center', targetCid)
+              .maybeSingle(),
+            resolvedSyResData
+              ? Promise.resolve({ data: resolvedSyResData, error: null })
+              : supabase
+                  .from('school_years')
+                  .select('*')
+                  .eq('center_id', targetCid)
+                  .order('name', { ascending: false })
+          ]);
+
+          if (centRes.data) {
+            setCenter(centRes.data);
+            try {
+              localStorage.setItem('edugens_active_center', JSON.stringify(centRes.data));
+              if (centRes.data.name) {
+                localStorage.setItem('edugens_center_name', centRes.data.name);
+              }
+            } catch {}
+          }
+
+          if (licRes && licRes.data) {
+            setLicense(licRes.data);
+            const expired = licRes.data.subscription_end_date
+              ? new Date(licRes.data.subscription_end_date) < new Date()
+              : false;
+            setIsSubscriptionExpired(expired);
+          } else {
+            setLicense(null);
+            setIsSubscriptionExpired(false);
+          }
+
+          // --- FASE 1B: DATOS ESCOLARES OPERATIVOS ---
           const [
             cRes,
             sRes,
@@ -279,11 +325,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             perfRes,
             lvlSchedRes,
             fEventsRes,
-            syRes,
             studRes,
             actRes,
-            centRes,
-            licRes,
             pPrefRes
           ] = await Promise.all([
             fetchAllPaginated((from, to) =>
@@ -325,13 +368,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               .limit(200),
             supabase.from('level_schedules').select('*').eq('center_id', targetCid),
             supabase.from('fixed_events').select('*').eq('center_id', targetCid),
-            resolvedSyResData
-              ? Promise.resolve({ data: resolvedSyResData, error: null })
-              : supabase
-                  .from('school_years')
-                  .select('*')
-                  .eq('center_id', targetCid)
-                  .order('name', { ascending: false }),
             fetchAllPaginated((from, to) =>
               supabase
                 .from('students')
@@ -362,35 +398,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return { data: [], error: null };
               }
             })(),
-            supabase.from('centers').select('*').eq('id', targetCid).single(),
-            supabase
-              .from('saas_licenses')
-              .select('*, plan:saas_plans(*)')
-              .eq('used_by_center', targetCid)
-              .maybeSingle(),
             supabase.from('priority_preferences').select('*').eq('center_id', targetCid)
           ]);
-
-          if (centRes.data) {
-            setCenter(centRes.data);
-            try {
-              localStorage.setItem('edugens_active_center', JSON.stringify(centRes.data));
-              if (centRes.data.name) {
-                localStorage.setItem('edugens_center_name', centRes.data.name);
-              }
-            } catch {}
-          }
-
-          if (licRes && licRes.data) {
-            setLicense(licRes.data);
-            const expired = licRes.data.subscription_end_date
-              ? new Date(licRes.data.subscription_end_date) < new Date()
-              : false;
-            setIsSubscriptionExpired(expired);
-          } else {
-            setLicense(null);
-            setIsSubscriptionExpired(false);
-          }
 
           const normalize = (t: any, priority: number) => {
             const name = (t.name || t.full_name || 'Sin Nombre').trim();
