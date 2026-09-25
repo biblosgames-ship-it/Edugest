@@ -849,7 +849,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
     setIsSendingDirectMessage(true);
     try {
-      const senderName = currentTeacherIdentity?.name || profile?.full_name || 'Docente';
+      const senderName = profile?.full_name || 'Docente';
 
       await dataService.saveCommunication({
         center_id: centerId,
@@ -1873,7 +1873,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     const partialLink = parseTaskPartialLink(task);
     const isLinked = partialLink.linked;
     const compId = partialLink.competencyId || 'c1';
-    const compLabel = activeCompetencies.find((c) => c.id === compId)?.label || compId.toUpperCase();
+    const competencyLabel = activeCompetencies.find((c) => c.id === compId)?.label || compId.toUpperCase();
 
     const targetActId = `task_act_${task.id}`;
     let completed = 0;
@@ -4283,7 +4283,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                     <span className="font-bold text-xs flex items-center gap-1.5 truncate">
                       <span>{getStudentFullName(s)}</span>
                       {specialNotesMap[s.id] && (
-                        <Pin size={11} className="text-amber-600 fill-amber-500 shrink-0 rotate-45" title={specialNotesMap[s.id]} />
+                        <span title={specialNotesMap[s.id]} className="inline-flex">
+                          <Pin size={11} className="text-amber-600 fill-amber-500 shrink-0 rotate-45" />
+                        </span>
                       )}
                       {sExcuse && (
                         <span className={`px-1.5 py-0.2 rounded text-[8px] font-black text-white shrink-0 ${sExcuseBadgeBg}`} title={`Excusa: ${sExcuse.message}`}>
@@ -4343,17 +4345,6 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                 primaryContact?.role ||
                 (dbTutor ? 'Tutor' : dbMadre ? 'Madre' : dbPadre ? 'Padre' : 'Tutor / Encargado');
               const cleanPhone = primaryPhone.replace(/[^0-9]/g, '');
-
-              const openEditModal = () => {
-                setTutorEditForm({
-                  name: primaryName,
-                  relation: primaryRelation || 'Tutor',
-                  phone: primaryPhone,
-                  id_card: primaryContact?.secondary_phone || primaryContact?.id_card || '',
-                  occupation: primaryContact?.occupation || ''
-                });
-                setShowTutorEditModal(true);
-              };
 
               return (
                 <div className="space-y-6 animate-in fade-in duration-200">
