@@ -37,6 +37,7 @@ export const StudentManagement = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<'all' | 'Matutina' | 'Vespertina'>('all');
 
   // Resetear el curso seleccionado al cambiar el año escolar para evitar filtros fantasmas
   useEffect(() => {
@@ -50,6 +51,22 @@ export const StudentManagement = () => {
   const [localLoading, setLocalLoading] = useState(false);
   const showLoading = loading || localLoading;
 
+  const isVespertinaCourse = (c: any) => {
+    if (!c) return false;
+    const t = (c.tanda || '').toLowerCase();
+    const lvl = (c.level || '').toLowerCase();
+    return t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
+  };
+
+  const availableCourses = useMemo(() => {
+    const allSorted = sortCourses(state.courses || []);
+    if (selectedShiftFilter === 'all') return allSorted;
+    return allSorted.filter((c: any) => {
+      const isVes = isVespertinaCourse(c);
+      return selectedShiftFilter === 'Vespertina' ? isVes : !isVes;
+    });
+  }, [state.courses, selectedShiftFilter]);
+
   const normText = (str: string) =>
     (str || '')
       .toLowerCase()
@@ -60,6 +77,19 @@ export const StudentManagement = () => {
   // El filtrado ahora es local y ultra-rápido
   const filteredStudents = useMemo(() => {
     let result = [...(allStudents || [])];
+
+    // Filtro por tanda
+    if (selectedShiftFilter !== 'all') {
+      const shiftCourseIds = new Set(
+        (state.courses || [])
+          .filter((c: any) => {
+            const isVes = isVespertinaCourse(c);
+            return selectedShiftFilter === 'Vespertina' ? isVes : !isVes;
+          })
+          .map((c: any) => String(c.id))
+      );
+      result = result.filter((s) => shiftCourseIds.has(String(s.course_id)));
+    }
 
     // Filtro por curso
     if (selectedCourseId) {
@@ -87,7 +117,7 @@ export const StudentManagement = () => {
     }
 
     return result.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
-  }, [allStudents, selectedCourseId, searchTerm]);
+  }, [allStudents, selectedCourseId, selectedShiftFilter, searchTerm, state.courses]);
 
   const handleDownloadPDF = async (s: any) => {
     try {
@@ -366,8 +396,8 @@ export const StudentManagement = () => {
             </div>
           </div>
         </div>
-        <div className="flex flex-1 max-w-2xl gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-1 max-w-3xl gap-2.5 flex-wrap items-center">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
@@ -377,15 +407,69 @@ export const StudentManagement = () => {
               className="w-full pl-10 pr-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-[10px] font-black uppercase outline-none focus:border-indigo-500 focus:bg-surface transition-all shadow-inner"
             />
           </div>
+
+          {/* Filtro de Tanda: Todos (por defecto), Matutina, Vespertina */}
+          <div className="flex bg-brand-bg p-1 rounded-xl border border-border-main text-[10px] font-black uppercase shrink-0 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setSelectedShiftFilter('all')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                selectedShiftFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedShiftFilter('Matutina');
+                if (selectedCourseId) {
+                  const crs = (state.courses || []).find((c: any) => String(c.id) === String(selectedCourseId));
+                  if (crs && isVespertinaCourse(crs)) setSelectedCourseId('');
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                selectedShiftFilter === 'Matutina'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              Matutina
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedShiftFilter('Vespertina');
+                if (selectedCourseId) {
+                  const crs = (state.courses || []).find((c: any) => String(c.id) === String(selectedCourseId));
+                  if (crs && !isVespertinaCourse(crs)) setSelectedCourseId('');
+                }
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                selectedShiftFilter === 'Vespertina'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              Vespertina
+            </button>
+          </div>
+
           <select
             value={selectedCourseId}
             onChange={(e) => setSelectedCourseId(e.target.value)}
-            className="w-48 px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-[10px] font-black uppercase outline-none focus:border-indigo-500 focus:bg-surface transition-all shadow-inner cursor-pointer"
+            className="w-48 sm:w-56 px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-[10px] font-black uppercase outline-none focus:border-indigo-500 focus:bg-surface transition-all shadow-inner cursor-pointer"
           >
-            <option value="">TODOS LOS CURSOS</option>
-            {sortCourses(state.courses || []).map((c: any) => (
+            <option value="">
+              {selectedShiftFilter === 'all'
+                ? 'TODOS LOS CURSOS'
+                : `CURSOS (${selectedShiftFilter.toUpperCase()})`}
+            </option>
+            {availableCourses.map((c: any) => (
               <option key={c.id} value={c.id}>
-                {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                {c.level} {c.grade} "{c.section}" - {c.tanda || (isVespertinaCourse(c) ? 'Vespertina' : 'Matutina')}
               </option>
             ))}
           </select>

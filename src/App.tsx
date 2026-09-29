@@ -769,7 +769,7 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'saas' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <SaaSAdminPanel />
+              {activeView === 'saas' && <SaaSAdminPanel />}
             </div>
           </div>
         )}

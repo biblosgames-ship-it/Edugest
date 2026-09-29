@@ -37,6 +37,7 @@ import {
   calculateCleanSlotDurations
 } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
+import { sortCourses } from '../utils/courseSorter';
 
 export const ScheduleViewer = () => {
   const {
@@ -532,12 +533,42 @@ export const ScheduleViewer = () => {
     [teacherIdToKey]
   );
 
+  const isVespertinaCourse = useCallback((c: any) => {
+    if (!c) return false;
+    const t = (c.tanda || '').toLowerCase();
+    const lvl = (c.level || '').toLowerCase();
+    return t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
+  }, []);
+
+  const getEntryShift = useCallback((entry: any): 'Matutina' | 'Vespertina' => {
+    const sShift = (entry?.shift || '').toLowerCase();
+    if (sShift.includes('ves') || sShift.includes('tar')) return 'Vespertina';
+    if (sShift.includes('mat') || sShift.includes('mañ')) return 'Matutina';
+
+    const course = (state.courses || []).find((c: any) => String(c.id) === String(entry?.course_id || entry?.courseId));
+    if (course) {
+      return isVespertinaCourse(course) ? 'Vespertina' : 'Matutina';
+    }
+
+    const sTime = entry?.start_time || '';
+    if (sTime) {
+      const [h] = sTime.split(':').map(Number);
+      if (h >= 12) return 'Vespertina';
+    }
+    return 'Matutina';
+  }, [state.courses, isVespertinaCourse]);
+
   const filteredSchedule = useMemo(() => {
     const list = [...(state.schedule || [])];
-    const shiftBase = selectedShift.toLowerCase().substring(0, 3);
+
+    // Siempre filtrar por año escolar si está definido
+    const yearFiltered = list.filter((s: any) => {
+      if (!selectedYear) return true;
+      return !s.school_year || s.school_year === '' || s.school_year === selectedYear;
+    });
 
     if (filterType === 'course' && filterId) {
-      return list.filter((s: any) => {
+      return yearFiltered.filter((s: any) => {
         const sCid = s.course_id || s.courseId;
         return String(sCid) === String(filterId);
       });
@@ -545,25 +576,8 @@ export const ScheduleViewer = () => {
 
     if (filterType === 'teacher' && filterId) {
       // Filtrar estrictamente por la tanda seleccionada (Matutina o Vespertina)
-      return list.filter((s: any) => {
-        let yearMatch = true;
-        if (selectedYear) {
-          yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
-        }
-        if (!yearMatch) return false;
-
-        const sShift = (s.shift || '').toLowerCase();
-        const course = (state.courses || []).find((c: any) => String(c.id) === String(s.course_id || s.courseId));
-        const cTanda = (course?.tanda || '').toLowerCase();
-        const isEntryMorn =
-          sShift.includes('mat') ||
-          sShift.includes('mañ') ||
-          cTanda.includes('mat') ||
-          cTanda.includes('mañ') ||
-          (!sShift.includes('ves') && !sShift.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
-
-        const shiftMatch = selectedShift === 'Matutina' ? isEntryMorn : !isEntryMorn;
-        if (!shiftMatch) return false;
+      return yearFiltered.filter((s: any) => {
+        if (getEntryShift(s) !== selectedShift) return false;
 
         if (isSameTeacher(s.teacher_id, filterId)) return true;
         if (!s.teacher_id) {
@@ -578,17 +592,12 @@ export const ScheduleViewer = () => {
       });
     }
 
-    // Vista general (Todos los cursos)
-    return list.filter((s: any) => {
-      const sShift = (s.shift || '').toLowerCase();
-      const shiftMatch = !sShift || sShift.includes(shiftBase) || shiftBase.includes(sShift.substring(0, 3));
-      let yearMatch = true;
-      if (selectedYear) {
-        yearMatch = !s.school_year || s.school_year === '' || s.school_year === selectedYear;
-      }
-      return shiftMatch && yearMatch;
+    // Vista general (Todos los cursos):
+    // Filtrar estrictamente por la tanda seleccionada (sin mezclar matutinos y vespertinos)
+    return yearFiltered.filter((s: any) => {
+      return getEntryShift(s) === selectedShift;
     });
-  }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear, isSameTeacher]);
+  }, [state.schedule, state.assignments, filterType, filterId, selectedShift, selectedYear, isSameTeacher, getEntryShift]);
 
   const findOfficialSchedule = useCallback((schedules: any[], levelName: string, shiftName: string) => {
     if (!schedules || schedules.length === 0) return null;
@@ -1402,6 +1411,12 @@ export const ScheduleViewer = () => {
       entriesList.forEach((entry: any) => {
         if (!entry.day) return;
 
+        // Aislamiento estricto de tanda en el mapa: Si vemos Matutina, NUNCA ubicar entradas de tanda Vespertina, y viceversa
+        const targetShiftForEntry = opts?.shiftIsMorning !== undefined
+          ? (opts.shiftIsMorning ? 'Matutina' : 'Vespertina')
+          : selectedShift;
+        if (getEntryShift(entry) !== targetShiftForEntry) return;
+
         const normDay = normStr(entry.day);
         const matchedDay = tableDays.find((d) => normStr(d) === normDay);
         if (!matchedDay) return;
@@ -1484,7 +1499,7 @@ export const ScheduleViewer = () => {
 
       return map;
     },
-    [state.courses, state.timeBlocks, selectedShift, isMorning, normStr]
+    [state.courses, state.timeBlocks, selectedShift, isMorning, normStr, getEntryShift]
   );
 
   const entriesBySlotAndDay = useMemo(() => {
@@ -1959,14 +1974,7 @@ export const ScheduleViewer = () => {
           : state.teachers.filter((t: any) => {
               return (state.schedule || []).some((s: any) => {
                 if (!isSameTeacher(s.teacher_id, t.id)) return false;
-                const sh = (s.shift || '').toLowerCase();
-                const course = state.courses.find((c: any) => String(c.id) === String(s.course_id || s.courseId));
-                const cTanda = (course?.tanda || '').toLowerCase();
-                if (selectedShift === 'Matutina') {
-                  return sh.includes('mat') || sh.includes('mañ') || cTanda.includes('mat') || (!sh.includes('ves') && !sh.includes('tar') && !cTanda.includes('ves') && !cTanda.includes('tar'));
-                } else {
-                  return sh.includes('ves') || sh.includes('tar') || cTanda.includes('ves') || cTanda.includes('tar');
-                }
+                return getEntryShift(s) === selectedShift;
               });
             });
 
@@ -2191,16 +2199,12 @@ export const ScheduleViewer = () => {
         return;
       }
 
-      const shiftCourses = state.courses.filter((c: any) => {
-        const sBase = selectedShift.toLowerCase().substring(0, 3);
-        const tStr = (c.tanda || '').toLowerCase();
-        const lvlStr = (c.level || '').toLowerCase();
-        if (sBase === 'mat') {
-          return !tStr.includes('ves') && !tStr.includes('tar');
-        } else {
-          return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
-        }
-      });
+      const shiftCourses = sortCourses(
+        state.courses.filter((c: any) => {
+          const isVes = isVespertinaCourse(c);
+          return selectedShift === 'Vespertina' ? isVes : !isVes;
+        })
+      );
 
       const currentSelectedCourse =
         filterType === 'course' && filterId
@@ -2463,6 +2467,19 @@ export const ScheduleViewer = () => {
               try {
                 localStorage.setItem('edugens_selected_shift', shift);
               } catch {}
+              if (filterType === 'course' && filterId) {
+                const currentCourse = (state.courses || []).find((c: any) => String(c.id) === String(filterId));
+                if (currentCourse) {
+                  const t = (currentCourse.tanda || '').toLowerCase();
+                  const lvl = (currentCourse.level || '').toLowerCase();
+                  const isVes = t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
+                  const courseShift = isVes ? 'Vespertina' : 'Matutina';
+                  if (courseShift !== shift) {
+                    setFilterId('');
+                    try { localStorage.removeItem('selected_course_id'); } catch {}
+                  }
+                }
+              }
             };
 
             return (
@@ -2578,10 +2595,17 @@ export const ScheduleViewer = () => {
                   }}
                   className="px-6 py-2.5 rounded-2xl bg-slate-50 border-none text-[10px] font-black uppercase shadow-inner"
                 >
-                  <option value="">Seleccionar Curso...</option>
-                  {state.courses.map((c) => (
+                  <option value="">Seleccionar Curso ({selectedShift})...</option>
+                  {sortCourses(
+                    (state.courses || []).filter((c) => {
+                      const t = (c.tanda || '').toLowerCase();
+                      const lvl = (c.level || '').toLowerCase();
+                      const isVes = t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
+                      return selectedShift === 'Vespertina' ? isVes : !isVes;
+                    })
+                  ).map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                      {c.level} {c.grade} "{c.section}" - {c.tanda || selectedShift}
                     </option>
                   ))}
                 </select>
@@ -2858,12 +2882,8 @@ export const ScheduleViewer = () => {
                 filterType === 'course' && filterId
                   ? state.courses.filter((c: any) => c.id === filterId)
                   : state.courses.filter((c: any) => {
-                      const tStr = (c.tanda || '').toLowerCase().trim();
-                      if (shiftBaseVal === 'mat') {
-                        return !tStr.includes('ves') && !tStr.includes('tar');
-                      } else {
-                        return tStr.includes('ves') || tStr.includes('tar');
-                      }
+                      const isVes = isVespertinaCourse(c);
+                      return selectedShift === 'Vespertina' ? isVes : !isVes;
                     });
 
               coursesToAudit.forEach((course: any) => {
@@ -3751,23 +3771,17 @@ export const ScheduleViewer = () => {
                   }}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="">-- Elige un Curso --</option>
-                  {state.courses
-                    .filter((c: any) => {
-                      const sBase = selectedShift.toLowerCase().substring(0, 3);
-                      const tStr = (c.tanda || '').toLowerCase();
-                      const lvlStr = (c.level || '').toLowerCase();
-                      if (sBase === 'mat') {
-                        return !tStr.includes('ves') && !tStr.includes('tar');
-                      } else {
-                        return tStr.includes('ves') || tStr.includes('tar') || (tStr === '' && lvlStr.includes('secun'));
-                      }
+                  <option value="">-- Elige un Curso ({selectedShift}) --</option>
+                  {sortCourses(
+                    (state.courses || []).filter((c: any) => {
+                      const isVes = isVespertinaCourse(c);
+                      return selectedShift === 'Vespertina' ? isVes : !isVes;
                     })
-                    .map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
-                      </option>
-                    ))}
+                  ).map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.level} {c.grade} "{c.section || ''}" - {c.tanda || selectedShift}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -4083,10 +4097,17 @@ export const ScheduleViewer = () => {
                     }
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="">-- Elige un Curso --</option>
-                    {state.courses.map((c) => (
+                    <option value="">-- Elige un Curso ({selectedShift}) --</option>
+                    {sortCourses(
+                      (state.courses || []).filter((c) => {
+                        const t = (c.tanda || '').toLowerCase();
+                        const lvl = (c.level || '').toLowerCase();
+                        const isVes = t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
+                        return selectedShift === 'Vespertina' ? isVes : !isVes;
+                      })
+                    ).map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.level} {c.grade} "{c.section || ''}" - {c.tanda || 'Matutina'}
+                        {c.level} {c.grade} "{c.section || ''}" - {c.tanda || selectedShift}
                       </option>
                     ))}
                   </select>

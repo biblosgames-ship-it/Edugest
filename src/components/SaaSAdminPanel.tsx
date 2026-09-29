@@ -73,6 +73,7 @@ export const SaaSAdminPanel: React.FC = () => {
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [payments, setPayments] = useState<SaaSPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Forms state
   const [generateCount, setGenerateCount] = useState(1);
@@ -257,6 +258,7 @@ export const SaaSAdminPanel: React.FC = () => {
 
   const fetchData = async () => {
     setIsLoading(true);
+    setFetchError(null);
     try {
       const [newStats, newLicenses, newPlans, newPayments, newContracts] = await Promise.all([
         getDashboardStats(),
@@ -276,7 +278,9 @@ export const SaaSAdminPanel: React.FC = () => {
         // Ignorar silenciosamente ya que otra consulta paralela resolverá y cargará la información
         return;
       }
-      alert('Error cargando datos del panel: ' + error.message);
+      const errMsg = error.message || 'Error de conexión con el servidor';
+      setFetchError(errMsg);
+      toast.error('Error al cargar datos del panel SaaS: ' + errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -937,6 +941,26 @@ soporte@edugest.net`;
     return (
       <div className="flex justify-center items-center h-64">
         <RefreshCw className="animate-spin text-brand-blue" size={32} />
+      </div>
+    );
+  }
+
+  if (!isLoading && !stats && fetchError) {
+    return (
+      <div className="card p-12 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4 my-8">
+        <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center">
+          <Activity size={28} />
+        </div>
+        <div>
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">No se pudieron cargar los datos del panel SaaS</h3>
+          <p className="text-xs font-semibold text-slate-500 max-w-md mt-1">{fetchError}</p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-wider hover:bg-indigo-700 transition shadow-md active:scale-95"
+        >
+          <RefreshCw size={16} /> Reintentar Carga
+        </button>
       </div>
     );
   }
