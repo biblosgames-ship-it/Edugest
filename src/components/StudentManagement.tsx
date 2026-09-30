@@ -17,7 +17,8 @@ import {
   Printer,
   UserPlus,
   Search,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowRightLeft
 } from 'lucide-react';
 import { StudentForm } from './StudentForm';
 import { BulkImport } from './BulkImport';
@@ -28,6 +29,7 @@ import { generateStudentPDF } from '../utils/pdfGenerator';
 import { exportStudentsToExcel } from '../utils/listPdfGenerator';
 import { PromoteStudentModal } from './PromoteStudentModal';
 import { BulkPromoteModal } from './BulkPromoteModal';
+import { BulkMoveModal } from './BulkMoveModal';
 
 export const StudentManagement = () => {
   const queryClient = useQueryClient();
@@ -46,6 +48,7 @@ export const StudentManagement = () => {
   const [showForm, setShowForm] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showBulkPromote, setShowBulkPromote] = useState(false);
+  const [showBulkMove, setShowBulkMove] = useState(false);
   const [editingStudent, setEditingStudent] = useState<any>(null);
   const [promotingStudent, setPromotingStudent] = useState<any>(null);
   const [localLoading, setLocalLoading] = useState(false);
@@ -485,6 +488,15 @@ export const StudentManagement = () => {
           )}
           {selectedCourseId && (
             <button
+              onClick={() => setShowBulkMove(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl"
+              title="Mover masivamente alumnos de este curso a otra sección"
+            >
+              <ArrowRightLeft size={16} /> Mover de Sección
+            </button>
+          )}
+          {selectedCourseId && (
+            <button
               onClick={() => setShowBulkPromote(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl"
             >
@@ -751,6 +763,19 @@ export const StudentManagement = () => {
             />
           </div>
         </div>
+      )}
+
+      {showBulkMove && selectedCourseId && (
+        <BulkMoveModal
+          sourceCourseId={selectedCourseId}
+          onClose={() => setShowBulkMove(false)}
+          onSuccess={(newCourseId) => {
+            setShowBulkMove(false);
+            if (newCourseId) {
+              setSelectedCourseId(newCourseId);
+            }
+          }}
+        />
       )}
     </div>
   );

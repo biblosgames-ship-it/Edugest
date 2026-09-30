@@ -15,7 +15,10 @@ import {
   Loader2,
   Plus,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  ArrowUp,
+  ArrowDown,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -51,8 +54,8 @@ export const PreferencesForm = () => {
   const [cycleSlots, setCycleSlots] = useState<Array<{ label: string; start: string; end: string; isBreak: boolean }>>([
     { label: '1ra Hora', start: '08:00', end: '08:45', isBreak: false },
     { label: '2da Hora', start: '08:45', end: '09:30', isBreak: false },
-    { label: 'RECREO', start: '09:30', end: '10:00', isBreak: true },
-    { label: '3ra Hora', start: '10:00', end: '10:45', isBreak: false },
+    { label: '3ra Hora', start: '09:30', end: '10:15', isBreak: false },
+    { label: 'RECREO', start: '10:15', end: '10:45', isBreak: true },
     { label: '4ta Hora', start: '10:45', end: '11:30', isBreak: false },
     { label: '5ta Hora', start: '11:30', end: '12:15', isBreak: false },
     { label: '6ta Hora', start: '12:15', end: '13:00', isBreak: false }
@@ -69,9 +72,52 @@ export const PreferencesForm = () => {
     }
   }, [cycleBlockLevel, cycleBlockCycle, cycleBlockShift, state.cycleTimeBlocks]);
 
-  const applyCyclePreset = (minutes: number) => {
+  const rechainTimes = (slots: Array<{ label: string; start: string; end: string; isBreak: boolean }>) => {
+    if (slots.length === 0) return slots;
+    let curTime = slots[0].start || '08:00';
+    return slots.map((s) => {
+      const [sh, sm] = (s.start || curTime).split(':').map(Number);
+      const [eh, em] = (s.end || curTime).split(':').map(Number);
+      let dur = ((eh || 0) * 60 + (em || 0)) - ((sh || 0) * 60 + (sm || 0));
+      if (dur <= 0) dur = s.isBreak ? 25 : 45;
+
+      const [ch, cm] = curTime.split(':').map(Number);
+      const startMins = (ch || 0) * 60 + (cm || 0);
+      const endMins = startMins + dur;
+      const startStr = curTime;
+      const endStr = `${Math.floor(endMins / 60).toString().padStart(2, '0')}:${(endMins % 60).toString().padStart(2, '0')}`;
+      curTime = endStr;
+      return { ...s, start: startStr, end: endStr };
+    });
+  };
+
+  const moveSlot = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= cycleSlots.length) return;
+    const copy = [...cycleSlots];
+    const item = copy[index];
+    copy.splice(index, 1);
+    copy.splice(targetIndex, 0, item);
+    // Reencadenar las horas para mantener la continuidad cronológica respetando las duraciones
+    setCycleSlots(rechainTimes(copy));
+  };
+
+  const renumberHours = () => {
+    let hourCount = 1;
+    const copy = cycleSlots.map((s) => {
+      if (s.isBreak) {
+        return { ...s, label: s.label.toLowerCase().includes('recreo') ? s.label : 'RECREO' };
+      }
+      const label = `${hourCount}ra Hora`;
+      hourCount++;
+      return { ...s, label };
+    });
+    setCycleSlots(copy);
+  };
+
+  const applyCyclePreset = (minutes: number, preCount = 3, postCount = 3, customBreakDur?: number) => {
     const isMorn = cycleBlockShift === 'Matutina';
-    const baseStart = isMorn ? 480 : 840; // 08:00 o 14:00
+    const baseStart = isMorn ? 480 : 840; // 08:00 (480 min) o 14:00 (840 min = 2:00 PM)
     const toTimeStr = (m: number) => {
       const hh = Math.floor(m / 60).toString().padStart(2, '0');
       const mm = (m % 60).toString().padStart(2, '0');
@@ -81,8 +127,7 @@ export const PreferencesForm = () => {
     let cur = baseStart;
     const newSlots: Array<{ label: string; start: string; end: string; isBreak: boolean }> = [];
 
-    // Pre-recreo: 2 horas
-    const preCount = minutes >= 50 ? 2 : 2;
+    // Pre-recreo: 3 horas (1ra, 2da, 3ra Hora)
     for (let i = 0; i < preCount; i++) {
       const s = cur;
       const e = cur + minutes;
@@ -90,15 +135,14 @@ export const PreferencesForm = () => {
       cur = e;
     }
 
-    // Recreo (30 min en mañana, 25 min en tarde)
-    const breakDur = isMorn ? 30 : 25;
+    // Recreo (4to bloque)
+    const breakDur = customBreakDur !== undefined ? customBreakDur : (isMorn ? 30 : 20);
     const breakStart = cur;
     const breakEnd = cur + breakDur;
     newSlots.push({ label: 'RECREO', start: toTimeStr(breakStart), end: toTimeStr(breakEnd), isBreak: true });
     cur = breakEnd;
 
-    // Post-recreo: 3 o 4 horas
-    const postCount = minutes >= 50 ? 3 : 4;
+    // Post-recreo: 3 horas (4ta, 5ta, 6ta Hora)
     for (let i = 0; i < postCount; i++) {
       const s = cur;
       const e = cur + minutes;
@@ -1073,24 +1117,45 @@ export const PreferencesForm = () => {
               </span>
               <button
                 type="button"
-                onClick={() => applyCyclePreset(45)}
-                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => applyCyclePreset(45, 3, 3)}
+                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="3 horas de clase + Recreo en 4to bloque + 3 horas de clase (45 min)"
               >
-                <Sparkles size={13} /> 45 min (Estándar MINERD)
+                <Sparkles size={13} /> 3 Horas + Recreo + 3 Horas (45 min)
               </button>
               <button
                 type="button"
-                onClick={() => applyCyclePreset(50)}
-                className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => applyCyclePreset(40, 3, 3)}
+                className="px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="3 horas de clase + Recreo en 4to bloque + 3 horas de clase (40 min)"
               >
-                <Sparkles size={13} /> 50 min (Politécnico / Secundaria)
+                <Sparkles size={13} /> 3 Horas + Recreo + 3 Horas (40 min)
               </button>
+              {cycleBlockShift === 'Vespertina' ? (
+                <button
+                  type="button"
+                  onClick={() => applyCyclePreset(39, 3, 3, 16)}
+                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Horario de 2:00 a 6:10 (Recreo en el 4to bloque)"
+                >
+                  <Sparkles size={13} /> Vespertina 2:00 a 6:10 (3+Rec+3)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => applyCyclePreset(50, 3, 3)}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Sparkles size={13} /> 50 min (3+Rec+3)
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => applyCyclePreset(40)}
-                className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={renumberHours}
+                className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer sm:ml-auto shadow-xs"
+                title="Renumera automáticamente las horas respetando la posición del Recreo"
               >
-                <Sparkles size={13} /> 40 min
+                <RefreshCw size={13} /> Renumerar Horas
               </button>
             </div>
 
@@ -1098,10 +1163,10 @@ export const PreferencesForm = () => {
             <div className="space-y-2 border border-slate-100 rounded-2xl overflow-hidden shadow-inner p-3 bg-slate-50/50">
               <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 pb-1">
                 <div className="col-span-1 text-center">#</div>
-                <div className="col-span-4">Nombre / Etiqueta</div>
+                <div className="col-span-3">Nombre / Etiqueta</div>
                 <div className="col-span-3">Hora Inicio</div>
                 <div className="col-span-3">Hora Fin</div>
-                <div className="col-span-1 text-center">Tipo</div>
+                <div className="col-span-2 text-center">Acciones</div>
               </div>
 
               {cycleSlots.map((slot, idx) => (
@@ -1109,14 +1174,14 @@ export const PreferencesForm = () => {
                   key={idx}
                   className={`grid grid-cols-1 sm:grid-cols-12 gap-2 items-center p-2.5 rounded-xl border transition-all ${
                     slot.isBreak
-                      ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                      ? 'bg-amber-50/90 border-amber-300 text-amber-900 shadow-xs'
                       : 'bg-white border-slate-200/70 text-slate-800 shadow-sm'
                   }`}
                 >
                   <div className="col-span-1 text-center font-bold text-xs text-slate-400 sm:block hidden">
                     {idx + 1}
                   </div>
-                  <div className="col-span-4">
+                  <div className="col-span-3">
                     <input
                       type="text"
                       value={slot.label}
@@ -1153,7 +1218,25 @@ export const PreferencesForm = () => {
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-500"
                     />
                   </div>
-                  <div className="col-span-1 flex items-center justify-center gap-1">
+                  <div className="col-span-2 flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveSlot(idx, 'up')}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                      title="Mover bloque hacia arriba"
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === cycleSlots.length - 1}
+                      onClick={() => moveSlot(idx, 'down')}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                      title="Mover bloque hacia abajo"
+                    >
+                      <ArrowDown size={14} />
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1164,9 +1247,9 @@ export const PreferencesForm = () => {
                         }
                         setCycleSlots(copy);
                       }}
-                      className={`p-1.5 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
                         slot.isBreak
-                          ? 'bg-amber-500 text-white'
+                          ? 'bg-amber-500 text-white shadow-xs'
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                       }`}
                       title={slot.isBreak ? 'Es Recreo (clic para cambiar a clase)' : 'Es Clase (clic para cambiar a recreo)'}

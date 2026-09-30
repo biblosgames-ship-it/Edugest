@@ -691,7 +691,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   };
 
   const getAccountLabel = (key: string) => {
-    if (key === 'caja_chica') return 'Caja Chica';
+    if (key === 'caja_chica') return 'Caja Efectivo';
     if (key === 'caja_general' || key === 'banco') return 'Caja General';
     if (key === 'cuenta_banco') return 'Cuenta de Banco';
     return key;
@@ -1138,7 +1138,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
               <Banknote size={20} />
             </div>
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Caja Chica</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Caja Efectivo</p>
               <p className="text-[9px] font-bold text-slate-400 uppercase">Efectivo Físico</p>
             </div>
             <button
@@ -1409,7 +1409,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                 className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-48"
               >
                 <option value="all">Todas las Cuentas</option>
-                <option value="caja_chica">💵 Caja Chica</option>
+                <option value="caja_chica">💵 Caja Efectivo</option>
                 <option value="caja_general">💼 Caja General</option>
                 <option value="cuenta_banco">🏦 Cuenta Banco</option>
               </select>
@@ -1467,7 +1467,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg border border-emerald-100">
-                      <Banknote size={10} /> Caja Chica
+                      <Banknote size={10} /> Caja Efectivo
                     </span>
                   )}
                 </td>
@@ -1711,7 +1711,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                       }`}
                     >
                       <Banknote size={14} />
-                      Caja Chica
+                      Caja Efectivo
                     </button>
                     <button
                       type="button"
@@ -1829,7 +1829,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     onChange={(e) => setTransferFrom(e.target.value)}
                     className="w-full px-4 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
                   >
-                    <option value="caja_chica">💵 Caja Chica</option>
+                    <option value="caja_chica">💵 Caja Efectivo</option>
                     <option value="caja_general">💼 Caja General</option>
                     <option value="cuenta_banco">🏦 Cuenta Banco</option>
                   </select>
@@ -1845,7 +1845,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                     className="w-full px-4 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
                   >
                     <option value="caja_general">💼 Caja General</option>
-                    <option value="caja_chica">💵 Caja Chica</option>
+                    <option value="caja_chica">💵 Caja Efectivo</option>
                     <option value="cuenta_banco">🏦 Cuenta Banco</option>
                   </select>
                 </div>
@@ -1991,7 +1991,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
                   onChange={(e) => setEditCashAccount(e.target.value)}
                   className="w-full px-6 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-600"
                 >
-                  <option value="caja_chica">💵 Caja Chica</option>
+                  <option value="caja_chica">💵 Caja Efectivo</option>
                   <option value="caja_general">🏢 Caja General</option>
                   <option value="cuenta_banco">🏦 Cuenta Banco</option>
                 </select>

@@ -131,6 +131,12 @@ export const TeacherDashboard = ({
   const [showWeeklyScheduleModal, setShowWeeklyScheduleModal] = useState<boolean>(false);
 
   useEffect(() => {
+    if (showCreateForm || editingTask || editingAnnouncement) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [showCreateForm, editingTask, editingAnnouncement]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowWeeklyScheduleModal(false);

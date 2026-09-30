@@ -3579,18 +3579,28 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
           {/* MODAL PARA CREAR O EDITAR TAREA */}
           {showTaskModal && (
-            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-8">
-                <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 p-6 text-white flex items-center justify-between border-b border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-                      <BookOpen size={24} />
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 md:p-6 animate-fade-in"
+              onClick={() => {
+                setShowTaskModal(false);
+                setEditingTask(null);
+              }}
+            >
+              <div
+                className="bg-white dark:bg-slate-900 w-full max-w-xl lg:max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[88vh] overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Encabezado Fijo - Siempre visible arriba */}
+                <div className="shrink-0 bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between border-b border-white/10">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                      <BookOpen size={18} className="sm:w-5 sm:h-5 text-white" />
                     </div>
-                    <div>
-                      <h3 className="font-black text-lg uppercase tracking-tight text-white">
+                    <div className="min-w-0">
+                      <h3 className="font-black text-sm sm:text-base uppercase tracking-tight text-white truncate">
                         {editingTask ? 'Editar Tarea' : 'Nueva Tarea / Asignación'}
                       </h3>
-                      <p className="text-xs text-indigo-100">
+                      <p className="text-[11px] sm:text-xs text-indigo-100 font-medium truncate">
                         {editingTask ? 'Modifica los detalles de la asignación' : 'Publica una tarea para este grado'}
                       </p>
                     </div>
@@ -3601,227 +3611,230 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       setShowTaskModal(false);
                       setEditingTask(null);
                     }}
-                    className="text-white/70 hover:text-white p-1 rounded-xl hover:bg-white/10 cursor-pointer"
+                    className="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 cursor-pointer shrink-0 transition-colors ml-2"
+                    title="Cerrar ventana"
                   >
-                    <X size={22} />
+                    <X size={20} />
                   </button>
                 </div>
 
-                <form onSubmit={handleSaveTask} className="p-6 md:p-8 space-y-6">
-                  {/* Título */}
-                  <div className="space-y-2">
-                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                      Título de la Asignación *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Informe de Lectura - Capítulo 3"
-                      value={taskFormData.title}
-                      onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
-                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
-                      required
-                    />
-                  </div>
-
-                  {/* Periodo, Asignatura y Fecha de Entrega */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                        Período Escolar *
+                <form onSubmit={handleSaveTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
+                    {/* Título */}
+                    <div className="space-y-1 sm:space-y-1.5">
+                      <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                        Título de la Asignación *
                       </label>
-                      <select
-                        value={taskFormData.period}
-                        onChange={(e) => setTaskFormData({ ...taskFormData, period: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                      <input
+                        type="text"
+                        placeholder="Ej: Informe de Lectura - Capítulo 3"
+                        value={taskFormData.title}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
+                        className="w-full p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs sm:text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
                         required
-                      >
-                        <option value="P1">Período 1 (P1)</option>
-                        <option value="P2">Período 2 (P2)</option>
-                        <option value="P3">Período 3 (P3)</option>
-                        <option value="P4">Período 4 (P4)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                        Materia Asociada
-                      </label>
-                      <select
-                        value={taskFormData.subject_id}
-                        onChange={(e) => setTaskFormData({ ...taskFormData, subject_id: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
-                      >
-                        <option value="">GENERAL / TODAS</option>
-                        {availableSubjects.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                        Fecha y Hora Límite
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={taskFormData.due_date}
-                        onChange={(e) => setTaskFormData({ ...taskFormData, due_date: e.target.value })}
-                        className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                       />
                     </div>
-                  </div>
 
-                  {/* Instrucciones / Descripción */}
-                  <div className="space-y-2">
-                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                      Instrucciones y Criterios de Evaluación
-                    </label>
-                    <textarea
-                      placeholder="Indica detalladamente los pasos a seguir para completar la tarea... Puedes incluir enlaces (ej: https://... o www....) y se convertirán en enlaces clicables."
-                      value={taskFormData.description}
-                      onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
-                      rows={4}
-                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-relaxed resize-none transition-all"
-                    />
-                    {taskFormData.description && parseTextWithLinks(taskFormData.description).some((p) => p.type === 'link') && (
-                      <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900">
-                        <span>🔗 Enlaces detectados en el texto. Se mostrarán como enlaces directos para los estudiantes.</span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Vinculación con Calificaciones Parciales */}
-                  <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Award size={18} className="text-indigo-600 dark:text-indigo-400" />
-                        <div>
-                          <label className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block">
-                            Vincular a Calificación Parcial
-                          </label>
-                          <p className="text-[10px] text-text-muted font-medium">
-                            Permite calificar la tarea y transferir automáticamente la nota a Calificaciones Parciales.
-                          </p>
-                        </div>
+                    {/* Periodo, Asignatura y Fecha de Entrega */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1 sm:space-y-1.5">
+                        <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          Período Escolar *
+                        </label>
+                        <select
+                          value={taskFormData.period}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, period: e.target.value })}
+                          className="w-full p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                          required
+                        >
+                          <option value="P1">Período 1 (P1)</option>
+                          <option value="P2">Período 2 (P2)</option>
+                          <option value="P3">Período 3 (P3)</option>
+                          <option value="P4">Período 4 (P4)</option>
+                        </select>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={taskFormData.linkToPartial || false}
-                        onChange={(e) => setTaskFormData({ ...taskFormData, linkToPartial: e.target.checked })}
-                        className="w-5 h-5 text-indigo-600 rounded-lg cursor-pointer accent-brand-blue"
-                      />
+
+                      <div className="space-y-1 sm:space-y-1.5">
+                        <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          Materia Asociada
+                        </label>
+                        <select
+                          value={taskFormData.subject_id}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, subject_id: e.target.value })}
+                          className="w-full p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                        >
+                          <option value="">GENERAL / TODAS</option>
+                          {availableSubjects.map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1 sm:space-y-1.5">
+                        <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          Fecha y Hora Límite
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={taskFormData.due_date}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, due_date: e.target.value })}
+                          className="w-full p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+                        />
+                      </div>
                     </div>
 
-                    {taskFormData.linkToPartial && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-indigo-100 dark:border-indigo-900/60">
-                        <div className="space-y-1">
-                          <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
-                            Competencia a Evaluar
-                          </label>
-                          <select
-                            value={taskFormData.linkedCompetencyId || 'c1'}
-                            onChange={(e) => setTaskFormData({ ...taskFormData, linkedCompetencyId: e.target.value })}
-                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                          >
-                            {activeCompetencies.map((comp) => (
-                              <option key={comp.id} value={comp.id}>
-                                {comp.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                    {/* Instrucciones / Descripción */}
+                    <div className="space-y-1 sm:space-y-1.5">
+                      <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                        Instrucciones y Criterios de Evaluación
+                      </label>
+                      <textarea
+                        placeholder="Indica detalladamente los pasos a seguir para completar la tarea... Puedes incluir enlaces (ej: https://... o www....) y se convertirán en enlaces clicables."
+                        value={taskFormData.description}
+                        onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
+                        rows={3}
+                        className="w-full p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-relaxed resize-none transition-all"
+                      />
+                      {taskFormData.description && parseTextWithLinks(taskFormData.description).some((p) => p.type === 'link') && (
+                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900">
+                          <span>🔗 Enlaces detectados en el texto. Se mostrarán como enlaces directos para los estudiantes.</span>
+                        </p>
+                      )}
+                    </div>
 
+                    {/* Vinculación con Calificaciones Parciales */}
+                    <div className="p-3 sm:p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl sm:rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Award size={18} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                          <div className="min-w-0">
+                            <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block truncate">
+                              Vincular a Calificación Parcial
+                            </label>
+                            <p className="text-[9px] sm:text-[10px] text-text-muted font-medium line-clamp-1">
+                              Transfiere automáticamente la nota a Calificaciones Parciales.
+                            </p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={taskFormData.linkToPartial || false}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, linkToPartial: e.target.checked })}
+                          className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 rounded-lg cursor-pointer accent-brand-blue shrink-0"
+                        />
+                      </div>
+
+                      {taskFormData.linkToPartial && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-indigo-100 dark:border-indigo-900/60 animate-in fade-in duration-150">
+                          <div className="space-y-1">
+                            <label className="block text-[9px] sm:text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
+                              Competencia a Evaluar
+                            </label>
+                            <select
+                              value={taskFormData.linkedCompetencyId || 'c1'}
+                              onChange={(e) => setTaskFormData({ ...taskFormData, linkedCompetencyId: e.target.value })}
+                              className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              {activeCompetencies.map((comp) => (
+                                <option key={comp.id} value={comp.id}>
+                                  {comp.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[9px] sm:text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
+                              Puntuación Máxima
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={taskFormData.linkedMaxScore || 100}
+                              onChange={(e) => setTaskFormData({ ...taskFormData, linkedMaxScore: Number(e.target.value) || 100 })}
+                              className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Recursos Multimedia y Enlaces */}
+                    <div className="p-3 sm:p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+                        Recursos Adicionales (Opcional)
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div className="space-y-1">
-                          <label className="block text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
-                            Puntuación Máxima
+                          <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
+                            Enlace Drive / PDF / Web
                           </label>
                           <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={taskFormData.linkedMaxScore || 100}
-                            onChange={(e) => setTaskFormData({ ...taskFormData, linkedMaxScore: Number(e.target.value) || 100 })}
-                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            type="url"
+                            placeholder="https://drive.google.com/..."
+                            value={taskFormData.link_url}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, link_url: e.target.value })}
+                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
+                            Vídeo de YouTube o Foto
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://youtube.com/watch?v=..."
+                            value={taskFormData.media_url}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, media_url: e.target.value })}
+                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Recursos Multimedia y Enlaces */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
-                      Recursos Adicionales (Opcional)
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
-                          Enlace Drive / PDF / Web
-                        </label>
-                        <input
-                          type="url"
-                          placeholder="https://drive.google.com/..."
-                          value={taskFormData.link_url}
-                          onChange={(e) => setTaskFormData({ ...taskFormData, link_url: e.target.value })}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
 
                       <div className="space-y-1">
                         <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
-                          Vídeo de YouTube o Foto
+                          Acceso Directo a Google Classroom (para entrega en Classroom)
                         </label>
                         <input
                           type="url"
-                          placeholder="https://youtube.com/watch?v=..."
-                          value={taskFormData.media_url}
-                          onChange={(e) => setTaskFormData({ ...taskFormData, media_url: e.target.value })}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="https://classroom.google.com/c/..."
+                          value={taskFormData.classroom_url}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, classroom_url: e.target.value })}
+                          className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">
-                        Acceso Directo a Google Classroom (para entrega en Classroom)
-                      </label>
-                      <input
-                        type="url"
-                        placeholder="https://classroom.google.com/c/..."
-                        value={taskFormData.classroom_url}
-                        onChange={(e) => setTaskFormData({ ...taskFormData, classroom_url: e.target.value })}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
                   </div>
 
-                  {/* Botones de acción */}
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  {/* Botones de acción fijos en el pie */}
+                  <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-3.5 bg-slate-50 dark:bg-slate-900/90 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 sm:gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         setShowTaskModal(false);
                         setEditingTask(null);
                       }}
-                      className="px-5 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
+                      className="px-4 sm:px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold uppercase tracking-wider text-xs cursor-pointer transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={isSavingTask}
-                      className="px-6 py-3 bg-brand-blue hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-wider text-xs flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                      className="px-5 sm:px-6 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-wider text-xs flex items-center gap-2 shadow-lg shadow-brand-blue/30 disabled:opacity-50 cursor-pointer transition-all active:scale-95"
                     >
                       {isSavingTask ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Guardando...
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Guardando...</span>
                         </>
                       ) : (
                         <>
-                          <CheckCircle2 size={16} />
-                          {editingTask ? 'Actualizar Tarea' : 'Publicar Tarea Ahora'}
+                          <CheckCircle2 size={15} />
+                          <span>{editingTask ? 'Actualizar Tarea' : 'Publicar Tarea Ahora'}</span>
                         </>
                       )}
                     </button>

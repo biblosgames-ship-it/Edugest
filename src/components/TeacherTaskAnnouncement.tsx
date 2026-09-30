@@ -123,52 +123,52 @@ export const TeacherTaskAnnouncement = ({
   };
 
   const inputClass =
-    'w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium';
+    'w-full p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-xs sm:text-sm font-medium';
   const labelClass =
-    'block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1';
+    'block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1';
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in pb-10">
-      <div className="bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden">
+    <div className="max-w-3xl mx-auto animate-fade-in pb-8 px-2 sm:px-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
         {/* Header con gradiente */}
-        <div className="bg-indigo-600 p-8 text-white relative overflow-hidden">
+        <div className="bg-indigo-600 p-5 sm:p-6 text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl rounded-full -mr-20 -mt-20"></div>
-          <div className="relative z-10 flex items-center gap-6">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
-              {type === 'task' ? <GraduationCap size={32} /> : <Megaphone size={32} />}
+          <div className="relative z-10 flex items-center gap-3.5 sm:gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center shadow-inner shrink-0">
+              {type === 'task' ? <GraduationCap size={24} className="text-white" /> : <Megaphone size={24} className="text-white" />}
             </div>
-            <div>
-              <h2 className="text-3xl font-black uppercase tracking-tight">Crear Asignación</h2>
-              <p className="text-indigo-100 font-medium opacity-80 text-sm">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight truncate">Crear Asignación</h2>
+              <p className="text-indigo-100 font-medium opacity-90 text-xs sm:text-sm truncate">
                 Publica contenido multimedia para tus estudiantes
               </p>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-10">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-7">
           {/* Selector de Tipo y Clase */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-2">
               <label className={labelClass}>Tipo de Publicación</label>
-              <div className="flex p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+              <div className="flex p-1 bg-slate-100 rounded-xl border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setType('task')}
-                  className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${type === 'task' ? 'bg-white text-indigo-600 shadow-lg scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 py-2 sm:py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${type === 'task' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Plus size={14} /> Tarea
                 </button>
                 <button
                   type="button"
                   onClick={() => setType('announcement')}
-                  className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${type === 'announcement' ? 'bg-white text-indigo-600 shadow-lg scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 py-2 sm:py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${type === 'announcement' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Megaphone size={14} /> Comunicado
                 </button>
               </div>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-2">
               <label className={labelClass}>Clase / Curso Destino</label>
               <div className="relative">
                 <select
@@ -189,8 +189,8 @@ export const TeacherTaskAnnouncement = ({
           </div>
 
           {/* Materia y Fecha */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-2">
               <label className={labelClass}>Materia Asociada</label>
               <select
                 value={subjectId}
@@ -206,7 +206,7 @@ export const TeacherTaskAnnouncement = ({
               </select>
             </div>
             {type === 'task' && (
-              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+              <div className="space-y-2 animate-in slide-in-from-right-4 duration-300">
                 <label className={labelClass}>Fecha de Entrega</label>
                 <input
                   type="date"
@@ -220,8 +220,8 @@ export const TeacherTaskAnnouncement = ({
           </div>
 
           {/* Título y Contenido */}
-          <div className="space-y-6">
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="space-y-2">
               <label className={labelClass}>Título de la Asignación</label>
               <input
                 type="text"
@@ -232,7 +232,7 @@ export const TeacherTaskAnnouncement = ({
                 required
               />
             </div>
-            <div className="space-y-4">
+            <div className="space-y-2">
               <label className={labelClass}>Instrucciones / Descripción</label>
               <textarea
                 placeholder={
@@ -242,7 +242,7 @@ export const TeacherTaskAnnouncement = ({
                 }
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className={`${inputClass} h-40 resize-none leading-relaxed`}
+                className={`${inputClass} h-28 sm:h-32 resize-none leading-relaxed`}
                 required
               />
               {content && parseTextWithLinks(content).some((p) => p.type === 'link') && (
@@ -255,7 +255,7 @@ export const TeacherTaskAnnouncement = ({
 
           {/* SECCIÓN MULTIMEDIA (NUEVO) */}
           {/* SECCIÓN MULTIMEDIA - OPTIMIZADA PARA NUBE */}
-          <div className="space-y-8 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
+          <div className="space-y-4 sm:space-y-6 bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-200">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
               <div className="flex items-center gap-3">
                 <Globe size={20} className="text-indigo-600" />
@@ -406,13 +406,13 @@ export const TeacherTaskAnnouncement = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-amber-50 p-6 rounded-[2rem] border border-amber-100 text-amber-700">
-            <AlertCircle size={24} className="shrink-0" />
-            <div className="space-y-1">
+          <div className="flex items-center gap-3 bg-amber-50 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-amber-200 text-amber-800">
+            <AlertCircle size={20} className="shrink-0 text-amber-600" />
+            <div className="space-y-0.5">
               <p className="text-[10px] font-black uppercase tracking-wider">
                 Aviso de Privacidad y Almacenamiento
               </p>
-              <p className="text-xs font-medium opacity-90">
+              <p className="text-xs font-medium opacity-90 leading-relaxed">
                 Esta plataforma prioriza el uso de enlaces externos para garantizar la máxima
                 velocidad. Las tareas se publicarán en el muro del estudiante de inmediato.
               </p>
@@ -422,16 +422,16 @@ export const TeacherTaskAnnouncement = ({
           <button
             type="submit"
             disabled={isSaving}
-            className="w-full bg-slate-900 text-white py-6 rounded-3xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-4 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all shadow-2xl disabled:opacity-50"
+            className="w-full bg-slate-900 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 hover:bg-black active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
           >
             {isSaving ? (
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 Publicando...
               </div>
             ) : (
               <>
-                <CheckCircle2 size={22} />
+                <CheckCircle2 size={18} />
                 Publicar {type === 'task' ? 'Tarea' : 'Comunicado'} Ahora
               </>
             )}
