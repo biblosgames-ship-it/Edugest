@@ -2,17 +2,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { sortCourses } from '../utils/courseSorter';
 import {
   ArrowRightLeft,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   X,
-  Users,
   Search,
   CheckSquare,
   Square,
-  ArrowRight
+  ArrowRight,
+  GraduationCap,
+  Layers,
+  ArrowRightCircle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -34,35 +36,78 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Estados para selectores jerárquicos de destino
+  const [selectedTargetLevel, setSelectedTargetLevel] = useState<string>('ALL');
+  const [selectedTargetGrade, setSelectedTargetGrade] = useState<string>('ALL');
+
   // Curso de origen
   const sourceCourse = useMemo(() => {
     return (state.courses || []).find((c: any) => c.id === sourceCourseId);
   }, [state.courses, sourceCourseId]);
 
-  // Cursos disponibles para destino (del mismo año escolar, excluyendo el origen)
-  const availableTargetCourses = useMemo(() => {
-    return (state.courses || [])
-      .filter((c: any) => c.id !== sourceCourseId)
-      .sort((a: any, b: any) => {
-        // Ordenar primero los que coincidan en nivel y grado con el curso origen
-        const isSameGradeA = sourceCourse && a.level === sourceCourse.level && a.grade === sourceCourse.grade;
-        const isSameGradeB = sourceCourse && b.level === sourceCourse.level && b.grade === sourceCourse.grade;
-        if (isSameGradeA && !isSameGradeB) return -1;
-        if (!isSameGradeA && isSameGradeB) return 1;
-        return `${a.level} ${a.grade} ${a.section}`.localeCompare(`${b.level} ${b.grade} ${b.section}`);
-      });
-  }, [state.courses, sourceCourseId, sourceCourse]);
+  // Todos los cursos disponibles excepto el de origen, ordenados
+  const allTargetCourses = useMemo(() => {
+    return sortCourses((state.courses || []).filter((c: any) => c.id !== sourceCourseId));
+  }, [state.courses, sourceCourseId]);
 
-  // Pre-seleccionar sugerencia de curso destino
+  // Lista única de niveles disponibles en el centro
+  const availableLevels = useMemo(() => {
+    const set = new Set<string>();
+    allTargetCourses.forEach((c: any) => {
+      if (c.level) set.add(c.level);
+    });
+    return Array.from(set);
+  }, [allTargetCourses]);
+
+  // Lista única de grados disponibles (filtrados por nivel si no es 'ALL')
+  const availableGrades = useMemo(() => {
+    const list = selectedTargetLevel === 'ALL'
+      ? allTargetCourses
+      : allTargetCourses.filter((c: any) => c.level === selectedTargetLevel);
+
+    const set = new Set<string>();
+    const grades: string[] = [];
+    list.forEach((c: any) => {
+      if (c.grade && !set.has(c.grade)) {
+        set.add(c.grade);
+        grades.push(c.grade);
+      }
+    });
+    return grades;
+  }, [allTargetCourses, selectedTargetLevel]);
+
+  // Cursos filtrados para la selección según nivel y grado
+  const filteredTargetCourses = useMemo(() => {
+    return allTargetCourses.filter((c: any) => {
+      if (selectedTargetLevel !== 'ALL' && c.level !== selectedTargetLevel) return false;
+      if (selectedTargetGrade !== 'ALL' && c.grade !== selectedTargetGrade) return false;
+      return true;
+    });
+  }, [allTargetCourses, selectedTargetLevel, selectedTargetGrade]);
+
+  // Inicializar nivel y grado con los del curso origen si están disponibles
   useEffect(() => {
-    if (availableTargetCourses.length > 0 && !targetCourseId) {
-      // Buscar misma sección o misma clase en otra sección
-      const sameGradeDiffSection = availableTargetCourses.find(
-        (c: any) => sourceCourse && c.level === sourceCourse.level && c.grade === sourceCourse.grade
-      );
-      setTargetCourseId(sameGradeDiffSection ? sameGradeDiffSection.id : availableTargetCourses[0]?.id || '');
+    if (sourceCourse) {
+      if (sourceCourse.level && availableLevels.includes(sourceCourse.level)) {
+        setSelectedTargetLevel(sourceCourse.level);
+      }
+      if (sourceCourse.grade) {
+        setSelectedTargetGrade(sourceCourse.grade);
+      }
     }
-  }, [availableTargetCourses, sourceCourse, targetCourseId]);
+  }, [sourceCourse, availableLevels]);
+
+  // Asegurar que si cambia el filtro y el targetCourseId actual ya no está en la lista, se elija uno válido
+  useEffect(() => {
+    if (filteredTargetCourses.length > 0) {
+      const exists = filteredTargetCourses.some((c: any) => c.id === targetCourseId);
+      if (!exists) {
+        setTargetCourseId(filteredTargetCourses[0].id);
+      }
+    } else if (allTargetCourses.length > 0 && !targetCourseId) {
+      setTargetCourseId(allTargetCourses[0].id);
+    }
+  }, [filteredTargetCourses, allTargetCourses, targetCourseId]);
 
   // Cargar estudiantes del curso de origen
   useEffect(() => {
@@ -125,26 +170,70 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
     }
   };
 
+  // Manejo directo de selección de curso (sincroniza nivel y grado)
+  const handleDirectCourseSelect = (courseId: string) => {
+    setTargetCourseId(courseId);
+    const c = allTargetCourses.find((item: any) => item.id === courseId);
+    if (c) {
+      if (c.level) setSelectedTargetLevel(c.level);
+      if (c.grade) setSelectedTargetGrade(c.grade);
+    }
+  };
+
+  // Manejo de cambio de grado
+  const handleGradeSelect = (grade: string) => {
+    setSelectedTargetGrade(grade);
+    const matches = allTargetCourses.filter((c: any) => {
+      if (selectedTargetLevel !== 'ALL' && c.level !== selectedTargetLevel) return false;
+      if (grade !== 'ALL' && c.grade !== grade) return false;
+      return true;
+    });
+    if (matches.length > 0) {
+      setTargetCourseId(matches[0].id);
+    }
+  };
+
+  // Manejo de cambio de nivel
+  const handleLevelSelect = (level: string) => {
+    setSelectedTargetLevel(level);
+    const matches = allTargetCourses.filter((c: any) => {
+      if (level !== 'ALL' && c.level !== level) return false;
+      return true;
+    });
+    if (matches.length > 0) {
+      // Si el grado actual no existe en el nuevo nivel, tomar el primero
+      const gradesInNewLevel = Array.from(new Set(matches.map((c: any) => c.grade).filter(Boolean)));
+      if (!gradesInNewLevel.includes(selectedTargetGrade)) {
+        setSelectedTargetGrade(gradesInNewLevel[0] || 'ALL');
+      }
+      setTargetCourseId(matches[0].id);
+    }
+  };
+
+  const targetCourseObj = (state.courses || []).find((c: any) => c.id === targetCourseId);
+  const isDifferentGrade = Boolean(
+    sourceCourse && targetCourseObj && sourceCourse.grade !== targetCourseObj.grade
+  );
+
   const handleBulkMove = async () => {
     if (selectedStudentIds.length === 0) {
       setError('Por favor selecciona al menos un alumno para mover.');
       return;
     }
-    if (!targetCourseId) {
-      setError('Por favor selecciona la sección o curso de destino.');
+    if (!targetCourseId || !targetCourseObj) {
+      setError('Por favor selecciona el grado y sección de destino.');
       return;
     }
 
-    const targetCourse = state.courses.find((c: any) => c.id === targetCourseId);
-    const targetLabel = targetCourse
-      ? `${targetCourse.grade} "${targetCourse.section}" (${targetCourse.level})`
-      : 'el curso seleccionado';
+    const targetLabel = `${targetCourseObj.level || ''} ${targetCourseObj.grade} "${targetCourseObj.section}" (${targetCourseObj.tanda || 'Matutina'})`;
+    const sourceLabel = `${sourceCourse?.level || ''} ${sourceCourse?.grade || ''} "${sourceCourse?.section || ''}"`;
 
-    if (
-      !window.confirm(
-        `¿Confirmas que deseas mover ${selectedStudentIds.length} estudiante(s) a ${targetLabel}?`
-      )
-    ) {
+    let confirmMsg = `¿Confirmas que deseas mover ${selectedStudentIds.length} estudiante(s) a ${targetLabel}?`;
+    if (isDifferentGrade) {
+      confirmMsg = `⚠️ ATENCIÓN: Estás cambiando a los alumnos de GRADO:\n\nDe: ${sourceLabel}\nHacia: ${targetLabel}\n\n¿Estás seguro de continuar con el traslado masivo de ${selectedStudentIds.length} alumno(s)?`;
+    }
+
+    if (!window.confirm(confirmMsg)) {
       return;
     }
 
@@ -197,15 +286,13 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
     }
   };
 
-  const targetCourseObj = state.courses.find((c: any) => c.id === targetCourseId);
-
   return (
     <div
       className="fixed inset-0 z-[100] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800"
+        className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Encabezado Fijo */}
@@ -216,10 +303,10 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
             </div>
             <div className="min-w-0">
               <h3 className="font-black text-sm sm:text-base uppercase tracking-tight text-white truncate">
-                Mover Alumnos de Sección / Curso
+                Mover / Reubicar Alumnos de Grado y Sección
               </h3>
               <p className="text-[11px] sm:text-xs text-blue-100 font-medium truncate">
-                Reubica masivamente estudiantes dentro del año {selectedYear}
+                Mueve estudiantes masivamente a cualquier grado o sección en el año {selectedYear}
               </p>
             </div>
           </div>
@@ -244,59 +331,170 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
 
         {/* Cuerpo Scrollable */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
-          {/* Tarjeta de Origen y Destino */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
-            {/* Origen */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                Curso / Sección Origen
-              </span>
-              <p className="text-sm font-black text-slate-900 dark:text-white">
-                {sourceCourse
-                  ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}"`
-                  : 'Curso no seleccionado'}
-              </p>
-              <p className="text-[11px] font-bold text-slate-500">
-                Tanda {sourceCourse?.tanda || 'Matutina'} • {students.length} estudiantes
-              </p>
+          {/* Panel de Selección de Destino */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+            {/* Resumen Origen */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                  Curso de Origen Actual
+                </span>
+                <p className="text-sm font-black text-slate-900 dark:text-white">
+                  {sourceCourse
+                    ? `${sourceCourse.level} ${sourceCourse.grade} "${sourceCourse.section}"`
+                    : 'Curso no seleccionado'}
+                </p>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] font-bold text-slate-500 block">
+                  Tanda: {sourceCourse?.tanda || 'Matutina'}
+                </span>
+                <span className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">
+                  {students.length} alumnos matriculados
+                </span>
+              </div>
             </div>
 
-            {/* Destino */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
-                Mover Hacia (Curso / Sección Destino) *
-              </label>
-              <select
-                value={targetCourseId}
-                onChange={(e) => setTargetCourseId(e.target.value)}
-                disabled={isProcessing}
-                className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                {availableTargetCourses.length === 0 && (
-                  <option value="">No hay otros cursos disponibles</option>
-                )}
-                {availableTargetCourses.map((c: any) => {
-                  const isSuggested =
-                    sourceCourse && c.level === sourceCourse.level && c.grade === sourceCourse.grade;
-                  return (
+            {/* Selectores de Destino: Nivel, Grado y Sección */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-xs font-black uppercase text-blue-600 dark:text-blue-400">
+                <GraduationCap size={16} />
+                <span>Configurar Curso y Grado de Destino</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Selector de Nivel */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                    1. Nivel de Destino
+                  </label>
+                  <select
+                    value={selectedTargetLevel}
+                    onChange={(e) => handleLevelSelect(e.target.value)}
+                    disabled={isProcessing}
+                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="ALL">TODOS LOS NIVELES</option>
+                    {availableLevels.map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Selector de Grado (¡Lo que el usuario necesita!) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 block flex items-center justify-between">
+                    <span>2. Grado de Destino *</span>
+                    {selectedTargetGrade !== 'ALL' && (
+                      <span className="text-[9px] font-black bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.2 rounded">
+                        {selectedTargetGrade}
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={selectedTargetGrade}
+                    onChange={(e) => handleGradeSelect(e.target.value)}
+                    disabled={isProcessing}
+                    className="w-full p-2.5 bg-blue-50/50 dark:bg-blue-950/30 border-2 border-blue-400 dark:border-blue-600 rounded-xl text-xs font-black text-blue-900 dark:text-blue-200 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="ALL">TODOS LOS GRADOS</option>
+                    {availableGrades.map((g) => {
+                      const isCurrentGrade = sourceCourse && sourceCourse.grade === g;
+                      return (
+                        <option key={g} value={g}>
+                          {g} {isCurrentGrade ? '(Mismo grado actual)' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 3. Selector de Sección / Tanda */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                    3. Sección y Tanda *
+                  </label>
+                  <select
+                    value={targetCourseId}
+                    onChange={(e) => setTargetCourseId(e.target.value)}
+                    disabled={isProcessing}
+                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {filteredTargetCourses.length === 0 && (
+                      <option value="">No hay secciones disponibles</option>
+                    )}
+                    {filteredTargetCourses.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Selector global rápido / alternativo */}
+              <div className="pt-1">
+                <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">
+                  O seleccionar directamente de la lista de todos los cursos del centro:
+                </label>
+                <select
+                  value={targetCourseId}
+                  onChange={(e) => handleDirectCourseSelect(e.target.value)}
+                  disabled={isProcessing}
+                  className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- Elige directamente un curso de la lista completa --</option>
+                  {allTargetCourses.map((c: any) => (
                     <option key={c.id} value={c.id}>
-                      {isSuggested ? '★ ' : ''}
-                      {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
-                      {isSuggested ? ' (Mismo grado)' : ''}
+                      {c.level} • Grado: {c.grade} • Sección "{c.section}" ({c.tanda || 'Matutina'})
                     </option>
-                  );
-                })}
-              </select>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {/* Banner Informativo de Traslado */}
+            {targetCourseObj && (
+              <div
+                className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs transition-all ${
+                  isDifferentGrade
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200'
+                    : 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200'
+                }`}
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold">Resumen del traslado:</span>
+                  <span className="font-black px-2 py-0.5 bg-slate-900 text-white rounded-md text-[10px] uppercase">
+                    {sourceCourse?.level} {sourceCourse?.grade} "{sourceCourse?.section}"
+                  </span>
+                  <ArrowRight size={14} className="shrink-0" />
+                  <span className="font-black px-2 py-0.5 bg-blue-600 text-white rounded-md text-[10px] uppercase">
+                    {targetCourseObj.level} {targetCourseObj.grade} "{targetCourseObj.section}"
+                  </span>
+                </div>
+
+                {isDifferentGrade ? (
+                  <span className="font-black text-[10px] uppercase tracking-wider bg-amber-200 dark:bg-amber-900/80 px-2 py-1 rounded text-amber-800 dark:text-amber-200 shrink-0">
+                    ⚠️ Cambio de Grado ({sourceCourse?.grade} ➔ {targetCourseObj.grade})
+                  </span>
+                ) : (
+                  <span className="font-bold text-[10px] text-blue-600 dark:text-blue-400 shrink-0">
+                    ✓ Mismo grado (Cambio de sección)
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Barra de Búsqueda y Selección Total */}
+          {/* Barra de Búsqueda y Selección Total de Alumnos */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Filtrar por nombre o código..."
+                placeholder="Filtrar por nombre o matrícula..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
@@ -349,7 +547,7 @@ export const BulkMoveModal = ({ sourceCourseId, onClose, onSuccess }: BulkMoveMo
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => {}} // Manejado por el onClick del div
+                      onChange={() => {}}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600 shrink-0"
                     />
                     <div className="w-6 text-center text-[10px] font-black text-slate-400 shrink-0">
