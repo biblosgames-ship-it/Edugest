@@ -301,6 +301,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   const [competencyActivities, setCompetencyActivities] = useState<Record<string, Array<{ id: string; name: string; maxScore: number }>>>(getDefaultActivities);
 
   const [partialScores, setPartialScores] = useState<Record<string, Record<string, number>>>({});
+  const [studentNotes, setStudentNotes] = useState<Record<string, string>>({});
   const [isSavingPartials, setIsSavingPartials] = useState<boolean>(false);
   const [savePartialsSuccess, setSavePartialsSuccess] = useState<boolean>(false);
 
@@ -558,6 +559,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   useEffect(() => {
     if (!selectedCourseId || !selectedSubjectId) {
       setPartialScores({});
+      setStudentNotes({});
       setCompetencyActivities(getDefaultActivities());
       return;
     }
@@ -600,6 +602,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
           setPartialScores(parsed.scores || {});
+          setStudentNotes(parsed.studentNotes || parsed.notes || {});
           setCompetencyActivities(parsed.activities || getDefaultActivities());
           if (parsed.calcMode === 'sum' || parsed.calcMode === 'average') {
             setCompetencyCalcMode(parsed.calcMode);
@@ -614,6 +617,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     if (!loadedFromLocal) {
       // RESET INMEDIATO: asegura que el nuevo curso/periodo comience limpio
       setPartialScores({});
+      setStudentNotes({});
       setCompetencyActivities(getDefaultActivities());
       setCompetencyCalcMode('average');
     }
@@ -646,16 +650,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
         if (!error && row && row.scores) {
           const cloudScores = row.scores.scores || {};
+          const cloudNotes = row.scores.studentNotes || row.scores.notes || {};
           const cloudActivities = row.scores.activities || getDefaultActivities();
           const cloudMode = row.scores.calcMode || 'average';
 
           setPartialScores(cloudScores);
+          setStudentNotes(cloudNotes);
           setCompetencyActivities(cloudActivities);
           setCompetencyCalcMode(cloudMode);
 
           // Sincronizar respaldo local para este scope exacto
           localStorage.setItem(storageScopeKey, JSON.stringify({
             scores: cloudScores,
+            studentNotes: cloudNotes,
             activities: cloudActivities,
             calcMode: cloudMode,
             period: selectedPeriod,
@@ -668,6 +675,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         } else if (!error && (!data || data.length === 0) && !loadedFromLocal) {
           // Solo si Supabase respondió explícitamente sin registros Y no había nada local
           setPartialScores({});
+          setStudentNotes({});
           setCompetencyActivities(getDefaultActivities());
           setCompetencyCalcMode('average');
         }
@@ -1388,6 +1396,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     });
   };
 
+  const handlePartialNoteChange = (studentId: string, note: string) => {
+    setStudentNotes((prev) => ({
+      ...prev,
+      [studentId]: note
+    }));
+  };
+
   // Guardar calificaciones del período y sincronizar con el Registro Digital Oficial
   const handleSavePartials = async () => {
     setIsSavingPartials(true);
@@ -1399,6 +1414,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       // 1. Guardar de inmediato en localStorage (múltiples claves para evitar fallos de identidad)
       const payloadData = {
         scores: partialScores,
+        studentNotes: studentNotes,
+        notes: studentNotes,
         activities: competencyActivities,
         calcMode: competencyCalcMode,
         period: selectedPeriod,
@@ -1450,7 +1467,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         });
       });
 
-      const scoresPayload = { scores: partialScores, activities: competencyActivities, calcMode: competencyCalcMode };
+      const scoresPayload = {
+        scores: partialScores,
+        studentNotes: studentNotes,
+        notes: studentNotes,
+        activities: competencyActivities,
+        calcMode: competencyCalcMode
+      };
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
       if (isOffline) {
@@ -2852,6 +2875,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                     <th rowSpan={2} className="px-4 py-2 text-center bg-indigo-950 text-indigo-200 font-black min-w-[100px]">
                       Nota Final Parcial
                     </th>
+                    <th rowSpan={2} className="px-3 py-2 text-center bg-slate-900 text-slate-200 font-black min-w-[220px] w-64">
+                      Nota / Constancia Escrita
+                    </th>
                   </tr>
 
                   {/* FILA INFERIOR: COLUMNAS DE ACTIVIDADES */}
@@ -3009,6 +3035,17 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             <span className={`px-2.5 py-0.5 rounded-lg shadow-sm font-mono font-bold ${finalAvg >= 70 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
                               {finalAvg}
                             </span>
+                          </td>
+
+                          <td className="px-2 py-1 bg-white dark:bg-slate-900/40">
+                            <input
+                              type="text"
+                              placeholder="Constancia de nota..."
+                              value={studentNotes[s.id] || ''}
+                              onChange={(e) => handlePartialNoteChange(s.id, e.target.value)}
+                              className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 placeholder:italic outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium shadow-2xs"
+                              title={studentNotes[s.id] || 'Escribe una constancia o justificación para este estudiante'}
+                            />
                           </td>
                         </tr>
                       );
