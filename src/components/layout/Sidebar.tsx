@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
 import { SchoolBellControl } from '../SchoolBellControl';
 import { LinkChildModal } from '../LinkChildModal';
+import { clearOfflineSession } from '../../utils/offlineSync';
 
 export const Sidebar = ({
   navItems,
@@ -37,6 +38,7 @@ export const Sidebar = ({
 
   const handleLogout = async () => {
     try {
+      clearOfflineSession();
       await supabase.auth.signOut();
     } finally {
       // Preserve dismissed communication IDs across logouts

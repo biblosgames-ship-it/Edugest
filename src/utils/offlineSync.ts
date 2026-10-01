@@ -85,6 +85,39 @@ const idbSet = async (storeName: string, key: string, value: any): Promise<void>
 // ==========================================
 // 1. PERFIL Y SESIÓN OFFLINE
 // ==========================================
+export const saveCachedUser = (user: any) => {
+  if (!user) return;
+  try {
+    const minimalUser = {
+      id: user.id,
+      email: user.email,
+      app_metadata: user.app_metadata || {},
+      user_metadata: user.user_metadata || {},
+      aud: user.aud || 'authenticated',
+      role: user.role || 'authenticated'
+    };
+    localStorage.setItem('edugest_cached_user', JSON.stringify(minimalUser));
+    if (user.id) {
+      localStorage.setItem(`edugest_cached_user_${user.id}`, JSON.stringify(minimalUser));
+    }
+  } catch (e) {
+    console.warn('[OfflineSync] Error saving cached user:', e);
+  }
+};
+
+export const getCachedUser = (userId?: string): any | null => {
+  try {
+    if (userId) {
+      const userSpecific = localStorage.getItem(`edugest_cached_user_${userId}`);
+      if (userSpecific) return JSON.parse(userSpecific);
+    }
+    const general = localStorage.getItem('edugest_cached_user');
+    return general ? JSON.parse(general) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const saveCachedProfile = (profile: any) => {
   if (!profile) return;
   try {
@@ -107,6 +140,48 @@ export const getCachedProfile = (userId?: string): any | null => {
     return general ? JSON.parse(general) : null;
   } catch {
     return null;
+  }
+};
+
+export const saveOfflineSession = (user: any, profile: any, center?: any) => {
+  if (user) saveCachedUser(user);
+  if (profile) saveCachedProfile(profile);
+  if (center) {
+    try {
+      localStorage.setItem('edugens_active_center', JSON.stringify(center));
+    } catch {}
+  }
+};
+
+export const getOfflineSession = (): { user: any; profile: any; center: any } | null => {
+  const user = getCachedUser();
+  const profile = getCachedProfile(user?.id);
+  let center: any = null;
+  try {
+    const saved = localStorage.getItem('edugens_active_center');
+    if (saved) center = JSON.parse(saved);
+  } catch {}
+
+  if (user && profile) {
+    return { user, profile, center };
+  }
+  return null;
+};
+
+export const clearOfflineSession = () => {
+  try {
+    localStorage.removeItem('edugest_cached_user');
+    localStorage.removeItem('edugest_cached_profile');
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('edugest_cached_user_') || k.startsWith('edugest_cached_profile_'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn('[OfflineSync] Error clearing offline session:', e);
   }
 };
 

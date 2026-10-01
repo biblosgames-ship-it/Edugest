@@ -971,7 +971,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         }
 
         // 4. Construcción de la matriz de columnas
-        const compsList = isSecundario ? ['c1', 'c2', 'c3', 'c4'] : ['c1', 'c2', 'c3'];
+        const compsList = isSecundario ? ['c2', 'c3', 'c1', 'c4'] : ['c1', 'c2', 'c3'];
 
         const headRowsConfig: any[] = [
           registroSoloNumeros
@@ -997,6 +997,19 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           []
         ];
 
+        const compNamesSecundario = [
+          'COMUNICATIVA',
+          'PENSAMIENTO LÓGICO',
+          'ÉTICA Y CIUDADANA',
+          'CIENTÍFICA Y TEC.'
+        ];
+        const compNamesPrimaria = [
+          'COMUNICATIVA',
+          'PENSAMIENTO LÓGICO',
+          'ÉTICA Y CIUDADANA'
+        ];
+        const compSubNames = isSecundario ? compNamesSecundario : compNamesPrimaria;
+
         // Fila 1: Nombres de las competencias principales
         compsList.forEach((cId, cIdx) => {
           const colors = [
@@ -1007,13 +1020,14 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           ][cIdx];
 
           headRowsConfig[0].push({
-            content: `COMPETENCIA ${cIdx + 1}`,
+            content: `COMPETENCIA ${cIdx + 1}\n${compSubNames[cIdx] || ''}`,
             colSpan: 8,
             styles: {
               halign: 'center',
               fillColor: colors.fill,
               textColor: colors.text,
-              fontStyle: 'bold'
+              fontStyle: 'bold',
+              fontSize: 6.5
             }
           });
         });
@@ -2764,12 +2778,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
               styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
             },
             {
-              content: 'Científica y Tecnológicas\nAmbiental y de la Salud',
+              content: 'Ética y Ciudadanía\nDesarrollo Personal y Espiritual',
               colSpan: 4,
               styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
             },
             {
-              content: 'Desarrollo Personal y Espiritua\nÉtica y Ciudadania',
+              content: 'Científica y Tecnológica\nAmbiental y de la Salud',
               colSpan: 4,
               styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
             },
@@ -2878,24 +2892,24 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           let p4c2 = getBestGrade(sGrades, 'c3', 'P4');
           row.push(p4c2 || '');
 
-          // Competencia 3 (Científica...) -> database c4
-          let p1c3 = getBestGrade(sGrades, 'c4', 'P1');
+          // Competencia 3 (Ética y Ciudadana...) -> database c1
+          let p1c3 = getBestGrade(sGrades, 'c1', 'P1');
           row.push(p1c3 || '');
-          let p2c3 = getBestGrade(sGrades, 'c4', 'P2');
+          let p2c3 = getBestGrade(sGrades, 'c1', 'P2');
           row.push(p2c3 || '');
-          let p3c3 = getBestGrade(sGrades, 'c4', 'P3');
+          let p3c3 = getBestGrade(sGrades, 'c1', 'P3');
           row.push(p3c3 || '');
-          let p4c3 = getBestGrade(sGrades, 'c4', 'P4');
+          let p4c3 = getBestGrade(sGrades, 'c1', 'P4');
           row.push(p4c3 || '');
 
-          // Competencia 4 (Desarrollo Personal...) -> database c1
-          let p1c4 = getBestGrade(sGrades, 'c1', 'P1');
+          // Competencia 4 (Científica y Tecnológica...) -> database c4
+          let p1c4 = getBestGrade(sGrades, 'c4', 'P1');
           row.push(p1c4 || '');
-          let p2c4 = getBestGrade(sGrades, 'c1', 'P2');
+          let p2c4 = getBestGrade(sGrades, 'c4', 'P2');
           row.push(p2c4 || '');
-          let p3c4 = getBestGrade(sGrades, 'c1', 'P3');
+          let p3c4 = getBestGrade(sGrades, 'c4', 'P3');
           row.push(p3c4 || '');
-          let p4c4 = getBestGrade(sGrades, 'c1', 'P4');
+          let p4c4 = getBestGrade(sGrades, 'c4', 'P4');
           row.push(p4c4 || '');
 
           const getCompFinalVal = (p1: number, p2: number, p3: number, p4: number) => {

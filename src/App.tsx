@@ -328,14 +328,17 @@ function AppContent() {
 
   const needsActivation =
     !profile ||
-    (!profile.invitation_code &&
+    (!profile.center_id &&
+      !profile.invitation_code &&
       !profile.course_code &&
       (!profile.parent_course_ids || profile.parent_course_ids.length === 0) &&
       !hasLocalCourse &&
       profile.role !== 'admin' &&
       profile.role !== 'superAdmin' &&
       profile.role !== 'finance' &&
-      profile.role !== 'coordinator');
+      profile.role !== 'coordinator' &&
+      profile.role !== 'teacher' &&
+      profile.role !== 'management_teacher');
 
   if (needsActivation && !isSuperAdmin) {
     return (

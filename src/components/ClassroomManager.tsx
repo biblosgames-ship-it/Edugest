@@ -1118,15 +1118,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   // Lista activa de competencias para el curso seleccionado
   const activeCompetencies = useMemo(() => {
-    const list = [
-      { id: 'c1', label: 'Competencia 1' },
-      { id: 'c2', label: 'Competencia 2' },
-      { id: 'c3', label: 'Competencia 3' },
-    ];
     if (isSecondary) {
-      list.push({ id: 'c4', label: 'Competencia 4' });
+      return [
+        { id: 'c2', label: 'Competencia 1', short: 'C1', name: 'Comunicativa' },
+        { id: 'c3', label: 'Competencia 2', short: 'C2', name: 'Pensamiento Lógico' },
+        { id: 'c1', label: 'Competencia 3', short: 'C3', name: 'Ética y Ciudadana' },
+        { id: 'c4', label: 'Competencia 4', short: 'C4', name: 'Científica y Tecnol.' }
+      ];
     }
-    return list;
+    return [
+      { id: 'c1', label: 'Competencia 1', short: 'C1', name: 'Comunicativa' },
+      { id: 'c2', label: 'Competencia 2', short: 'C2', name: 'Pensamiento Lógico' },
+      { id: 'c3', label: 'Competencia 3', short: 'C3', name: 'Ética y Ciudadana' }
+    ];
   }, [isSecondary]);
 
   // Agregar nueva actividad parcial a una competencia específica (estrictamente personalizada por curso/periodo)
@@ -1873,7 +1877,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     const partialLink = parseTaskPartialLink(task);
     const isLinked = partialLink.linked;
     const compId = partialLink.competencyId || 'c1';
-    const competencyLabel = activeCompetencies.find((c) => c.id === compId)?.label || compId.toUpperCase();
+    const compFound = activeCompetencies.find((c) => c.id === compId);
+    const competencyLabel = compFound
+      ? `${compFound.label} (${compFound.name})`
+      : compId.toUpperCase();
 
     const targetActId = `task_act_${task.id}`;
     let completed = 0;
@@ -2683,9 +2690,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                 onChange={(e) => setSelectedCompetencyForNewAct(e.target.value)}
                 className="px-3 py-2 rounded-2xl border border-border-main bg-brand-bg text-xs font-bold text-brand-blue outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer"
               >
-                {activeCompetencies.map((c) => (
+                {activeCompetencies.map((c: any) => (
                   <option key={c.id} value={c.id}>
-                    {c.label}
+                    {c.label} {c.name ? `(${c.name})` : ''}
                   </option>
                 ))}
               </select>
@@ -2833,7 +2840,12 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           colSpan={colSpan}
                           className={`text-center py-2 px-2 bg-gradient-to-r ${colors[idx % colors.length]}`}
                         >
-                          {comp.label}
+                          <div className="font-black text-xs leading-tight">{comp.label}</div>
+                          {comp.name && (
+                            <div className="text-[10px] font-semibold opacity-90 tracking-normal normal-case mt-0.5">
+                              {comp.name}
+                            </div>
+                          )}
                         </th>
                       );
                     })}
@@ -3735,9 +3747,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                               onChange={(e) => setTaskFormData({ ...taskFormData, linkedCompetencyId: e.target.value })}
                               className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                             >
-                              {activeCompetencies.map((comp) => (
+                              {activeCompetencies.map((comp: any) => (
                                 <option key={comp.id} value={comp.id}>
-                                  {comp.label}
+                                  {comp.label} {comp.name ? `(${comp.name})` : ''}
                                 </option>
                               ))}
                             </select>
@@ -4010,9 +4022,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                               onChange={(e) => setGradingCompetencyId(e.target.value)}
                               className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                             >
-                              {activeCompetencies.map((comp) => (
+                              {activeCompetencies.map((comp: any) => (
                                 <option key={comp.id} value={comp.id}>
-                                  {comp.label}
+                                  {comp.label} {comp.name ? `(${comp.name})` : ''}
                                 </option>
                               ))}
                             </select>

@@ -90,25 +90,25 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       competencies: isSecundario
         ? [
             {
-              id: 'c1',
-              short: 'C1',
-              name: 'Competencia Ética y Ciudadana',
-              color: 'bg-indigo-100/40',
-              rColor: 'bg-indigo-50/20'
-            },
-            {
               id: 'c2',
-              short: 'C2',
+              short: 'C1',
               name: 'Competencia Comunicativa',
               color: 'bg-emerald-100/40',
               rColor: 'bg-emerald-50/20'
             },
             {
               id: 'c3',
-              short: 'C3',
+              short: 'C2',
               name: 'Competencia de Pensamiento Lógico, Creativo y Crítico',
               color: 'bg-amber-100/40',
               rColor: 'bg-amber-50/20'
+            },
+            {
+              id: 'c1',
+              short: 'C3',
+              name: 'Competencia Ética y Ciudadana',
+              color: 'bg-indigo-100/40',
+              rColor: 'bg-indigo-50/20'
             },
             {
               id: 'c4',
@@ -989,12 +989,12 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
           },
           {
-            content: 'Científica y Tecnológicas\nAmbiental y de la Salud',
+            content: 'Ética y Ciudadanía\nDesarrollo Personal y Espiritual',
             colSpan: 4,
             styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
           },
           {
-            content: 'Desarrollo Personal y Espiritua\nÉtica y Ciudadania',
+            content: 'Científica y Tecnológica\nAmbiental y de la Salud',
             colSpan: 4,
             styles: { fillColor: [173, 216, 230], fontSize: 6, halign: 'center' }
           },
@@ -1103,24 +1103,24 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         let p4c2 = getBestGradeForPDF(sGrades, 'c3', 'P4');
         row.push(p4c2 || '');
 
-        // Competencia 3 (Científica...) -> database c4
-        let p1c3 = getBestGradeForPDF(sGrades, 'c4', 'P1');
+        // Competencia 3 (Ética y Ciudadana...) -> database c1
+        let p1c3 = getBestGradeForPDF(sGrades, 'c1', 'P1');
         row.push(p1c3 || '');
-        let p2c3 = getBestGradeForPDF(sGrades, 'c4', 'P2');
+        let p2c3 = getBestGradeForPDF(sGrades, 'c1', 'P2');
         row.push(p2c3 || '');
-        let p3c3 = getBestGradeForPDF(sGrades, 'c4', 'P3');
+        let p3c3 = getBestGradeForPDF(sGrades, 'c1', 'P3');
         row.push(p3c3 || '');
-        let p4c3 = getBestGradeForPDF(sGrades, 'c4', 'P4');
+        let p4c3 = getBestGradeForPDF(sGrades, 'c1', 'P4');
         row.push(p4c3 || '');
 
-        // Competencia 4 (Desarrollo Personal...) -> database c1
-        let p1c4 = getBestGradeForPDF(sGrades, 'c1', 'P1');
+        // Competencia 4 (Científica y Tecnológica...) -> database c4
+        let p1c4 = getBestGradeForPDF(sGrades, 'c4', 'P1');
         row.push(p1c4 || '');
-        let p2c4 = getBestGradeForPDF(sGrades, 'c1', 'P2');
+        let p2c4 = getBestGradeForPDF(sGrades, 'c4', 'P2');
         row.push(p2c4 || '');
-        let p3c4 = getBestGradeForPDF(sGrades, 'c1', 'P3');
+        let p3c4 = getBestGradeForPDF(sGrades, 'c4', 'P3');
         row.push(p3c4 || '');
-        let p4c4 = getBestGradeForPDF(sGrades, 'c1', 'P4');
+        let p4c4 = getBestGradeForPDF(sGrades, 'c4', 'P4');
         row.push(p4c4 || '');
 
         const getCompFinalVal = (p1: number, p2: number, p3: number, p4: number) => {
@@ -2226,9 +2226,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                           .includes('secund');
                         const comps = isStudentSecundario
                           ? [
-                              { short: 'C1', name: 'Ética y Ciudadana' },
-                              { short: 'C2', name: 'Comunicativa' },
-                              { short: 'C3', name: 'Pensamiento Crítico' },
+                              { short: 'C1', name: 'Comunicativa' },
+                              { short: 'C2', name: 'Pensamiento Lógico' },
+                              { short: 'C3', name: 'Ética y Ciudadana' },
                               { short: 'C4', name: 'Científica y Tec.' }
                             ]
                           : [
@@ -2288,9 +2288,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         .includes('secund');
                       const comps = isStudentSecundario
                         ? [
-                            { id: 'c1', short: 'C1' },
-                            { id: 'c2', short: 'C2' },
-                            { id: 'c3', short: 'C3' },
+                            { id: 'c2', short: 'C1' },
+                            { id: 'c3', short: 'C2' },
+                            { id: 'c1', short: 'C3' },
                             { id: 'c4', short: 'C4' }
                           ]
                         : [

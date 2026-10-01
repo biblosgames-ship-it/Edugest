@@ -6,6 +6,11 @@ import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesMana
 import {
   saveCachedProfile,
   getCachedProfile,
+  saveCachedUser,
+  getCachedUser,
+  saveOfflineSession,
+  getOfflineSession,
+  clearOfflineSession,
   saveStateSnapshot,
   getStateSnapshot
 } from '../utils/offlineSync';
@@ -131,8 +136,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loading: true,
     error: null
   });
-  const [user, setUser] = useState<any | null>(null);
-  const [profile, setProfile] = useState<any | null>(null);
+  const [user, setUser] = useState<any | null>(() => {
+    try {
+      const cached = getCachedUser();
+      return cached || null;
+    } catch {
+      return null;
+    }
+  });
+  const [profile, setProfile] = useState<any | null>(() => {
+    try {
+      const cachedUser = getCachedUser();
+      const cachedProf = getCachedProfile(cachedUser?.id);
+      return cachedProf || null;
+    } catch {
+      return null;
+    }
+  });
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? !navigator.onLine : false;
+  });
   const [center, setCenter] = useState<any | null>(() => {
     try {
       const saved = localStorage.getItem('edugens_active_center');
@@ -1136,39 +1159,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshData(undefined, true);
   };
 
-  // Load initial session on mount
+  const loginOffline = useCallback((): boolean => {
+    const offlineSession = getOfflineSession();
+    if (offlineSession?.user && offlineSession?.profile) {
+      setUser(offlineSession.user);
+      setProfile(offlineSession.profile);
+      if (offlineSession.center) setCenter(offlineSession.center);
+      setIsAuthReady(true);
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Load initial session on mount with Offline-First support
   useEffect(() => {
-    const hasAuthHash = window.location.hash && (
+    const hasAuthHash = typeof window !== 'undefined' && window.location.hash && (
       window.location.hash.includes('access_token=') || 
       window.location.hash.includes('id_token=') || 
       window.location.hash.includes('error=')
     );
 
+    const offlineSession = getOfflineSession();
+
+    // Timeout de seguridad: Si no hay internet o la red está inaccesible, Supabase puede tardar
+    // o fallar al intentar refrescar el token vencido de la sesión.
+    // Si tenemos una sesión offline válida guardada en el dispositivo, la activamos inmediatamente.
+    const isCurrentlyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const offlineTimeoutMs = isCurrentlyOffline ? 80 : 2500;
+
+    const offlineFallbackTimer = setTimeout(() => {
+      if (!isAuthReady) {
+        if (offlineSession?.user && offlineSession?.profile) {
+          console.log('[AppContext] Activando sesión offline por timeout/red:', offlineSession.user.email);
+          setUser(offlineSession.user);
+          setProfile(offlineSession.profile);
+          if (offlineSession.center) setCenter(offlineSession.center);
+        }
+        setIsAuthReady(true);
+      }
+    }, offlineTimeoutMs);
+
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      clearTimeout(offlineFallbackTimer);
       const sessionUser = session?.user ?? null;
-      setUser(sessionUser);
 
-      if (event === 'SIGNED_IN') {
-        if (window.location.hash) {
+      if (sessionUser) {
+        setUser(sessionUser);
+        saveCachedUser(sessionUser);
+        if (event === 'SIGNED_IN' && window.location.hash) {
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
         }
         setIsAuthReady(true);
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-        setCenter(null);
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        const currentOffline = getOfflineSession();
+
+        // Si no hay conexión o si fue fallo de red al refrescar token expirado, preservar sesión offline
+        if (isOffline && currentOffline?.user && currentOffline?.profile) {
+          console.log('[AppContext] Manteniendo sesión offline tras desconexión');
+          setUser(currentOffline.user);
+          setProfile(currentOffline.profile);
+          if (currentOffline.center) setCenter(currentOffline.center);
+        } else {
+          setUser(null);
+          setProfile(null);
+          setCenter(null);
+          clearOfflineSession();
+        }
         setIsAuthReady(true);
       } else {
-        // For INITIAL_SESSION or other events, if no auth hash is in progress, mark auth as ready
+        // INITIAL_SESSION o sin sesión de red
         if (!hasAuthHash) {
+          const currentOffline = getOfflineSession();
+          if (!sessionUser && currentOffline?.user && currentOffline?.profile) {
+            console.log('[AppContext] Restaurando sesión offline para inicio del día:', currentOffline.user.email);
+            setUser(currentOffline.user);
+            setProfile(currentOffline.profile);
+            if (currentOffline.center) setCenter(currentOffline.center);
+          } else {
+            setUser(sessionUser);
+          }
           setIsAuthReady(true);
         }
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Escuchar reconexión a internet para re-validar token en segundo plano y sincronizar
+    const handleOnline = () => {
+      setIsOfflineMode(false);
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          setUser(session.user);
+          saveCachedUser(session.user);
+        }
+      }).catch((err) => {
+        console.warn('[AppContext] Error al reconectar sesión:', err);
+      });
+    };
+
+    const handleOffline = () => {
+      setIsOfflineMode(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearTimeout(offlineFallbackTimer);
+      subscription.unsubscribe();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // Fetch profile whenever user state changes
@@ -1301,7 +1404,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             } catch {}
           }
+          saveOfflineSession(user, finalProfile, centData || center);
         } else {
+          saveOfflineSession(user, finalProfile, center);
           setState((prev) => ({ ...prev, loading: false }));
         }
       } catch (err) {
@@ -1316,6 +1421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (saved) setCenter(JSON.parse(saved));
             } catch {}
           }
+          saveOfflineSession(user, cached, center);
         }
         setState((prev) => ({ ...prev, loading: false }));
       }
@@ -1777,14 +1883,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }}
     >
-      <AuthContext.Provider value={{ user, profile, isAuthReady }}>{children}</AuthContext.Provider>
+      <AuthContext.Provider value={{ user, profile, isAuthReady, isOfflineMode, loginOffline }}>
+        {children}
+      </AuthContext.Provider>
     </AppContext.Provider>
   );
 };
 
-const AuthContext = createContext<{ user: any; profile: any; isAuthReady: boolean } | undefined>(
-  undefined
-);
+const AuthContext = createContext<{
+  user: any;
+  profile: any;
+  isAuthReady: boolean;
+  isOfflineMode: boolean;
+  loginOffline: () => boolean;
+} | undefined>(undefined);
 export const useSupabase = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useSupabase must be used within AppProvider');

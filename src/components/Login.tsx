@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { Sparkles, ShieldCheck } from 'lucide-react';
+import { Sparkles, ShieldCheck, WifiOff, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { SEO } from './SEO';
+import { useSupabase } from '../context/AppContext';
+import { getOfflineSession } from '../utils/offlineSync';
 
 export const Login = () => {
   const [loading, setLoading] = useState(false);
+  const { loginOffline } = useSupabase();
+
+  const offlineSession = useMemo(() => {
+    return getOfflineSession();
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -18,6 +25,10 @@ export const Login = () => {
       console.error('Login error:', error);
       setLoading(false);
     }
+  };
+
+  const handleOfflineEnter = () => {
+    loginOffline();
   };
 
   return (
@@ -56,6 +67,34 @@ export const Login = () => {
           </div>
 
           <div className="space-y-4">
+            {offlineSession && (
+              <div className="p-4 bg-slate-900/90 border border-amber-500/40 rounded-2xl text-left space-y-3 backdrop-blur-md shadow-xl">
+                <div className="flex items-center justify-between text-amber-400">
+                  <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider">
+                    <WifiOff size={15} />
+                    <span>Sesión Local Guardada</span>
+                  </div>
+                  <span className="text-[9px] font-black uppercase bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                    Modo Offline
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-snug">
+                  Puedes continuar sin internet como:{' '}
+                  <strong className="text-white block mt-0.5 font-bold">
+                    {offlineSession.profile?.full_name || offlineSession.profile?.name || offlineSession.user?.email}
+                  </strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOfflineEnter}
+                  className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <ArrowRight size={15} />
+                  <span>Entrar Sin Conexión</span>
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
