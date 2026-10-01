@@ -11,13 +11,18 @@ import {
   GraduationCap,
   Trash2,
   Plus,
-  Calendar
+  Calendar,
+  Send,
+  Phone,
+  MessageCircle,
+  Copy
 } from 'lucide-react';
 import { useFinance } from '../../hooks/useFinance';
 import { toast } from 'react-hot-toast';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { getLocalDateString } from '../../utils/dateUtils';
+import { dataService } from '../../services/dataService';
 
 interface Props {
   student: any;
@@ -114,10 +119,14 @@ export const PaymentModal = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [tutorName, setTutorName] = useState<string>('No registrado');
+  const [tutorPhone, setTutorPhone] = useState<string>('');
+  const [parentProfileIds, setParentProfileIds] = useState<string[]>([]);
+  const [internalMsgStatus, setInternalMsgStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [copiedLink, setCopiedLink] = useState(false);
   const [printFormat, setPrintFormat] = useState<'letter' | 'ticket' | 'ticket58'>('letter');
   const isSubmittingPayment = React.useRef(false);
 
-  // CARGAR DATOS DEL TUTOR
+  // CARGAR DATOS DEL TUTOR Y SU CONTACTO (WHATSAPP / TELÉFONO)
   React.useEffect(() => {
     const fetchTutor = async () => {
       try {
@@ -131,33 +140,193 @@ export const PaymentModal = ({
           .eq('student_id', student.id);
 
         let foundName = '';
+        let foundPhone = '';
+        const foundParentProfileIds: string[] = [];
         const allData = [...(parents || []), ...(family || [])];
 
         if (allData.length > 0) {
+          allData.forEach((f: any) => {
+            if (f.profile_id) foundParentProfileIds.push(f.profile_id);
+          });
+
           // Priorizar Tutor/Encargado, luego Madre, luego Padre
           const relative =
-            allData.find((f) => {
+            allData.find((f: any) => {
               const r = (f.role || f.relation || '').toLowerCase().trim();
               return r !== 'padre' && r !== 'madre' && r !== '';
             }) ||
-            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('madre')) ||
-            allData.find((f) => (f.role || f.relation || '').toLowerCase().includes('padre')) ||
+            allData.find((f: any) => (f.role || f.relation || '').toLowerCase().includes('madre')) ||
+            allData.find((f: any) => (f.role || f.relation || '').toLowerCase().includes('padre')) ||
             allData[0];
 
-          foundName = relative.name || relative.full_name || relative.first_name;
+          foundName = relative.name || relative.full_name || relative.first_name || '';
+          foundPhone =
+            relative.phone ||
+            relative.cellphone ||
+            relative.secondary_phone ||
+            relative.whatsapp ||
+            relative.tel ||
+            '';
+
+          // Si el pariente principal no tiene teléfono, buscar en cualquiera de los otros registrados
+          if (!foundPhone) {
+            const anyWithPhone = allData.find(
+              (f: any) => f.phone || f.cellphone || f.secondary_phone || f.whatsapp || f.tel
+            );
+            if (anyWithPhone) {
+              foundPhone =
+                anyWithPhone.phone ||
+                anyWithPhone.cellphone ||
+                anyWithPhone.secondary_phone ||
+                anyWithPhone.whatsapp ||
+                anyWithPhone.tel ||
+                '';
+            }
+          }
         }
 
         if (!foundName && student.authorized_person) {
           foundName = student.authorized_person;
         }
 
+        // Si aún no hay teléfono del tutor, revisar atributos de teléfono del alumno
+        if (!foundPhone) {
+          foundPhone =
+            student.personal_phone ||
+            student.home_phone ||
+            student.phone ||
+            student.guardian_phone ||
+            student.tutor_phone ||
+            '';
+        }
+
         if (foundName) setTutorName(foundName);
+        if (foundPhone) setTutorPhone(foundPhone);
+        if (foundParentProfileIds.length > 0) setParentProfileIds(foundParentProfileIds);
       } catch (error) {
         console.error('Error in fetchTutor:', error);
       }
     };
     fetchTutor();
   }, [student.id, student.authorized_person]);
+
+  const buildReceiptMessage = (activeReceipt?: any) => {
+    const current = activeReceipt || receiptData;
+    const studentFullName =
+      `${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`.trim() ||
+      student.name ||
+      'Estudiante';
+    const centerTitle = center?.name || 'Centro Educativo';
+    const receiptNoStr =
+      current?.receiptNumbers && current.receiptNumbers.length > 0
+        ? current.receiptNumbers.map((n: any) => `#${n}`).join(', ')
+        : '#REC-' + (new Date().getTime().toString().slice(-6));
+
+    const dateStr = current?.date || new Date().toLocaleDateString();
+    const conceptsStr = current?.concepts || totalConcepts || 'Cobro escolar';
+    const amountVal = Number(current?.amount ?? formData.amount_paid ?? 0);
+    const methodStr = current?.method || formData.payment_method || 'Efectivo';
+    const refStr = current?.ref || formData.reference_number || '';
+    const notesStr = current?.notes || formData.notes || '';
+
+    // Formatear conceptos con viñetas limpias
+    const conceptsFormatted = conceptsStr
+      .split(' + ')
+      .map((c: string) => `  • ${c.trim()}`)
+      .join('\n');
+
+    return `🧾 *COMPROBANTE DE PAGO DIGITAL*
+━━━━━━━━━━━━━━━━━━━━
+🏫 *${centerTitle.toUpperCase()}*
+${center?.phone ? `📞 Tel: ${center.phone}\n` : ''}${center?.address ? `📍 Dirección: ${center.address}\n` : ''}━━━━━━━━━━━━━━━━━━━━
+📄 *No. Recibo:* ${receiptNoStr}
+📅 *Fecha:* ${dateStr}
+👤 *Alumno:* ${studentFullName}${student.matricula ? ` (Mat: ${student.matricula})` : ''}
+🎓 *Grado / Curso:* ${courseName}
+👥 *Tutor / Responsable:* ${tutorName}
+
+📋 *Detalle / Conceptos:*
+${conceptsFormatted}
+
+💳 *Método de Pago:* ${methodStr}${refStr ? ` (Ref: ${refStr})` : ''}
+💰 *TOTAL PAGADO: RD$ ${amountVal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}*
+${notesStr ? `\n📌 *Nota:* ${notesStr}` : ''}
+━━━━━━━━━━━━━━━━━━━━
+✅ *Comprobante de pago oficial registrado en la plataforma Edugest.*
+¡Agradecemos su compromiso y puntualidad! 🙏`;
+  };
+
+  const sendToInternalMessaging = async (dataToUse?: any) => {
+    const activeReceipt = dataToUse || receiptData;
+    if (!activeReceipt) return;
+
+    try {
+      setInternalMsgStatus('sending');
+      const studentFullName =
+        `${student.names || ''} ${student.first_surname || ''} ${student.second_surname || ''}`.trim() ||
+        student.name ||
+        'Estudiante';
+
+      const centerTitle = center?.name || 'Centro Educativo';
+      const targetCenterId = center?.id || student.center_id || profile?.center_id;
+      const receiptNoStr =
+        activeReceipt.receiptNumbers && activeReceipt.receiptNumbers.length > 0
+          ? activeReceipt.receiptNumbers.map((n: any) => `#${n}`).join(', ')
+          : 'Nuevo';
+
+      const messageContent = buildReceiptMessage(activeReceipt);
+
+      await dataService.saveCommunication({
+        center_id: targetCenterId,
+        sender_id: profile?.id,
+        sender_name: profile?.full_name || centerTitle,
+        motive: `Recibo de Pago ${receiptNoStr} - ${studentFullName}`,
+        message: messageContent,
+        target_roles: ['Padres', 'Alumnos', 'parent', 'student'],
+        target_student_ids: [student.id],
+        target_student_id: student.id,
+        target_student_name: studentFullName,
+        target_parent_ids: parentProfileIds,
+        target_user_ids: parentProfileIds,
+        target_courses: student.course_id ? [student.course_id] : []
+      });
+
+      setInternalMsgStatus('sent');
+      toast.success('Recibo enviado a la mensajería interna');
+    } catch (err: any) {
+      console.error('Error enviando recibo a mensajería interna:', err);
+      setInternalMsgStatus('error');
+      toast.error('No se pudo enviar a la mensajería interna');
+    }
+  };
+
+  const handleOpenWhatsApp = () => {
+    if (!tutorPhone || !tutorPhone.trim()) {
+      toast.error('Por favor ingresa o confirma el número de WhatsApp del tutor');
+      return;
+    }
+
+    const digits = tutorPhone.replace(/\D/g, '');
+    if (digits.length < 7) {
+      toast.error('El número de teléfono debe tener al menos 7 dígitos');
+      return;
+    }
+
+    // Si tiene 10 dígitos (ej. 809..., 829..., 849...), agregar código de país 1 (Rep. Dom. / NANP)
+    const cleanPhone = digits.length === 10 ? '1' + digits : digits;
+    const msg = buildReceiptMessage();
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+
+    window.open(url, '_blank');
+  };
+
+  const handleCopyMessage = () => {
+    const msg = buildReceiptMessage();
+    navigator.clipboard.writeText(msg);
+    setCopiedLink(true);
+    toast.success('Detalle del recibo copiado al portapapeles');
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   // DETECTAR FACTURAS YA PAGADAS PARA IR DIRECTO AL RECIBO
   React.useEffect(() => {
@@ -410,7 +579,7 @@ export const PaymentModal = ({
       const methodsString = Array.from(new Set(payments.map((p) => methodLabels[p.method] || p.method))).join(' + ');
       const refsString = Array.from(new Set(payments.map((p) => p.reference_number).filter(Boolean))).join(', ');
 
-      setReceiptData({
+      const finalReceipt = {
         student,
         courseName,
         concepts: totalConcepts,
@@ -418,10 +587,15 @@ export const PaymentModal = ({
         method: methodsString || 'Efectivo',
         date: new Date().toLocaleDateString(),
         ref: refsString,
-        receiptNumbers: results.filter((r) => r && r.receipt_number).map((r) => r.receipt_number)
-      });
+        receiptNumbers: results.filter((r) => r && r.receipt_number).map((r) => r.receipt_number),
+        notes: formData.notes
+      };
+
+      setReceiptData(finalReceipt);
       setIsSuccess(true);
-      // No cerramos inmediatamente para permitir imprimir
+      // Enviar automáticamente a la mensajería interna de la plataforma
+      sendToInternalMessaging(finalReceipt);
+      // No cerramos inmediatamente para permitir imprimir o enviar por WhatsApp
     } catch (error) {
       console.error('Payment error:', error);
       isSubmittingPayment.current = false;
@@ -650,7 +824,94 @@ export const PaymentModal = ({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 no-print mt-8">
+          {/* TARJETA DE ENVÍO DIGITAL: WHATSAPP Y MENSAJERÍA INTERNA */}
+          <div className="no-print mt-6 p-4 rounded-3xl bg-slate-50 border border-slate-200 text-left space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <Send size={14} className="text-emerald-600" />
+                Envío Digital del Recibo
+              </span>
+              {/* Badge de mensajería interna */}
+              {internalMsgStatus === 'sent' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <CheckCircle2 size={12} /> Mensajería Interna: Enviado
+                </span>
+              )}
+              {internalMsgStatus === 'sending' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
+                  Enviando a Mensajería...
+                </span>
+              )}
+              {internalMsgStatus === 'error' && (
+                <button
+                  type="button"
+                  onClick={() => sendToInternalMessaging()}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 hover:bg-rose-200 cursor-pointer"
+                  title="Reintentar envío a mensajería interna"
+                >
+                  Error en Mensajería (Reintentar)
+                </button>
+              )}
+            </div>
+
+            {/* Input del teléfono del tutor con edición directa */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                Teléfono WhatsApp del Tutor ({tutorName})
+              </label>
+              <div className="relative">
+                <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="tel"
+                  placeholder="Ej. 809-555-1234 ó 8295551234"
+                  value={tutorPhone}
+                  onChange={(e) => setTutorPhone(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-2xs"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {tutorPhone
+                  ? 'Número detectado automáticamente del perfil familiar. Puedes editarlo si deseas enviar a otro número.'
+                  : 'No se encontró teléfono previo. Escribe el número del tutor para enviar por WhatsApp.'}
+              </p>
+            </div>
+
+            {/* Botones de acción rápida: WhatsApp + Copiar */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleOpenWhatsApp}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-3 rounded-xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+                title="Abrir WhatsApp con el recibo listo para enviar"
+              >
+                <MessageCircle size={16} />
+                Enviar por WhatsApp
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyMessage}
+                className="w-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 py-3 px-3 rounded-xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                title="Copiar texto del recibo para enviar por correo o SMS"
+              >
+                {copiedLink ? <CheckCircle2 size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                {copiedLink ? '¡Copiado!' : 'Copiar Recibo'}
+              </button>
+            </div>
+
+            {internalMsgStatus !== 'sent' && internalMsgStatus !== 'sending' && (
+              <button
+                type="button"
+                onClick={() => sendToInternalMessaging()}
+                className="w-full py-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Send size={13} />
+                Enviar a la mensajería interna de la plataforma
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 no-print mt-6">
             <button
               onClick={handlePrint}
               className="w-full bg-slate-900 text-white py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 cursor-pointer"
