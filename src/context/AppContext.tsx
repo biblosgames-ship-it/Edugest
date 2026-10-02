@@ -1080,11 +1080,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const dbKeys = new Set(
                   dbActivities.map((x: any) => `${x.date}_${String(x.title || '').toLowerCase().trim()}`)
                 );
+                const dbEphemDates = new Set(
+                  dbActivities.filter((x: any) => x.type === 'ephemeris').map((x: any) => x.date)
+                );
 
                 return [
                   ...dbActivities,
                   ...minerdDefaults.filter(
-                    (m) => !dbKeys.has(`${m.date}_${String(m.title || '').toLowerCase().trim()}`)
+                    (m) =>
+                      !dbKeys.has(`${m.date}_${String(m.title || '').toLowerCase().trim()}`) &&
+                      !dbEphemDates.has(m.date)
                   )
                 ];
               })(),

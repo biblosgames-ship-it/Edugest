@@ -5,7 +5,9 @@ import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useApp } from '../context/AppContext';
 import { useSupabase } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 import { Activity } from '../types';
+import toast from 'react-hot-toast';
 import {
   Plus,
   X,
@@ -19,10 +21,17 @@ import {
   Users as UsersIcon,
   Star,
   BookOpen,
-  Ban
+  Ban,
+  Building2,
+  RotateCcw,
+  CheckCircle2
 } from 'lucide-react';
 
-import { SchoolEphemeridesManager } from './SchoolEphemeridesManager';
+import {
+  SchoolEphemeridesManager,
+  parseEphemerisDescription,
+  formatEphemerisDescription
+} from './SchoolEphemeridesManager';
 
 const locales = { es: es };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -34,6 +43,7 @@ const CustomCalendarEvent = ({ event }: any) => {
   const isIncident = event.type === 'incident';
   const isMeeting = event.type === 'meeting';
   const isPedagogical = event.type === 'pedagogical_group';
+  const hasCenterDetails = !!event.centerDetails;
 
   const timeText = event.raw?.startTime
     ? event.raw.endTime && event.raw.endTime !== event.raw.startTime
@@ -44,7 +54,7 @@ const CustomCalendarEvent = ({ event }: any) => {
   return (
     <div
       className="flex flex-col w-full h-full text-left overflow-hidden select-none p-0.5 leading-tight text-white"
-      title={`${isNoClasses ? '🚫 NO HAY DOCENCIA\n' : ''}${event.title}${timeText ? ` (${timeText})` : ''}${event.desc ? `\n\n📝 ${event.desc}` : ''}`}
+      title={`${isNoClasses ? '🚫 NO HAY DOCENCIA\n' : ''}${event.title}${timeText ? ` (${timeText})` : ''}${event.centerDetails ? `\n\n📍 Actividad del Centro:\n${event.centerDetails}` : ''}${event.officialDesc ? `\n\n📖 Reseña:\n${event.officialDesc}` : event.desc ? `\n\n📝 ${event.desc}` : ''}`}
     >
       {/* Alerta Destacada: NO HAY DOCENCIA */}
       {isNoClasses && (
@@ -85,8 +95,16 @@ const CustomCalendarEvent = ({ event }: any) => {
         </span>
       </div>
 
+      {/* Badge si tiene actividades organizadas por el centro */}
+      {hasCenterDetails && (
+        <div className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-amber-400 text-amber-950 font-black text-[7.5px] uppercase tracking-wider shadow-2xs mt-1 w-fit">
+          <Building2 size={8} className="shrink-0 text-amber-900" />
+          <span>Actividad Centro</span>
+        </div>
+      )}
+
       {/* Descripción abajo junto a la hora */}
-      {(timeText || event.desc) && (
+      {(timeText || event.centerDetails || event.desc) && (
         <div className="mt-1 pt-0.5 flex flex-col gap-0.5 border-t border-white/25">
           {timeText && (
             <div className="flex items-center gap-1 text-[8.5px] font-bold text-white/90">
@@ -94,11 +112,15 @@ const CustomCalendarEvent = ({ event }: any) => {
               <span>{timeText}</span>
             </div>
           )}
-          {event.desc && (
+          {event.centerDetails ? (
+            <p className="text-[8.5px] font-bold leading-snug line-clamp-2 break-words whitespace-normal text-amber-200">
+              📍 {event.centerDetails}
+            </p>
+          ) : event.desc ? (
             <p className="text-[8.5px] font-medium leading-snug line-clamp-2 break-words whitespace-normal text-white/95">
               {event.desc}
             </p>
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -106,7 +128,7 @@ const CustomCalendarEvent = ({ event }: any) => {
 };
 
 export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
-  const { state, center, addActivity, updateActivity, deleteActivity } = useApp();
+  const { state, center, addActivity, updateActivity, deleteActivity, refreshData } = useApp();
   const { profile } = useSupabase();
   const [showModal, setShowModal] = useState(false);
   const [showEphemeridesModal, setShowEphemeridesModal] = useState(false);
@@ -122,6 +144,17 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   const isReadOnly = readOnly || !isStaffAdmin;
   const canManageEphemerides = isStaffAdmin;
   const centerColor = center?.primary_color || '#4f46e5';
+
+  const [editingEphemeris, setEditingEphemeris] = useState<{
+    id?: string;
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    officialDesc: string;
+    centerDetails: string;
+    suspendsClasses: boolean;
+  } | null>(null);
 
   // Solo administradores/coordinadores en PC pueden ver la vista de calendario mensual/semanal
   const [mobileViewMode, setMobileViewMode] = useState<'calendar' | 'list'>(() => {
@@ -203,12 +236,16 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
               descLower.includes('feriado nacional') ||
               a.category === 'holiday';
 
+        const { officialDesc, centerDetails } = parseEphemerisDescription(a.description || '');
+
         return {
           id: a.id,
           title: a.title,
           start,
           end,
           desc: a.description?.replace(/\[NO_DOCENCIA\]\s*/g, '').trim(),
+          officialDesc,
+          centerDetails,
           type: a.type || 'event',
           is_global: !!isEphem,
           is_patriotic: isPatriotic,
@@ -216,7 +253,9 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
           centerColor,
           raw: {
             ...a,
-            suspends_classes: isNoClasses
+            suspends_classes: isNoClasses,
+            officialDesc,
+            centerDetails
           }
         };
       } catch (e) {
@@ -281,6 +320,134 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
     setShowModal(true);
   };
 
+  const handleOpenEditEphemeris = (event: any) => {
+    const raw = event?.raw || event || {};
+    const { officialDesc, centerDetails } = parseEphemerisDescription(raw.description || event?.desc || '');
+
+    let dateStr = raw.date;
+    if (!dateStr && event?.start) {
+      dateStr = format(new Date(event.start), 'yyyy-MM-dd');
+    }
+
+    setEditingEphemeris({
+      id: raw.id || event?.id,
+      title: raw.title || event?.title || '',
+      date: dateStr || format(new Date(), 'yyyy-MM-dd'),
+      startTime: raw.startTime || raw.start_time || '08:00',
+      endTime: raw.endTime || raw.end_time || '14:00',
+      officialDesc: raw.officialDesc || officialDesc || '',
+      centerDetails: raw.centerDetails || centerDetails || '',
+      suspendsClasses: !!(raw.suspends_classes ?? event?.suspends_classes)
+    });
+    setViewingEvent(null);
+  };
+
+  const handleSaveEphemerisDetails = async () => {
+    if (!editingEphemeris) return;
+    if (!editingEphemeris.title.trim() || !editingEphemeris.date) {
+      toast.error('Por favor completa el título y la fecha.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const targetCid = profile?.center_id || center?.id;
+      if (!targetCid) {
+        toast.error('No se encontró el centro educativo asociado a tu usuario.');
+        return;
+      }
+
+      const finalDescription = formatEphemerisDescription(
+        editingEphemeris.officialDesc,
+        editingEphemeris.centerDetails,
+        editingEphemeris.suspendsClasses
+      );
+
+      const payload: any = {
+        title: editingEphemeris.title.trim(),
+        date: editingEphemeris.date,
+        description: finalDescription,
+        type: 'ephemeris',
+        start_time: editingEphemeris.startTime || '08:00',
+        end_time: editingEphemeris.endTime || '14:00',
+        suspends_classes: editingEphemeris.suspendsClasses,
+        center_id: targetCid,
+        is_global: false
+      };
+
+      const isVirtual = !editingEphemeris.id || String(editingEphemeris.id).startsWith('minerd_');
+
+      if (!isVirtual) {
+        let { error } = await supabase
+          .from('activities')
+          .update(payload)
+          .eq('id', editingEphemeris.id);
+        if (error && error.message?.includes('suspends_classes')) {
+          const { suspends_classes, ...fallback } = payload;
+          const retryRes = await supabase.from('activities').update(fallback).eq('id', editingEphemeris.id);
+          error = retryRes.error;
+        }
+        if (error) throw error;
+      } else {
+        const { data: existing } = await supabase
+          .from('activities')
+          .select('id')
+          .eq('center_id', targetCid)
+          .eq('date', editingEphemeris.date)
+          .eq('type', 'ephemeris')
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          let { error } = await supabase
+            .from('activities')
+            .update(payload)
+            .eq('id', existing[0].id);
+          if (error) throw error;
+        } else {
+          let { error } = await supabase
+            .from('activities')
+            .insert([payload]);
+          if (error && error.message?.includes('suspends_classes')) {
+            const { suspends_classes, ...fallback } = payload;
+            const retryRes = await supabase.from('activities').insert([fallback]);
+            error = retryRes.error;
+          }
+          if (error) throw error;
+        }
+      }
+
+      toast.success('¡Efeméride y detalles del centro guardados con éxito!');
+      setEditingEphemeris(null);
+      await refreshData(undefined, true);
+    } catch (err: any) {
+      console.error('Error al guardar efeméride:', err);
+      toast.error('Error al guardar: ' + (err.message || 'Error de conexión'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetEphemerisToDefault = async (eventId: string, title: string) => {
+    if (!window.confirm(`¿Deseas restablecer "${title}" a la efeméride oficial del MINERD y quitar los detalles del centro?`)) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      if (eventId && !String(eventId).startsWith('minerd_')) {
+        const { error } = await supabase.from('activities').delete().eq('id', eventId);
+        if (error) throw error;
+      }
+      toast.success('Efeméride restablecida al catálogo oficial MINERD');
+      setViewingEvent(null);
+      await refreshData(undefined, true);
+    } catch (err: any) {
+      console.error('Error al restablecer efeméride:', err);
+      toast.error('Error al restablecer: ' + (err.message || 'Error de conexión'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveActivity = async () => {
     if (!selectedDate || !newActivity.title || !profile?.center_id) {
       alert('Faltan datos obligatorios');
@@ -328,7 +495,7 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
   };
 
   return (
-    <div className="min-h-[650px] md:h-[780px] bg-white p-4 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col overflow-hidden">
+    <div className="min-h-[820px] bg-white p-4 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col pb-8">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
@@ -568,10 +735,30 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                     {event.title}
                   </h4>
 
-                  {event.desc && (
+                  {event.officialDesc && (
+                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
+                      {event.officialDesc}
+                    </p>
+                  )}
+
+                  {!event.officialDesc && event.desc && (
                     <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
                       {event.desc}
                     </p>
+                  )}
+
+                  {event.centerDetails && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-indigo-50/80 border border-indigo-200/80 text-xs text-indigo-950 font-semibold flex items-start gap-2">
+                      <Building2 size={15} className="text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 block">
+                          📍 Actividades / Organización del Centro:
+                        </span>
+                        <p className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium">
+                          {event.centerDetails}
+                        </p>
+                      </div>
+                    </div>
                   )}
 
                   <div className="mt-3 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
@@ -579,9 +766,24 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                       <Clock size={12} className="text-indigo-600" />
                       {a.startTime && a.endTime ? `${a.startTime} - ${a.endTime}` : 'Todo el día'}
                     </span>
-                    <span className="text-[9px] font-black uppercase text-indigo-600 hover:underline">
-                      Ver Ficha / Detalles →
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {canManageEphemerides && (event.is_global || event.type === 'ephemeris') && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditEphemeris(event);
+                          }}
+                          className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-indigo-50 px-2.5 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                          <Pencil size={11} />
+                          <span>{event.centerDetails ? 'Editar Detalles Centro' : 'Agregar Detalles'}</span>
+                        </button>
+                      )}
+                      <span className="text-[9px] font-black uppercase text-slate-600 hover:underline">
+                        Ver Ficha →
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -589,9 +791,13 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 relative z-10 flex flex-col">
+        <div className="flex-1 min-h-[660px] bg-slate-50/50 rounded-[2rem] border border-slate-100 p-3 sm:p-5 relative z-10 flex flex-col">
         <style>
           {`
+            .rbc-calendar {
+              min-height: 660px !important;
+              height: 100% !important;
+            }
             .rbc-toolbar {
               display: flex !important;
               flex-wrap: wrap !important;
@@ -605,8 +811,15 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
             .rbc-btn-group button.rbc-active { background: #4f46e5 !important; color: white !important; border-color: #4f46e5 !important; }
             .rbc-toolbar-label { font-weight: 900 !important; text-transform: uppercase !important; color: #1e293b !important; font-size: 14px !important; letter-spacing: 0.05em !important; }
             .rbc-header { padding: 12px !important; font-weight: 900 !important; text-transform: uppercase !important; font-size: 10px !important; color: #94a3b8 !important; }
-            .rbc-month-view { min-height: 520px; }
-            .rbc-month-row { min-height: 110px !important; overflow: visible !important; }
+            .rbc-month-view {
+              min-height: 580px !important;
+              height: auto !important;
+              border-bottom: 1px solid #e2e8f0 !important;
+            }
+            .rbc-month-row {
+              min-height: 105px !important;
+              overflow: visible !important;
+            }
             .rbc-row-content { z-index: 2 !important; }
             .rbc-event {
               border: none !important;
@@ -1170,7 +1383,16 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                 </div>
               )}
 
-              {viewingEvent.desc && (
+              {viewingEvent.officialDesc ? (
+                <div className="pt-3 border-t border-slate-200/60">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
+                    Reseña Histórica / Descripción Oficial MINERD:
+                  </span>
+                  <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+                    {viewingEvent.officialDesc}
+                  </p>
+                </div>
+              ) : viewingEvent.desc ? (
                 <div className="pt-3 border-t border-slate-200/60">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
                     Descripción / Detalles:
@@ -1179,15 +1401,224 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                     {viewingEvent.desc}
                   </p>
                 </div>
-              )}
+              ) : null}
+
+              {viewingEvent.centerDetails ? (
+                <div className="p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 shadow-2xs">
+                  <div className="flex items-center gap-2 text-indigo-900 font-black text-xs uppercase tracking-wider mb-1.5">
+                    <Building2 size={16} className="text-indigo-600 shrink-0" />
+                    <span>Actividades y Organización de Nuestro Centro:</span>
+                  </div>
+                  <p className="text-xs text-indigo-950 font-semibold leading-relaxed whitespace-pre-wrap">
+                    {viewingEvent.centerDetails}
+                  </p>
+                </div>
+              ) : canManageEphemerides && (viewingEvent.is_global || viewingEvent.type === 'ephemeris') ? (
+                <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs">
+                  <p className="font-bold flex items-center gap-1.5 mb-1">
+                    <Building2 size={14} className="text-amber-700 shrink-0" />
+                    <span>¿Deseas agregar detalles de tu centro?</span>
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-snug">
+                    Puedes especificar el programa de actos cívicos, asignación de cursos, poesías o vestimenta escolar pulsando en <strong>"Agregar Detalles del Centro"</strong>.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
-            <div className="flex justify-end">
-              <button
-                onClick={() => setViewingEvent(null)}
-                className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer"
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {canManageEphemerides && (viewingEvent.is_global || viewingEvent.type === 'ephemeris') && !String(viewingEvent.id || viewingEvent.raw?.id).startsWith('minerd_') && (
+                  <button
+                    type="button"
+                    onClick={() => handleResetEphemerisToDefault(viewingEvent.raw?.id || viewingEvent.id, viewingEvent.title)}
+                    className="w-full sm:w-auto px-3.5 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Restablecer efeméride a la versión predeterminada oficial"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Restablecer</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setViewingEvent(null)}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                {canManageEphemerides && (viewingEvent.is_global || viewingEvent.type === 'ephemeris') && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditEphemeris(viewingEvent)}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <Pencil size={13} />
+                    <span>{viewingEvent.centerDetails ? 'Editar Detalles' : 'Agregar Detalles del Centro'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR EFEMÉRIDE Y DETALLES DEL CENTRO */}
+      {editingEphemeris && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[120] p-3 sm:p-4 text-left animate-fade-in">
+          <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl relative border border-white">
+            <button
+              onClick={() => setEditingEphemeris(null)}
+              className="absolute top-6 right-6 text-slate-300 hover:text-slate-600 transition-colors p-1 rounded-xl cursor-pointer"
+            >
+              <X size={22} />
+            </button>
+
+            <div className="flex items-center gap-3 shrink-0 mb-4 border-b border-slate-100 pb-3">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-xs">
+                <Building2 size={22} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                  Editar Efeméride y Detalles del Centro
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  Organiza actos, notas y especificaciones para tu centro educativo
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                  Título de la Efeméride *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingEphemeris.title}
+                  onChange={(e) => setEditingEphemeris({ ...editingEphemeris, title: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                    Fecha *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editingEphemeris.date}
+                    onChange={(e) => setEditingEphemeris({ ...editingEphemeris, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                    Hora Inicio
+                  </label>
+                  <input
+                    type="time"
+                    value={editingEphemeris.startTime}
+                    onChange={(e) => setEditingEphemeris({ ...editingEphemeris, startTime: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                    Hora Fin
+                  </label>
+                  <input
+                    type="time"
+                    value={editingEphemeris.endTime}
+                    onChange={(e) => setEditingEphemeris({ ...editingEphemeris, endTime: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* CAMPO DESTACADO: DETALLES Y ACTIVIDADES DEL CENTRO */}
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 shadow-xs">
+                <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-900 mb-1.5">
+                  <Building2 size={16} className="text-indigo-600" />
+                  <span>Detalles y Organización de Nuestro Centro</span>
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Ej: Acto cívico en el patio a las 8:30 AM. Izamiento solemne con 6to de secundaria, poesías a cargo de 4to grado y palabras de la directora. Vestimenta de gala escolar..."
+                  value={editingEphemeris.centerDetails}
+                  onChange={(e) => setEditingEphemeris({ ...editingEphemeris, centerDetails: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                />
+                <p className="text-[10px] text-indigo-700/80 mt-1 font-medium">
+                  Estos detalles aparecerán destacados en el calendario institucional y la ficha del evento para toda la comunidad escolar.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                  Reseña Histórica / Descripción Oficial MINERD
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contexto histórico de la fecha..."
+                  value={editingEphemeris.officialDesc}
+                  onChange={(e) => setEditingEphemeris({ ...editingEphemeris, officialDesc: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* SUSPENDER DOCENCIA */}
+              <div
+                onClick={() => setEditingEphemeris({ ...editingEphemeris, suspendsClasses: !editingEphemeris.suspendsClasses })}
+                className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
+                  editingEphemeris.suspendsClasses
+                    ? 'bg-rose-50 border-rose-300 text-rose-700 shadow-sm'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
               >
-                Cerrar
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl ${editingEphemeris.suspendsClasses ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                    <Ban size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider">
+                      Suspender Docencia (No hay clases)
+                    </p>
+                    <p className="text-[10px] opacity-80">
+                      Alerta roja en el calendario para padres, docentes y alumnos
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editingEphemeris.suspendsClasses}
+                  onChange={(e) => setEditingEphemeris({ ...editingEphemeris, suspendsClasses: e.target.checked })}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 shrink-0 mt-3">
+              <button
+                type="button"
+                onClick={() => setEditingEphemeris(null)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleSaveEphemerisDetails}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCircle2 size={15} />
+                <span>{isSaving ? 'Guardando...' : 'Guardar para el Centro'}</span>
               </button>
             </div>
           </div>

@@ -31,6 +31,40 @@ export interface EphemerisItem {
   suspends_classes?: boolean;
 }
 
+export function parseEphemerisDescription(description: string = '') {
+  let clean = (description || '').replace(/\[NO_DOCENCIA\]\s*/g, '').trim();
+  let officialDesc = clean;
+  let centerDetails = '';
+
+  if (clean.includes('[DETALLES_CENTRO]')) {
+    const parts = clean.split('[DETALLES_CENTRO]');
+    officialDesc = parts[0].trim();
+    centerDetails = parts.slice(1).join('[DETALLES_CENTRO]').trim();
+  }
+
+  return { officialDesc, centerDetails };
+}
+
+export function formatEphemerisDescription(
+  officialDesc: string,
+  centerDetails: string,
+  suspendsClasses: boolean
+) {
+  let parts: string[] = [];
+  if (suspendsClasses) {
+    parts.push('[NO_DOCENCIA]');
+  }
+  const cleanOfficial = (officialDesc || '').replace(/\[NO_DOCENCIA\]\s*/g, '').trim();
+  if (cleanOfficial) {
+    parts.push(cleanOfficial);
+  }
+  const cleanCenter = (centerDetails || '').trim();
+  if (cleanCenter) {
+    parts.push(`[DETALLES_CENTRO]\n${cleanCenter}`);
+  }
+  return parts.join('\n\n').trim();
+}
+
 // Catálogo Base Oficial del Calendario Escolar Dominicano (MINERD)
 export const getDefaultMinerdEphemerides = (schoolYear: string = '2026-2027'): EphemerisItem[] => {
   const [startYearStr, endYearStr] = (schoolYear || '2026-2027').split('-');
@@ -295,6 +329,7 @@ export const SchoolEphemeridesManager: React.FC = () => {
   const [formDate, setFormDate] = useState('');
   const [formCategory, setFormCategory] = useState<'civic' | 'educational' | 'holiday' | 'institutional'>('civic');
   const [formDescription, setFormDescription] = useState('');
+  const [formCenterDetails, setFormCenterDetails] = useState('');
   const [formIsGlobal, setFormIsGlobal] = useState(true);
   const [formSuspendsClasses, setFormSuspendsClasses] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -473,7 +508,9 @@ export const SchoolEphemeridesManager: React.FC = () => {
           ? 'civic'
           : 'educational'
       );
-      setFormDescription(item.description ? item.description.replace(/\[NO_DOCENCIA\]/g, '').trim() : '');
+      const { officialDesc, centerDetails } = parseEphemerisDescription(item.description || '');
+      setFormDescription(officialDesc);
+      setFormCenterDetails(centerDetails);
       setFormIsGlobal(item.is_global ?? true);
       setFormSuspendsClasses(
         !!(item.suspends_classes || item.description?.includes('[NO_DOCENCIA]') || item.category === 'holiday' || item.description?.toLowerCase().includes('feriado'))
@@ -484,6 +521,7 @@ export const SchoolEphemeridesManager: React.FC = () => {
       setFormDate('');
       setFormCategory('civic');
       setFormDescription('');
+      setFormCenterDetails('');
       setFormIsGlobal(true);
       setFormSuspendsClasses(false);
     }
@@ -501,14 +539,7 @@ export const SchoolEphemeridesManager: React.FC = () => {
     setIsSaving(true);
     try {
       const targetCid = profile?.center_id || center?.id;
-      let finalDesc = formDescription.trim();
-      if (formSuspendsClasses) {
-        if (!finalDesc.includes('[NO_DOCENCIA]')) {
-          finalDesc = `${finalDesc}\n[NO_DOCENCIA]`.trim();
-        }
-      } else {
-        finalDesc = finalDesc.replace(/\[NO_DOCENCIA\]/g, '').trim();
-      }
+      const finalDesc = formatEphemerisDescription(formDescription, formCenterDetails, formSuspendsClasses);
 
       const payload: any = {
         title: formTitle.trim(),
@@ -802,12 +833,37 @@ export const SchoolEphemeridesManager: React.FC = () => {
                               Sin Docencia
                             </span>
                           )}
+                          {(() => {
+                            const { centerDetails } = parseEphemerisDescription(item.description || '');
+                            if (centerDetails) {
+                              return (
+                                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase flex items-center gap-1 shrink-0">
+                                  <Building2 size={10} className="text-amber-700" />
+                                  Detalles del Centro
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
-                        {item.description && (
-                          <p className="text-[11px] text-text-muted line-clamp-2 leading-relaxed font-medium">
-                            {item.description.replace(/\[NO_DOCENCIA\]/g, '').trim()}
-                          </p>
-                        )}
+                        {(() => {
+                          const { officialDesc, centerDetails } = parseEphemerisDescription(item.description || '');
+                          return (
+                            <div className="space-y-1">
+                              {officialDesc && (
+                                <p className="text-[11px] text-text-muted line-clamp-2 leading-relaxed font-medium">
+                                  {officialDesc}
+                                </p>
+                              )}
+                              {centerDetails && (
+                                <div className="p-1.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 text-[10.5px] text-indigo-900 dark:text-indigo-200 font-semibold flex items-start gap-1.5">
+                                  <Building2 size={12} className="text-indigo-600 shrink-0 mt-0.5" />
+                                  <span className="line-clamp-2">{centerDetails}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 text-[10px] font-black uppercase">
@@ -906,15 +962,32 @@ export const SchoolEphemeridesManager: React.FC = () => {
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-text-muted mb-1">
-                  Descripción o Reseña Histórica
+                  Descripción o Reseña Histórica Oficial
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Escribe brevemente el contexto histórico o instrucciones formativas para los centros..."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-brand-bg border border-border-main rounded-xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 bg-brand-bg border border-border-main rounded-xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 mb-1">
+                  <Building2 size={13} />
+                  <span>Detalles / Actividades de Nuestro Centro Educativo</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ej: Acto a las 8:00 AM en el patio central. Presentación cultural de 5to y 6to grado. Vestimenta de gala escolar..."
+                  value={formCenterDetails}
+                  onChange={(e) => setFormCenterDetails(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold text-text-main outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-indigo-400/60"
+                />
+                <p className="text-[10px] text-text-muted mt-1">
+                  Instrucciones internas, asignación de cursos o notas organizativas específicas para tu centro.
+                </p>
               </div>
 
               {/* ALERTA ROJA: NO HAY DOCENCIA */}
