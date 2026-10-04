@@ -171,6 +171,8 @@ function AppContent() {
   const { isSubscriptionExpired, center } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [classroomTab, setClassroomTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>('attendance');
+  const [classroomCourseId, setClassroomCourseId] = useState<string>('');
+  const [classroomSubjectId, setClassroomSubjectId] = useState<string>('');
   const [dataView, setDataView] = useState('course');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
@@ -194,15 +196,34 @@ function AppContent() {
   const isParentRole = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
   const isStudentOrParent = profile?.role === 'student' || isParentRole;
 
-  // Manejo de cambio de vista con acceso directo inteligente a tareas de Mi Aula para docentes
-  const handleViewChange = (view: string) => {
+  // Manejo de cambio de vista con acceso directo inteligente a tareas o asistencia de Mi Aula
+  const handleViewChange = (
+    view: string,
+    options?: {
+      tab?: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder';
+      courseId?: string;
+      subjectId?: string;
+    }
+  ) => {
+    if (options?.courseId) {
+      setClassroomCourseId(options.courseId);
+    }
+    if (options?.subjectId) {
+      setClassroomSubjectId(options.subjectId);
+    }
+    if (options?.tab) {
+      setClassroomTab(options.tab);
+    }
+
     if (view === 'tasks' && !isStudentOrParent) {
       setClassroomTab('tasks');
       setActiveView('classroom');
       return;
     }
     if (view === 'classroom' && activeView !== 'classroom') {
-      setClassroomTab('attendance');
+      if (!options?.tab) {
+        setClassroomTab('attendance');
+      }
     }
     setActiveView(view);
   };
@@ -581,6 +602,8 @@ function AppContent() {
             <div className="max-w-7xl mx-auto">
               <ClassroomManager
                 initialTab={classroomTab}
+                initialCourseId={classroomCourseId}
+                initialSubjectId={classroomSubjectId}
                 onTabChange={(tab) => setClassroomTab(tab)}
               />
             </div>

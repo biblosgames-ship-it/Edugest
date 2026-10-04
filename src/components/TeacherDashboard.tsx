@@ -28,7 +28,8 @@ import {
   Pencil,
   Trash2,
   Building2,
-  UserCheck
+  UserCheck,
+  ChevronRight
 } from 'lucide-react';
 import { ExcuseAlert } from './ExcuseAlert';
 import { TeacherTaskAnnouncement } from './TeacherTaskAnnouncement';
@@ -66,11 +67,23 @@ export const TeacherDashboard = ({
   onViewChange
 }: {
   userData: any;
-  onViewChange?: (view: string) => void;
+  onViewChange?: (view: string, options?: any) => void;
 }) => {
   const { state, selectedYear, center } = useApp();
   const { unreadCount } = useNotifications();
   const { isSameTeacher } = useTeacherIdentity();
+
+  // Acceso directo a Mi Aula con el curso y asignatura seleccionados para pasar lista
+  const handleGoToClassroomAttendance = (courseId?: string, subjectId?: string) => {
+    if (!courseId) return;
+    if (onViewChange) {
+      onViewChange('classroom', {
+        tab: 'attendance',
+        courseId,
+        subjectId: subjectId || ''
+      });
+    }
+  };
 
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
@@ -2039,26 +2052,44 @@ export const TeacherDashboard = ({
 
                 {/* CLASE ACTUAL EN VIVO */}
                 {activeClassNow ? (
-                  <div className="bg-emerald-50 border-2 border-emerald-300 rounded-[2rem] p-6 mb-6 relative overflow-hidden animate-in zoom-in-95 duration-300">
+                  <div
+                    onClick={() => handleGoToClassroomAttendance(activeClassNow.course?.id, activeClassNow.sub?.id)}
+                    title={`Hacer clic para pasar lista a ${activeClassNow.course?.grade || ''} ${activeClassNow.course?.section || ''} (${activeClassNow.sub?.name || 'Materia'})`}
+                    className="bg-emerald-50 border-2 border-emerald-300 rounded-[2rem] p-5 sm:p-6 mb-6 relative overflow-hidden animate-in zoom-in-95 duration-300 cursor-pointer hover:shadow-lg hover:border-emerald-400 transition-all group"
+                  >
                     <div className="absolute -top-3 right-6 px-4 py-1 bg-emerald-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">
                       CLASE EN VIVO
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center font-black text-base shadow-md">
-                        {activeClassNow.room?.name || 'A'}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center font-black text-base shadow-md shrink-0">
+                          {activeClassNow.room?.name || 'A'}
+                        </div>
+                        <div>
+                          <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
+                            AHORA MISMO
+                          </span>
+                          <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
+                            {activeClassNow.sub?.name}
+                          </h4>
+                          <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
+                            <BookOpen size={12} /> Curso: {activeClassNow.course?.grade}{' '}
+                            {activeClassNow.course?.section} ({activeClassNow.course?.level})
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">
-                          AHORA MISMO
-                        </span>
-                        <h4 className="text-2xl font-black text-emerald-950 uppercase tracking-tight leading-tight mt-0.5">
-                          {activeClassNow.sub?.name}
-                        </h4>
-                        <p className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2 mt-1">
-                          <BookOpen size={12} /> Curso: {activeClassNow.course?.grade}{' '}
-                          {activeClassNow.course?.section} ({activeClassNow.course?.level})
-                        </p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGoToClassroomAttendance(activeClassNow.course?.id, activeClassNow.sub?.id);
+                        }}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer w-full sm:w-auto"
+                      >
+                        <UserCheck size={16} />
+                        <span>Pasar Lista</span>
+                        <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -2079,7 +2110,7 @@ export const TeacherDashboard = ({
 
                 {/* TIMELINE DE HOY */}
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">
-                  Clases Asignadas para Hoy
+                  Clases Asignadas para Hoy (Haz clic para pasar lista)
                 </h4>
                 <div className="space-y-3">
                   {teacherTodaySchedule.length === 0 ? (
@@ -2124,7 +2155,9 @@ export const TeacherDashboard = ({
                       return (
                         <div
                           key={c.id}
-                          className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+                          onClick={() => handleGoToClassroomAttendance(c.course?.id, c.sub?.id)}
+                          title={`Hacer clic para pasar lista a ${c.course?.grade || ''} ${c.course?.section || ''} (${c.sub?.name || 'Materia'})`}
+                          className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex items-center justify-between cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] group ${
                             c.isNow
                               ? 'bg-emerald-50 border-emerald-400 shadow-sm ring-2 ring-emerald-200'
                               : `${theme.bg} ${theme.border} shadow-xs`
@@ -2132,7 +2165,7 @@ export const TeacherDashboard = ({
                         >
                           <div className="flex items-center gap-4">
                             <div
-                              className="w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-xs"
+                              className="w-12 h-10 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-xs group-hover:scale-105 transition-transform"
                               style={{ backgroundColor: c.isNow ? '#10b981' : theme.accent }}
                             >
                               {format12h(c.sTime)}
@@ -2149,11 +2182,18 @@ export const TeacherDashboard = ({
                               </p>
                             </div>
                           </div>
-                          {c.room && (
-                            <span className="text-[9px] font-black text-slate-700 bg-white/85 border border-slate-200/80 px-3 py-1.5 rounded-lg flex items-center gap-1.5 uppercase shadow-xs">
-                              <MapPin size={10} style={{ color: theme.accent }} /> {c.room.name}
+                          <div className="flex items-center gap-2">
+                            {c.room && (
+                              <span className="hidden sm:inline-flex text-[9px] font-black text-slate-700 bg-white/85 border border-slate-200/80 px-2.5 py-1.5 rounded-lg items-center gap-1 uppercase shadow-xs">
+                                <MapPin size={10} style={{ color: theme.accent }} /> {c.room.name}
+                              </span>
+                            )}
+                            <span className="px-3 py-1.5 rounded-xl bg-indigo-600 group-hover:bg-indigo-700 text-white font-black text-[9px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all shrink-0">
+                              <UserCheck size={12} />
+                              <span className="hidden xs:inline">Pasar Lista</span>
+                              <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
                             </span>
-                          )}
+                          </div>
                         </div>
                       );
                     })

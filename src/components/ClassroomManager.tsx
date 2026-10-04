@@ -61,11 +61,15 @@ const getDefaultActivities = (): Record<string, Array<{ id: string; name: string
 export interface ClassroomManagerProps {
   initialTab?: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder';
   onTabChange?: (tab: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder') => void;
+  initialCourseId?: string;
+  initialSubjectId?: string;
 }
 
 export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   initialTab = 'attendance',
-  onTabChange
+  onTabChange,
+  initialCourseId,
+  initialSubjectId
 }) => {
   const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
@@ -101,8 +105,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   };
 
   // Estados de vista
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(initialSubjectId || '');
   const [activeTab, setActiveTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>(initialTab);
 
   useEffect(() => {
@@ -110,6 +114,18 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  useEffect(() => {
+    if (initialCourseId) {
+      setSelectedCourseId(initialCourseId);
+    }
+  }, [initialCourseId]);
+
+  useEffect(() => {
+    if (initialSubjectId) {
+      setSelectedSubjectId(initialSubjectId);
+    }
+  }, [initialSubjectId]);
 
   const handleTabChange = (tab: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder') => {
     setActiveTab(tab);
@@ -2169,27 +2185,24 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* HEADER DE BIENVENIDA Y SELECTORES */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/10 relative overflow-hidden">
+      {/* HEADER DE BIENVENIDA Y SELECTORES COMPACTO */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-xl border border-white/10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="flex flex-wrap items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 border border-indigo-400/30 rounded-full text-indigo-300 text-xs font-black uppercase tracking-wider">
-              <UserCheck size={14} /> Mi Aula & Control Rápido
+        <div className="flex flex-wrap items-center justify-between gap-4 relative z-10">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-indigo-500/20 border border-indigo-400/30 rounded-full text-indigo-300 text-[10px] font-black uppercase tracking-wider">
+              <UserCheck size={12} /> Mi Aula & Control Rápido
             </div>
-            <h1 className="text-2xl md:text-4xl font-black tracking-tight">
+            <h1 className="text-lg md:text-xl font-black tracking-tight text-white">
               Gestión de Estudiantes por Grado
             </h1>
-            <p className="text-slate-400 text-xs md:text-sm font-medium max-w-xl">
-              Pasa lista, registra apuntes de conducta, toma notas parciales y consulta la ficha de tus estudiantes de forma instantánea.
-            </p>
           </div>
 
           {/* SELECTOR DE CURSO, ASIGNATURA Y PERIODO */}
-          <div className="flex flex-wrap items-center gap-3 bg-white/5 p-3 rounded-3xl border border-white/10 backdrop-blur-md">
+          <div className="flex flex-wrap items-center gap-2.5 bg-white/5 p-2 rounded-2xl border border-white/10 backdrop-blur-md">
             <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+              <label className="block text-[8.5px] font-black uppercase tracking-widest text-indigo-300 mb-0.5">
                 Curso / Grado:
               </label>
               <select
@@ -2198,7 +2211,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                   setSelectedCourseId(e.target.value);
                   setSelectedSubjectId('');
                 }}
-                className="bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-2xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer max-w-[200px]"
               >
                 {availableCourses.map((c: any) => (
                   <option key={c.id} value={c.id}>
@@ -2209,13 +2222,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
+              <label className="block text-[8.5px] font-black uppercase tracking-widest text-indigo-300 mb-0.5">
                 Asignatura:
               </label>
               <select
                 value={selectedSubjectId}
                 onChange={(e) => setSelectedSubjectId(e.target.value)}
-                className="bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-2xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer min-w-[150px]"
+                className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer min-w-[130px] max-w-[180px]"
               >
                 {availableSubjects.map((s: any) => (
                   <option key={s.id} value={s.id}>
@@ -2226,57 +2239,60 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
-                Período Evaluativo:
+              <label className="block text-[8.5px] font-black uppercase tracking-widest text-indigo-300 mb-0.5">
+                Período:
               </label>
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="bg-slate-900 text-amber-300 font-black text-xs px-4 py-2.5 rounded-2xl border border-amber-400/40 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+                className="bg-slate-900 text-amber-300 font-black text-xs px-3 py-1.5 rounded-xl border border-amber-400/40 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
               >
-                <option value="P1">Período 1 (P1)</option>
-                <option value="P2">Período 2 (P2)</option>
-                <option value="P3">Período 3 (P3)</option>
-                <option value="P4">Período 4 (P4)</option>
+                <option value="P1">P1</option>
+                <option value="P2">P2</option>
+                <option value="P3">P3</option>
+                <option value="P4">P4</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-indigo-300 mb-1">
-                Fecha Asistencia:
+              <label className="block text-[8.5px] font-black uppercase tracking-widest text-indigo-300 mb-0.5">
+                Fecha:
               </label>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-2xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                className="bg-slate-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
               />
             </div>
           </div>
         </div>
 
-        {/* METRICAS RAPIDAS DE ASISTENCIA */}
+        {/* METRICAS COMPACTAS DE ASISTENCIA */}
         {selectedCourseId && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
-            <div className="bg-white/5 p-3 rounded-2xl border border-white/10 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Inscriptos</span>
-              <span className="text-xl font-black text-white">{attendanceStats.total}</span>
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/10 relative z-10 text-xs">
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 mr-1">
+              Asistencia Diaria:
+            </span>
+            <div className="inline-flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-xl text-white font-bold border border-white/10 shadow-2xs">
+              <span className="text-slate-400 text-[9px] uppercase tracking-wider">Inscritos</span>
+              <span className="font-black text-white text-xs">{attendanceStats.total}</span>
             </div>
-            <div className="bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/20 text-center">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase block">Presentes</span>
-              <span className="text-xl font-black text-emerald-400">{attendanceStats.presente}</span>
+            <div className="inline-flex items-center gap-1.5 bg-emerald-500/15 px-2.5 py-1 rounded-xl text-emerald-300 font-bold border border-emerald-500/25 shadow-2xs">
+              <span className="text-emerald-400 text-[9px] uppercase tracking-wider">Presentes</span>
+              <span className="font-black text-emerald-200 text-xs">{attendanceStats.presente}</span>
             </div>
-            <div className="bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 text-center">
-              <span className="text-[10px] font-bold text-amber-400 uppercase block">Tardanzas</span>
-              <span className="text-xl font-black text-amber-400">{attendanceStats.tardanza}</span>
+            <div className="inline-flex items-center gap-1.5 bg-amber-500/15 px-2.5 py-1 rounded-xl text-amber-300 font-bold border border-amber-500/25 shadow-2xs">
+              <span className="text-amber-400 text-[9px] uppercase tracking-wider">Tardanzas</span>
+              <span className="font-black text-amber-200 text-xs">{attendanceStats.tardanza}</span>
             </div>
-            <div className="bg-indigo-500/10 p-3 rounded-2xl border border-indigo-500/20 text-center">
-              <span className="text-[10px] font-bold text-indigo-400 uppercase block">Excusas</span>
-              <span className="text-xl font-black text-indigo-400">{attendanceStats.excusa}</span>
+            <div className="inline-flex items-center gap-1.5 bg-indigo-500/15 px-2.5 py-1 rounded-xl text-indigo-300 font-bold border border-indigo-500/25 shadow-2xs">
+              <span className="text-indigo-400 text-[9px] uppercase tracking-wider">Excusas</span>
+              <span className="font-black text-indigo-200 text-xs">{attendanceStats.excusa}</span>
             </div>
-            <div className="bg-rose-500/10 p-3 rounded-2xl border border-rose-500/20 text-center">
-              <span className="text-[10px] font-bold text-rose-400 uppercase block">Ausentes</span>
-              <span className="text-xl font-black text-rose-400">{attendanceStats.ausente}</span>
+            <div className="inline-flex items-center gap-1.5 bg-rose-500/15 px-2.5 py-1 rounded-xl text-rose-300 font-bold border border-rose-500/25 shadow-2xs">
+              <span className="text-rose-400 text-[9px] uppercase tracking-wider">Ausentes</span>
+              <span className="font-black text-rose-200 text-xs">{attendanceStats.ausente}</span>
             </div>
           </div>
         )}
