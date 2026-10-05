@@ -20,13 +20,27 @@ import {
   Banknote,
   Landmark,
   Building2,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
+
+const isInternalTransfer = (e: any) => {
+  const acc = String(e?.account || '').toUpperCase().trim();
+  const m = String(e?.method || '').toLowerCase().trim();
+  const item = String(e?.item || '').toUpperCase().trim();
+  return (
+    acc === 'TRANSFERENCIA ENTRE CAJAS' ||
+    m === 'internal_transfer' ||
+    acc.includes('TRANSFERENCIA ENTRE') ||
+    item.includes('TRASPASO')
+  );
+};
 
 const translateMethod = (method: string, account?: string) => {
   const m = String(method || '').toLowerCase().trim();
@@ -530,6 +544,31 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     }
   }, [showModal]);
 
+  const [entryTypeFilter, setEntryTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+
+  const availableCategories = useMemo(() => {
+    if (entryTypeFilter === 'income') {
+      return categories.filter((c: any) => c.type === 'income');
+    }
+    if (entryTypeFilter === 'expense') {
+      return categories.filter((c: any) => c.type === 'expense');
+    }
+    return categories;
+  }, [categories, entryTypeFilter]);
+
+  const handleTypeFilterChange = (newType: 'all' | 'income' | 'expense') => {
+    setEntryTypeFilter(newType);
+    setSelectedAccounts([]);
+  };
+
+  const handleToggleAccount = (accName: string) => {
+    setSelectedAccounts((prev) =>
+      prev.includes(accName) ? prev.filter((a) => a !== accName) : [...prev, accName]
+    );
+  };
+
   const handleGenerateCustomReport = () => {
     if (reportType === 'condensed') {
       handleCondensedCashClosing();
@@ -541,7 +580,24 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
   const filteredEntries = useMemo(() => {
     return entries.filter((e: any) => {
       const matchesDate = e.date >= startDate && e.date <= endDate;
-      const matchesAccount = accountFilter === 'all' || e.account === accountFilter;
+
+      // Exclusión estricta de transferencias entre cajas en reportes de ingresos o gastos reales
+      const isInternal = isInternalTransfer(e);
+      let matchesType = true;
+      if (entryTypeFilter === 'income') {
+        matchesType = e.type === 'income' && !isInternal;
+      } else if (entryTypeFilter === 'expense') {
+        matchesType = e.type === 'expense' && !isInternal;
+      }
+
+      // Filtro por conceptos/cuentas seleccionadas
+      let matchesAccount = true;
+      if (selectedAccounts.length > 0) {
+        matchesAccount = selectedAccounts.includes(e.account);
+      } else if (accountFilter !== 'all') {
+        matchesAccount = e.account === accountFilter;
+      }
+
       const matchesMethod = methodFilter === 'all' || (e.method || 'cash') === methodFilter;
       const acc = e.cash_account || 'caja_chica';
       const matchesCashAccount =
@@ -551,10 +607,25 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
           : acc === cashAccountFilter);
       const matchesSearch =
         (e.description || e.desc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (e.item || '').toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesDate && matchesAccount && matchesMethod && matchesCashAccount && matchesSearch;
+        (e.item || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (e.account || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesDate && matchesType && matchesAccount && matchesMethod && matchesCashAccount && matchesSearch;
     });
-  }, [entries, startDate, endDate, accountFilter, methodFilter, cashAccountFilter, searchTerm]);
+  }, [entries, startDate, endDate, entryTypeFilter, selectedAccounts, accountFilter, methodFilter, cashAccountFilter, searchTerm]);
+
+  // Total real para la barra de resumen en pantalla
+  const realTotalAmount = useMemo(() => {
+    return filteredEntries.reduce((acc: number, e: any) => {
+      if (entryTypeFilter === 'expense') {
+        return acc + (e.type === 'expense' ? Number(e.amount || 0) : 0);
+      }
+      if (entryTypeFilter === 'income') {
+        return acc + (e.type === 'income' ? Number(e.amount || 0) : 0);
+      }
+      return acc + (e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0));
+    }, 0);
+  }, [filteredEntries, entryTypeFilter]);
 
   // Computed balances per cash register (Period filtered & Accumulated up to selected date)
   const balances = useMemo(() => {
@@ -890,9 +961,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
   const handleCondensedCashClosing = () => {
     // Excluir transferencias internas del resumen contable condensado
-    const cuadreEntries = filteredEntries.filter(
-      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
-    );
+    const cuadreEntries = filteredEntries.filter((e) => !isInternalTransfer(e));
     if (cuadreEntries.length === 0)
       return toast.error('No hay movimientos válidos de cuadre en este rango de fechas');
 
@@ -905,7 +974,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     const methodSummary: Record<string, number> = { cash: 0, transfer: 0, card: 0, check: 0 };
     cuadreEntries.forEach((e) => {
-      if (e.type === 'income') {
+      if (entryTypeFilter === 'expense' ? e.type === 'expense' : e.type === 'income') {
         const method = e.method || 'cash';
         const amt = Number(e.amount || 0);
         if (methodSummary.hasOwnProperty(method)) methodSummary[method] += amt;
@@ -918,17 +987,23 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     const accountCount = accountEntries.length;
     const activeMethods = Object.entries(methodSummary).filter(([, total]) => total > 0);
 
-    // Dynamic height calculation so all accounts, totals, payment breakdown and signatures fit without getting cut off
     const calculatedHeight = 48 + (accountCount * 6) + 26 + 12 + (activeMethods.length * 5) + 16 + 35 + 25;
     const pageHeight = Math.max(150, Math.ceil(calculatedHeight));
 
     const doc = new jsPDF({ format: [100, pageHeight] });
 
+    const reportTitle =
+      entryTypeFilter === 'income'
+        ? 'RESUMEN DE INGRESOS REALES'
+        : entryTypeFilter === 'expense'
+        ? 'RESUMEN DE GASTOS REALES'
+        : 'RESUMEN CONTABLE CONDENSADO';
+
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text(center?.name || 'EDUGEST SCHOOL', 50, 15, { align: 'center' });
     doc.setFontSize(8);
-    doc.text('RESUMEN CONTABLE CONDENSADO', 50, 22, { align: 'center' });
+    doc.text(reportTitle, 50, 22, { align: 'center' });
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.text(`PERIODO: ${startDate} al ${endDate}`, 50, 26, { align: 'center' });
@@ -937,15 +1012,16 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     let currentY = 40;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text('CUENTA', 10, currentY);
-    doc.text('TOTAL NETO', 90, currentY, { align: 'right' });
+    doc.text('CONCEPTO / CUENTA', 10, currentY);
+    doc.text('MONTO TOTAL', 90, currentY, { align: 'right' });
     doc.line(10, currentY + 2, 90, currentY + 2);
     currentY += 8;
 
     doc.setFont('helvetica', 'normal');
     accountEntries.forEach(([account, total]) => {
+      const displayTotal = entryTypeFilter === 'expense' ? Math.abs(total) : total;
       doc.text(account.length > 28 ? account.substring(0, 27) + '…' : account, 10, currentY);
-      doc.text(`RD$ ${total.toLocaleString()}`, 90, currentY, { align: 'right' });
+      doc.text(`RD$ ${displayTotal.toLocaleString()}`, 90, currentY, { align: 'right' });
       currentY += 6;
     });
 
@@ -963,20 +1039,31 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.text('TOTAL INGRESOS:', 10, currentY);
-    doc.text(`RD$ ${totalIncome.toLocaleString()}`, 90, currentY, { align: 'right' });
-    currentY += 5;
 
-    doc.text('TOTAL EGRESOS:', 10, currentY);
-    doc.text(`RD$ ${totalExpense.toLocaleString()}`, 90, currentY, { align: 'right' });
-    currentY += 5;
+    if (entryTypeFilter === 'all') {
+      doc.text('TOTAL INGRESOS:', 10, currentY);
+      doc.text(`RD$ ${totalIncome.toLocaleString()}`, 90, currentY, { align: 'right' });
+      currentY += 5;
 
-    doc.setFillColor(240, 240, 240);
-    doc.rect(10, currentY - 4, 80, 6, 'F');
-    const balanceLabel = startDate === endDate ? 'BALANCE DEL DÍA:' : 'BALANCE DEL PERIODO:';
-    doc.text(balanceLabel, 12, currentY);
-    doc.text(`RD$ ${netBalance.toLocaleString()}`, 88, currentY, { align: 'right' });
-    currentY += 8;
+      doc.text('TOTAL EGRESOS:', 10, currentY);
+      doc.text(`RD$ ${totalExpense.toLocaleString()}`, 90, currentY, { align: 'right' });
+      currentY += 5;
+
+      doc.setFillColor(240, 240, 240);
+      doc.rect(10, currentY - 4, 80, 6, 'F');
+      const balanceLabel = startDate === endDate ? 'BALANCE DEL DÍA:' : 'BALANCE DEL PERIODO:';
+      doc.text(balanceLabel, 12, currentY);
+      doc.text(`RD$ ${netBalance.toLocaleString()}`, 88, currentY, { align: 'right' });
+      currentY += 8;
+    } else {
+      doc.setFillColor(240, 240, 240);
+      doc.rect(10, currentY - 4, 80, 6, 'F');
+      const label = entryTypeFilter === 'income' ? 'TOTAL INGRESOS REALES:' : 'TOTAL GASTOS REALES:';
+      const amountVal = entryTypeFilter === 'income' ? totalIncome : totalExpense;
+      doc.text(label, 12, currentY);
+      doc.text(`RD$ ${amountVal.toLocaleString()}`, 88, currentY, { align: 'right' });
+      currentY += 8;
+    }
 
     // DESGLOSE POR MÉTODO DE PAGO
     doc.line(10, currentY, 90, currentY);
@@ -1005,11 +1092,19 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'bold');
     doc.setFillColor(245, 245, 245);
     doc.rect(10, currentY - 6, 80, 10, 'F');
-    const grandTotal = cuadreEntries.reduce(
-      (acc, e) => acc + (e.type === 'income' ? Number(e.amount || 0) : -Number(e.amount || 0)),
-      0
-    );
-    doc.text(`BALANCE: RD$ ${grandTotal.toLocaleString()}`, 50, currentY, { align: 'center' });
+    const grandTotalVal =
+      entryTypeFilter === 'income'
+        ? totalIncome
+        : entryTypeFilter === 'expense'
+        ? totalExpense
+        : netBalance;
+    const finalLabel =
+      entryTypeFilter === 'income'
+        ? 'TOTAL REAL:'
+        : entryTypeFilter === 'expense'
+        ? 'TOTAL REAL:'
+        : 'BALANCE:';
+    doc.text(`${finalLabel} RD$ ${grandTotalVal.toLocaleString()}`, 50, currentY, { align: 'center' });
 
     currentY += 25;
     doc.line(15, currentY, 45, currentY);
@@ -1033,15 +1128,27 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     doc.setFont('helvetica', 'normal');
     doc.text(center?.address || 'Dirección del Centro', 105, 26, { align: 'center' });
 
+    const reportTitle =
+      entryTypeFilter === 'income'
+        ? 'REPORTE DE INGRESOS REALES POR CONCEPTO'
+        : entryTypeFilter === 'expense'
+        ? 'REPORTE DE GASTOS REALES POR CONCEPTO'
+        : 'REPORTE CONTABLE AGRUPADO';
+
     doc.setFont('helvetica', 'bold');
-    doc.text('REPORTE CONTABLE AGRUPADO', 14, 40);
+    doc.text(reportTitle, 14, 40);
     doc.setFont('helvetica', 'normal');
     doc.text(`Periodo: ${startDate} al ${endDate}`, 14, 46);
 
+    if (entryTypeFilter !== 'all') {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.text('* Se excluyen transferencias y traspasos internos entre cajas y cuentas.', 14, 51);
+      doc.setFont('helvetica', 'normal');
+    }
+
     // Excluir transferencias internas del reporte PDF
-    const reportEntries = filteredEntries.filter(
-      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
-    );
+    const reportEntries = filteredEntries.filter((e) => !isInternalTransfer(e));
     const groupedEntries = groupLedgerEntries(reportEntries);
 
     const grouped: any = {};
@@ -1050,18 +1157,40 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       grouped[e.account].push(e);
     });
 
-    let currentY = 55;
+    let currentY = entryTypeFilter !== 'all' ? 57 : 55;
+    let grandTotalSum = 0;
+
     Object.keys(grouped).forEach((accountName) => {
       const accountEntries = grouped[accountName];
       const accountTotal = accountEntries.reduce(
-        (acc: any, e: any) => acc + (e.type === 'income' ? e.amount : -e.amount),
+        (acc: any, e: any) =>
+          acc +
+          (entryTypeFilter === 'expense'
+            ? e.type === 'expense'
+              ? Number(e.amount)
+              : 0
+            : entryTypeFilter === 'income'
+            ? e.type === 'income'
+              ? Number(e.amount)
+              : 0
+            : e.type === 'income'
+            ? Number(e.amount)
+            : -Number(e.amount)),
         0
       );
+      grandTotalSum += accountTotal;
+
+      const headerColor =
+        entryTypeFilter === 'income'
+          ? [16, 185, 129]
+          : entryTypeFilter === 'expense'
+          ? [225, 29, 72]
+          : [79, 70, 229];
 
       autoTable(doc, {
         startY: currentY,
         head: [
-          [{ content: `CUENTA: ${accountName}`, colSpan: 6, styles: { fillColor: [79, 70, 229] } }]
+          [{ content: `CONCEPTO: ${accountName}`, colSpan: 6, styles: { fillColor: headerColor } }]
         ],
         body: accountEntries.map((e: any) => [
           e.date,
@@ -1069,13 +1198,43 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
           getStudentGrade(e.item),
           e.description,
           translateMethod(e.method, e.account),
-          `RD$ ${e.amount.toLocaleString()}`
+          `RD$ ${Number(e.amount).toLocaleString()}`
         ]),
-        foot: [['', '', '', '', 'TOTAL CUENTA:', `RD$ ${accountTotal.toLocaleString()}`]],
+        foot: [['', '', '', '', 'TOTAL CONCEPTO:', `RD$ ${accountTotal.toLocaleString()}`]],
         footStyles: { fillColor: [241, 245, 249], textColor: [0, 0, 0], fontStyle: 'bold' }
       });
       currentY = (doc as any).lastAutoTable.finalY + 10;
     });
+
+    // TOTAL GENERAL
+    if (Object.keys(grouped).length > 0) {
+      const grandLabel =
+        entryTypeFilter === 'income'
+          ? `GRAN TOTAL INGRESOS REALES: RD$ ${grandTotalSum.toLocaleString()}`
+          : entryTypeFilter === 'expense'
+          ? `GRAN TOTAL GASTOS REALES: RD$ ${grandTotalSum.toLocaleString()}`
+          : `BALANCE NETO DEL PERIODO: RD$ ${grandTotalSum.toLocaleString()}`;
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [
+          [
+            {
+              content: grandLabel,
+              colSpan: 6,
+              styles: {
+                fillColor: entryTypeFilter === 'income' ? [5, 150, 105] : entryTypeFilter === 'expense' ? [190, 18, 60] : [15, 23, 42],
+                fontStyle: 'bold',
+                halign: 'right',
+                fontSize: 10
+              }
+            }
+          ]
+        ],
+        body: []
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+    }
 
     // FIRMAS AL FINAL DEL REPORTE
     if (currentY > 250) doc.addPage();
@@ -1091,13 +1250,11 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
 
   const handleExportCSV = () => {
     // Excluir transferencias internas de la exportación a Excel / CSV
-    const reportEntries = filteredEntries.filter(
-      (e) => e.account !== 'TRANSFERENCIA ENTRE CAJAS' && e.method !== 'internal_transfer'
-    );
+    const reportEntries = filteredEntries.filter((e) => !isInternalTransfer(e));
     const groupedEntries = groupLedgerEntries(reportEntries);
     if (groupedEntries.length === 0) return toast.error('No hay movimientos para exportar');
 
-    const headers = ['FECHA', 'CUENTA', 'ALUMNO_CLIENTE', 'GRADO', 'DESCRIPCION', 'METODO_PAGO', 'TIPO', 'MONTO'];
+    const headers = ['FECHA', 'CONCEPTO_O_CUENTA', 'ALUMNO_O_CLIENTE', 'GRADO', 'DESCRIPCION', 'METODO_PAGO', 'CAJA', 'TIPO', 'MONTO'];
     const rows = groupedEntries.map((e) => [
       e.date,
       e.account,
@@ -1105,6 +1262,7 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       getStudentGrade(e.item),
       e.description,
       translateMethod(e.method, e.account),
+      getAccountLabel(e.cash_account || 'caja_chica'),
       e.type === 'income' ? 'INGRESO' : 'EGRESO',
       e.amount
     ]);
@@ -1118,8 +1276,14 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
+    const prefix =
+      entryTypeFilter === 'income'
+        ? 'Reporte_Ingresos_Reales'
+        : entryTypeFilter === 'expense'
+        ? 'Reporte_Gastos_Reales'
+        : 'Libro_Contable';
     const closingDateText = startDate === endDate ? startDate : `${startDate}_al_${endDate}`;
-    link.setAttribute('download', `Cuadre_Caja_${closingDateText}.csv`);
+    link.setAttribute('download', `${prefix}_${closingDateText}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1351,86 +1515,305 @@ const DailyLedger = ({ entries, onSaveEntry, onDeleteEntry, categories }: any) =
       </div>
 
       {/* GENERADOR DE REPORTES CONFIGURABLE */}
-      <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100/50 flex flex-wrap items-center justify-between gap-6 mb-10">
-        <div className="flex flex-wrap items-center gap-6">
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
-                Tipo de Reporte
-              </label>
-              <select
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
-                className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-40"
-              >
-                <option value="detailed">Reporte Detallado</option>
-                <option value="condensed">Reporte Consolidado</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
-                Método de Pago
-              </label>
-              <select
-                value={methodFilter}
-                onChange={(e) => setMethodFilter(e.target.value)}
-                className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-40"
-              >
-                <option value="all">Todos los Métodos</option>
-                <option value="cash">Efectivo</option>
-                <option value="transfer">Transferencia</option>
-                <option value="card">Tarjeta</option>
-                <option value="check">Cheque</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
-                Filtrar Cuenta
-              </label>
-              <select
-                value={accountFilter}
-                onChange={(e) => setAccountFilter(e.target.value)}
-                className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-44"
-              >
-                <option value="all">Todas las Cuentas</option>
-                {categories.map((c: any) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2">
-                Tipo de Caja / Cuenta
-              </label>
-              <select
-                value={cashAccountFilter}
-                onChange={(e) => setCashAccountFilter(e.target.value)}
-                className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500 w-48"
-              >
-                <option value="all">Todas las Cuentas</option>
-                <option value="caja_chica">💵 Caja Efectivo</option>
-                <option value="caja_general">💼 Caja General</option>
-                <option value="cuenta_banco">🏦 Cuenta Banco</option>
-              </select>
-            </div>
+      <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100/50 flex flex-wrap items-center justify-between gap-6 mb-6">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          {/* FILTRO TIPO DE FLUJO (TODOS / SOLO INGRESOS REALES / SOLO GASTOS REALES) */}
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2">
+              Flujo Contable
+            </label>
+            <select
+              value={entryTypeFilter}
+              onChange={(e) => handleTypeFilterChange(e.target.value as any)}
+              className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 w-48 cursor-pointer"
+            >
+              <option value="all">🔄 Todos los Movimientos</option>
+              <option value="income">📥 Solo Ingresos Reales</option>
+              <option value="expense">📤 Solo Gastos Reales</option>
+            </select>
+          </div>
+
+          {/* SELECTOR MÚLTIPLE DE CONCEPTOS / CUENTAS */}
+          <div className="space-y-1.5 relative">
+            <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2 flex items-center justify-between">
+              <span>Conceptos / Cuentas</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowAccountDropdown((prev) => !prev)}
+              className={`bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 w-52 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors ${
+                selectedAccounts.length > 0 ? 'ring-2 ring-indigo-500 text-indigo-700' : 'text-slate-800'
+              }`}
+            >
+              <span className="truncate">
+                {selectedAccounts.length === 0
+                  ? entryTypeFilter === 'income'
+                    ? 'Todos los Ingresos'
+                    : entryTypeFilter === 'expense'
+                    ? 'Todos los Gastos'
+                    : 'Todos los Conceptos'
+                  : `${selectedAccounts.length} concepto${selectedAccounts.length > 1 ? 's' : ''} selec.`}
+              </span>
+              <ChevronDown size={14} className="text-slate-400 shrink-0 ml-1.5" />
+            </button>
+
+            {/* POPOVER MULTISELECCIÓN DE CONCEPTOS */}
+            {showAccountDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowAccountDropdown(false)}
+                />
+                <div className="absolute left-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 p-3 z-50 animate-in fade-in-50 zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                      {entryTypeFilter === 'income' ? 'Conceptos de Ingresos' : entryTypeFilter === 'expense' ? 'Conceptos de Gastos' : 'Todos los Conceptos'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAccounts([])}
+                      className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded-lg transition-colors ${
+                        selectedAccounts.length === 0
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Seleccionar Todos
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                    {availableCategories.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 font-bold p-3 text-center">
+                        No hay conceptos disponibles
+                      </p>
+                    ) : (
+                      availableCategories.map((c: any) => {
+                        const isChecked = selectedAccounts.includes(c.name);
+                        return (
+                          <label
+                            key={c.id || c.name}
+                            className={`flex items-center gap-2.5 p-2 rounded-xl text-[10px] font-bold uppercase transition-colors cursor-pointer select-none ${
+                              isChecked
+                                ? 'bg-indigo-50 text-indigo-950 font-black'
+                                : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleAccount(c.name)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                            />
+                            <span className="truncate flex-1">{c.name}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center text-[9px] font-bold text-slate-500">
+                    <span>
+                      {selectedAccounts.length === 0
+                        ? 'Todos activos'
+                        : `${selectedAccounts.length} de ${availableCategories.length} seleccionados`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAccountDropdown(false)}
+                      className="text-indigo-600 font-black uppercase hover:underline cursor-pointer"
+                    >
+                      Listo ✓
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2">
+              Tipo de Reporte
+            </label>
+            <select
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
+              className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 w-40 cursor-pointer"
+            >
+              <option value="detailed">Reporte Detallado</option>
+              <option value="condensed">Reporte Consolidado</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2">
+              Método de Pago
+            </label>
+            <select
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+              className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 w-40 cursor-pointer"
+            >
+              <option value="all">Todos los Métodos</option>
+              <option value="cash">Efectivo</option>
+              <option value="transfer">Transferencia</option>
+              <option value="card">Tarjeta</option>
+              <option value="check">Cheque</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest px-2">
+              Tipo de Caja / Cuenta
+            </label>
+            <select
+              value={cashAccountFilter}
+              onChange={(e) => setCashAccountFilter(e.target.value)}
+              className="bg-white border-none text-[10px] font-black uppercase rounded-xl px-4 py-2.5 shadow-sm focus:ring-2 focus:ring-indigo-500 w-48 cursor-pointer"
+            >
+              <option value="all">Todas las Cuentas</option>
+              <option value="caja_chica">💵 Caja Efectivo</option>
+              <option value="caja_general">💼 Caja General</option>
+              <option value="cuenta_banco">🏦 Cuenta Banco</option>
+            </select>
+          </div>
         </div>
 
         <div className="flex gap-2">
           <button
             onClick={handleGenerateCustomReport}
-            className="flex items-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95"
+            className="flex items-center gap-3 bg-indigo-600 text-white px-8 sm:px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all transform active:scale-95 cursor-pointer"
           >
             <Download size={18} /> Generar Reporte
           </button>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-3 bg-emerald-600 text-white px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-900 transition-all transform active:scale-95"
+            className="flex items-center gap-3 bg-emerald-600 text-white px-8 sm:px-10 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-slate-900 transition-all transform active:scale-95 cursor-pointer"
           >
             <FileText size={18} /> Exportar a Excel
           </button>
         </div>
       </div>
+
+      {/* CHIPS DE FILTROS ACTIVOS */}
+      {(entryTypeFilter !== 'all' || selectedAccounts.length > 0 || methodFilter !== 'all' || cashAccountFilter !== 'all') && (
+        <div className="flex flex-wrap items-center gap-2 mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+            <Filter size={11} /> Filtros Activos:
+          </span>
+          {entryTypeFilter === 'income' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase shadow-2xs">
+              📥 Solo Ingresos Reales
+              <button
+                type="button"
+                onClick={() => setEntryTypeFilter('all')}
+                className="hover:text-emerald-950 font-bold ml-1 cursor-pointer"
+                title="Quitar filtro"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {entryTypeFilter === 'expense' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-100 text-rose-800 text-[10px] font-black uppercase shadow-2xs">
+              📤 Solo Gastos Reales
+              <button
+                type="button"
+                onClick={() => setEntryTypeFilter('all')}
+                className="hover:text-rose-950 font-bold ml-1 cursor-pointer"
+                title="Quitar filtro"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {selectedAccounts.map((acc) => (
+            <span
+              key={acc}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-black uppercase shadow-2xs"
+            >
+              {acc}
+              <button
+                type="button"
+                onClick={() => handleToggleAccount(acc)}
+                className="hover:text-indigo-950 font-bold ml-1 cursor-pointer"
+                title="Quitar concepto"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {methodFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-slate-200 text-slate-700 text-[10px] font-black uppercase shadow-2xs">
+              Método: {methodFilter}
+              <button
+                type="button"
+                onClick={() => setMethodFilter('all')}
+                className="hover:text-slate-950 font-bold ml-1 cursor-pointer"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {cashAccountFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-slate-200 text-slate-700 text-[10px] font-black uppercase shadow-2xs">
+              Caja: {getAccountLabel(cashAccountFilter)}
+              <button
+                type="button"
+                onClick={() => setCashAccountFilter('all')}
+                className="hover:text-slate-950 font-bold ml-1 cursor-pointer"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEntryTypeFilter('all');
+              setSelectedAccounts([]);
+              setMethodFilter('all');
+              setCashAccountFilter('all');
+            }}
+            className="text-[9px] font-black text-slate-400 hover:text-indigo-600 uppercase ml-auto hover:underline cursor-pointer"
+          >
+            Limpiar Todos los Filtros
+          </button>
+        </div>
+      )}
+
+      {/* BANNER DE TOTALES REALES EN PANTALLA */}
+      {entryTypeFilter !== 'all' && (
+        <div
+          className={`p-6 rounded-3xl border mb-6 flex flex-wrap items-center justify-between gap-4 shadow-sm animate-in fade-in duration-200 ${
+            entryTypeFilter === 'income'
+              ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 text-white border-emerald-400/50'
+              : 'bg-gradient-to-r from-rose-600 via-rose-500 to-pink-600 text-white border-rose-400/50'
+          }`}
+        >
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-90 block">
+              {entryTypeFilter === 'income'
+                ? '📥 Total de Ingresos Reales por Concepto'
+                : '📤 Total de Gastos Reales por Concepto'}
+            </span>
+            <h3 className="text-3xl sm:text-4xl font-black tracking-tight mt-1">
+              RD$ {realTotalAmount.toLocaleString()}
+            </h3>
+            <p className="text-[11px] font-bold opacity-90 mt-1">
+              {filteredEntries.length} movimiento{filteredEntries.length !== 1 ? 's' : ''} en el periodo •{' '}
+              {startDate === endDate ? startDate : `${startDate} al ${endDate}`}
+              {selectedAccounts.length > 0 && ` • ${selectedAccounts.length} concepto(s) filtrado(s)`}
+            </p>
+          </div>
+          <div className="bg-white/15 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/20 text-right">
+            <span className="text-[9px] font-black uppercase tracking-wider block opacity-90">
+              Fidelidad Contable
+            </span>
+            <span className="text-xs font-black">
+              Cero traspasos internos computados
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left">

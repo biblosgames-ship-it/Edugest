@@ -1134,7 +1134,7 @@ export const Dashboard = React.memo(() => {
                           )
                         ) : null}
                         <h4
-                          className="text-sm font-black truncate leading-tight transition-colors"
+                          className="text-sm font-black line-clamp-2 break-words leading-tight transition-colors"
                           style={{
                             color: isNoClasses ? '#dc2626' : isOwnActivity ? centerColor : '#1e293b'
                           }}
@@ -1143,23 +1143,25 @@ export const Dashboard = React.memo(() => {
                         </h4>
                       </div>
 
-                      {/* Hora */}
+                      {/* Hora (solo si fue establecida por el centro) y Ubicación */}
                       <div className="flex flex-wrap gap-x-3 gap-y-1">
-                        <p
-                          className="text-[10px] font-black uppercase flex items-center gap-1.5"
-                          style={{
-                            color: isNoClasses
-                              ? '#dc2626'
-                              : isOwnActivity
-                              ? centerColor
-                              : '#4f46e5'
-                          }}
-                        >
-                          <Clock size={12} /> {event.startTime || 'Todo el día'}{' '}
-                          {event.endTime && event.endTime !== event.startTime
-                            ? `- ${event.endTime}`
-                            : ''}
-                        </p>
+                        {event.startTime && event.startTime !== '00:00' && event.startTime !== '00:00:00' && (
+                          <p
+                            className="text-[10px] font-black uppercase flex items-center gap-1.5"
+                            style={{
+                              color: isNoClasses
+                                ? '#dc2626'
+                                : isOwnActivity
+                                ? centerColor
+                                : '#4f46e5'
+                            }}
+                          >
+                            <Clock size={12} /> {event.startTime}{' '}
+                            {event.endTime && event.endTime !== event.startTime && event.endTime !== '23:59'
+                              ? `- ${event.endTime}`
+                              : ''}
+                          </p>
+                        )}
                         <p className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1.5">
                           <MapPin size={12} /> {event.level?.[0] || 'I'} -{' '}
                           {event.cycle || 'Institucional'}

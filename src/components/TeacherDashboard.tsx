@@ -2266,10 +2266,27 @@ export const TeacherDashboard = ({
                         String(act.title || '').toLowerCase().includes('independencia');
                       const isEphem = act.is_global || act.type === 'ephemeris';
 
+                      const [y, m, d] = (act.date || '').split('-');
+                      const monthNames = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+                      const monthLabel = m ? monthNames[parseInt(m, 10) - 1] || m : '';
+                      const dayLabel = d ? parseInt(d, 10).toString() : '';
+
+                      const hasSpecificHour = !!(
+                        act.startTime &&
+                        act.startTime !== '00:00' &&
+                        act.startTime !== '00:00:00' &&
+                        act.startTime.trim() !== ''
+                      );
+                      const timeLabel = hasSpecificHour
+                        ? act.endTime && act.endTime !== act.startTime && act.endTime !== '23:59' && act.endTime !== '23:59:00'
+                          ? `${act.startTime} - ${act.endTime}`
+                          : act.startTime
+                        : null;
+
                       return (
                         <div
                           key={act.id}
-                          className={`p-3 rounded-xl border transition-all ${
+                          className={`p-3 rounded-2xl border transition-all flex items-start gap-3 shadow-2xs ${
                             isNoClasses
                               ? 'bg-rose-50/80 border-rose-200'
                               : isPatriotic
@@ -2279,56 +2296,75 @@ export const TeacherDashboard = ({
                               : 'bg-purple-50/50 border-purple-150'
                           }`}
                         >
-                          <div className="flex justify-between items-center mb-1">
-                            <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                          {/* BLOQUE DESTACADO DE DÍA Y MES (LEGIBLE EN MÓVILES) */}
+                          <div className="flex flex-col items-center justify-center min-w-[50px] px-2 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs text-center shrink-0">
+                            <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider leading-none">
+                              {monthLabel}
+                            </span>
+                            <span className="text-xl font-black text-slate-900 leading-none my-0.5 tracking-tight">
+                              {dayLabel}
+                            </span>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1">
                               {isNoClasses ? (
-                                <span className="text-[10px]">🚫</span>
+                                <span className="text-[11px] shrink-0">🚫</span>
                               ) : isPatriotic ? (
-                                <span className="text-[10px]">🇩🇴</span>
+                                <span className="text-[11px] shrink-0">🇩🇴</span>
                               ) : isEphem ? (
                                 <img
                                   src="/minerd_logo.webp"
                                   alt="MINERD"
-                                  className="w-3 h-3 rounded object-contain bg-white shrink-0"
+                                  className="w-3.5 h-3.5 rounded object-contain bg-white shrink-0 border border-slate-200/60 p-0.5"
                                 />
                               ) : (
-                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0"></span>
+                                <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
                               )}
-                              <p
-                                className={`text-[10px] font-black uppercase truncate ${
+                              <span
+                                className={`text-[9px] font-black uppercase tracking-wider ${
                                   isNoClasses
-                                    ? 'text-rose-950'
+                                    ? 'text-rose-700'
                                     : isPatriotic
-                                    ? 'text-blue-950'
+                                    ? 'text-blue-700'
                                     : isEphem
-                                    ? 'text-sky-950'
-                                    : 'text-slate-900'
+                                    ? 'text-sky-700'
+                                    : 'text-purple-700'
                                 }`}
                               >
-                                {act.title}
-                              </p>
-                            </div>
-                            <span
-                              className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${
-                                isNoClasses
-                                  ? 'bg-rose-200 text-rose-800'
+                                {isNoClasses
+                                  ? 'Sin Docencia'
                                   : isPatriotic
-                                  ? 'bg-blue-200 text-blue-800'
+                                  ? 'Fecha Patria'
                                   : isEphem
-                                  ? 'bg-sky-200 text-sky-800'
-                                  : 'bg-purple-100 text-purple-700'
+                                  ? 'Efeméride MINERD'
+                                  : 'Actividad Centro'}
+                              </span>
+                            </div>
+
+                            {/* TÍTULO EN HASTA DOS LÍNEAS PARA NO CORTAR FESTIVIDADES */}
+                            <h5
+                              className={`text-xs font-black uppercase line-clamp-2 break-words leading-tight ${
+                                isNoClasses
+                                  ? 'text-rose-950'
+                                  : isPatriotic
+                                  ? 'text-blue-950'
+                                  : isEphem
+                                  ? 'text-sky-950'
+                                  : 'text-slate-900'
                               }`}
                             >
-                              {act.date.split('-').reverse().slice(0, 2).join('/')}
-                            </span>
+                              {act.title}
+                            </h5>
+
+                            {/* HORA SOLO SI FUE ESTABLECIDA POR EL CENTRO */}
+                            {timeLabel && (
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1 mt-1">
+                                <Clock size={10} className="text-indigo-600" />
+                                <span>{timeLabel}</span>
+                              </p>
+                            )}
                           </div>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
-                            {isNoClasses
-                              ? 'SUSPENSIÓN DE DOCENCIA'
-                              : act.startTime && act.endTime
-                              ? `${act.startTime} - ${act.endTime}`
-                              : 'Todo el día'}
-                          </p>
                         </div>
                       );
                     })

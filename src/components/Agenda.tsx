@@ -711,62 +711,100 @@ export const Agenda = ({ readOnly = false }: { readOnly?: boolean }) => {
                 ? '📖 R. Pedagógica'
                 : '⭐ Actividad Institucional';
 
-              const dateText = format(event.start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
-              const capDate = dateText.charAt(0).toUpperCase() + dateText.slice(1);
+              const monthAbbr = format(event.start, 'MMM', { locale: es });
+              const dayNum = format(event.start, 'd');
+              const dayName = format(event.start, 'EEEE', { locale: es });
+
+              const hasSpecificHour = !!(
+                a.startTime &&
+                a.startTime !== '00:00' &&
+                a.startTime !== '00:00:00' &&
+                a.startTime.trim() !== ''
+              );
+              const timeLabel = hasSpecificHour
+                ? a.endTime && a.endTime !== a.startTime && a.endTime !== '23:59' && a.endTime !== '23:59:00'
+                  ? `${a.startTime} - ${a.endTime}`
+                  : a.startTime
+                : null;
 
               return (
                 <div
                   key={event.id}
                   onClick={() => handleSelectEvent(event)}
-                  className={`p-4 rounded-2xl border border-l-4 transition-all cursor-pointer shadow-xs hover:shadow-md hover:scale-[1.005] ${cardBg}`}
+                  className={`p-3.5 sm:p-4 rounded-2xl border border-l-4 transition-all cursor-pointer shadow-xs hover:shadow-md hover:scale-[1.005] ${cardBg}`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <span
-                      className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 ${badgeColor}`}
-                    >
-                      {categoryTitle}
-                    </span>
-                    <span className="text-[10px] font-black text-slate-500 bg-white/90 border border-slate-200/80 px-2.5 py-1 rounded-lg">
-                      📅 {capDate}
-                    </span>
+                  <div className="flex items-start gap-3">
+                    {/* BLOQUE DESTACADO DE DÍA Y MES (LEGIBLE EN MÓVILES) */}
+                    <div className="flex flex-col items-center justify-center min-w-[56px] sm:min-w-[62px] px-2 py-2 rounded-2xl bg-white/95 border border-slate-200/90 shadow-xs text-center shrink-0">
+                      <span className="text-[11px] sm:text-xs font-black uppercase text-indigo-600 tracking-wider leading-none">
+                        {monthAbbr}
+                      </span>
+                      <span className="text-2xl sm:text-3xl font-black text-slate-900 leading-none my-1 tracking-tight">
+                        {dayNum}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 capitalize truncate max-w-[54px] sm:max-w-[60px] leading-tight">
+                        {dayName}
+                      </span>
+                    </div>
+
+                    {/* CONTENIDO DE LA ACTIVIDAD / EFEMÉRIDE */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 ${badgeColor}`}
+                        >
+                          {categoryTitle}
+                        </span>
+                        {timeLabel && (
+                          <span className="text-[10px] font-black text-slate-600 bg-white/95 border border-slate-200/90 px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                            <Clock size={11} className="text-indigo-600" />
+                            {timeLabel}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* TÍTULO EN HASTA DOS LÍNEAS PARA NO CORTAR FESTIVIDADES */}
+                      <h4 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-snug line-clamp-2 break-words">
+                        {event.title}
+                      </h4>
+
+                      {event.officialDesc && (
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed font-medium line-clamp-3">
+                          {event.officialDesc}
+                        </p>
+                      )}
+
+                      {!event.officialDesc && event.desc && (
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed font-medium line-clamp-3">
+                          {event.desc}
+                        </p>
+                      )}
+
+                      {event.centerDetails && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-indigo-50/80 border border-indigo-200/80 text-xs text-indigo-950 font-semibold flex items-start gap-2">
+                          <Building2 size={14} className="text-indigo-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-900 block">
+                              📍 Actividad / Organización del Centro:
+                            </span>
+                            <p className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium">
+                              {event.centerDetails}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <h4 className="text-base font-black text-slate-900 tracking-tight leading-snug">
-                    {event.title}
-                  </h4>
-
-                  {event.officialDesc && (
-                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
-                      {event.officialDesc}
-                    </p>
-                  )}
-
-                  {!event.officialDesc && event.desc && (
-                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">
-                      {event.desc}
-                    </p>
-                  )}
-
-                  {event.centerDetails && (
-                    <div className="mt-2.5 p-3 rounded-xl bg-indigo-50/80 border border-indigo-200/80 text-xs text-indigo-950 font-semibold flex items-start gap-2">
-                      <Building2 size={15} className="text-indigo-600 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 block">
-                          📍 Actividades / Organización del Centro:
+                  <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isNoClasses && (
+                        <span className="text-[9px] font-black uppercase text-red-600 bg-red-100/80 px-2 py-0.5 rounded-md">
+                          Docencia Suspendida
                         </span>
-                        <p className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium">
-                          {event.centerDetails}
-                        </p>
-                      </div>
+                      )}
                     </div>
-                  )}
-
-                  <div className="mt-3 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                      <Clock size={12} className="text-indigo-600" />
-                      {a.startTime && a.endTime ? `${a.startTime} - ${a.endTime}` : 'Todo el día'}
-                    </span>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 ml-auto">
                       {canManageEphemerides && (event.is_global || event.type === 'ephemeris') && (
                         <button
                           type="button"
