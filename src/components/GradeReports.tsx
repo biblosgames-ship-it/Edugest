@@ -35,8 +35,9 @@ import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
 import * as XLSX from 'xlsx';
 import { CourseRecordReport } from './CourseRecordReport';
-import { Users, X, ScrollText as ScrollIcon } from 'lucide-react';
+import { Users, X, ScrollText as ScrollIcon, BookOpen } from 'lucide-react';
 import PrimaryCertificate from './PrimaryCertificate';
+import GradeRegisterReport from './GradeRegisterReport';
 
 export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, selectedYear, center: contextCenter } = useApp();
@@ -100,6 +101,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
   const [pendingGradesPeriod, setPendingGradesPeriod] = useState('P1');
 
   const [showCourseRecord, setShowCourseRecord] = useState(false);
+  const [showGradeRegisterModal, setShowGradeRegisterModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certStudentId, setCertStudentId] = useState<string | null>(null);
 
@@ -3728,6 +3730,33 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
       {selectedCourseId && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* DATOS PARA LLENAR REGISTRO DE GRADO (MINERD) */}
+          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all duration-300 border-t-4 border-t-indigo-600">
+            <div className="h-32 bg-indigo-700 flex items-center justify-center relative overflow-hidden">
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white to-transparent"></div>
+              <BookOpen size={48} className="text-white relative z-10" />
+            </div>
+            <div className="p-6 text-center space-y-4">
+              <div className="flex items-center justify-center gap-2">
+                <h3 className="text-lg font-black uppercase text-slate-800">
+                  Datos Registro de Grado
+                </h3>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black rounded-full uppercase">
+                  Nuevo
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Planilla con los 16 datos requeridos: RNE calculado (MINERD), acta de nacimiento, cédula, dirección, salud y datos familiares.
+              </p>
+              <button
+                onClick={() => setShowGradeRegisterModal(true)}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <BookOpen size={14} /> Generar Reporte
+              </button>
+            </div>
+          </div>
+
           {/* ACTA DE CALIFICACIONES */}
           <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all duration-300">
             <div className="h-32 bg-indigo-600 flex items-center justify-center relative overflow-hidden">
@@ -4032,6 +4061,30 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
                 </div>
               </div>
             )}
+        </div>
+      )}
+
+      {showGradeRegisterModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-3 md:p-6 overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full max-w-[96vw] rounded-[2.5rem] shadow-2xl my-4 overflow-hidden border border-slate-100 flex flex-col max-h-[95vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-black uppercase text-indigo-600 tracking-widest px-3 py-1 bg-indigo-50 rounded-full">
+                Planilla Oficial — Registro de Grado (MINERD)
+              </span>
+              <button
+                onClick={() => setShowGradeRegisterModal(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="p-4 md:p-8 overflow-y-auto flex-1 bg-slate-50/50">
+              <GradeRegisterReport
+                initialCourseId={selectedCourseId}
+                onClose={() => setShowGradeRegisterModal(false)}
+              />
+            </div>
+          </div>
         </div>
       )}
 
