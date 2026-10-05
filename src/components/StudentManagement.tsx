@@ -18,10 +18,12 @@ import {
   UserPlus,
   Search,
   FileSpreadsheet,
-  ArrowRightLeft
+  ArrowRightLeft,
+  BookOpen
 } from 'lucide-react';
 import { StudentForm } from './StudentForm';
 import { BulkImport } from './BulkImport';
+import GradeRegisterReport from './GradeRegisterReport';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { dataService } from '../services/dataService';
@@ -49,6 +51,7 @@ export const StudentManagement = () => {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showBulkPromote, setShowBulkPromote] = useState(false);
   const [showBulkMove, setShowBulkMove] = useState(false);
+  const [showGradeRegisterModal, setShowGradeRegisterModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<any>(null);
   const [promotingStudent, setPromotingStudent] = useState<any>(null);
   const [localLoading, setLocalLoading] = useState(false);
@@ -519,6 +522,15 @@ export const StudentManagement = () => {
               <Printer size={16} /> Imprimir PDF
             </button>
           )}
+          {selectedCourseId && (
+            <button
+              onClick={() => setShowGradeRegisterModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl"
+              title="Reporte oficial con los 16 datos para llenar el registro de grado"
+            >
+              <BookOpen size={16} /> Registro de Grado
+            </button>
+          )}
           <button
             onClick={exportCourseListExcel}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-xl"
@@ -776,6 +788,30 @@ export const StudentManagement = () => {
             }
           }}
         />
+      )}
+
+      {showGradeRegisterModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+          <div className="bg-white w-full max-w-[96vw] rounded-[2.5rem] shadow-2xl my-4 overflow-hidden border border-slate-100 flex flex-col max-h-[95vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-black uppercase text-indigo-600 tracking-widest px-3 py-1 bg-indigo-50 rounded-full">
+                Planilla Oficial — Registro de Grado
+              </span>
+              <button
+                onClick={() => setShowGradeRegisterModal(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="p-4 md:p-8 overflow-y-auto flex-1 bg-slate-50/50">
+              <GradeRegisterReport
+                initialCourseId={selectedCourseId}
+                onClose={() => setShowGradeRegisterModal(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -46,6 +46,7 @@ import DemographicReport from './DemographicReport';
 import { GlobalAdminDashboardReport } from './GlobalAdminDashboardReport';
 import MasterDirectoryReport from './MasterDirectoryReport';
 import { DailyMinerdAttendanceReport } from './DailyMinerdAttendanceReport';
+import GradeRegisterReport from './GradeRegisterReport';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -168,6 +169,14 @@ export const GeneralReports = () => {
     ],
     'academic-course': [
       {
+        title: 'Datos para Registro de Grado',
+        description:
+          'Planilla oficial por grado con los 16 datos requeridos: RNE calculado según fórmula oficial MINERD, acta de nacimiento, salud y datos familiares.',
+        icon: BookOpen,
+        color: 'bg-indigo-600',
+        id: 'grade-register-report'
+      },
+      {
         title: 'Récord Académico por Grado',
         description:
           'Vistazo general y detallado del desempeño, promedios y alumnos en riesgo de un curso específico.',
@@ -221,6 +230,14 @@ export const GeneralReports = () => {
       }
     ],
     students: [
+      {
+        title: 'Datos para Registro de Grado',
+        description:
+          'Planilla oficial por grado con los 16 datos requeridos: RNE calculado según fórmula oficial MINERD, acta de nacimiento, salud y datos familiares.',
+        icon: BookOpen,
+        color: 'bg-indigo-600',
+        id: 'grade-register-report'
+      },
       {
         title: 'Directorio Maestro',
         description: 'Base de datos completa con información de contacto y tutores legal.',
@@ -537,6 +554,7 @@ export const GeneralReports = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedConductStudentId, setSelectedConductStudentId] = useState<string | null>(null);
   const [showMasterDirectory, setShowMasterDirectory] = useState(false);
+  const [showGradeRegisterReport, setShowGradeRegisterReport] = useState(false);
   const [showGlobalAdminReport, setShowGlobalAdminReport] = useState(false);
 
   // Load raw grades on-demand for detailed reports
@@ -1929,6 +1947,8 @@ export const GeneralReports = () => {
                           setShowDemographicReport(true);
                         } else if (report.id === 'master-directory') {
                           setShowMasterDirectory(true);
+                        } else if (report.id === 'grade-register-report') {
+                          setShowGradeRegisterReport(true);
                         } else if (report.id === 'primary-certificate') {
                           setShowPrimaryCertificate(true);
                         } else if (report.id === 'conduct-balance-certificate') {
@@ -2576,6 +2596,27 @@ export const GeneralReports = () => {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGradeRegisterReport && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+          <div className="bg-white w-full max-w-[96vw] rounded-[2.5rem] shadow-2xl my-4 overflow-hidden border border-slate-100 flex flex-col max-h-[95vh]">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-black uppercase text-indigo-600 tracking-widest px-3 py-1 bg-indigo-50 rounded-full">
+                Planilla Oficial — Registro de Grado
+              </span>
+              <button
+                onClick={() => setShowGradeRegisterReport(false)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-300 transition-all cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="p-4 md:p-8 overflow-y-auto flex-1 bg-slate-50/50">
+              <GradeRegisterReport onClose={() => setShowGradeRegisterReport(false)} />
             </div>
           </div>
         </div>
