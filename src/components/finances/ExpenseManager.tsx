@@ -86,6 +86,18 @@ const groupLedgerEntries = (entriesList: any[]) => {
   return Array.from(groupedMap.values());
 };
 
+const DEFAULT_LEDGER_CATEGORIES = [
+  { name: 'INGRESOS: COLEGIATURAS', type: 'income', items: [] },
+  { name: 'INGRESOS: INSCRIPCIONES', type: 'income', items: [] },
+  { name: 'INGRESOS: UNIFORMES', type: 'income', items: [] },
+  { name: 'INGRESOS: LIBROS', type: 'income', items: [] },
+  { name: 'INGRESOS: MATERIALES', type: 'income', items: [] },
+  { name: 'EGRESOS: SERVICIOS', type: 'expense', items: [] },
+  { name: 'EGRESOS: NOMINA', type: 'expense', items: [] },
+  { name: 'EGRESOS: INVENTARIO', type: 'expense', items: [] },
+  { name: 'EGRESOS: OTROS', type: 'expense', items: [] }
+];
+
 export const LedgerManager = () => {
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem('edugens_ledger_active_tab');
@@ -107,6 +119,15 @@ export const LedgerManager = () => {
   const hasSeeded = useRef(false);
   const hasMigrated = useRef(false);
 
+  // Categorías efectivas para renderizado (fallback a por defecto si aún no hay en BD o RLS está bloqueando)
+  const displayCategories = useMemo(() => {
+    if (categories && categories.length > 0) return categories;
+    return DEFAULT_LEDGER_CATEGORIES.map((cat, idx) => ({
+      id: `default-${cat.type}-${idx}`,
+      ...cat
+    }));
+  }, [categories]);
+
   useEffect(() => {
     localStorage.setItem('edugens_ledger_active_tab', activeTab);
   }, [activeTab]);
@@ -114,31 +135,20 @@ export const LedgerManager = () => {
   useEffect(() => {
     if (!loading && categories.length === 0 && !hasSeeded.current) {
       hasSeeded.current = true;
-      const defaultCats = [
-        { name: 'INGRESOS: COLEGIATURAS', type: 'income', items: [] },
-        { name: 'INGRESOS: INSCRIPCIONES', type: 'income', items: [] },
-        { name: 'INGRESOS: UNIFORMES', type: 'income', items: [] },
-        { name: 'INGRESOS: LIBROS', type: 'income', items: [] },
-        { name: 'INGRESOS: MATERIALES', type: 'income', items: [] },
-        { name: 'EGRESOS: SERVICIOS', type: 'expense', items: [] },
-        { name: 'EGRESOS: NOMINA', type: 'expense', items: [] },
-        { name: 'EGRESOS: INVENTARIO', type: 'expense', items: [] },
-        { name: 'EGRESOS: OTROS', type: 'expense', items: [] }
-      ];
       const seedDefaults = async () => {
         try {
-          for (const cat of defaultCats) {
+          for (const cat of DEFAULT_LEDGER_CATEGORIES) {
             const exists = (categories || []).some(
               (c: any) =>
                 (c.name || '').trim().toUpperCase() === cat.name.trim().toUpperCase() &&
                 c.type === cat.type
             );
             if (!exists) {
-              await saveLedgerCategory(cat);
+              await saveLedgerCategory(cat, true); // Modo silencioso para no alarmar al usuario si RLS bloquea
             }
           }
         } catch (e) {
-          console.error('Error seeding default ledger categories:', e);
+          console.warn('Auto-seed de categorías contables no permitido o pospuesto:', e);
         }
       };
       seedDefaults();
@@ -238,12 +248,12 @@ export const LedgerManager = () => {
           entries={entries}
           onSaveEntry={saveLedgerEntry}
           onDeleteEntry={deleteLedgerEntry}
-          categories={categories}
+          categories={displayCategories}
         />
       )}
       {activeTab === 'config' && (
         <AccountsConfig
-          categories={categories}
+          categories={displayCategories}
           onSaveCategory={saveLedgerCategory}
           onDeleteCategory={deleteLedgerCategory}
         />

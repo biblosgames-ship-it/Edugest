@@ -783,10 +783,10 @@ export const useFinance = (options?: {
   };
 
   // MUTADORES DEL LIBRO CONTABLE
-  const saveLedgerCategory = async (category: any) => {
+  const saveLedgerCategory = async (category: any, silent = false) => {
     const currentCenterId = centerId || profile?.center_id;
     if (!currentCenterId) {
-      toast.error('Error: No se encontró la identificación del centro');
+      if (!silent) toast.error('Error: No se encontró la identificación del centro');
       return;
     }
     try {
@@ -803,7 +803,9 @@ export const useFinance = (options?: {
       return data?.[0];
     } catch (error: any) {
       console.error('Error saving ledger category:', error);
-      toast.error(`Error al guardar categoría contable: ${error.message}`);
+      if (!silent) {
+        toast.error(`Error al guardar categoría contable: ${error.message}`);
+      }
       throw error;
     }
   };
