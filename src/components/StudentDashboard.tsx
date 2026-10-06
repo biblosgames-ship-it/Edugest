@@ -1675,6 +1675,7 @@ export const StudentDashboard = ({
                     String(act.title || '').toLowerCase().includes('patria') ||
                     String(act.title || '').toLowerCase().includes('duarte') ||
                     String(act.title || '').toLowerCase().includes('independencia');
+                  const isEphem = !!act.is_global || act.type === 'ephemeris';
                   const [y, m, d] = (act.date || '').split('-');
                   const monthNames = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
                   const monthLabel = m ? monthNames[parseInt(m, 10) - 1] || m : '';
