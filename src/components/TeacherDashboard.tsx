@@ -1633,11 +1633,14 @@ export const TeacherDashboard = ({
         <div className="relative">
           <button
             onClick={() => {
-              setShowCreateForm(false);
-              setEditingTask(null);
-              setEditingAnnouncement(null);
+              if (window.confirm('¿Deseas cerrar el formulario? Cualquier dato no guardado se perderá.')) {
+                setShowCreateForm(false);
+                setEditingTask(null);
+                setEditingAnnouncement(null);
+              }
             }}
             className="absolute top-6 right-6 z-20 w-10 h-10 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white transition-all shadow-md cursor-pointer"
+            title="Cerrar formulario"
           >
             <X size={20} />
           </button>

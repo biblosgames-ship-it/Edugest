@@ -12,7 +12,8 @@ import {
   GraduationCap,
   Play,
   AlertCircle,
-  X
+  X,
+  Layers
 } from 'lucide-react';
 import { parseTextWithLinks } from './LinkifiedText';
 
@@ -41,6 +42,7 @@ export const TeacherTaskAnnouncement = ({
   const [mediaUrl, setMediaUrl] = useState(taskToEdit?.media_url || announcementToEdit?.media_url || '');
   const [linkUrl, setLinkUrl] = useState(taskToEdit?.link_url || announcementToEdit?.link_url || '');
   const [classroomUrl, setClassroomUrl] = useState(taskToEdit?.classroom_url || '');
+  const [additionalCourseIds, setAdditionalCourseIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Extraer ID de YouTube para vista previa
@@ -92,7 +94,23 @@ export const TeacherTaskAnnouncement = ({
           classroom_url: classroomUrl || null,
           due_date: dueDate ? new Date(dueDate).toISOString() : null
         });
-        alert('¡Tarea publicada con éxito!');
+
+        if (additionalCourseIds.length > 0) {
+          const promises = additionalCourseIds.map((cId) =>
+            dataService.addTask({
+              ...payload,
+              course_id: cId,
+              teacher_id: profile.teacher_id || profile.id,
+              description: content,
+              classroom_url: classroomUrl || null,
+              due_date: dueDate ? new Date(dueDate).toISOString() : null
+            })
+          );
+          await Promise.allSettled(promises);
+          alert(`¡Tarea publicada con éxito en ${additionalCourseIds.length + 1} cursos!`);
+        } else {
+          alert('¡Tarea publicada con éxito!');
+        }
       } else {
         await dataService.addAnnouncement({
           ...payload,
@@ -100,7 +118,22 @@ export const TeacherTaskAnnouncement = ({
           sender_role: profile.role,
           content: content
         });
-        alert('¡Comunicado publicado con éxito!');
+
+        if (additionalCourseIds.length > 0) {
+          const promises = additionalCourseIds.map((cId) =>
+            dataService.addAnnouncement({
+              ...payload,
+              course_id: cId,
+              sender_id: profile.id,
+              sender_role: profile.role,
+              content: content
+            })
+          );
+          await Promise.allSettled(promises);
+          alert(`¡Comunicado publicado con éxito en ${additionalCourseIds.length + 1} cursos!`);
+        } else {
+          alert('¡Comunicado publicado con éxito!');
+        }
       }
 
       // Reset Form
@@ -111,7 +144,7 @@ export const TeacherTaskAnnouncement = ({
       setMediaUrl('');
       setLinkUrl('');
       setClassroomUrl('');
-      alert(`¡${type === 'task' ? 'Tarea' : 'Comunicado'} publicado con éxito!`);
+      setAdditionalCourseIds([]);
       if (onClose) onClose();
     } catch (error: any) {
       console.error('Error saving task/announcement:', error);
@@ -169,7 +202,7 @@ export const TeacherTaskAnnouncement = ({
               </div>
             </div>
             <div className="space-y-2">
-              <label className={labelClass}>Clase / Curso Destino</label>
+              <label className={labelClass}>Clase / Curso Destino (Principal)</label>
               <div className="relative">
                 <select
                   value={courseId}
@@ -180,13 +213,111 @@ export const TeacherTaskAnnouncement = ({
                   <option value="">-- SELECCIONAR CURSO --</option>
                   {state.courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.level} {c.grade} {c.section}
+                      {c.level} {c.grade} {c.section} {c.tanda ? `(${c.tanda})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
           </div>
+
+          {/* PUBLICAR EN MÚLTIPLES CURSOS AL MISMO TIEMPO */}
+          {!taskToEdit && !announcementToEdit && courseId && state.courses.length > 1 && (
+            <div className="p-4 bg-indigo-50/70 rounded-2xl border border-indigo-100 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Layers size={18} className="text-indigo-600 shrink-0" />
+                  <div>
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-800 block">
+                      ¿Publicar también en otros cursos simultáneamente?
+                    </label>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      Asigna este {type === 'task' ? 'trabajo' : 'comunicado'} al mismo tiempo en otras secciones o grados.
+                    </p>
+                  </div>
+                </div>
+                {additionalCourseIds.length > 0 && (
+                  <span className="px-2.5 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] font-black shrink-0">
+                    +{additionalCourseIds.length} {additionalCourseIds.length === 1 ? 'adicional' : 'adicionales'}
+                  </span>
+                )}
+              </div>
+
+              {/* Botones de acción rápida */}
+              <div className="space-y-2 pt-1 border-t border-indigo-100">
+                <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const curCourse = state.courses.find((c) => c.id === courseId);
+                      if (curCourse) {
+                        const sameLevelOrGrade = state.courses
+                          .filter((c) => c.id !== courseId && (c.grade === curCourse.grade || c.level === curCourse.level))
+                          .map((c) => c.id);
+                        setAdditionalCourseIds(sameLevelOrGrade);
+                      }
+                    }}
+                    className="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 bg-white border border-indigo-200 rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors cursor-pointer"
+                  >
+                    + Mismo Nivel / Grado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allOthers = state.courses.filter((c) => c.id !== courseId).map((c) => c.id);
+                      setAdditionalCourseIds(allOthers);
+                    }}
+                    className="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Seleccionar Todos
+                  </button>
+                  {additionalCourseIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAdditionalCourseIds([])}
+                      className="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 bg-white border border-rose-200 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                  {state.courses
+                    .filter((c) => c.id !== courseId)
+                    .map((c) => {
+                      const isChecked = additionalCourseIds.includes(c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="truncate pr-2">
+                            {c.level} — {c.grade} &quot;{c.section}&quot; {c.tanda ? `(${c.tanda})` : ''}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setAdditionalCourseIds(additionalCourseIds.filter((id) => id !== c.id));
+                              } else {
+                                setAdditionalCourseIds([...additionalCourseIds, c.id]);
+                              }
+                            }}
+                            className="rounded accent-indigo-600 w-4 h-4 cursor-pointer"
+                          />
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Materia y Fecha */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -419,23 +550,43 @@ export const TeacherTaskAnnouncement = ({
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="w-full bg-slate-900 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 hover:bg-black active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
-          >
-            {isSaving ? (
-              <div className="flex items-center gap-2.5">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                Publicando...
-              </div>
-            ) : (
-              <>
-                <CheckCircle2 size={18} />
-                Publicar {type === 'task' ? 'Tarea' : 'Comunicado'} Ahora
-              </>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            {onClose && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (title.trim() || content.trim()) {
+                    if (window.confirm('¿Deseas cancelar? Los cambios no guardados se perderán.')) {
+                      onClose();
+                    }
+                  } else {
+                    onClose();
+                  }
+                }}
+                className="w-full sm:w-auto px-6 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
             )}
-          </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="w-full flex-1 bg-slate-900 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 hover:bg-black active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
+            >
+              {isSaving ? (
+                <div className="flex items-center gap-2.5">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  Publicando...
+                </div>
+              ) : (
+                <>
+                  <CheckCircle2 size={18} />
+                  Publicar {type === 'task' ? 'Tarea' : 'Comunicado'} Ahora
+                  {additionalCourseIds.length > 0 && ` (+${additionalCourseIds.length} cursos)`}
+                </>
+              )}
+            </button>
+          </div>
         </form>
       </div>
     </div>

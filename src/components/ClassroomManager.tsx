@@ -41,7 +41,8 @@ import {
   Settings,
   Pin,
   MessageSquare,
-  Send
+  Send,
+  Layers
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
@@ -214,6 +215,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   const [showTaskModal, setShowTaskModal] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [additionalCourseIds, setAdditionalCourseIds] = useState<string[]>([]);
   const [taskFormData, setTaskFormData] = useState<{
     title: string;
     description: string;
@@ -1767,8 +1769,23 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     });
   }, [teacherTasks, taskFilterPeriod, taskFilterSubjectId, taskFilterStatus, taskSearchQuery]);
 
+  const handleCloseTaskModal = () => {
+    if (!editingTask && (taskFormData.title.trim() || taskFormData.description.trim())) {
+      if (window.confirm('¿Deseas cerrar la ventana? El texto escrito no guardado se perderá.')) {
+        setShowTaskModal(false);
+        setEditingTask(null);
+        setAdditionalCourseIds([]);
+      }
+    } else {
+      setShowTaskModal(false);
+      setEditingTask(null);
+      setAdditionalCourseIds([]);
+    }
+  };
+
   const handleOpenCreateTask = () => {
     setEditingTask(null);
+    setAdditionalCourseIds([]);
     setTaskFormData({
       title: '',
       description: '',
@@ -1787,6 +1804,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   const handleOpenEditTask = (task: any) => {
     setEditingTask(task);
+    setAdditionalCourseIds([]);
     const partialLink = parseTaskPartialLink(task);
     setTaskFormData({
       title: task.title || '',
@@ -1853,7 +1871,21 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           teacher_id: teacherId
         });
         savedTaskId = (created as any)?.id;
-        alert('¡Tarea creada y publicada con éxito!');
+
+        // Si se seleccionaron cursos adicionales, crear la tarea en cada uno de ellos
+        if (additionalCourseIds.length > 0) {
+          for (const extraCid of additionalCourseIds) {
+            await dataService.addTask({
+              ...payload,
+              course_id: extraCid,
+              teacher_id: teacherId
+            });
+          }
+          const totalPublished = 1 + additionalCourseIds.length;
+          alert(`¡Tarea creada y publicada con éxito en ${totalPublished} cursos!`);
+        } else {
+          alert('¡Tarea creada y publicada con éxito!');
+        }
       }
 
       // Si está vinculada a parciales, asegurar actividad en competencyActivities
@@ -1879,6 +1911,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
       setShowTaskModal(false);
       setEditingTask(null);
+      setAdditionalCourseIds([]);
       await loadTasksAndLinks();
     } catch (err: any) {
       console.error('Error al guardar tarea:', err);
@@ -3642,18 +3675,14 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             </div>
           )}
 
-          {/* MODAL PARA CREAR O EDITAR TAREA */}
+          {/* MODAL PARA CREAR O EDITAR TAREA - PROTEGIDO CONTRA CIERRE ACCIDENTAL */}
           {showTaskModal && (
             <div
               className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 md:p-6 animate-fade-in"
-              onClick={() => {
-                setShowTaskModal(false);
-                setEditingTask(null);
-              }}
+              // NOTA: No se usa onClick en el overlay para evitar que al seleccionar texto o arrastrar el cursor se cierre la ventana
             >
               <div
                 className="bg-white dark:bg-slate-900 w-full max-w-xl lg:max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[88vh] overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
               >
                 {/* Encabezado Fijo - Siempre visible arriba */}
                 <div className="shrink-0 bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between border-b border-white/10">
@@ -3672,10 +3701,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowTaskModal(false);
-                      setEditingTask(null);
-                    }}
+                    onClick={handleCloseTaskModal}
                     className="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 cursor-pointer shrink-0 transition-colors ml-2"
                     title="Cerrar ventana"
                   >
@@ -3872,16 +3898,111 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                         />
                       </div>
                     </div>
+
+                    {/* PUBLICAR EN MÚLTIPLES CURSOS AL MISMO TIEMPO */}
+                    {!editingTask && (
+                      <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl sm:rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Layers size={18} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <div>
+                              <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block">
+                                Publicar también en otros cursos
+                              </label>
+                              <p className="text-[9px] sm:text-[10px] text-text-muted font-medium">
+                                Asigna esta misma tarea simultáneamente en otras secciones o grados.
+                              </p>
+                            </div>
+                          </div>
+                          {additionalCourseIds.length > 0 && (
+                            <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] font-black">
+                              +{additionalCourseIds.length} {additionalCourseIds.length === 1 ? 'adicional' : 'adicionales'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Botones de acción rápida y listado de cursos */}
+                        <div className="space-y-2 pt-1 border-t border-indigo-100 dark:border-indigo-900/60">
+                          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const curCourse = state.courses.find((c) => c.id === selectedCourseId);
+                                if (curCourse) {
+                                  const sameLevelOrGrade = state.courses
+                                    .filter((c) => c.id !== selectedCourseId && (c.grade === curCourse.grade || c.level === curCourse.level))
+                                    .map((c) => c.id);
+                                  setAdditionalCourseIds(sameLevelOrGrade);
+                                }
+                              }}
+                              className="text-[9px] font-black uppercase tracking-wider px-2 py-1 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-lg text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 transition-colors cursor-pointer"
+                            >
+                              + Mismo Nivel / Grado
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allOthers = state.courses.filter((c) => c.id !== selectedCourseId).map((c) => c.id);
+                                setAdditionalCourseIds(allOthers);
+                              }}
+                              className="text-[9px] font-black uppercase tracking-wider px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
+                            >
+                              Seleccionar Todos
+                            </button>
+                            {additionalCourseIds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setAdditionalCourseIds([])}
+                                className="text-[9px] font-black uppercase tracking-wider px-2 py-1 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              >
+                                Limpiar
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="max-h-36 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                            {state.courses
+                              .filter((c) => c.id !== selectedCourseId)
+                              .map((c) => {
+                                const isChecked = additionalCourseIds.includes(c.id);
+                                return (
+                                  <label
+                                    key={c.id}
+                                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                      isChecked
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <span className="truncate pr-2">
+                                      {c.level} — {c.grade} &quot;{c.section}&quot; ({c.tanda || 'Matutina'})
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setAdditionalCourseIds(additionalCourseIds.filter((id) => id !== c.id));
+                                        } else {
+                                          setAdditionalCourseIds([...additionalCourseIds, c.id]);
+                                        }
+                                      }}
+                                      className="rounded accent-indigo-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Botones de acción fijos en el pie */}
                   <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-3.5 bg-slate-50 dark:bg-slate-900/90 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 sm:gap-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowTaskModal(false);
-                        setEditingTask(null);
-                      }}
+                      onClick={handleCloseTaskModal}
                       className="px-4 sm:px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold uppercase tracking-wider text-xs cursor-pointer transition-colors"
                     >
                       Cancelar
