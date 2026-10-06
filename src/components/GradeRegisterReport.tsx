@@ -8,17 +8,10 @@ import {
   FileSpreadsheet,
   Search,
   X,
-  Filter,
   Users,
   HeartPulse,
-  Phone,
-  MapPin,
-  Mail,
-  ShieldAlert,
   GraduationCap,
-  FileText,
-  CheckCircle2,
-  AlertTriangle
+  CheckCircle2
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -37,7 +30,7 @@ interface GradeRegisterReportProps {
  * y el día de nacimiento con 0 adelante si es menor a 10."
  */
 export const generateRNE = (student: any): string => {
-  if (!student) return '---';
+  if (!student) return '';
 
   const cleanLetters = (str: string) =>
     str
@@ -88,8 +81,7 @@ export const generateRNE = (student: any): string => {
   const bDate = student.birth_date || student.birthDate;
   if (!bDate) {
     if (student.rne) return student.rne;
-    if (prefixLetters) return `${prefixLetters} (Sin F. Nac)`;
-    return '---';
+    return prefixLetters;
   }
 
   // Parsear fecha de nacimiento de manera segura sin saltos de huso horario
@@ -117,7 +109,7 @@ export const generateRNE = (student: any): string => {
   }
 
   if (!yearStr || !monthStr || !dayStr) {
-    return student.rne || `${prefixLetters} (F. Nac Inválida)`;
+    return student.rne || prefixLetters;
   }
 
   // Terminal del año (últimos 2 dígitos del año de nacimiento)
@@ -130,6 +122,30 @@ export const generateRNE = (student: any): string => {
   const dayPadded = String(parseInt(dayStr, 10)).padStart(2, '0');
 
   return `${prefixLetters}${yearTerminal}${monthPadded}${dayPadded}`;
+};
+
+// Limpieza para detectar si un campo médico está realmente vacío
+const isEmptyOrNone = (val?: string | null): boolean => {
+  if (!val) return true;
+  const clean = val.trim().toLowerCase();
+  return (
+    clean === '' ||
+    clean === 'no' ||
+    clean === 'no.' ||
+    clean === 'no tiene' ||
+    clean === 'ninguna' ||
+    clean === 'ninguno' ||
+    clean === 'ningun' ||
+    clean === 'na' ||
+    clean === 'n/a' ||
+    clean === '-' ||
+    clean === '--' ||
+    clean === 's/n' ||
+    clean === 'sin alergias' ||
+    clean === 'sin enfermedades' ||
+    clean === 'sin medicamentos' ||
+    clean === 'ninguna enfermedad'
+  );
 };
 
 export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
@@ -148,57 +164,131 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
   const courses = state.courses || [];
   const allStudents = state.students || [];
 
-  // Cargar datos complementarios (padres y registros médicos)
+  // Cargar datos complementarios (padres y registros médicos) de forma robusta
   useEffect(() => {
+    let isMounted = true;
+
     const fetchExtraData = async () => {
       setLoadingExtra(true);
       try {
-        const centerId = profile?.center_id || center?.id;
+        const centerId = profile?.center_id || center?.id || (courses[0] as any)?.center_id;
         const studentIds = allStudents.map((s: any) => s.id).filter(Boolean);
 
-        // 1. Cargar padres
-        let pQuery = supabase.from('parents').select('*');
-        if (centerId && studentIds.length > 0) {
-          pQuery = pQuery.or(`center_id.eq.${centerId},student_id.in.(${studentIds.join(',')})`);
-        } else if (centerId) {
-          pQuery = pQuery.eq('center_id', centerId);
-        } else if (studentIds.length > 0) {
-          pQuery = pQuery.in('student_id', studentIds);
-        }
-        const { data: pList, error: pErr } = await pQuery;
-        if (!pErr && pList) {
-          setParentsData(pList);
+        // 1. CARGAR PADRES / FAMILIARES
+        let allParentsAccum: any[] = [];
+
+        // A) Intentar por center_id directo (muy rápido y sin límites de URL)
+        if (centerId) {
+          try {
+            const { data: pByCenter, error: errC } = await supabase
+              .from('parents')
+              .select('*')
+              .eq('center_id', centerId);
+            if (!errC && pByCenter) {
+              allParentsAccum = [...pByCenter];
+            }
+          } catch (e) {
+            console.error('Error al consultar parents por center_id:', e);
+          }
         }
 
-        // 2. Cargar ficha médica
-        if (studentIds.length > 0) {
-          // Dividir en bloques si son muchos estudiantes para evitar límites de URL
-          const batchSize = 100;
-          let medAccum: any[] = [];
-          for (let i = 0; i < studentIds.length; i += batchSize) {
-            const batch = studentIds.slice(i, i + batchSize);
-            const { data: mList, error: mErr } = await supabase
-              .from('student_medical')
-              .select('*')
-              .in('student_id', batch);
-            if (!mErr && mList) {
-              medAccum = [...medAccum, ...mList];
+        // B) Si faltan registros o no tenían center_id, consultar por student_id en lotes de 40
+        const existingStudentIds = new Set(allParentsAccum.map((p) => p.student_id));
+        const missingStudentIds = studentIds.filter((id: string) => !existingStudentIds.has(id));
+
+        if (missingStudentIds.length > 0) {
+          const batchSize = 40;
+          for (let i = 0; i < missingStudentIds.length; i += batchSize) {
+            const batch = missingStudentIds.slice(i, i + batchSize);
+            try {
+              const { data: pBatch, error: errB } = await supabase
+                .from('parents')
+                .select('*')
+                .in('student_id', batch);
+              if (!errB && pBatch) {
+                pBatch.forEach((p) => {
+                  if (!allParentsAccum.some((existing) => existing.id === p.id)) {
+                    allParentsAccum.push(p);
+                  }
+                });
+              }
+            } catch (e) {
+              console.error('Error en lote de parents:', e);
             }
           }
-          setMedicalData(medAccum);
+        }
+
+        // C) Consultar también tabla 'student_family' por si los familiares se registraron allí
+        try {
+          const batchSize = 40;
+          for (let i = 0; i < studentIds.length; i += batchSize) {
+            const batch = studentIds.slice(i, i + batchSize);
+            const { data: fBatch } = await supabase
+              .from('student_family')
+              .select('*')
+              .in('student_id', batch);
+            if (fBatch && fBatch.length > 0) {
+              fBatch.forEach((f) => {
+                allParentsAccum.push({
+                  id: f.id,
+                  student_id: f.student_id,
+                  name: f.name || f.full_name || f.first_name,
+                  relation: f.role || f.relation || 'Tutor',
+                  phone: f.phone || f.cellphone || f.tel,
+                  secondary_phone: f.secondary_phone || f.whatsapp
+                });
+              });
+            }
+          }
+        } catch (e) {
+          // student_family puede no existir en algunas instancias
+        }
+
+        if (isMounted) {
+          setParentsData(allParentsAccum);
+        }
+
+        // 2. CARGAR FICHA MÉDICA
+        if (studentIds.length > 0) {
+          let medAccum: any[] = [];
+          const batchSize = 40;
+          for (let i = 0; i < studentIds.length; i += batchSize) {
+            const batch = studentIds.slice(i, i + batchSize);
+            try {
+              const { data: mList, error: mErr } = await supabase
+                .from('student_medical')
+                .select('*')
+                .in('student_id', batch);
+              if (!mErr && mList) {
+                medAccum = [...medAccum, ...mList];
+              }
+            } catch (e) {
+              console.error('Error en student_medical batch:', e);
+            }
+          }
+          if (isMounted) {
+            setMedicalData(medAccum);
+          }
         }
       } catch (err) {
         console.error('Error fetching extra data for GradeRegisterReport:', err);
       } finally {
-        setLoadingExtra(false);
+        if (isMounted) {
+          setLoadingExtra(false);
+        }
       }
     };
 
     fetchExtraData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [profile?.center_id, center?.id, allStudents.length]);
 
   // Construir la lista enriquecida con los 16 datos requeridos
   const enrichedStudents = useMemo(() => {
+    // 1. Mapeo de padres por student_id
     const pMap: Record<string, any[]> = {};
     parentsData.forEach((p) => {
       if (p.student_id) {
@@ -207,6 +297,22 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
       }
     });
 
+    // 2. Mapeo de familiares por family_id para enlazar hermanos
+    const familyIdToParentsMap: Record<string, any[]> = {};
+    allStudents.forEach((student: any) => {
+      if (student.family_id && pMap[student.id]) {
+        if (!familyIdToParentsMap[student.family_id]) {
+          familyIdToParentsMap[student.family_id] = [];
+        }
+        pMap[student.id].forEach((p) => {
+          if (!familyIdToParentsMap[student.family_id].some((x) => x.id === p.id)) {
+            familyIdToParentsMap[student.family_id].push(p);
+          }
+        });
+      }
+    });
+
+    // 3. Mapeo de registros médicos
     const mMap: Record<string, any> = {};
     medicalData.forEach((m) => {
       if (m.student_id) {
@@ -217,38 +323,107 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
     return allStudents.map((s: any, idx: number) => {
       const course = courses.find((c: any) => c.id === s.course_id);
 
-      // Familiares
-      const sParents = pMap[s.id] || [];
+      // Obtener lista de familiares asociados al estudiante
+      let sParents: any[] = pMap[s.id] || [];
+      if (sParents.length === 0 && s.family_id && familyIdToParentsMap[s.family_id]) {
+        sParents = familyIdToParentsMap[s.family_id];
+      }
+      if (sParents.length === 0 && Array.isArray(s.parents) && s.parents.length > 0) {
+        sParents = s.parents;
+      }
+
       const getRole = (p: any) => (p.relation || p.role || '').toLowerCase().trim();
 
-      const dbPadre = sParents.find((p) => getRole(p) === 'padre' || getRole(p) === 'father');
-      const dbMadre = sParents.find((p) => getRole(p) === 'madre' || getRole(p) === 'mother');
-      const dbTutor =
-        sParents.find(
-          (p) => getRole(p) === 'tutor' || (!['padre', 'madre', 'father', 'mother'].includes(getRole(p)) && getRole(p) !== '')
-        ) ||
+      // PADRE
+      const dbPadre = sParents.find((p) => {
+        const r = getRole(p);
+        return r.includes('padre') || r.includes('father') || r.includes('papa') || r.includes('papá');
+      });
+      const fatherName = (dbPadre?.name || s.father_name || s.padre_name || s.nombre_padre || '').trim();
+      const fatherPhone = (
+        dbPadre?.phone ||
+        dbPadre?.secondary_phone ||
+        s.father_phone ||
+        s.padre_phone ||
+        s.telefono_padre ||
+        ''
+      ).trim();
+
+      // MADRE
+      const dbMadre = sParents.find((p) => {
+        const r = getRole(p);
+        return r.includes('madre') || r.includes('mother') || r.includes('mama') || r.includes('mamá');
+      });
+      const motherName = (dbMadre?.name || s.mother_name || s.madre_name || s.nombre_madre || '').trim();
+      const motherPhone = (
+        dbMadre?.phone ||
+        dbMadre?.secondary_phone ||
+        s.mother_phone ||
+        s.madre_phone ||
+        s.telefono_madre ||
+        ''
+      ).trim();
+
+      // TUTOR
+      // Buscar alguien con rol de tutor o pariente no padre/madre
+      const dbTutorExplicit = sParents.find((p) => {
+        const r = getRole(p);
+        return (
+          r.includes('tutor') ||
+          (!r.includes('padre') && !r.includes('madre') && !r.includes('father') && !r.includes('mother') && r !== '')
+        );
+      });
+
+      // Si no hay tutor explícito, tomar el familiar principal o tutor legal autorizado
+      const tutorCandidate =
+        dbTutorExplicit ||
+        (s.lives_with?.toLowerCase().includes('madre') ? dbMadre : null) ||
+        (s.lives_with?.toLowerCase().includes('padre') ? dbPadre : null) ||
         dbMadre ||
         dbPadre ||
         sParents[0];
 
-      // Ficha médica
-      const med = mMap[s.id] || {};
-      const medicalConditions = (med.medical_conditions || '').trim();
-      const allergies = (med.allergies || '').trim();
-      const conditionsList: string[] = [];
-      if (medicalConditions && !['no', 'ninguna', 'ninguno', 'na', 'n/a', '-'].includes(medicalConditions.toLowerCase())) {
-        conditionsList.push(medicalConditions);
-      }
-      if (allergies && !['no', 'ninguna', 'ninguno', 'na', 'n/a', '-'].includes(allergies.toLowerCase())) {
-        conditionsList.push(`Alergia: ${allergies}`);
-      }
-      const enfermedadesAlergias = conditionsList.length > 0 ? conditionsList.join(' | ') : 'Ninguna';
+      const tutorName = (
+        dbTutorExplicit?.name ||
+        s.tutor_name ||
+        s.tutorName ||
+        s.authorized_person ||
+        s.authorizedPerson ||
+        tutorCandidate?.name ||
+        ''
+      ).trim();
 
-      const permanentMed = (med.permanent_medication || '').trim();
-      const medicamentos =
-        permanentMed && !['no', 'ninguna', 'ninguno', 'na', 'n/a', '-'].includes(permanentMed.toLowerCase())
-          ? permanentMed
-          : 'Ninguno';
+      const tutorPhone = (
+        dbTutorExplicit?.phone ||
+        dbTutorExplicit?.secondary_phone ||
+        s.tutor_phone ||
+        tutorCandidate?.phone ||
+        tutorCandidate?.secondary_phone ||
+        s.personal_phone ||
+        s.home_phone ||
+        ''
+      ).trim();
+
+      // FICHA MÉDICA (Si está vacía, DEBE SALIR VACÍA "")
+      const med = mMap[s.id] || {};
+      const rawConditions = (med.medical_conditions || s.medical_conditions || '').trim();
+      const rawAllergies = (med.allergies || s.allergies || '').trim();
+
+      const conditionsList: string[] = [];
+      if (!isEmptyOrNone(rawConditions)) {
+        conditionsList.push(rawConditions);
+      }
+      if (!isEmptyOrNone(rawAllergies)) {
+        conditionsList.push(
+          rawAllergies.toLowerCase().startsWith('alergia') ? rawAllergies : `Alergia: ${rawAllergies}`
+        );
+      }
+      // Vacío si no tiene
+      const enfermedadesAlergias = conditionsList.length > 0 ? conditionsList.join(' | ') : '';
+
+      const rawPermanentMed = (med.permanent_medication || s.permanent_medication || s.medication || '').trim();
+      // Vacío si no tiene
+      const medicamentos = !isEmptyOrNone(rawPermanentMed) ? rawPermanentMed : '';
 
       // Nombres y apellidos completos formateados
       const firstSur = (s.first_surname || '').trim();
@@ -270,12 +445,12 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         .filter(Boolean)
         .map((x: string) => x.trim())
         .filter((x: string) => x.length > 0);
-      const direccionCompleta = addressParts.length > 0 ? addressParts.join(', ') : (s.address || 'No especificada');
+      const direccionCompleta = addressParts.length > 0 ? addressParts.join(', ') : (s.address || '');
 
       // Datos del acta de nacimiento
       const numActa = (s.birth_certificate_number || '').trim();
       const folioActa = (s.birth_certificate_folio || '').trim();
-      let datosActa = '---';
+      let datosActa = '';
       if (numActa && folioActa) {
         datosActa = `Núm: ${numActa} | Folio: ${folioActa}`;
       } else if (numActa) {
@@ -294,9 +469,9 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           ? `${course.level} - ${course.grade} "${course.section}" (${course.tanda || 'Matutina'})`
           : 'Sin Grado Asignado',
         courseShort: course ? `${course.grade} "${course.section}"` : 'S/A',
-        courseLevel: course?.level || 'N/A',
-        courseGrade: course?.grade || 'N/A',
-        courseSection: course?.section || 'N/A',
+        courseLevel: course?.level || '',
+        courseGrade: course?.grade || '',
+        courseSection: course?.section || '',
         courseTanda: course?.tanda || 'Matutina',
 
         // 1. Número de orden
@@ -316,7 +491,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         folioActa,
 
         // 5. No. Cédula o Pasaporte
-        idCardOrPassport: s.id_card || s.passport || '---',
+        idCardOrPassport: s.id_card || s.passport || '',
 
         // 6. RNE
         rne: rneCalculado,
@@ -325,7 +500,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         address: direccionCompleta,
 
         // 8. Correo Electrónico
-        email: s.email || 'No registrado',
+        email: s.email || '',
 
         // 9. Enfermedades o alérgico a
         conditionsAndAllergies: enfermedadesAlergias,
@@ -334,22 +509,22 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         medications: medicamentos,
 
         // 11. Tutor
-        tutorName: dbTutor?.name || s.authorized_person || 'No asignado',
+        tutorName,
 
         // 12. Teléfono del tutor
-        tutorPhone: dbTutor?.phone || dbTutor?.secondary_phone || '---',
+        tutorPhone,
 
         // 13. Nombre del padre
-        fatherName: dbPadre?.name || 'No registrado',
+        fatherName,
 
         // 14. Teléfono del padre
-        fatherPhone: dbPadre?.phone || dbPadre?.secondary_phone || '---',
+        fatherPhone,
 
         // 15. Nombre de la madre
-        motherName: dbMadre?.name || 'No registrada',
+        motherName,
 
         // 16. Teléfono de la madre
-        motherPhone: dbMadre?.phone || dbMadre?.secondary_phone || '---'
+        motherPhone
       };
     });
   }, [allStudents, courses, parentsData, medicalData]);
@@ -392,7 +567,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
     filteredStudents.forEach((student) => {
       const cid = student.course_id || 'unassigned';
       if (!map[cid]) {
-        const foundCourse = courses.find((c) => c.id === cid);
+        const foundCourse = courses.find((c: any) => c.id === cid);
         map[cid] = {
           course: foundCourse || {
             id: 'unassigned',
@@ -415,9 +590,10 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
     const total = filteredStudents.length;
     const boys = filteredStudents.filter((s) => s.sex === 'M').length;
     const girls = filteredStudents.filter((s) => s.sex === 'F').length;
-    const withRNE = filteredStudents.filter((s) => s.rne && !s.rne.includes('Sin F.') && s.rne !== '---').length;
+    const withRNE = filteredStudents.filter((s) => s.rne && s.rne.length >= 4).length;
+    // Solo contar si REALMENTE tiene una condición médica o medicamento
     const withMedicalNotes = filteredStudents.filter(
-      (s) => s.conditionsAndAllergies !== 'Ninguna' || s.medications !== 'Ninguno'
+      (s) => s.conditionsAndAllergies !== '' || s.medications !== ''
     ).length;
     return { total, boys, girls, withRNE, withMedicalNotes };
   }, [filteredStudents]);
@@ -425,7 +601,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
   // Curso seleccionado actual (si no es ALL)
   const currentCourse = useMemo(() => {
     if (selectedCourseId === 'ALL') return null;
-    return courses.find((c) => c.id === selectedCourseId) || null;
+    return courses.find((c: any) => c.id === selectedCourseId) || null;
   }, [selectedCourseId, courses]);
 
   // EXPORTAR A EXCEL
@@ -516,7 +692,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
 
       let isFirstPage = true;
 
-      studentsByCourse.forEach((group, groupIdx) => {
+      studentsByCourse.forEach((group) => {
         if (!isFirstPage) {
           doc.addPage('letter', 'landscape');
         }
@@ -543,7 +719,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           align: 'center'
         });
 
-        // Tabla con las 16 columnas requeridas adaptadas para caber con total legibilidad
+        // Tabla con las 16 columnas requeridas
         const head = [
           [
             '#',
@@ -570,12 +746,12 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           s.idCardOrPassport,
           s.rne,
           s.address,
-          s.email !== 'No registrado' ? s.email : '---',
+          s.email,
           s.conditionsAndAllergies,
           s.medications,
-          `${s.tutorName}\n${s.tutorPhone !== '---' ? s.tutorPhone : ''}`,
-          `${s.fatherName !== 'No registrado' ? s.fatherName : '---'}\n${s.fatherPhone !== '---' ? s.fatherPhone : ''}`,
-          `${s.motherName !== 'No registrada' ? s.motherName : '---'}\n${s.motherPhone !== '---' ? s.motherPhone : ''}`
+          s.tutorName ? `${s.tutorName}${s.tutorPhone ? '\n' + s.tutorPhone : ''}` : '',
+          s.fatherName ? `${s.fatherName}${s.fatherPhone ? '\n' + s.fatherPhone : ''}` : '',
+          s.motherName ? `${s.motherName}${s.motherPhone ? '\n' + s.motherPhone : ''}` : ''
         ]);
 
         autoTable(doc, {
@@ -942,10 +1118,10 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
                             {student.email}
                           </td>
 
-                          {/* 9. Enfermedades o Alérgico a */}
+                          {/* 9. Enfermedades o Alérgico a (Vacío si no tiene) */}
                           <td
                             className={`p-2 border border-slate-200 text-[10px] ${
-                              student.conditionsAndAllergies !== 'Ninguna'
+                              student.conditionsAndAllergies
                                 ? 'text-rose-700 font-bold bg-rose-50/30'
                                 : 'text-slate-500'
                             }`}
@@ -953,10 +1129,10 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
                             {student.conditionsAndAllergies}
                           </td>
 
-                          {/* 10. Medicamentos que usa */}
+                          {/* 10. Medicamentos que usa (Vacío si no tiene) */}
                           <td
                             className={`p-2 border border-slate-200 text-[10px] ${
-                              student.medications !== 'Ninguno'
+                              student.medications
                                 ? 'text-amber-700 font-bold bg-amber-50/30'
                                 : 'text-slate-500'
                             }`}
