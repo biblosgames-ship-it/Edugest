@@ -301,6 +301,10 @@ export const InicialRoutineManager: React.FC<InicialRoutineManagerProps> = ({
   const [teacherName, setTeacherName] = useState<string>('');
   const printAreaRef = useRef<HTMLDivElement>(null);
 
+  const isStaffOrAdmin = profile?.role
+    ? ['admin', 'coordinator', 'creator', 'teacher', 'management_teacher', 'director', 'superAdmin', 'superadmin'].includes(profile.role)
+    : false;
+
   const courseId = course?.id || 'default_course';
   const centerId = profile?.center_id || course?.center_id;
   const storageKey = `edugest_inicial_routine_${centerId || 'local'}_${courseId}_${selectedYear}`;
@@ -676,13 +680,15 @@ export const InicialRoutineManager: React.FC<InicialRoutineManagerProps> = ({
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer"
-              >
-                <Sparkles size={16} /> Personalizar / Editar
-              </button>
+              {isStaffOrAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles size={16} /> Personalizar / Editar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleExportPNG}
