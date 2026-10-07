@@ -100,15 +100,29 @@ export const ScheduleViewer = () => {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const selectedCourseObj = useMemo(() => {
+    if (filterType === 'inicial') {
+      const found = (state.courses || []).find((c: any) => String(c.id) === String(filterId));
+      if (found) return found;
+      const firstIni = (state.courses || []).find((c: any) => isCourseInicial(c));
+      if (firstIni) return firstIni;
+      return {
+        id: 'general_inicial',
+        grade: 'Nivel Inicial',
+        section: 'General',
+        level: 'Inicial',
+        tanda: selectedShift
+      };
+    }
     if (filterType === 'course' && filterId) {
       return (state.courses || []).find((c: any) => String(c.id) === String(filterId));
     }
     return null;
-  }, [filterType, filterId, state.courses]);
+  }, [filterType, filterId, state.courses, selectedShift]);
 
   const isSelectedCourseInicial = useMemo(() => {
+    if (filterType === 'inicial') return true;
     return selectedCourseObj ? isCourseInicial(selectedCourseObj) : false;
-  }, [selectedCourseObj]);
+  }, [filterType, selectedCourseObj]);
 
   // Candados de Seguridad 🔒 (Blindaje de casillas y bloqueo maestro del horario)
   const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}_${selectedYear || 'default'}`;
@@ -2549,15 +2563,67 @@ export const ScheduleViewer = () => {
               <select
                 value={filterType}
                 onChange={(e) => {
-                  setFilterType(e.target.value as any);
-                  setFilterId('');
+                  const val = e.target.value as any;
+                  setFilterType(val);
+                  if (val === 'inicial') {
+                    const firstIni = (state.courses || []).find((c: any) => isCourseInicial(c));
+                    setFilterId(firstIni ? firstIni.id : 'general_inicial');
+                  } else {
+                    setFilterId('');
+                  }
                 }}
                 className="px-6 py-2.5 rounded-2xl bg-slate-50 border-none text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner"
               >
                 <option value="all">Ver Todos</option>
                 <option value="teacher">Por Docente</option>
                 <option value="course">Por Curso</option>
+                <option value="inicial">🧸 Rutinas Nivel Inicial</option>
               </select>
+
+              {/* Botón de acceso directo a Rutinas de Nivel Inicial */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (filterType === 'inicial') {
+                    setFilterType('all');
+                    setFilterId('');
+                  } else {
+                    setFilterType('inicial');
+                    const firstIni = (state.courses || []).find((c: any) => isCourseInicial(c));
+                    setFilterId(firstIni ? firstIni.id : 'general_inicial');
+                  }
+                }}
+                className={`px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  filterType === 'inicial'
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+                title="Acceso directo a las fichas de rutina de Nivel Inicial"
+              >
+                <Baby size={14} /> Rutinas Inicial
+              </button>
+
+              {filterType === 'inicial' && (
+                <div className="flex items-center gap-2">
+                  {(state.courses || []).filter((c: any) => isCourseInicial(c)).length > 0 ? (
+                    <select
+                      value={filterId}
+                      onChange={(e) => setFilterId(e.target.value)}
+                      className="px-6 py-2.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-[10px] font-black uppercase shadow-inner"
+                    >
+                      {(state.courses || []).filter((c: any) => isCourseInicial(c)).map((c: any) => (
+                        <option key={c.id} value={c.id}>
+                          {c.grade} "{c.section}" ({c.tanda || 'Matutina'})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="px-4 py-2 bg-amber-100 text-amber-900 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                      Ficha General (Borrador)
+                    </span>
+                  )}
+                </div>
+              )}
               {filterType === 'teacher' && (
                 <select
                   value={filterId}
