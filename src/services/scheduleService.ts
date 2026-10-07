@@ -33,7 +33,7 @@ const findOfficialSchedule = (schedules: any[], levelName: string, shiftName: st
   return match || null;
 };
 
-const isCourseInicial = (course: any) => {
+export const isCourseInicial = (course: any) => {
   const cGrade = (course?.grade || '').toLowerCase();
   const cLevel = (course?.level || '').toLowerCase();
   return (

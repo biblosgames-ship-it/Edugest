@@ -21,7 +21,8 @@ import {
   Trash2,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Baby
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
@@ -34,10 +35,12 @@ import {
   isEntryLocked,
   findCycleTimeBlocks,
   getSlotsFromCycleConfig,
-  calculateCleanSlotDurations
+  calculateCleanSlotDurations,
+  isCourseInicial
 } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 import { sortCourses } from '../utils/courseSorter';
+import { InicialRoutineManager } from './InicialRoutineManager';
 
 export const ScheduleViewer = () => {
   const {
@@ -89,11 +92,23 @@ export const ScheduleViewer = () => {
     return '';
   });
   const [viewMode, setViewMode] = useState<'list' | 'matrix'>('matrix');
+  const [inicialViewMode, setInicialViewMode] = useState<'routine' | 'grid'>('routine');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isDeepRepairing, setIsDeepRepairing] = useState(false);
   const [deepRepairAttempt, setDeepRepairAttempt] = useState(0);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  const selectedCourseObj = useMemo(() => {
+    if (filterType === 'course' && filterId) {
+      return (state.courses || []).find((c: any) => String(c.id) === String(filterId));
+    }
+    return null;
+  }, [filterType, filterId, state.courses]);
+
+  const isSelectedCourseInicial = useMemo(() => {
+    return selectedCourseObj ? isCourseInicial(selectedCourseObj) : false;
+  }, [selectedCourseObj]);
 
   // Candados de Seguridad 🔒 (Blindaje de casillas y bloqueo maestro del horario)
   const lockStorageKey = `edugens_locked_entries_${profile?.center_id || 'default'}_${selectedShift}_${selectedYear || 'default'}`;
@@ -2610,6 +2625,34 @@ export const ScheduleViewer = () => {
                   ))}
                 </select>
               )}
+
+              {/* Selector de Vista Especial para Nivel Inicial */}
+              {isSelectedCourseInicial && (
+                <div className="flex items-center gap-1.5 p-1 bg-amber-50 border border-amber-200 rounded-2xl animate-fade-in shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setInicialViewMode('routine')}
+                    className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                      inicialViewMode === 'routine'
+                        ? 'bg-amber-500 text-white shadow-md'
+                        : 'text-amber-800 hover:bg-amber-100/60'
+                    }`}
+                  >
+                    <Baby size={13} /> Rutina Diaria Oficial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInicialViewMode('grid')}
+                    className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                      inicialViewMode === 'grid'
+                        ? 'bg-white text-slate-800 shadow-md border border-slate-200'
+                        : 'text-amber-800 hover:bg-amber-100/60'
+                    }`}
+                  >
+                    Cuadrícula Horaria
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             (() => {
@@ -3085,11 +3128,23 @@ export const ScheduleViewer = () => {
         </div>
       )}
 
-      {/* Matrix Table */}
-      <div
-        ref={tableRef}
-        className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden p-8 print-container"
-      >
+      {/* VISTA ESPECIALIZADA: RUTINA DIARIA DE NIVEL INICIAL */}
+      {isSelectedCourseInicial && inicialViewMode === 'routine' ? (
+        <InicialRoutineManager
+          course={selectedCourseObj}
+          teachers={state.teachers}
+          subjects={state.subjects}
+          centerName={centerName}
+          selectedYear={selectedYear}
+          profile={profile}
+        />
+      ) : (
+        <>
+          {/* Matrix Table */}
+          <div
+            ref={tableRef}
+            className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden p-8 print-container"
+          >
         {/* Título de Impresión (Solo visible al imprimir o exportar) */}
         <div className="print-only mb-6 border-b pb-4">
           <div className="flex justify-between items-end">
@@ -3730,6 +3785,8 @@ export const ScheduleViewer = () => {
           </div>
         </div>
       )}
+    </>
+  )}
 
       {/* MODAL: ASISTENTE DE INTERCAMBIO DIRECTO */}
       {showSwapModal && (
