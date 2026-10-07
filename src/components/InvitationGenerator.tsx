@@ -677,24 +677,49 @@ export const InvitationGenerator = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {['Inicial', 'Primario', 'Secundario'].map((lvl) => {
-              const levelCourses = allCourses.filter((c: any) => c.level === lvl);
-              if (levelCourses.length === 0) return null;
+            {(() => {
+              const standardLevels = ['Inicial', 'Primario', 'Secundario'];
+              const customLevels = Array.from(
+                new Set(
+                  allCourses.map((c: any) => {
+                    const l = (c.level || '').trim();
+                    if (!l) return 'General';
+                    const lower = l.toLowerCase();
+                    if (lower.includes('inic') || lower.includes('matern') || lower.includes('parv') || lower.includes('kind') || lower.includes('preprim')) return 'Inicial';
+                    if (lower.includes('prim')) return 'Primario';
+                    if (lower.includes('secun')) return 'Secundario';
+                    return l;
+                  })
+                )
+              );
+              const allUniqueLevels = Array.from(new Set([...standardLevels, ...customLevels]));
 
-              return (
-                <div
-                  key={lvl}
-                  className="bg-white rounded-[2rem] border border-slate-200/80 overflow-hidden shadow-sm flex flex-col animate-in fade-in duration-200"
-                >
-                  {/* Cabecera del Nivel */}
-                  <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
-                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                      Nivel {lvl}
-                    </h4>
-                    <span className="text-[10px] bg-slate-200/70 text-slate-600 font-bold px-2 py-0.5 rounded-full">
-                      {levelCourses.length} cursos
-                    </span>
-                  </div>
+              return allUniqueLevels.map((lvl) => {
+                const levelCourses = allCourses.filter((c: any) => {
+                  const cLvl = (c.level || '').trim();
+                  if (cLvl === lvl) return true;
+                  const cLower = cLvl.toLowerCase();
+                  if (lvl === 'Inicial' && (cLower.includes('inic') || cLower.includes('matern') || cLower.includes('parv') || cLower.includes('kind') || cLower.includes('preprim'))) return true;
+                  if (lvl === 'Primario' && (cLower.includes('prim') || cLower.includes('basic'))) return true;
+                  if (lvl === 'Secundario' && (cLower.includes('secun') || cLower.includes('medio'))) return true;
+                  return false;
+                });
+                if (levelCourses.length === 0) return null;
+
+                return (
+                  <div
+                    key={lvl}
+                    className="bg-white rounded-[2rem] border border-slate-200/80 overflow-hidden shadow-sm flex flex-col animate-in fade-in duration-200"
+                  >
+                    {/* Cabecera del Nivel */}
+                    <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                        Nivel {lvl}
+                      </h4>
+                      <span className="text-[10px] bg-slate-200/70 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                        {levelCourses.length} cursos
+                      </span>
+                    </div>
 
                   {/* Lista de Cursos del Nivel */}
                   <div className="divide-y divide-slate-100 p-2">
@@ -768,8 +793,9 @@ export const InvitationGenerator = ({
                   </div>
                 </div>
               );
-            })}
-          </div>
+            });
+          })()}
+        </div>
         </div>
       )}
     </div>

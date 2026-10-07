@@ -387,24 +387,53 @@ export const CourseForm = () => {
               No hay cursos registrados aún.
             </div>
           ) : (
-            (['Inicial', 'Primario', 'Secundario'] as const).map((lvl) => {
-              const levelCourses = allCourses.filter((c: any) => c.level === lvl);
-              if (levelCourses.length === 0) return null;
+            (() => {
+              // Extraer todos los niveles únicos presentes en allCourses más los estándares
+              const standardLevels = ['Inicial', 'Primario', 'Secundario'];
+              const customLevels = Array.from(
+                new Set(
+                  allCourses.map((c: any) => {
+                    const l = (c.level || '').trim();
+                    if (!l) return 'General';
+                    const lower = l.toLowerCase();
+                    if (lower.includes('inic') || lower.includes('matern') || lower.includes('parv') || lower.includes('kind') || lower.includes('preprim')) return 'Inicial';
+                    if (lower.includes('prim')) return 'Primario';
+                    if (lower.includes('secun')) return 'Secundario';
+                    return l;
+                  })
+                )
+              );
 
-              return (
-                <div
-                  key={lvl}
-                  className="bg-surface rounded-[2rem] border border-border-main overflow-hidden shadow-md"
-                >
-                  {/* Cabecera del Nivel */}
-                  <div className="bg-brand-bg px-6 py-4 border-b border-border-main flex items-center justify-between">
-                    <h4 className="text-xs font-black text-text-main uppercase tracking-widest">
-                      Nivel {lvl}
-                    </h4>
-                    <span className="text-[9px] bg-indigo-50 border border-indigo-100 text-indigo-700 font-black px-2.5 py-0.5 rounded-full uppercase">
-                      {levelCourses.length} {levelCourses.length === 1 ? 'Curso' : 'Cursos'}
-                    </span>
-                  </div>
+              // Unir estándares y personalizados manteniendo el orden preferente
+              const allUniqueLevels = Array.from(new Set([...standardLevels, ...customLevels]));
+
+              return allUniqueLevels.map((lvl) => {
+                const levelCourses = allCourses.filter((c: any) => {
+                  const cLvl = (c.level || '').trim();
+                  if (cLvl === lvl) return true;
+                  const cLower = cLvl.toLowerCase();
+                  if (lvl === 'Inicial' && (cLower.includes('inic') || cLower.includes('matern') || cLower.includes('parv') || cLower.includes('kind') || cLower.includes('preprim'))) return true;
+                  if (lvl === 'Primario' && (cLower.includes('prim') || cLower.includes('basic'))) return true;
+                  if (lvl === 'Secundario' && (cLower.includes('secun') || cLower.includes('medio'))) return true;
+                  return false;
+                });
+
+                if (levelCourses.length === 0) return null;
+
+                return (
+                  <div
+                    key={lvl}
+                    className="bg-surface rounded-[2rem] border border-border-main overflow-hidden shadow-md"
+                  >
+                    {/* Cabecera del Nivel */}
+                    <div className="bg-brand-bg px-6 py-4 border-b border-border-main flex items-center justify-between">
+                      <h4 className="text-xs font-black text-text-main uppercase tracking-widest">
+                        Nivel {lvl}
+                      </h4>
+                      <span className="text-[9px] bg-indigo-50 border border-indigo-100 text-indigo-700 font-black px-2.5 py-0.5 rounded-full uppercase">
+                        {levelCourses.length} {levelCourses.length === 1 ? 'Curso' : 'Cursos'}
+                      </span>
+                    </div>
 
                   {/* Lista de Cursos del Nivel */}
                   <div className="divide-y divide-border-main">
@@ -490,8 +519,9 @@ export const CourseForm = () => {
                   </div>
                 </div>
               );
-            })
-          )}
+            });
+          })()
+        )}
         </div>
       </div>
     </div>
