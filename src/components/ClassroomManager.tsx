@@ -794,7 +794,6 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   }, [selectedCourseId, courseStudents, profile?.id, profile?.role, profile?.center_id, center?.id]);
 
   const [newActivityName, setNewActivityName] = useState<string>('');
-  const [newActivityMaxScore, setNewActivityMaxScore] = useState<number>(100);
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
   const [folderStudentId, setFolderStudentId] = useState<string>('');
   const [folderStudentDetails, setFolderStudentDetails] = useState<{
@@ -1174,8 +1173,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       return;
     }
     const compId = selectedCompetencyForNewAct || 'c1';
-    const parsedMaxScore = Number(newActivityMaxScore) > 0 ? Number(newActivityMaxScore) : 100;
-    const act = { id: `act_${compId}_${Date.now()}`, name: newActivityName.trim(), maxScore: parsedMaxScore };
+    const act = { id: `act_${compId}_${Date.now()}`, name: newActivityName.trim(), maxScore: 100 };
 
     setCompetencyActivities((prev) => {
       const updated = {
@@ -1195,42 +1193,12 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         teacherId: profile?.teacher_id || profile?.id,
         centerId: centerId,
         year: year,
-        calcMode: competencyCalcMode,
         updatedAt: new Date().toISOString()
       }));
 
       return updated;
     });
     setNewActivityName('');
-    setNewActivityMaxScore(100);
-  };
-
-  // Modificar puntuación máxima de una actividad existente
-  const handleUpdateActivityMaxScore = (compId: string, actId: string, newMax: number) => {
-    const validMax = isNaN(newMax) ? 0 : Math.max(0, Math.min(100, Number(newMax)));
-    setCompetencyActivities((prev) => {
-      const updated = {
-        ...prev,
-        [compId]: (prev[compId] || []).map((a) => (a.id === actId ? { ...a, maxScore: validMax } : a))
-      };
-
-      const centerId = profile?.center_id || center?.id;
-      const year = selectedYear || '2026-2027';
-      localStorage.setItem(storageScopeKey, JSON.stringify({
-        scores: partialScores,
-        activities: updated,
-        period: selectedPeriod,
-        subjectId: selectedSubjectId,
-        courseId: selectedCourseId,
-        teacherId: profile?.teacher_id || profile?.id,
-        centerId: centerId,
-        year: year,
-        calcMode: competencyCalcMode,
-        updatedAt: new Date().toISOString()
-      }));
-
-      return updated;
-    });
   };
 
   // Eliminar actividad parcial
@@ -1273,15 +1241,14 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   };
 
   // Cambiar nota parcial de alumno
-  const handlePartialScoreChange = (studentId: string, activityId: string, val: number, maxScore: number = 100) => {
-    const limit = maxScore > 0 ? maxScore : 100;
+  const handlePartialScoreChange = (studentId: string, activityId: string, val: number) => {
     setPartialScores((prev) => {
       const studentScores = prev[studentId] || {};
       const updatedScores = {
         ...prev,
         [studentId]: {
           ...studentScores,
-          [activityId]: isNaN(val) ? 0 : Math.min(limit, Math.max(0, val))
+          [activityId]: isNaN(val) ? 0 : Math.min(100, Math.max(0, val))
         }
       };
       localStorage.setItem(storageScopeKey, JSON.stringify({
@@ -2853,23 +2820,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                 placeholder="Nombre de la actividad (Ej. Quiz 1)..."
                 value={newActivityName}
                 onChange={(e) => setNewActivityName(e.target.value)}
-                className="px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+                className="px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 min-w-[220px]"
               />
-              <div 
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                title="Puntuación o valor máximo de la actividad (base sobre la que se evalúa)"
-              >
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Valor:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={newActivityMaxScore}
-                  onChange={(e) => setNewActivityMaxScore(Number(e.target.value))}
-                  className="w-12 text-center font-black text-indigo-600 dark:text-indigo-400 bg-transparent outline-none text-xs"
-                />
-                <span className="text-[10px] font-bold text-slate-400">pts</span>
-              </div>
               <button
                 onClick={handleAddActivity}
                 className="px-4 py-2 bg-brand-blue hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-md shadow-brand-blue/20"
@@ -3036,59 +2988,16 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             </th>
                           ) : (
                             acts.map((act) => (
-                              <th key={act.id} className="px-1.5 py-1.5 text-center min-w-[95px] max-w-[140px] relative group text-[10px]">
-                                {/* Título de la actividad truncado con tooltip al pasar el cursor */}
-                                <div className="flex items-center justify-center gap-1 relative group/title">
-                                  <span
-                                    className="truncate max-w-[75px] font-bold text-text-main cursor-pointer hover:text-brand-blue transition-colors"
-                                    title={`${act.name} (Valor: ${act.maxScore || 100} pts)`}
-                                  >
-                                    {act.name}
-                                  </span>
-
-                                  {/* Tooltip flotante con el nombre completo y valor de la actividad */}
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/title:flex flex-col items-center z-50 pointer-events-none whitespace-normal min-w-[140px] max-w-[240px]">
-                                    <div className="bg-slate-900/95 dark:bg-slate-800 text-white text-[11px] font-medium py-1 px-2.5 rounded-lg shadow-xl text-center border border-slate-700/60 backdrop-blur-sm">
-                                      <p className="font-bold text-white break-words leading-tight">{act.name}</p>
-                                      <p className="text-[10px] text-amber-300 font-bold mt-1">
-                                        Puntuación base: {act.maxScore || 100} pts
-                                      </p>
-                                    </div>
-                                    <div className="w-2 h-2 bg-slate-900/95 dark:bg-slate-800 rotate-45 -mt-1 border-r border-b border-slate-700/60"></div>
-                                  </div>
-
+                              <th key={act.id} className="px-2 py-1.5 text-center min-w-[90px] relative group text-[10px]">
+                                <div className="flex items-center justify-center gap-1">
+                                  <span className="truncate max-w-[80px]">{act.name}</span>
                                   <button
-                                    type="button"
                                     onClick={() => handleDeleteActivity(comp.id, act.id)}
-                                    className="text-rose-400 hover:text-rose-600 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer font-bold"
+                                    className="text-rose-400 hover:text-rose-600 ml-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     title="Eliminar columna"
                                   >
                                     ×
                                   </button>
-                                </div>
-
-                                {/* Monto editable de puntuación máxima / base */}
-                                <div className="flex items-center justify-center gap-1 mt-1 text-[9px] text-text-muted font-normal">
-                                  <span className="text-[8px] font-black uppercase text-slate-400">Val:</span>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    value={act.maxScore || ''}
-                                    placeholder="100"
-                                    onChange={(e) => {
-                                      const val = e.target.value === '' ? 0 : Number(e.target.value);
-                                      handleUpdateActivityMaxScore(comp.id, act.id, val);
-                                    }}
-                                    onBlur={() => {
-                                      if (!act.maxScore || act.maxScore <= 0) {
-                                        handleUpdateActivityMaxScore(comp.id, act.id, 100);
-                                      }
-                                    }}
-                                    className="w-10 text-center py-0.5 px-0.5 text-[10px] font-mono font-black bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-brand-blue dark:text-indigo-400 focus:ring-1 focus:ring-indigo-500 outline-none shadow-2xs"
-                                    title="Puntuación máxima de esta actividad (haz clic para editar)"
-                                  />
-                                  <span className="text-[9px] font-semibold text-slate-400">pts</span>
                                 </div>
                               </th>
                             ))
@@ -3193,28 +3102,23 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                 {acts.length === 0 ? (
                                   <td className="px-2 py-1 text-center text-slate-400 italic text-[11px]">--</td>
                                 ) : (
-                                  acts.map((act) => {
-                                    const maxLimit = act.maxScore || 100;
-                                    return (
-                                      <td key={act.id} className="px-2 py-1 text-center">
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          max={maxLimit}
-                                          data-partial-act={act.id}
-                                          data-student-idx={idx}
-                                          value={studentScores[act.id] ?? ''}
-                                          placeholder={`0-${maxLimit}`}
-                                          onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value), maxLimit)}
-                                          onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
-                                          onPaste={(e) => handlePartialPaste(e, idx, act.id)}
-                                          onFocus={(e) => e.target.select()}
-                                          className="w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs"
-                                          title={`${act.name}: Calificación sobre ${maxLimit} pts`}
-                                        />
-                                      </td>
-                                    );
-                                  })
+                                  acts.map((act) => (
+                                    <td key={act.id} className="px-2 py-1 text-center">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        data-partial-act={act.id}
+                                        data-student-idx={idx}
+                                        value={studentScores[act.id] ?? ''}
+                                        onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
+                                        onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
+                                        onPaste={(e) => handlePartialPaste(e, idx, act.id)}
+                                        onFocus={(e) => e.target.select()}
+                                        className="w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs"
+                                      />
+                                    </td>
+                                  ))
                                 )}
                                 <td className="px-2 py-1 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue text-xs">
                                   {compScore}
