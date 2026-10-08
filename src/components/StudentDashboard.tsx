@@ -28,6 +28,7 @@ import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
+import { ParentCampaignBanner } from './campaigns/ParentCampaignBanner';
 import { getSubjectTheme } from '../utils/subjectColors';
 import {
   findCycleTimeBlocks,
@@ -1285,6 +1286,15 @@ export const StudentDashboard = ({
           )}
         </div>
       </div>
+
+      {/* PUBLICIDAD PRIORITARIA / BANNER DE CAMPAÑAS, PASEOS Y CONSULTAS */}
+      <ParentCampaignBanner
+        centerId={profile?.center_id || (state as any)?.center?.id}
+        familyStudents={familyStudents}
+        currentStudentId={profile?.student_id || profile?.id}
+        currentCourseId={selectedCourseId}
+        userProfile={profile}
+      />
 
       {/* MONITOR OPERATIVO EN VIVO */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

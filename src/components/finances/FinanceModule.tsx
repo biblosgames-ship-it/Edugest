@@ -9,7 +9,8 @@ import {
   GraduationCap,
   Wallet,
   BookOpen,
-  Package
+  Package,
+  Compass
 } from 'lucide-react';
 import { FinanceDashboard } from './FinanceDashboard';
 import { StudentAccounts } from './StudentAccounts';
@@ -19,6 +20,7 @@ import { ScholarshipsManager } from './ScholarshipsManager';
 import { FinanceSettings } from './FinanceSettings';
 import { FinanceReports } from './FinanceReports';
 import { InventoryManager } from './InventoryManager';
+import { CampaignsManager } from './CampaignsManager';
 
 export const FinanceModule = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -26,6 +28,7 @@ export const FinanceModule = () => {
   const tabs = [
     { id: 'dashboard', label: 'Resumen', icon: BarChart3 },
     { id: 'students', label: 'Cuentas Alumnos', icon: Users },
+    { id: 'campaigns', label: 'Paseos y Campañas', icon: Compass },
     { id: 'inventory', label: 'Inventario', icon: Package },
     { id: 'expenses', label: 'Libro Contable', icon: BookOpen },
     { id: 'payroll', label: 'Nómina', icon: Wallet },
@@ -58,6 +61,7 @@ export const FinanceModule = () => {
       <div className="animate-fade-in">
         {activeTab === 'dashboard' && <FinanceDashboard />}
         {activeTab === 'students' && <StudentAccounts onTabChange={setActiveTab} />}
+        {activeTab === 'campaigns' && <CampaignsManager />}
         {activeTab === 'expenses' && <LedgerManager />}
         {activeTab === 'payroll' && <PayrollManager />}
         {activeTab === 'scholarships' && <ScholarshipsManager />}
