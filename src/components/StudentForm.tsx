@@ -70,6 +70,7 @@ export const StudentForm = ({
     birthDate: initialData?.birth_date || '',
     placeOfBirth: initialData?.place_of_birth || '',
     nationality: initialData?.nationality || 'Dominicana',
+    birthCertificateBook: initialData?.birth_certificate_book || initialData?.book_number || initialData?.book || '',
     birthCertificateFolio: initialData?.birth_certificate_folio || '',
     birthCertificateNumber: initialData?.birth_certificate_number || '',
     idCard: initialData?.id_card || '',
@@ -251,6 +252,7 @@ export const StudentForm = ({
             birthDate: full.birth_date || prev.birthDate,
             placeOfBirth: full.place_of_birth || prev.placeOfBirth,
             nationality: full.nationality || prev.nationality,
+            birthCertificateBook: full.birth_certificate_book || full.book_number || full.book || prev.birthCertificateBook,
             birthCertificateFolio: full.birth_certificate_folio || prev.birthCertificateFolio,
             birthCertificateNumber: full.birth_certificate_number || prev.birthCertificateNumber,
             idCard: full.id_card || prev.idCard,
@@ -410,6 +412,7 @@ export const StudentForm = ({
         created_at: new Date().toISOString(),
         place_of_birth: student.placeOfBirth,
         nationality: normalize(student.nationality),
+        birth_certificate_book: student.birthCertificateBook,
         birth_certificate_folio: student.birthCertificateFolio,
         birth_certificate_number: student.birthCertificateNumber,
         id_card: student.idCard,
@@ -474,6 +477,7 @@ export const StudentForm = ({
             birthDate: '',
             idCard: '',
             sigerdCode: '',
+            birthCertificateBook: '',
             birthCertificateFolio: '',
             birthCertificateNumber: '',
             student_code: '', // Se generará nuevo
@@ -742,6 +746,7 @@ export const StudentForm = ({
                             sex: 'M',
                             birthDate: '',
                             placeOfBirth: '',
+                            birthCertificateBook: '',
                             birthCertificateFolio: '',
                             birthCertificateNumber: '',
                             idCard: '',
@@ -1004,9 +1009,19 @@ export const StudentForm = ({
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-3 gap-6">
                 <div>
-                  <label className={labelClass}>Folio del Acta de Nacimiento</label>
+                  <label className={labelClass}>Libro del Acta</label>
+                  <input
+                    type="text"
+                    value={student.birthCertificateBook}
+                    onChange={(e) => setStudent({ ...student, birthCertificateBook: e.target.value })}
+                    className={inputClass}
+                    placeholder="Ej: 0012"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Folio del Acta</label>
                   <input
                     type="text"
                     value={student.birthCertificateFolio}
@@ -1016,7 +1031,7 @@ export const StudentForm = ({
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Número del Acta de Nacimiento</label>
+                  <label className={labelClass}>Número del Acta</label>
                   <input
                     type="text"
                     value={student.birthCertificateNumber}

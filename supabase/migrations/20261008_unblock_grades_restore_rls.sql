@@ -35,6 +35,21 @@ CREATE POLICY "Allow all on student_partial_activities" ON public.student_partia
   USING (true)
   WITH CHECK (true);
 
--- 4. Permisos de consulta y guardado
+-- 4. Asegurar permisos completos de actualización, inserción y lectura en courses
+ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can read courses" ON public.courses;
+DROP POLICY IF EXISTS "Admins can manage courses" ON public.courses;
+DROP POLICY IF EXISTS "Allow all on courses" ON public.courses;
+DROP POLICY IF EXISTS "saas_write_isolation" ON public.courses;
+DROP POLICY IF EXISTS "courses_policy" ON public.courses;
+
+CREATE POLICY "Allow all on courses" ON public.courses
+  FOR ALL TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- 5. Permisos de consulta y guardado
 GRANT ALL ON public.student_grades TO authenticated, service_role, anon;
 GRANT ALL ON public.student_partial_activities TO authenticated, service_role, anon;
+GRANT ALL ON public.courses TO authenticated, service_role, anon;

@@ -92,8 +92,8 @@ export const generateStudentPDF = (
       ],
       ['Código Alumno / SIGERD:', `${student.student_code || '---'}  /  ${student.sigerdCode || student.sigerd_code || '---'}`],
       ['Fecha de Inscripción:', formattedEnrollmentDate],
-      ['Fecha y Lugar de Nac.:', `${student.birthDate || student.birth_date || '---'}  |  ${student.placeOfBirth || student.place_of_birth || '---'}`],
-      ['Sexo / Nacionalidad / Folio:', `${student.sex || '---'}  /  ${student.nationality || 'Dominicana'}  /  Folio: ${student.birthCertificateFolio || student.birth_certificate_folio || '---'}`],
+      ['Sexo / Nacionalidad:', `${student.sex || '---'}  /  ${student.nationality || 'Dominicana'}`],
+      ['Acta de Nacimiento:', `Libro: ${student.birthCertificateBook || student.birth_certificate_book || student.book_number || student.book || '---'}  |  Folio: ${student.birthCertificateFolio || student.birth_certificate_folio || '---'}  |  Núm: ${student.birthCertificateNumber || student.birth_certificate_number || '---'}`],
       ['Cédula:', student.idCard || student.id_card || '---'],
       [
         'Dirección:',

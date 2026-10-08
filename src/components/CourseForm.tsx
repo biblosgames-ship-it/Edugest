@@ -92,13 +92,23 @@ export const CourseForm = () => {
   const handleEdit = (course: any) => {
     setEditingCourseId(course.id);
     setIsCodeManuallyEdited(!!course.code);
+    const rawTanda = (course.tanda || '').trim();
+    let tandaVal: Tanda = 'Matutina';
+    if (rawTanda.toLowerCase().includes('vesp') || rawTanda.toLowerCase().includes('tard')) {
+      tandaVal = 'Vespertina';
+    } else if (rawTanda.toLowerCase().includes('noct') || rawTanda.toLowerCase().includes('noche')) {
+      tandaVal = 'Nocturna';
+    } else {
+      tandaVal = 'Matutina';
+    }
+
     setFormData({
       code: course.code || '',
       level: course.level,
       grade: course.grade,
       section: course.section,
       studentCount: course.studentCount || course.student_count || 0,
-      tanda: course.tanda,
+      tanda: tandaVal,
       cycle: course.cycle,
       modality: course.modality,
       output: course.output,

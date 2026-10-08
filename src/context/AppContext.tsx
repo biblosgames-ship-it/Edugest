@@ -1450,7 +1450,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshData(undefined, true);
   };
   const updateCourse = async (id: string, updates: any) => {
-    await supabase.from('courses').update(updates).eq('id', id);
+    const { data, error } = await supabase.from('courses').update(updates).eq('id', id).select();
+    if (error) {
+      console.error('Error actualizando curso:', error);
+      throw error;
+    }
+    setState((prev: any) => ({
+      ...prev,
+      courses: (prev.courses || []).map((c: any) => (c.id === id ? { ...c, ...updates } : c))
+    }));
     await refreshData(undefined, true);
   };
   const deleteCourse = async (id: string) => {

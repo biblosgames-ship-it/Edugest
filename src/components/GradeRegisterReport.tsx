@@ -447,17 +447,35 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         .filter((x: string) => x.length > 0);
       const direccionCompleta = addressParts.length > 0 ? addressParts.join(', ') : (s.address || '');
 
-      // Datos del acta de nacimiento
+      // Fecha de nacimiento formateada (DD/MM/AAAA)
+      const rawBDate = s.birth_date || s.birthDate;
+      let birthDateFormatted = '';
+      if (rawBDate) {
+        try {
+          const rawDatePart = String(rawBDate).split('T')[0];
+          const parts = rawDatePart.split('-');
+          if (parts.length === 3) {
+            birthDateFormatted = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+          } else {
+            const d = new Date(rawBDate);
+            if (!isNaN(d.getTime())) {
+              birthDateFormatted = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+            }
+          }
+        } catch (e) {
+          birthDateFormatted = String(rawBDate);
+        }
+      }
+
+      // Datos del acta de nacimiento (Libro, Folio, Número)
       const numActa = (s.birth_certificate_number || '').trim();
       const folioActa = (s.birth_certificate_folio || '').trim();
-      let datosActa = '';
-      if (numActa && folioActa) {
-        datosActa = `Núm: ${numActa} | Folio: ${folioActa}`;
-      } else if (numActa) {
-        datosActa = `Núm: ${numActa}`;
-      } else if (folioActa) {
-        datosActa = `Folio: ${folioActa}`;
-      }
+      const libroActa = (s.birth_certificate_book || s.book_number || s.book || '').trim();
+      const actaParts: string[] = [];
+      if (libroActa) actaParts.push(`Lib: ${libroActa}`);
+      if (folioActa) actaParts.push(`Fol: ${folioActa}`);
+      if (numActa) actaParts.push(`Núm: ${numActa}`);
+      const datosActa = actaParts.join(' | ');
 
       // RNE
       const rneCalculado = generateRNE(s);
@@ -485,8 +503,12 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         // 3. Sexo
         sex: (s.sex || '').toUpperCase() === 'F' ? 'F' : 'M',
 
+        // Fecha de Nacimiento
+        birthDate: birthDateFormatted,
+
         // 4. Datos del acta de nacimiento
         birthCertificateData: datosActa,
+        libroActa,
         numActa,
         folioActa,
 
@@ -613,7 +635,11 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         'Nº ORDEN': s.orderNumber || index + 1,
         'APELLIDOS Y NOMBRES': s.fullName,
         'SEXO': s.sex,
+        'FECHA NACIMIENTO': s.birthDate,
         'DATOS ACTA NACIMIENTO': s.birthCertificateData,
+        'LIBRO': s.libroActa,
+        'FOLIO': s.folioActa,
+        'NÚMERO': s.numActa,
         'NO. CÉDULA O PASAPORTE': s.idCardOrPassport,
         'RNE': s.rne,
         'DIRECCIÓN DE RESIDENCIA': s.address,
@@ -639,7 +665,11 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         { wch: 10 }, // Nº Orden
         { wch: 35 }, // Nombres y Apellidos
         { wch: 6 },  // Sexo
-        { wch: 24 }, // Acta Nacimiento
+        { wch: 14 }, // Fecha Nacimiento
+        { wch: 25 }, // Datos Acta Nacimiento
+        { wch: 10 }, // Libro
+        { wch: 10 }, // Folio
+        { wch: 12 }, // Número
         { wch: 18 }, // Cédula/Pasaporte
         { wch: 14 }, // RNE
         { wch: 35 }, // Dirección
@@ -719,13 +749,14 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           align: 'center'
         });
 
-        // Tabla con las 16 columnas requeridas
+        // Tabla con las columnas oficiales
         const head = [
           [
             '#',
             'NOMBRES Y APELLIDOS',
             'SEX',
-            'ACTA NAC.',
+            'F. NAC.',
+            'ACTA (LIB/FOL/NÚM)',
             'CÉDULA / PAS.',
             'RNE',
             'DIRECCIÓN RESIDENCIA',
@@ -742,7 +773,8 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           s.orderNumber || idx + 1,
           s.fullName,
           s.sex,
-          s.birthCertificateData,
+          s.birthDate || '',
+          s.birthCertificateData || '',
           s.idCardOrPassport,
           s.rne,
           s.address,
@@ -775,18 +807,19 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
           },
           columnStyles: {
             0: { cellWidth: 7, halign: 'center' },   // #
-            1: { cellWidth: 38 },                   // Nombres y Apellidos
+            1: { cellWidth: 35 },                   // Nombres y Apellidos
             2: { cellWidth: 7, halign: 'center' },   // Sexo
-            3: { cellWidth: 20 },                   // Acta
-            4: { cellWidth: 17 },                   // Cédula/Pas.
-            5: { cellWidth: 18, fontStyle: 'bold' },// RNE
-            6: { cellWidth: 32 },                   // Dirección
-            7: { cellWidth: 20 },                   // Correo
-            8: { cellWidth: 20 },                   // Enfermedades/Alergias
-            9: { cellWidth: 18 },                   // Medicamentos
-            10: { cellWidth: 25 },                  // Tutor + Tel
-            11: { cellWidth: 23 },                  // Padre + Tel
-            12: { cellWidth: 23 }                   // Madre + Tel
+            3: { cellWidth: 15, halign: 'center' },  // F. Nac.
+            4: { cellWidth: 20 },                   // Acta
+            5: { cellWidth: 17 },                   // Cédula/Pas.
+            6: { cellWidth: 18, fontStyle: 'bold' },// RNE
+            7: { cellWidth: 29 },                   // Dirección
+            8: { cellWidth: 19 },                   // Correo
+            9: { cellWidth: 19 },                   // Enfermedades/Alergias
+            10: { cellWidth: 17 },                  // Medicamentos
+            11: { cellWidth: 22 },                  // Tutor + Tel
+            12: { cellWidth: 20 },                  // Padre + Tel
+            13: { cellWidth: 20 }                   // Madre + Tel
           },
           alternateRowStyles: {
             fillColor: [248, 250, 252]
@@ -1045,7 +1078,8 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
                         <th className="p-2 border border-slate-700 text-center w-8">#</th>
                         <th className="p-2 border border-slate-700 min-w-[200px]">NOMBRE(S) Y APELLIDO(S)</th>
                         <th className="p-2 border border-slate-700 text-center w-10">SEXO</th>
-                        <th className="p-2 border border-slate-700 min-w-[120px]">ACTA DE NACIMIENTO</th>
+                        <th className="p-2 border border-slate-700 text-center min-w-[95px]">FECHA NAC.</th>
+                        <th className="p-2 border border-slate-700 min-w-[130px]">ACTA (LIB/FOL/NÚM)</th>
                         <th className="p-2 border border-slate-700 min-w-[110px]">CÉDULA / PASAPORTE</th>
                         <th className="p-2 border border-slate-700 min-w-[100px] bg-indigo-950 text-indigo-200">
                           RNE OFICIAL
@@ -1093,9 +1127,14 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
                             </span>
                           </td>
 
-                          {/* 4. Datos del acta de nacimiento */}
-                          <td className="p-2 border border-slate-200 text-[10px] text-slate-600">
-                            {student.birthCertificateData}
+                          {/* Fecha de Nacimiento */}
+                          <td className="p-2 border border-slate-200 text-center font-mono text-[10px] text-slate-700">
+                            {student.birthDate || '---'}
+                          </td>
+
+                          {/* 4. Datos del acta de nacimiento (Libro, Folio, Número) */}
+                          <td className="p-2 border border-slate-200 text-[10px] text-slate-600 font-medium">
+                            {student.birthCertificateData || '---'}
                           </td>
 
                           {/* 5. Cédula o Pasaporte */}

@@ -6,6 +6,7 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Download,
   Loader2,
   X,
@@ -77,6 +78,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
   const [progressValue, setProgressValue] = useState(0);
   const [parsedData, setParsedData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmedCenter, setConfirmedCenter] = useState(false);
+  const [updateCenterInfo, setUpdateCenterInfo] = useState(false);
 
   // EXPORTAR DATOS ACTUALES A EXCEL
   const handleExportData = async () => {
@@ -482,6 +485,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           students: studentsPayload,
           assignments: assignmentsPayload
         });
+        setConfirmedCenter(false);
+        setUpdateCenterInfo(false);
         setCurrentStep('preview');
       } catch (err: any) {
         console.error(err);
@@ -497,6 +502,17 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
   const handleImport = async () => {
     if (!parsedData || !profile?.center_id) return;
 
+    if (!confirmedCenter) {
+      toast.error('Debes confirmar el centro educativo destino antes de continuar.');
+      return;
+    }
+
+    const centerName = center?.name || 'este centro';
+    const ok = window.confirm(
+      `¿CONFIRMAS QUE DESEAS IMPORTAR ESTA BASE DE DATOS EN:\n\n👉 "${centerName.toUpperCase()}"?\n\nVerifica que no estás en otro centro escolar abierto. Esta acción modificará cursos, tandas y personal.`
+    );
+    if (!ok) return;
+
     setCurrentStep('importing');
     setProgressMsg('Preparando base de datos...');
     setProgressValue(10);
@@ -504,8 +520,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
     try {
       const centerId = profile.center_id;
 
-      // Paso 1: Actualizar Centro
-      if (parsedData.center) {
+      // Paso 1: Actualizar Centro (Solo si el usuario activó la opción explícitamente)
+      if (parsedData.center && updateCenterInfo) {
         setProgressMsg('Actualizando Perfil del Centro...');
         setProgressValue(20);
         await supabase.from('centers').update(parsedData.center).eq('id', centerId);
@@ -515,7 +531,12 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
       setProgressMsg('Procesando Cursos, Materias, Profesores, Alumnos y Asignaciones...');
       setProgressValue(50);
 
-      await dataService.importCompleteCenter(centerId, selectedYear, parsedData);
+      const dataToImport = {
+        ...parsedData,
+        center: updateCenterInfo ? parsedData.center : null
+      };
+
+      await dataService.importCompleteCenter(centerId, selectedYear, dataToImport);
 
       setProgressMsg('Sincronizando Estado de la Aplicación...');
       setProgressValue(85);
@@ -557,6 +578,31 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         >
           <X size={20} />
         </button>
+      </div>
+
+      {/* Banner Informativo y de Seguridad: Centro Activo Destino */}
+      <div className="bg-slate-900 text-white p-4 md:p-5 rounded-[2rem] shadow-sm border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+              Centro Escolar Actualmente Activo en Pantalla
+            </span>
+          </div>
+          <h2 className="text-base font-black uppercase text-white tracking-wide">
+            {center?.name || 'CENTRO EDUCATIVO'}
+          </h2>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-300 font-medium">
+            {center?.code && <span>Código: <strong className="text-white">{center.code}</strong></span>}
+            {center?.district && <span>Distrito: <strong className="text-white">{center.district}</strong></span>}
+            {center?.regional && <span>Regional: <strong className="text-white">{center.regional}</strong></span>}
+            <span>Año Escolar: <strong className="text-white">{selectedYear || '2026-2027'}</strong></span>
+          </div>
+        </div>
+        <div className="bg-white/10 px-3.5 py-2 rounded-xl text-left md:text-right shrink-0">
+          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">Destino de la Carga</span>
+          <span className="text-xs font-black text-indigo-300 uppercase">Cualquier subida afectará este centro</span>
+        </div>
       </div>
 
       {error && (
@@ -619,89 +665,164 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         </div>
       )}
 
-      {currentStep === 'preview' && parsedData && (
-        <div className="space-y-6 animate-in zoom-in-95 duration-200">
-          <div className="bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100/50">
-            <h4 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4">
-              Resumen de Contenido Detectado
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Información de Centro
-                </p>
-                <p className="text-sm font-black text-slate-700 uppercase mt-1">
-                  {parsedData.center ? 'Modificado' : 'Sin Cambios'}
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Cursos y Grados
-                </p>
-                <p className="text-sm font-black text-slate-700 mt-1">
-                  {parsedData.courses.length} Cursos
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Materias / Asignaturas
-                </p>
-                <p className="text-sm font-black text-slate-700 mt-1">
-                  {parsedData.subjects.length} Materias
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Colaboradores / Personal
-                </p>
-                <p className="text-sm font-black text-slate-700 mt-1">
-                  {parsedData.staff.length} Personas
+      {currentStep === 'preview' && parsedData && (() => {
+        const excelCenterName = parsedData.center?.name?.trim();
+        const currentCenterName = (center?.name || '').trim();
+        const hasNameDiscrepancy = Boolean(
+          excelCenterName &&
+          currentCenterName &&
+          excelCenterName.toLowerCase() !== currentCenterName.toLowerCase()
+        );
+
+        return (
+          <div className="space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Alerta de discrepancia de nombre de centro si el Excel viene de otro colegio */}
+            {hasNameDiscrepancy && (
+              <div className="p-5 bg-rose-50 border-2 border-rose-300 text-rose-900 rounded-[2rem] space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black shrink-0">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black uppercase text-rose-800">
+                      ¡Alerta Crítica: Posible Centro Incorrecto!
+                    </h5>
+                    <p className="text-[11px] font-semibold text-rose-700">
+                      El Excel contiene datos para: <strong className="underline">&quot;{excelCenterName}&quot;</strong>, pero actualmente tienes abierto: <strong className="underline">&quot;{currentCenterName}&quot;</strong>.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-rose-800 bg-rose-100/70 p-3 rounded-xl leading-relaxed">
+                  Si continúas, los cursos, tandas y personal del archivo se cargarán en <strong>{currentCenterName}</strong>. Asegúrate de verificar si abriste el centro correcto antes de proceder.
                 </p>
               </div>
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Alumnos Registrados
-                </p>
-                <p className="text-sm font-black text-slate-700 mt-1">
-                  {parsedData.students.length} Estudiantes
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Asignaciones Docentes
-                </p>
-                <p className="text-sm font-black text-slate-700 mt-1">
-                  {parsedData.assignments.length} Cargados
-                </p>
+            )}
+
+            <div className="bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100/50">
+              <h4 className="text-xs font-black uppercase text-indigo-700 tracking-wider mb-4">
+                Resumen de Contenido Detectado
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Información de Centro
+                  </p>
+                  <p className="text-sm font-black text-slate-700 uppercase mt-1">
+                    {parsedData.center ? (parsedData.center.name || 'Detectado') : 'Sin Cambios'}
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Cursos y Grados
+                  </p>
+                  <p className="text-sm font-black text-slate-700 mt-1">
+                    {parsedData.courses.length} Cursos
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Materias / Asignaturas
+                  </p>
+                  <p className="text-sm font-black text-slate-700 mt-1">
+                    {parsedData.subjects.length} Materias
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Colaboradores / Personal
+                  </p>
+                  <p className="text-sm font-black text-slate-700 mt-1">
+                    {parsedData.staff.length} Personas
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Alumnos Registrados
+                  </p>
+                  <p className="text-sm font-black text-slate-700 mt-1">
+                    {parsedData.students.length} Estudiantes
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Asignaciones Docentes
+                  </p>
+                  <p className="text-sm font-black text-slate-700 mt-1">
+                    {parsedData.assignments.length} Cargados
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-[10px] font-bold uppercase leading-relaxed flex items-start gap-2.5">
-            <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            <span>
-              Nota: Al proceder, el sistema creará los nuevos registros y actualizará los
-              existentes. Las asignaciones de materias y profesores se re-estructurarán de acuerdo a
-              este Excel. Asegúrate de verificar los datos antes de continuar.
-            </span>
-          </div>
+            <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-[10px] font-bold uppercase leading-relaxed flex items-start gap-2.5">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>
+                Nota: Al proceder, el sistema creará los nuevos registros y actualizará los
+                existentes. Las asignaciones de materias y profesores se re-estructurarán de acuerdo a
+                este Excel. Asegúrate de verificar los datos antes de continuar.
+              </span>
+            </div>
 
-          <div className="flex gap-4 pt-4 border-t border-slate-100">
-            <button
-              onClick={() => setCurrentStep('upload')}
-              className="flex-1 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-            >
-              Volver a Subir
-            </button>
-            <button
-              onClick={handleImport}
-              className="flex-2 px-12 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Play size={14} /> Iniciar Configuración Masiva
-            </button>
+            {/* Cuadro de Confirmación Obligatorio del Centro */}
+            <div className="p-5 bg-indigo-50/80 border-2 border-indigo-200 rounded-[2rem] space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={confirmedCenter}
+                  onChange={(e) => setConfirmedCenter(e.target.checked)}
+                  className="mt-1 w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <span className="font-black text-slate-900 uppercase block tracking-wider">
+                    Confirmación Obligatoria de Centro Destino
+                  </span>
+                  <span className="text-slate-600 font-semibold leading-relaxed block mt-0.5">
+                    Confirmo que revisé y deseo aplicar esta carga masiva de datos en el centro educativo:{' '}
+                    <strong className="text-indigo-700 bg-indigo-100/60 px-1.5 py-0.5 rounded font-black">
+                      {center?.name || 'CENTRO ACTUAL'}
+                    </strong>{' '}
+                    (Año escolar: {selectedYear || '2026-2027'}).
+                  </span>
+                </div>
+              </label>
+
+              {parsedData.center && (
+                <label className="flex items-start gap-3 cursor-pointer select-none pt-3 border-t border-indigo-200/60">
+                  <input
+                    type="checkbox"
+                    checked={updateCenterInfo}
+                    onChange={(e) => setUpdateCenterInfo(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] font-bold text-slate-700">
+                    Actualizar también el nombre, teléfono y lema del centro según la pestaña &quot;Centro&quot; del Excel (Desmarcado por seguridad para evitar renombrar el centro por error).
+                  </span>
+                </label>
+              )}
+            </div>
+
+            <div className="flex gap-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => setCurrentStep('upload')}
+                className="flex-1 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+              >
+                Volver a Subir
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!confirmedCenter}
+                className={`flex-2 px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 ${
+                  confirmedCenter
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100 hover:scale-105 active:scale-95 cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                }`}
+              >
+                <Play size={14} /> Iniciar Configuración Masiva
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {currentStep === 'importing' && (
         <div className="p-12 flex flex-col items-center justify-center text-center gap-6 min-h-[300px] animate-in fade-in duration-300">
