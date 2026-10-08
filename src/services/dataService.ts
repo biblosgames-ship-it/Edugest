@@ -1320,7 +1320,17 @@ export const dataService = {
       const fallbackKey = `${s.level_course || ''}_${normGrade}_${s.seccion_course || ''}`
         .toLowerCase()
         .trim();
-      const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
+      let courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
+      if (!courseId && existingCourses && existingCourses.length > 0) {
+        const found = existingCourses.find((ec: any) => {
+          const ecGrade = normalizeGrade(ec.grade);
+          return (
+            ecGrade === normGrade &&
+            String(ec.section || '').trim().toLowerCase() === String(s.seccion_course || '').trim().toLowerCase()
+          );
+        });
+        if (found) courseId = found.id;
+      }
 
       const cleanNames = (s.names || '').trim().replace(/\s+/g, ' ');
       const cleanFirstSurname = (s.first_surname || '').trim().replace(/\s+/g, ' ');
@@ -1354,13 +1364,13 @@ export const dataService = {
         );
       });
 
-      const studentPayload = {
+      const studentPayload: any = {
         center_id: centerId,
         school_year: schoolYear,
-        names: cleanNames,
-        first_name: cleanNames,
-        first_surname: cleanFirstSurname,
-        last_name: cleanFirstSurname,
+        names: cleanNames || 'Estudiante',
+        first_name: cleanNames || 'Estudiante',
+        first_surname: cleanFirstSurname || 'S/A',
+        last_name: cleanFirstSurname || 'S/A',
         second_surname: cleanSecondSurname || null,
         sex: s.sex || 'M',
         birth_date: s.birth_date || null,
@@ -1368,27 +1378,51 @@ export const dataService = {
         address_street: s.address_street || null,
         address_sector: s.address_sector || null,
         sigerd_code: s.sigerd_code || null,
+        birth_certificate_book: s.birth_certificate_book || null,
+        birth_certificate_folio: s.birth_certificate_folio || null,
+        birth_certificate_number: s.birth_certificate_number || null,
         course_id: courseId,
         status: 'Active',
         student_type: s.student_type || (match ? (match.student_type || 'antiguo') : 'antiguo')
       };
 
       let studentId = '';
-      if (match) {
-        studentId = match.id;
-        const { error } = await supabase
-          .from('students')
-          .update(studentPayload)
-          .eq('id', studentId);
-        if (error) throw error;
-      } else {
-        const { data: newStudent, error } = await supabase
-          .from('students')
-          .insert(studentPayload)
-          .select()
-          .single();
-        if (error) throw error;
-        studentId = newStudent.id;
+      try {
+        if (match) {
+          studentId = match.id;
+          const { error } = await supabase
+            .from('students')
+            .update(studentPayload)
+            .eq('id', studentId);
+          if (error) {
+            console.error('Error actualizando alumno:', error, studentPayload);
+            // Si alguna columna adicional da error de esquema, intentar sin las columnas opcionales
+            const { birth_certificate_book, birth_certificate_folio, birth_certificate_number, ...basePayload } = studentPayload;
+            await supabase.from('students').update(basePayload).eq('id', studentId);
+          }
+        } else {
+          const { data: newStudent, error } = await supabase
+            .from('students')
+            .insert(studentPayload)
+            .select()
+            .single();
+          if (error) {
+            console.error('Error insertando alumno:', error, studentPayload);
+            const { birth_certificate_book, birth_certificate_folio, birth_certificate_number, ...basePayload } = studentPayload;
+            const { data: fallbackStudent, error: fbErr } = await supabase
+              .from('students')
+              .insert(basePayload)
+              .select()
+              .single();
+            if (fbErr) throw fbErr;
+            studentId = fallbackStudent?.id || '';
+          } else {
+            studentId = newStudent.id;
+          }
+        }
+      } catch (stErr) {
+        console.error('Error fatal procesando alumno:', stErr);
+        throw stErr;
       }
 
       // Si viene información de tutor, upsert en la tabla 'parents'

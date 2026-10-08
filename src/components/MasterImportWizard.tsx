@@ -306,17 +306,25 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
 
-        const getSheetData = (name: string) => {
-          const ws = wb.Sheets[name];
+        const getSheetData = (aliases: string[]) => {
+          const foundKey = Object.keys(wb.Sheets).find((sheetKey) => {
+            const cleanSheet = sheetKey.toLowerCase().trim().replace(/[_ \-]/g, '');
+            return aliases.some((alias) => {
+              const cleanAlias = alias.toLowerCase().trim().replace(/[_ \-]/g, '');
+              return cleanSheet === cleanAlias || cleanSheet.includes(cleanAlias);
+            });
+          });
+          if (!foundKey) return [];
+          const ws = wb.Sheets[foundKey];
           return ws ? XLSX.utils.sheet_to_json(ws) : [];
         };
 
-        const rawCentro = getSheetData('Centro');
-        const rawCursos = getSheetData('Cursos');
-        const rawMaterias = getSheetData('Materias');
-        const rawPersonal = getSheetData('Personal');
-        const rawAlumnos = getSheetData('Alumnos');
-        const rawAsignaciones = getSheetData('Asignaciones');
+        const rawCentro = getSheetData(['Centro', 'Colegio', 'Escuela', 'Institucion']);
+        const rawCursos = getSheetData(['Cursos', 'Grados', 'Aulas']);
+        const rawMaterias = getSheetData(['Materias', 'Asignaturas']);
+        const rawPersonal = getSheetData(['Personal', 'Docentes', 'Profesores', 'Staff']);
+        const rawAlumnos = getSheetData(['Alumnos', 'Estudiantes', 'Matricula', 'Students', 'Pupils']);
+        const rawAsignaciones = getSheetData(['Asignaciones', 'Cargas', 'Horarios']);
 
         if (rawCursos.length === 0 && rawPersonal.length === 0 && rawAlumnos.length === 0) {
           setError(
@@ -425,34 +433,110 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           })
           .filter((p: any) => p.name && p.name.trim() !== '');
 
-        // Mapeo de Alumnos
+        // Mapeo flexible e inteligente de Alumnos
         const studentsPayload = rawAlumnos
           .map((row: any) => {
             const findVal = (keys: string[]) => {
-              const k = Object.keys(row).find((key) =>
-                keys.some((tk) => key.toLowerCase().replace(/_/g, '').includes(tk))
-              );
+              const k = Object.keys(row).find((key) => {
+                const cleanKey = key.toLowerCase().trim().replace(/[_ \-]/g, '');
+                return keys.some((tk) => {
+                  const cleanTk = tk.toLowerCase().trim().replace(/[_ \-]/g, '');
+                  return cleanKey === cleanTk || cleanKey.includes(cleanTk);
+                });
+              });
               return k ? String(row[k]).trim() : '';
             };
+
+            let rawNames = findVal(['nombres', 'nombre', 'firstname', 'names', 'name']);
+            let rawFirstSurname = findVal([
+              'primerapellido',
+              'apellido1',
+              'apellidopaterno',
+              'lastname',
+              'surname',
+              'apellido',
+              'apellidos'
+            ]);
+            let rawSecondSurname = findVal(['segundoapellido', 'apellido2', 'apellidomaterno', 'middlename']);
+
+            // Si viene una columna combinada (ej: "Nombre Completo", "Estudiante", "Alumno", "Nombres y Apellidos")
+            if (!rawNames || !rawFirstSurname) {
+              const fullNameCol = findVal([
+                'nombrecompleto',
+                'nombresyapellidos',
+                'apellidosynombres',
+                'estudiante',
+                'alumno',
+                'alumnos',
+                'estudiantes'
+              ]);
+              if (fullNameCol) {
+                const parts = fullNameCol.trim().split(/\s+/).filter(Boolean);
+                if (parts.length === 1) {
+                  rawNames = parts[0];
+                  rawFirstSurname = 'S/A';
+                } else if (parts.length === 2) {
+                  rawNames = parts[0];
+                  rawFirstSurname = parts[1];
+                } else if (parts.length === 3) {
+                  rawNames = parts[0];
+                  rawFirstSurname = parts[1];
+                  rawSecondSurname = parts[2];
+                } else if (parts.length >= 4) {
+                  rawNames = `${parts[0]} ${parts[1]}`;
+                  rawFirstSurname = parts[2];
+                  rawSecondSurname = parts.slice(3).join(' ');
+                }
+              }
+            }
+
+            // Si solo tiene "nombres" con varias palabras y primer_apellido vino vacío
+            if (rawNames && (!rawFirstSurname || rawFirstSurname === '')) {
+              const nameParts = rawNames.trim().split(/\s+/).filter(Boolean);
+              if (nameParts.length >= 2) {
+                rawNames = nameParts[0];
+                rawFirstSurname = nameParts.slice(1).join(' ');
+              } else {
+                rawFirstSurname = 'S/A';
+              }
+            }
+
+            // Si solo tiene "apellidos" pero nombres vino vacío
+            if (!rawNames && rawFirstSurname) {
+              const surParts = rawFirstSurname.trim().split(/\s+/).filter(Boolean);
+              if (surParts.length >= 2) {
+                rawNames = surParts.slice(1).join(' ');
+                rawFirstSurname = surParts[0];
+              } else {
+                rawNames = 'Estudiante';
+              }
+            }
+
             return {
-              names: findVal(['nombres', 'firstname', 'names']),
-              first_surname: findVal(['primerapellido', 'lastname', 'surname', 'apellido']),
-              second_surname: findVal(['segundoapellido', 'middlename']),
-              sex: findVal(['sexo', 'gender']).toUpperCase().startsWith('M') ? 'M' : 'F',
-              birth_date: formatToISODate(findVal(['fecha', 'nacimiento', 'birth'])),
-              level_course: findVal(['nivel', 'level']) || 'Secundario',
-              grade_course: findVal(['grado', 'grade']) || '1ero',
-              seccion_course: findVal(['seccion', 'section']) || 'A',
-              tanda_course: findVal(['tanda', 'shift', 'jornada']) || 'Matutina',
-              tutor_name: findVal(['tutor', 'padre', 'encargado']),
-              tutor_parentesco: findVal(['parentesco', 'relation']),
-              tutor_telefono: findVal(['telefono', 'phone']),
-              address_street: findVal(['calle', 'street', 'direccion']),
-              address_sector: findVal(['sector', 'barrio']),
-              student_type: findVal(['tipo', 'condicion', 'ingreso']).toLowerCase().includes('nuevo') ? 'nuevo' : 'antiguo'
+              names: rawNames,
+              first_surname: rawFirstSurname,
+              second_surname: rawSecondSurname,
+              sex: findVal(['sexo', 'genero', 'gender', 'sex']).toUpperCase().startsWith('M') ? 'M' : 'F',
+              birth_date: formatToISODate(findVal(['fechanacimiento', 'nacimiento', 'fecha', 'birth'])),
+              level_course: findVal(['nivelcurso', 'nivel', 'level']) || 'Secundario',
+              grade_course: findVal(['gradocurso', 'grado', 'grade', 'curso']) || '1ero',
+              seccion_course: findVal(['seccioncurso', 'seccion', 'section']) || 'A',
+              tanda_course: findVal(['tandacurso', 'tanda', 'shift', 'jornada']) || 'Matutina',
+              tutor_name: findVal(['tutornombre', 'tutor', 'padre', 'madre', 'encargado', 'representante']),
+              tutor_parentesco: findVal(['tutorparentesco', 'parentesco', 'relation']),
+              tutor_telefono: findVal(['tutortelefono', 'telefono', 'celular', 'phone']),
+              address_street: findVal(['direccioncalle', 'calle', 'street', 'direccion']),
+              address_sector: findVal(['direccionsector', 'sector', 'barrio']),
+              sigerd_code: findVal(['codigosigerd', 'sigerd', 'rné', 'rne', 'codigo']),
+              birth_certificate_book: findVal(['libro', 'book', 'lib']),
+              birth_certificate_folio: findVal(['folio', 'fol']),
+              birth_certificate_number: findVal(['numeroacta', 'acta', 'noacta', 'numacta']),
+              student_type: findVal(['tipo', 'condicion', 'ingreso']).toLowerCase().includes('nuevo')
+                ? 'nuevo'
+                : 'antiguo'
             };
           })
-          .filter((s) => s.names && s.first_surname); // Filtro estricto: requiere nombre y apellido
+          .filter((s) => Boolean((s.names && s.names.trim().length > 0) || (s.first_surname && s.first_surname.trim().length > 0)));
 
         // Mapeo de Asignaciones
         const assignmentsPayload = rawAsignaciones

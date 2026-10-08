@@ -49,7 +49,31 @@ CREATE POLICY "Allow all on courses" ON public.courses
   USING (true)
   WITH CHECK (true);
 
--- 5. Permisos de consulta y guardado
+-- 5. Asegurar permisos de inserción y actualización en students y parents (Carga Masiva Excel)
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parents ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all on students" ON public.students;
+DROP POLICY IF EXISTS "Admins can manage students" ON public.students;
+DROP POLICY IF EXISTS "saas_write_isolation" ON public.students;
+
+CREATE POLICY "Allow all on students" ON public.students
+  FOR ALL TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on parents" ON public.parents;
+DROP POLICY IF EXISTS "Admins can manage parents" ON public.parents;
+DROP POLICY IF EXISTS "saas_write_isolation" ON public.parents;
+
+CREATE POLICY "Allow all on parents" ON public.parents
+  FOR ALL TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- 6. Permisos de consulta y guardado
 GRANT ALL ON public.student_grades TO authenticated, service_role, anon;
 GRANT ALL ON public.student_partial_activities TO authenticated, service_role, anon;
 GRANT ALL ON public.courses TO authenticated, service_role, anon;
+GRANT ALL ON public.students TO authenticated, service_role, anon;
+GRANT ALL ON public.parents TO authenticated, service_role, anon;
