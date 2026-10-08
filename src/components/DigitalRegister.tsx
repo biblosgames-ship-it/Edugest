@@ -12,7 +12,8 @@ import {
   Printer,
   FileText,
   X,
-  ScrollText
+  ScrollText,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -39,8 +40,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   }, [profile, state.teachers, isSameTeacher]);
 
   const isEditable = useMemo(() => {
-    if (profile?.role !== 'teacher' && profile?.role !== 'management_teacher') return true;
-    if (currentTeacherRecord) {
+    if (profile?.role === 'teacher' || profile?.role === 'management_teacher') {
+      if (!profile?.teacher_id || !currentTeacherRecord) return false;
       return currentTeacherRecord.grades_editable !== false;
     }
     return true;
@@ -148,8 +149,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const filteredCourses = useMemo(() => {
     let baseCourses = allCourses || [];
 
-    // Si el rol es docente y tiene un docente vinculado, filtrar solo sus cursos asignados
-    if (profile?.role === 'teacher' && profile?.teacher_id) {
+    // Si el rol es docente, filtrar estrictamente solo sus cursos asignados
+    if (profile?.role === 'teacher') {
+      if (!profile?.teacher_id) {
+        return [];
+      }
       const assignedCourseIds = new Set(
         (allAssignments || [])
           .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id)
@@ -168,8 +172,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const courseSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
 
-    // Si el rol es docente y tiene un docente vinculado, filtrar solo sus asignaturas asignadas en este curso
-    if (profile?.role === 'teacher' && profile?.teacher_id) {
+    // Si el rol es docente, filtrar estrictamente solo sus asignaturas asignadas en este curso
+    if (profile?.role === 'teacher') {
+      if (!profile?.teacher_id) {
+        return [];
+      }
       return (allAssignments || [])
         .filter(
           (a: any) =>
@@ -1615,6 +1622,47 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       `Boletin_${student.names.replace(/ /g, '_')}_${student.first_surname.replace(/ /g, '_')}.pdf`
     );
   };
+
+  if (profile?.role === 'teacher' && !profile?.teacher_id) {
+    return (
+      <div className="card p-12 text-center bg-white rounded-3xl border border-amber-200 shadow-xl max-w-xl mx-auto my-12 animate-fade-in">
+        <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200 text-amber-600">
+          <Lock size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">
+          Cuenta Docente No Vinculada
+        </h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Tu usuario no está vinculado a una ficha oficial de docente en este centro educativo.
+          Por motivos de seguridad y confidencialidad académica, el acceso a las calificaciones y listas de estudiantes está restringido.
+        </p>
+        <div className="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-600 text-left">
+          <p className="font-bold text-slate-700 mb-1">¿Cómo habilitar mi acceso?</p>
+          <p>Comunícate con el administrador o equipo de dirección de tu centro para que asigne tu perfil docente o te proporcione tu código de invitación oficial.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profile?.role === 'teacher' && filteredCourses.length === 0) {
+    return (
+      <div className="card p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xl max-w-xl mx-auto my-12 animate-fade-in">
+        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-200 text-indigo-600">
+          <AlertCircle size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">
+          Sin Cursos Asignados
+        </h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Tu cuenta está vinculada a tu perfil docente, pero aún no tienes cursos ni asignaturas asignadas en el horario de este ciclo escolar.
+        </p>
+        <div className="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-600 text-left">
+          <p className="font-bold text-slate-700 mb-1">Información</p>
+          <p>Si consideras que esto es un error, solicita al coordinador académico que registre tus asignaciones de materias en el sistema.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 text-text-main pb-20 animate-fade-in">

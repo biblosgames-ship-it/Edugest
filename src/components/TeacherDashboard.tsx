@@ -85,16 +85,32 @@ export const TeacherDashboard = ({
     }
   };
 
+  // Roles y Permisos: Equipo de Gestión, Coordinadores y Directores
+  const isManagementOrDirector = Boolean(
+    profile?.is_superadmin ||
+    ['admin', 'superAdmin', 'coordinator', 'coordinador', 'management_teacher', 'director', 'directora', 'orientador', 'orientacion', 'psicologo', 'creator'].includes(profile?.role || '')
+  );
+
   // Guardar y recuperar la selección del docente de localStorage o de la base de datos (Supabase)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
-    return profile?.teacher_id || localStorage.getItem('selected_teacher_id') || '';
+    if (profile?.teacher_id) return profile.teacher_id;
+    const isMgmt = Boolean(
+      profile?.is_superadmin ||
+      ['admin', 'superAdmin', 'coordinator', 'coordinador', 'management_teacher', 'director', 'directora', 'orientador', 'orientacion', 'psicologo', 'creator'].includes(profile?.role || '')
+    );
+    if (isMgmt) {
+      return localStorage.getItem('selected_teacher_id') || '';
+    }
+    return '';
   });
 
   useEffect(() => {
     if (profile?.teacher_id) {
       setSelectedTeacherId(profile.teacher_id);
+    } else if (!isManagementOrDirector) {
+      setSelectedTeacherId('');
     }
-  }, [profile?.teacher_id]);
+  }, [profile?.teacher_id, isManagementOrDirector]);
 
   const [isLinking, setIsLinking] = useState(false);
 
@@ -235,8 +251,9 @@ export const TeacherDashboard = ({
       .replace(/[\u0300-\u036f]/g, '')
       .trim();
 
-  // Persistir la selección
+  // Persistir la selección (solo permitido para equipo directivo/gestión)
   const handleTeacherChange = (id: string) => {
+    if (!isManagementOrDirector) return;
     setSelectedTeacherId(id);
     if (id) {
       localStorage.setItem('selected_teacher_id', id);
@@ -1435,32 +1452,34 @@ export const TeacherDashboard = ({
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="w-full md:w-64">
-            <select
-              value={selectedTeacherId}
-              onChange={(e) => handleTeacherChange(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 font-bold text-xs uppercase"
-            >
-              <option value="">-- SELECCIONAR MI PERFIL --</option>
-              {[...(state.teachers || [])]
-                .sort((a, b) => (a.name || a.full_name || '').localeCompare(b.name || b.full_name || ''))
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {(t.name || t.full_name || 'Docente').toUpperCase()}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {selectedTeacherId && profile?.teacher_id !== selectedTeacherId && (
-            <button
-              onClick={() => handleLinkTeacher(selectedTeacherId)}
-              disabled={isLinking}
-              className="w-full md:w-auto flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-2xl transition-all font-black text-[9px] uppercase tracking-widest shadow-md shrink-0 cursor-pointer animate-pulse"
-            >
-              <CheckCircle2 size={12} />
-              {isLinking ? 'Vinculando...' : 'Vincular este Perfil'}
-            </button>
+          {isManagementOrDirector ? (
+            <div className="w-full md:w-64">
+              <select
+                value={selectedTeacherId}
+                onChange={(e) => handleTeacherChange(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border-2 border-slate-200 rounded-2xl outline-none focus:border-indigo-500 font-bold text-xs uppercase"
+              >
+                <option value="">-- SELECCIONAR DOCENTE (GESTIÓN) --</option>
+                {[...(state.teachers || [])]
+                  .sort((a, b) => (a.name || a.full_name || '').localeCompare(b.name || b.full_name || ''))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {(t.name || t.full_name || 'Docente').toUpperCase()}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : profile?.teacher_id ? (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl">
+              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+              <span className="text-xs font-black text-emerald-900 uppercase tracking-tight">
+                {currentTeacher?.name || profile?.full_name || 'Docente Vinculado'}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-2xl text-[10px] font-black text-amber-800 uppercase tracking-wider">
+              <span>⚠️ Perfil no vinculado</span>
+            </div>
           )}
 
           {/* Fila de los 3 Botones de Acceso Rápido: Horario, Aula, Tareas */}
@@ -1618,14 +1637,21 @@ export const TeacherDashboard = ({
           <div className="p-12 text-center bg-white rounded-[3rem] border border-slate-100 shadow-2xl">
             <ClipboardList className="mx-auto mb-6 text-indigo-600 animate-pulse" size={64} />
             <h3 className="text-xl font-black text-slate-900 uppercase">Panel Docente</h3>
-            <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-              Por favor, selecciona tu nombre del listado superior para acceder a tu agenda escolar,
-              horarios de cursos, asignación de tareas, comunicados y control de excusas.
-            </p>
-            <p className="text-[10px] text-slate-400 mt-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-bold uppercase tracking-wider">
-              💡 Una vez seleccionado tu perfil, haz clic en "Vincular Cuenta" para guardar la
-              configuración de forma definitiva en la nube.
-            </p>
+            {isManagementOrDirector ? (
+              <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                Selecciona un docente en el listado superior para supervisar su agenda escolar,
+                horarios de cursos, asignación de tareas, comunicados y control de excusas.
+              </p>
+            ) : (
+              <>
+                <p className="text-slate-500 mt-2 text-sm leading-relaxed">
+                  Tu cuenta de usuario no está vinculada a una ficha de docente oficial en el centro.
+                </p>
+                <p className="text-[10px] text-slate-400 mt-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-bold uppercase tracking-wider">
+                  💡 Comunícate con la dirección o coordinación académica para que asocie tu cuenta de correo a tu perfil docente.
+                </p>
+              </>
+            )}
           </div>
         </div>
       ) : showCreateForm || editingTask || editingAnnouncement ? (

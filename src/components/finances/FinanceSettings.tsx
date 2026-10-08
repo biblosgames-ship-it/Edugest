@@ -462,13 +462,22 @@ export const FinanceSettings = () => {
                       0 (Solo Inscripción)
                     </option>
                     <option value={1} className="bg-slate-900">
-                      1 (Pago Único)
+                      1 (Pago Único / Anual)
+                    </option>
+                    <option value={8} className="bg-slate-900">
+                      8 Cuotas
+                    </option>
+                    <option value={9} className="bg-slate-900">
+                      9 Cuotas (Año Escolar)
                     </option>
                     <option value={10} className="bg-slate-900">
-                      10 (Año Escolar Std)
+                      10 Cuotas (Año Escolar Std)
+                    </option>
+                    <option value={11} className="bg-slate-900">
+                      11 Cuotas
                     </option>
                     <option value={12} className="bg-slate-900">
-                      12 (Año Completo)
+                      12 Cuotas (Año Completo)
                     </option>
                   </select>
                 </div>

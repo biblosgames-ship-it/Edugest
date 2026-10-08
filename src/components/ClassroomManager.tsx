@@ -42,7 +42,8 @@ import {
   Pin,
   MessageSquare,
   Send,
-  Layers
+  Layers,
+  Lock
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
@@ -267,14 +268,14 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       (a: any) => (a.course_id || a.courseId) === selectedCourseId
     );
 
-    // Si el usuario es docente, filtrar solo las asignaturas que él imparte en este curso
-    if (profile?.role === 'teacher' && profile?.teacher_id) {
-      const myAssignments = teacherAssignments.filter(
+    // Si el usuario es docente, filtrar estrictamente solo las asignaturas que él imparte en este curso
+    if (profile?.role === 'teacher') {
+      if (!profile?.teacher_id) {
+        return [];
+      }
+      teacherAssignments = teacherAssignments.filter(
         (a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id
       );
-      if (myAssignments.length > 0) {
-        teacherAssignments = myAssignments;
-      }
     }
 
     let subs = teacherAssignments
@@ -284,9 +285,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     // Eliminar duplicados si hay múltiples bloques asignados de la misma materia
     const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
 
+    if (profile?.role === 'teacher') {
+      return uniqueSubs;
+    }
+
     if (uniqueSubs.length === 0) return allSubjects || [];
     return uniqueSubs;
-  }, [selectedCourseId, allAssignments, allSubjects, profile]);
+  }, [selectedCourseId, allAssignments, allSubjects, profile, isSameTeacher]);
 
   // Autoseleccionar primera asignatura válida al cambiar curso o asignaturas
   useEffect(() => {
@@ -326,15 +331,16 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   // Cursos disponibles para el usuario
   const availableCourses = useMemo(() => {
     let base = [...(allCourses || [])];
-    if (profile?.role === 'teacher' && profile?.teacher_id) {
+    if (profile?.role === 'teacher') {
+      if (!profile?.teacher_id) {
+        return [];
+      }
       const assignedIds = new Set(
         (allAssignments || [])
           .filter((a: any) => isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id)
           .map((a: any) => a.course_id || a.courseId)
       );
-      if (assignedIds.size > 0) {
-        base = base.filter((c: any) => assignedIds.has(c.id));
-      }
+      return base.filter((c: any) => assignedIds.has(c.id));
     }
     return base;
   }, [allCourses, profile, allAssignments, isSameTeacher]);
@@ -2215,6 +2221,47 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       setIsSavingLinks(false);
     }
   };
+
+  if (profile?.role === 'teacher' && !profile?.teacher_id) {
+    return (
+      <div className="card p-12 text-center bg-white rounded-3xl border border-amber-200 shadow-xl max-w-xl mx-auto my-12 animate-fade-in">
+        <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200 text-amber-600">
+          <Lock size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">
+          Cuenta Docente No Vinculada
+        </h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Tu usuario no está vinculado a una ficha oficial de docente en este centro educativo.
+          Por motivos de privacidad académica, el acceso a las listas de alumnos, asistencia y evaluaciones está restringido.
+        </p>
+        <div className="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-600 text-left">
+          <p className="font-bold text-slate-700 mb-1">¿Cómo activar tu acceso?</p>
+          <p>Solicita a la administración o equipo directivo de tu centro que asocie tu cuenta con tu perfil docente oficial.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profile?.role === 'teacher' && availableCourses.length === 0) {
+    return (
+      <div className="card p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xl max-w-xl mx-auto my-12 animate-fade-in">
+        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-200 text-indigo-600">
+          <BookOpen size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">
+          Sin Cursos Asignados
+        </h2>
+        <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+          Tu cuenta está vinculada a tu perfil docente, pero actualmente no tienes cursos ni materias asignadas en este ciclo lectivo.
+        </p>
+        <div className="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-600 text-left">
+          <p className="font-bold text-slate-700 mb-1">Información</p>
+          <p>Comunícate con la coordinación académica para verificar las asignaciones docentes en el horario escolar.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
