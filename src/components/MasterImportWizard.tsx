@@ -326,9 +326,15 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         const rawAlumnos = getSheetData(['Alumnos', 'Estudiantes', 'Matricula', 'Students', 'Pupils']);
         const rawAsignaciones = getSheetData(['Asignaciones', 'Cargas', 'Horarios']);
 
-        if (rawCursos.length === 0 && rawPersonal.length === 0 && rawAlumnos.length === 0) {
+        if (
+          rawCursos.length === 0 &&
+          rawPersonal.length === 0 &&
+          rawAlumnos.length === 0 &&
+          rawAsignaciones.length === 0 &&
+          rawMaterias.length === 0
+        ) {
           setError(
-            'El archivo Excel no parece contener datos en las hojas requeridas ("Cursos", "Personal", "Alumnos").'
+            'El archivo Excel no parece contener datos en ninguna de las hojas esperadas ("Asignaciones", "Cursos", "Personal", "Alumnos", "Materias").'
           );
           setIsProcessing(false);
           return;
@@ -579,13 +585,41 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               );
               return k ? String(row[k]).trim() : '';
             };
+            let rawGrade = findVal(['gradocurso', 'grado', 'grade']) || '';
+            let rawSection = findVal(['seccioncurso', 'seccion', 'section']) || '';
+            let rawLevel = findVal(['nivelcurso', 'nivel', 'level']) || 'Secundario';
+            let rawShift = findVal(['tandacurso', 'tanda', 'shift', 'jornada']) || 'Matutina';
+
+            // Si vino una columna combinada "Curso" (ej: "1ero A", "Primero B", "4to C")
+            if (!rawGrade || !rawSection) {
+              const fullCourseCol = findVal(['curso', 'gradoyseccion', 'aula']);
+              if (fullCourseCol) {
+                const parts = fullCourseCol.trim().split(/\s+/).filter(Boolean);
+                if (parts.length >= 2 && /^[a-zA-Z]$/.test(parts[parts.length - 1])) {
+                  rawSection = parts.pop()!.toUpperCase();
+                  rawGrade = parts.join(' ');
+                } else if (!rawGrade) {
+                  rawGrade = fullCourseCol;
+                  rawSection = rawSection || 'A';
+                }
+              }
+            }
+
+            if (!rawSection && rawGrade) {
+              const matchLetter = rawGrade.match(/^(.+?)[ -]?([a-zA-Z])$/);
+              if (matchLetter) {
+                rawGrade = matchLetter[1].trim();
+                rawSection = matchLetter[2].toUpperCase();
+              }
+            }
+
             return {
               docente: findVal(['docente', 'profesor', 'teacher']),
               materia: findVal(['materia', 'asignatura', 'subject']),
-              nivel: findVal(['nivel', 'level']) || 'Secundario',
-              grade: findVal(['grado', 'grade']) || '1ero',
-              section: findVal(['seccion', 'section']) || 'A',
-              tanda: findVal(['tanda', 'shift', 'jornada']) || 'Matutina',
+              nivel: rawLevel,
+              grade: rawGrade || '1ero',
+              section: rawSection || 'A',
+              tanda: rawShift,
               hours_per_week: Number(findVal(['horas', 'weekly'])) || 4
             };
           })

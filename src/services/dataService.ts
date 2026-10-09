@@ -1155,6 +1155,14 @@ export const dataService = {
 
     const courseMap = new Map<string, string>(); // 'nivel_grado_seccion_tanda' -> UUID
     const courseMapFallback = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
+    // Pre-cargar todos los cursos existentes en la base de datos
+    (existingCourses || []).forEach((ec: any) => {
+      const normGrade = normalizeGrade(ec.grade);
+      const k = `${ec.level || ''}_${normGrade}_${ec.section || ''}_${ec.tanda || 'Matutina'}`.toLowerCase().trim();
+      const fbK = `${ec.level || ''}_${normGrade}_${ec.section || ''}`.toLowerCase().trim();
+      courseMap.set(k, ec.id);
+      if (!courseMapFallback.has(fbK)) courseMapFallback.set(fbK, ec.id);
+    });
 
     for (const c of data.courses) {
       const normGrade = normalizeGrade(c.grade);
@@ -1211,6 +1219,11 @@ export const dataService = {
       .eq('center_id', centerId);
 
     const subjectMap = new Map<string, string>(); // 'nombre_nivel' -> UUID
+    // Pre-cargar todas las materias existentes en la base de datos
+    (existingSubjects || []).forEach((es: any) => {
+      subjectMap.set(`${es.name}_${es.level || ''}`.toLowerCase().trim(), es.id);
+      subjectMap.set(`${es.name}`.toLowerCase().trim(), es.id);
+    });
 
     for (const s of data.subjects) {
       const key = `${s.name}_${s.level}`.toLowerCase().trim();
@@ -1245,6 +1258,7 @@ export const dataService = {
         subjectId = newSubject.id;
       }
       subjectMap.set(key, subjectId);
+      subjectMap.set(`${s.name}`.toLowerCase().trim(), subjectId);
     }
 
     // 4. Personal (Staff y Teachers)
@@ -1254,6 +1268,11 @@ export const dataService = {
       .eq('center_id', centerId);
 
     const staffMap = new Map<string, string>(); // 'nombre_completo' -> UUID
+    // Pre-cargar todo el personal existente en la base de datos
+    (existingStaff || []).forEach((es: any) => {
+      const n = (es.full_name || es.name || '').toLowerCase().trim();
+      if (n) staffMap.set(n, es.id);
+    });
 
     for (const p of data.staff) {
       if (!p.name || !p.name.trim()) continue;
