@@ -512,16 +512,48 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               }
             }
 
+            let rawLevel = findVal(['nivelcurso', 'nivel', 'level']) || 'Secundario';
+            let rawGrade = findVal(['gradocurso', 'grado', 'grade']) || '';
+            let rawSection = findVal(['seccioncurso', 'seccion', 'section']) || '';
+            let rawShift = findVal(['tandacurso', 'tanda', 'shift', 'jornada']) || 'Matutina';
+
+            // Si vino una columna combinada "Curso" (ej: "1ero A", "Primero B", "4to C", "Kinder A")
+            if (!rawGrade || !rawSection) {
+              const fullCourseCol = findVal(['curso', 'gradoyseccion', 'aulayseccion', 'aula']);
+              if (fullCourseCol) {
+                const parts = fullCourseCol.trim().split(/\s+/).filter(Boolean);
+                if (parts.length >= 2 && /^[a-zA-Z]$/.test(parts[parts.length - 1])) {
+                  rawSection = parts.pop()!.toUpperCase();
+                  rawGrade = parts.join(' ');
+                } else if (!rawGrade) {
+                  rawGrade = fullCourseCol;
+                  rawSection = rawSection || 'A';
+                }
+              }
+            }
+
+            // Si el grado trae la sección pegada o al final (ej: "1A", "2B", "1ro A")
+            if (!rawSection && rawGrade) {
+              const matchLetter = rawGrade.match(/^(.+?)[ -]?([a-zA-Z])$/);
+              if (matchLetter) {
+                rawGrade = matchLetter[1].trim();
+                rawSection = matchLetter[2].toUpperCase();
+              }
+            }
+
+            if (!rawGrade) rawGrade = '1ero';
+            if (!rawSection) rawSection = 'A';
+
             return {
               names: rawNames,
               first_surname: rawFirstSurname,
               second_surname: rawSecondSurname,
               sex: findVal(['sexo', 'genero', 'gender', 'sex']).toUpperCase().startsWith('M') ? 'M' : 'F',
               birth_date: formatToISODate(findVal(['fechanacimiento', 'nacimiento', 'fecha', 'birth'])),
-              level_course: findVal(['nivelcurso', 'nivel', 'level']) || 'Secundario',
-              grade_course: findVal(['gradocurso', 'grado', 'grade', 'curso']) || '1ero',
-              seccion_course: findVal(['seccioncurso', 'seccion', 'section']) || 'A',
-              tanda_course: findVal(['tandacurso', 'tanda', 'shift', 'jornada']) || 'Matutina',
+              level_course: rawLevel,
+              grade_course: rawGrade,
+              seccion_course: rawSection,
+              tanda_course: rawShift,
               tutor_name: findVal(['tutornombre', 'tutor', 'padre', 'madre', 'encargado', 'representante']),
               tutor_parentesco: findVal(['tutorparentesco', 'parentesco', 'relation']),
               tutor_telefono: findVal(['tutortelefono', 'telefono', 'celular', 'phone']),
