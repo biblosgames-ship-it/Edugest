@@ -15,18 +15,42 @@ export const useAllStudents = () => {
       if (!centerId) return [];
 
       const targetYear = selectedYear || '2026-2027';
+      const fetchAllPaginated = async (
+        queryFn: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }> | any
+      ) => {
+        let allRows: any[] = [];
+        let from = 0;
+        const step = 1000;
+        while (true) {
+          const { data, error } = await queryFn(from, from + step - 1);
+          if (error) {
+            console.warn('[useAllStudents] Error fetching paginated chunk:', error);
+            break;
+          }
+          if (!data || data.length === 0) break;
+          allRows = allRows.concat(data);
+          if (data.length < step) break;
+          from += step;
+        }
+        return { data: allRows, error: null };
+      };
+
       const [studRes, coursesRes] = await Promise.all([
-        supabase
-          .from('students')
-          .select('*')
-          .eq('center_id', centerId)
-          .order('created_at', { ascending: false })
-          .range(0, 9999),
-        supabase
-          .from('courses')
-          .select('id, school_year, level, grade, section, tanda')
-          .eq('center_id', centerId)
-          .range(0, 9999)
+        fetchAllPaginated((from, to) =>
+          supabase
+            .from('students')
+            .select('*')
+            .eq('center_id', centerId)
+            .order('created_at', { ascending: false })
+            .range(from, to)
+        ),
+        fetchAllPaginated((from, to) =>
+          supabase
+            .from('courses')
+            .select('id, school_year, level, grade, section, tanda')
+            .eq('center_id', centerId)
+            .range(from, to)
+        )
       ]);
 
       if (studRes.error) {
@@ -137,8 +161,8 @@ export const useAllStudents = () => {
           const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
           if (isGenesis && !is2026New && gradSet.has(key)) return;
 
-          // Si el registro pertenece explícitamente al ciclo escolar 2025-2026 y no fue reinscrito en 2026, dejar en el historial de 2025-2026
-          if (s.school_year === '2025-2026' && !is2026New && (!s.course_id || !activeCourseIds.has(String(s.course_id)))) {
+          // Si el registro pertenece explícitamente al ciclo escolar 2025-2026 y no fue reinscrito en 2026, dejar en el historial de 2025-2026 (solo aplicable a reglas estrictas de Génesis)
+          if (isGenesis && s.school_year === '2025-2026' && !is2026New && (!s.course_id || !activeCourseIds.has(String(s.course_id)))) {
             return;
           }
 
