@@ -1478,20 +1478,61 @@ export const dataService = {
 
     for (const a of data.assignments) {
       if (!a.docente || !a.materia) continue;
-      const docKey = a.docente.toLowerCase().trim();
-      const subKey = `${a.materia}_${a.nivel || ''}`.toLowerCase().trim();
+      const cleanDocente = (a.docente || '').trim();
+      const docKey = cleanDocente.toLowerCase();
+      const cleanMateria = (a.materia || '').trim().toLowerCase();
+      const cleanNivel = (a.nivel || '').trim().toLowerCase();
       const normGrade = normalizeGrade(a.grade);
-      const courseKey = `${a.nivel || ''}_${normGrade}_${a.section || ''}_${a.tanda || 'Matutina'}`.toLowerCase().trim();
-      const fallbackKey = `${a.nivel || ''}_${normGrade}_${a.section || ''}`.toLowerCase().trim();
+      const cleanSection = (a.section || 'A').trim().toLowerCase();
+      const cleanTanda = (a.tanda || 'Matutina').trim().toLowerCase();
 
-      const teacherId = staffMap.get(docKey);
-      const subjectId = subjectMap.get(subKey);
-      const courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey);
+      // 1. Resolver Profesor / Docente
+      let teacherId = staffMap.get(docKey);
+      if (!teacherId) {
+        // Búsqueda inteligente por coincidencia de nombre (apellidos invertidos, acentos, etc.)
+        for (const [sName, sId] of staffMap.entries()) {
+          if (areTeacherNamesMatching(sName, cleanDocente)) {
+            teacherId = sId;
+            break;
+          }
+        }
+      }
 
-      // Si alguno no se encuentra, se omite de forma flexible de acuerdo con la decisión de diseño
+      // 2. Resolver Materia / Asignatura
+      const subKeyWithLevel = `${cleanMateria}_${cleanNivel}`;
+      let subjectId = subjectMap.get(subKeyWithLevel) || subjectMap.get(cleanMateria);
+      if (!subjectId) {
+        // Búsqueda aproximada si la materia difiere por acentos o palabras extras
+        const normMat = cleanMateria.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        for (const [sKey, sId] of subjectMap.entries()) {
+          const normKey = sKey.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (normKey === normMat || normKey.includes(normMat) || normMat.includes(normKey)) {
+            subjectId = sId;
+            break;
+          }
+        }
+      }
+
+      // 3. Resolver Curso
+      const courseKey = `${cleanNivel}_${normGrade}_${cleanSection}_${cleanTanda}`;
+      const fallbackKey = `${cleanNivel}_${normGrade}_${cleanSection}`;
+      let courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey);
+      
+      // Fallback adicional por solo Grado y Sección (sin depender de si el nivel es Secundario o Primario)
+      if (!courseId) {
+        const gradeSectionKey = `${normGrade}_${cleanSection}`;
+        for (const [k, cId] of courseMapFallback.entries()) {
+          if (k.endsWith(`_${gradeSectionKey}`) || k === gradeSectionKey) {
+            courseId = cId;
+            break;
+          }
+        }
+      }
+
+      // Si alguno no se encuentra, se omite y se registra en consola
       if (!teacherId || !subjectId || !courseId) {
         console.warn(
-          `Omitiendo asignación inválida: docente=${a.docente}, materia=${a.materia}, curso=${a.grade} ${a.section}`
+          `Omitiendo asignación: docente="${a.docente}" (encontrado=${Boolean(teacherId)}), materia="${a.materia}" (encontrado=${Boolean(subjectId)}), curso="${a.grade} ${a.section}" (encontrado=${Boolean(courseId)})`
         );
         continue;
       }
