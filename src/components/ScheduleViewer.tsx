@@ -43,6 +43,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { sortCourses } from '../utils/courseSorter';
 import { InicialRoutineManager } from './InicialRoutineManager';
+import { ScheduleImportModal } from './ScheduleImportModal';
 
 export const ScheduleViewer = () => {
   const {
@@ -95,6 +96,7 @@ export const ScheduleViewer = () => {
   });
   const [viewMode, setViewMode] = useState<'list' | 'matrix'>('matrix');
   const [inicialViewMode, setInicialViewMode] = useState<'routine' | 'grid'>('routine');
+  const [isScheduleImportModalOpen, setIsScheduleImportModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isDeepRepairing, setIsDeepRepairing] = useState(false);
@@ -2859,6 +2861,17 @@ export const ScheduleViewer = () => {
           </button>
 
           {isAdminOrStaff && (
+            <button
+              onClick={() => setIsScheduleImportModalOpen(true)}
+              className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md transition-all no-print cursor-pointer"
+              title="Importar horario escolar completo desde archivo Excel para esta tanda"
+            >
+              <Upload size={14} className="text-white" />
+              Subir Horario Excel
+            </button>
+          )}
+
+          {isAdminOrStaff && (
             <>
               {/* Botón Maestro de Blindaje de Horario */}
               <button
@@ -4584,6 +4597,17 @@ export const ScheduleViewer = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Carga Masiva de Horarios desde Excel */}
+      <ScheduleImportModal
+        isOpen={isScheduleImportModalOpen}
+        onClose={() => setIsScheduleImportModalOpen(false)}
+        activeShift={selectedShift}
+        schoolYear={selectedYear || '2026-2027'}
+        state={state}
+        profile={profile}
+        refreshData={refreshData}
+      />
     </div>
   );
 };

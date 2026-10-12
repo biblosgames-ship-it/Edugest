@@ -18,6 +18,7 @@ import { dataService } from '../services/dataService';
 import { useApp, useSupabase } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { ScheduleImportModal } from './ScheduleImportModal';
 
 const formatToISODate = (dateStr: any) => {
   if (!dateStr) return null;
@@ -88,6 +89,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
   const [error, setError] = useState<string | null>(null);
   const [confirmedCenter, setConfirmedCenter] = useState(false);
   const [updateCenterInfo, setUpdateCenterInfo] = useState(false);
+  const [isScheduleImportOpen, setIsScheduleImportOpen] = useState(false);
 
   // EXPORTAR DATOS ACTUALES A EXCEL
   const handleExportData = async () => {
@@ -829,6 +831,30 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
             </button>
           </div>
 
+          {/* Tarjeta Especializada para Carga Masiva de Horarios por Tanda */}
+          <div className="p-6 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border-2 border-emerald-500/30 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20 shrink-0">
+                <FileSpreadsheet size={24} />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-2">
+                  Carga Masiva de Horarios Escolares por Tanda <span className="text-emerald-600 font-bold">⚡ Nuevo</span>
+                </h4>
+                <p className="text-xs text-slate-500 font-medium max-w-xl">
+                  Sube el horario completo de tus cursos en una sola planilla Excel, enlazando automáticamente a los docentes que ya tienes asignados.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsScheduleImportOpen(true)}
+              className="flex items-center gap-2 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/20 transition-all shrink-0 cursor-pointer"
+            >
+              <Upload size={16} /> Cargar Horarios Excel
+            </button>
+          </div>
+
           <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-center group hover:border-indigo-500 transition-colors relative cursor-pointer min-h-[220px]">
             <Upload
               className="text-slate-300 group-hover:text-indigo-600 mb-4 transition-colors"
@@ -1066,6 +1092,17 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           </button>
         </div>
       )}
+
+      {/* Modal de Carga Masiva de Horarios desde Excel */}
+      <ScheduleImportModal
+        isOpen={isScheduleImportOpen}
+        onClose={() => setIsScheduleImportOpen(false)}
+        activeShift="Matutina"
+        schoolYear={targetSchoolYear || selectedYear || '2026-2027'}
+        state={state}
+        profile={profile}
+        refreshData={refreshData}
+      />
     </div>
   );
 };
