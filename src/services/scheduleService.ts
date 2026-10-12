@@ -425,6 +425,54 @@ export const isEntryLocked = (e: any, lockedKeys: string[] = []): boolean => {
   });
 };
 
+export const getStandardExtendedDaySlots = () => [
+  { start: '07:30:00', end: '07:45:00', isBreak: true, label: 'Acogida' },
+  { start: '07:45:00', end: '08:00:00', isBreak: true, label: 'Acto a la Bandera' },
+  { start: '08:00:00', end: '08:15:00', isBreak: true, label: 'Desayuno' },
+  { start: '08:15:00', end: '09:00:00', isBreak: false, label: '1ra Hora' },
+  { start: '09:00:00', end: '09:45:00', isBreak: false, label: '2da Hora' },
+  { start: '09:45:00', end: '10:15:00', isBreak: true, label: 'RECREO' },
+  { start: '10:15:00', end: '11:00:00', isBreak: false, label: '3ra Hora' },
+  { start: '11:00:00', end: '11:45:00', isBreak: false, label: '4ta Hora' },
+  { start: '11:45:00', end: '12:45:00', isBreak: true, label: 'ALMUERZO' },
+  { start: '12:45:00', end: '13:30:00', isBreak: false, label: '5ta Hora' },
+  { start: '13:30:00', end: '14:15:00', isBreak: false, label: '6ta Hora' },
+  { start: '14:15:00', end: '14:30:00', isBreak: true, label: 'RECREO' },
+  { start: '14:30:00', end: '15:15:00', isBreak: false, label: '7ma Hora' },
+  { start: '15:15:00', end: '16:00:00', isBreak: false, label: '8va Hora' },
+];
+
+export const isExtendedSchedule = (
+  courseOrShift?: any,
+  startMins?: number,
+  endMins?: number,
+  official?: any
+): boolean => {
+  if (typeof courseOrShift === 'string') {
+    const s = courseOrShift.toLowerCase();
+    if (s.includes('ext') || s.includes('jor')) return true;
+  } else if (courseOrShift && typeof courseOrShift === 'object') {
+    const t = (courseOrShift.tanda || '').toLowerCase();
+    if (t.includes('ext') || t.includes('jor')) return true;
+  }
+  if (official) {
+    const s = (official.shift || '').toLowerCase();
+    if (s.includes('ext') || s.includes('jor')) return true;
+    const offStart = official.start_time;
+    const offEnd = official.end_time;
+    if (offStart && offEnd) {
+      const [sh, sm] = offStart.split(':').map(Number);
+      const [eh, em] = offEnd.split(':').map(Number);
+      const span = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+      if (span >= 450) return true;
+    }
+  }
+  if (startMins !== undefined && endMins !== undefined) {
+    if (endMins - startMins >= 450) return true;
+  }
+  return false;
+};
+
 export const findCycleTimeBlocks = (
   cycleTimeBlocks: any[] | undefined,
   course: any,
@@ -443,7 +491,11 @@ export const findCycleTimeBlocks = (
   const matchShift = (cfg: any) => {
     const s = (cfg.shift || '').toLowerCase();
     if (!s || s === 'ambas' || s.includes('amb')) return true;
-    return s.substring(0, 3) === courseShift.substring(0, 3) || courseShift.includes(s.substring(0, 3));
+    const c = courseShift;
+    // Interoperabilidad de Jornada Extendida y Matutina
+    if ((s.includes('ext') || s.includes('jor')) && (c.includes('ext') || c.includes('jor') || c.includes('mat'))) return true;
+    if ((c.includes('ext') || c.includes('jor')) && (s.includes('ext') || s.includes('jor') || s.includes('mat'))) return true;
+    return s.substring(0, 3) === c.substring(0, 3) || c.includes(s.substring(0, 3));
   };
 
   const matchLevel = (cfg: any): 'exact' | 'general' | 'none' => {
@@ -467,12 +519,20 @@ export const findCycleTimeBlocks = (
     return 'none';
   };
 
-  const matchingConfigs = cycleTimeBlocks.filter((cfg: any) => {
+  let matchingConfigs = cycleTimeBlocks.filter((cfg: any) => {
     if (!matchShift(cfg)) return false;
     const lMatch = matchLevel(cfg);
     const cMatch = matchCycle(cfg);
     return lMatch !== 'none' && cMatch !== 'none';
   });
+
+  // Si no hay coincidencia exacta de ciclo, permitir la del mismo nivel y tanda
+  if (matchingConfigs.length === 0) {
+    matchingConfigs = cycleTimeBlocks.filter((cfg: any) => {
+      if (!matchShift(cfg)) return false;
+      return matchLevel(cfg) !== 'none';
+    });
+  }
 
   if (matchingConfigs.length === 0) return null;
 
@@ -643,6 +703,11 @@ export const scheduleService = {
       const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
       const isSecundaria = levelNorm.includes('secun');
       const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
+
+      const isExtended = isExtendedSchedule(course, startT, endT, official) || isExtendedSchedule(shift);
+      if (isExtended) {
+        return getStandardExtendedDaySlots().map((s, i) => ({ ...s, originalIdx: i }));
+      }
 
       // 1. EVENTO FIJO DE APERTURA / ACTO DE BANDERA (100% Dinámico desde Preferencias de la DB)
       const dbActoEvent = (fixedEvents || []).find((fe: any) => {
@@ -1514,6 +1579,11 @@ export const scheduleService = {
       const isPrimariaOrInicial = levelNorm.includes('primar') || levelNorm.includes('ini');
       const isSecundaria = levelNorm.includes('secun');
       const targetTotal = isSecundaria ? 6 : 5; // Primaria/Inicial: 5 bloques/día. Secundaria: 6 bloques/día
+
+      const isExtended = isExtendedSchedule(course, startT, endT, official) || isExtendedSchedule(shift);
+      if (isExtended) {
+        return getStandardExtendedDaySlots().map((s, i) => ({ ...s, originalIdx: i }));
+      }
 
       const preWindow = Math.max(0, bStart - classStart);
       let preCount = isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
@@ -2803,6 +2873,11 @@ export const scheduleService = {
       let sT = toMins(official?.start_time || (isMorningCourse ? '08:00' : '14:00'));
       let eT = toMins(official?.end_time || (isMorningCourse ? '12:00' : '18:15'));
 
+      const isExtended = isExtendedSchedule(cObj, sT, eT, official) || isExtendedSchedule(isMorningCourse ? 'Matutina' : 'Vespertina');
+      if (isExtended) {
+        return getStandardExtendedDaySlots().filter((s: any) => !s.isBreak);
+      }
+
       const firstBp = (breakPreferences || []).find((bp: any) => {
         let bpM = toMins(bp.startTime);
         if (!isMorningCourse && bpM < 420) bpM += 720;
@@ -3385,6 +3460,11 @@ export const scheduleService = {
       if (!isMorning && startT < 720 && startT > 0) startT += 720;
       let endT = official?.end_time ? toMins(official.end_time) : isMorning ? 720 : 1095;
       if (!isMorning && endT < 720 && endT > 0) endT += 720;
+
+      const isExtended = isExtendedSchedule(course, startT, endT, official) || isExtendedSchedule(shiftName);
+      if (isExtended) {
+        return getStandardExtendedDaySlots().filter((s: any) => !s.isBreak);
+      }
 
       const bPref = getEffectiveCourseBreak(course, breakPreferences, isMorning ? 'Matutina' : 'Vespertina', toMins);
       const rawMasterStart = bPref?.startTime || bPref?.start_time || (isMorning ? '10:00:00' : '15:55:00');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { sortCourses } from '../utils/courseSorter';
 import {
@@ -74,6 +74,14 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
   const [currentStep, setCurrentStep] = useState<'upload' | 'preview' | 'importing' | 'success'>(
     'upload'
   );
+  const [targetSchoolYear, setTargetSchoolYear] = useState<string>(selectedYear || '2026-2027');
+
+  useEffect(() => {
+    if (selectedYear && selectedYear.trim()) {
+      setTargetSchoolYear(selectedYear);
+    }
+  }, [selectedYear]);
+
   const [progressMsg, setProgressMsg] = useState('');
   const [progressValue, setProgressValue] = useState(0);
   const [parsedData, setParsedData] = useState<any>(null);
@@ -179,6 +187,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           studentParents[0];
 
         return {
+          No_Orden: s.order_number || s.orderNumber || '',
           Nombres: s.names || s.first_name || '',
           Primer_Apellido: s.first_surname || s.last_name || '',
           Segundo_Apellido: s.second_surname || '',
@@ -193,11 +202,13 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Tutor_Telefono: parent?.phone || '',
           Direccion_Calle: s.address_street || '',
           Direccion_Sector: s.address_sector || '',
-          Codigo_SIGERD: s.sigerd_code || ''
+          Codigo_SIGERD: s.sigerd_code || '',
+          Ano_Escolar: s.school_year || targetSchoolYear || selectedYear || '2026-2027'
         };
       });
       if (sheetAlumnos.length === 0) {
         sheetAlumnos.push({
+          No_Orden: 1,
           Nombres: 'Carlos Alberto',
           Primer_Apellido: 'Gómez',
           Segundo_Apellido: 'Santos',
@@ -212,7 +223,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           Tutor_Telefono: '809-555-0202',
           Direccion_Calle: 'Calle Duarte #15',
           Direccion_Sector: 'Centro Ciudad',
-          Codigo_SIGERD: '12345678'
+          Codigo_SIGERD: '12345678',
+          Ano_Escolar: targetSchoolYear || selectedYear || '2026-2027'
         });
       }
 
@@ -440,6 +452,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
           .filter((p: any) => p.name && p.name.trim() !== '');
 
         // Mapeo flexible e inteligente de Alumnos
+        const courseStudentCounters = new Map<string, number>();
         const studentsPayload = rawAlumnos
           .map((row: any) => {
             const findVal = (keys: string[]) => {
@@ -453,6 +466,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               return k ? String(row[k]).trim() : '';
             };
 
+            const rawOrder = findVal(['noorden', 'orden', 'numeroorden', 'numorden', 'numero', 'no', '#', 'posicion', 'listnumber', 'ord']);
             let rawNames = findVal(['nombres', 'nombre', 'firstname', 'names', 'name']);
             let rawFirstSurname = findVal([
               'primerapellido',
@@ -550,7 +564,17 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
             if (!rawGrade) rawGrade = '1ero';
             if (!rawSection) rawSection = 'A';
 
+            // Calcular orden: si vino columna específica usarla, sino usar la posición de fila por curso
+            const courseKey = `${rawLevel}_${rawGrade}_${rawSection}_${rawShift}`.toLowerCase().trim();
+            const nextSeq = (courseStudentCounters.get(courseKey) || 0) + 1;
+            courseStudentCounters.set(courseKey, nextSeq);
+
+            const finalOrder = (rawOrder && !isNaN(Number(rawOrder)) && Number(rawOrder) > 0)
+              ? Number(rawOrder)
+              : nextSeq;
+
             return {
+              order_number: finalOrder,
               names: rawNames,
               first_surname: rawFirstSurname,
               second_surname: rawSecondSurname,
@@ -571,7 +595,8 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               birth_certificate_number: findVal(['numeroacta', 'acta', 'noacta', 'numacta']),
               student_type: findVal(['tipo', 'condicion', 'ingreso']).toLowerCase().includes('nuevo')
                 ? 'nuevo'
-                : 'antiguo'
+                : 'antiguo',
+              school_year: findVal(['anoescolar', 'añoescolar', 'ciclo', 'periodo', 'schoolyear']) || targetSchoolYear || selectedYear || '2026-2027'
             };
           })
           .filter((s) => Boolean((s.names && s.names.trim().length > 0) || (s.first_surname && s.first_surname.trim().length > 0)));
@@ -686,11 +711,12 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
         center: updateCenterInfo ? parsedData.center : null
       };
 
-      await dataService.importCompleteCenter(centerId, selectedYear, dataToImport);
+      const finalYear = (targetSchoolYear && targetSchoolYear.trim()) || (selectedYear && selectedYear.trim()) || '2026-2027';
+      await dataService.importCompleteCenter(centerId, finalYear, dataToImport);
 
       setProgressMsg('Sincronizando Estado de la Aplicación...');
       setProgressValue(85);
-      queryClient.invalidateQueries({ queryKey: ['students', centerId, selectedYear] });
+      queryClient.invalidateQueries({ queryKey: ['students', centerId, finalYear] });
       queryClient.invalidateQueries({ queryKey: ['center-stats', centerId] });
       await refreshData(centerId, true);
 
@@ -746,7 +772,27 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
             {center?.code && <span>Código: <strong className="text-white">{center.code}</strong></span>}
             {center?.district && <span>Distrito: <strong className="text-white">{center.district}</strong></span>}
             {center?.regional && <span>Regional: <strong className="text-white">{center.regional}</strong></span>}
-            <span>Año Escolar: <strong className="text-white">{selectedYear || '2026-2027'}</strong></span>
+            <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-xl border border-slate-700">
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Año Escolar Destino:</span>
+              <select
+                value={targetSchoolYear}
+                onChange={(e) => setTargetSchoolYear(e.target.value)}
+                className="bg-transparent text-white font-black text-xs outline-none cursor-pointer"
+              >
+                {state.schoolYears && state.schoolYears.length > 0 ? (
+                  state.schoolYears.map((sy: any) => (
+                    <option key={sy.id || sy.name} value={sy.name} className="bg-slate-900 text-white">
+                      {sy.name} {sy.is_active ? '⭐' : ''}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="2026-2027" className="bg-slate-900 text-white">2026-2027</option>
+                    <option value="2025-2026" className="bg-slate-900 text-white">2025-2026</option>
+                  </>
+                )}
+              </select>
+            </div>
           </div>
         </div>
         <div className="bg-white/10 px-3.5 py-2 rounded-xl text-left md:text-right shrink-0">
@@ -931,7 +977,7 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
                     <strong className="text-indigo-700 bg-indigo-100/60 px-1.5 py-0.5 rounded font-black">
                       {center?.name || 'CENTRO ACTUAL'}
                     </strong>{' '}
-                    (Año escolar: {selectedYear || '2026-2027'}).
+                    (Año escolar: {targetSchoolYear || selectedYear || '2026-2027'}).
                   </span>
                 </div>
               </label>

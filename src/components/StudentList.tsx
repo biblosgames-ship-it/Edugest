@@ -77,9 +77,9 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
 
     const head = [['Nº', 'CÓDIGO SIGERD', 'NOMBRES Y APELLIDOS', 'SEXO', 'CÉDULA']];
     const body = [...students]
-      .sort((a: any, b: any) => (a.orderNumber || 99) - (b.orderNumber || 99))
+      .sort((a: any, b: any) => (a.order_number || a.orderNumber || 99) - (b.order_number || b.orderNumber || 99))
       .map((s: any, idx) => [
-        s.orderNumber || idx + 1,
+        s.order_number || s.orderNumber || idx + 1,
         s.sigerd_code || s.sigerdCode || '---',
         `${s.first_surname || s.lastName} ${s.second_surname || ''}, ${s.names || s.firstName}`.toUpperCase(),
         s.sex || '-',
@@ -174,11 +174,11 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
             </tr>
           ) : (
             students
-              .sort((a, b) => (a.orderNumber || 99) - (b.orderNumber || 99))
-              .map((s: any) => (
+              .sort((a: any, b: any) => (a.order_number || a.orderNumber || 99) - (b.order_number || b.orderNumber || 99))
+              .map((s: any, idx) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-3 py-0.5 text-center text-[10px] font-black text-indigo-600">
-                    {s.orderNumber || '-'}
+                    {s.order_number || s.orderNumber || idx + 1}
                   </td>
                   <td className="px-3 py-0.5 font-mono text-[9px] font-bold text-slate-600">
                     {s.sigerd_code || s.sigerdCode || '---'}

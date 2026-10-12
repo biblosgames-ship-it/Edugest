@@ -106,13 +106,32 @@ export const PreferencesForm = () => {
     let hourCount = 1;
     const copy = cycleSlots.map((s) => {
       if (s.isBreak) {
-        return { ...s, label: s.label.toLowerCase().includes('recreo') ? s.label : 'RECREO' };
+        return s;
       }
       const label = `${hourCount}ra Hora`;
       hourCount++;
       return { ...s, label };
     });
     setCycleSlots(copy);
+  };
+
+  const applyExtendedDayPreset = () => {
+    setCycleSlots([
+      { label: 'Acogida', start: '07:30', end: '07:45', isBreak: true },
+      { label: 'Acto a la Bandera', start: '07:45', end: '08:00', isBreak: true },
+      { label: 'Desayuno', start: '08:00', end: '08:15', isBreak: true },
+      { label: '1ra Hora', start: '08:15', end: '09:00', isBreak: false },
+      { label: '2da Hora', start: '09:00', end: '09:45', isBreak: false },
+      { label: 'RECREO', start: '09:45', end: '10:15', isBreak: true },
+      { label: '3ra Hora', start: '10:15', end: '11:00', isBreak: false },
+      { label: '4ta Hora', start: '11:00', end: '11:45', isBreak: false },
+      { label: 'ALMUERZO', start: '11:45', end: '12:45', isBreak: true },
+      { label: '5ta Hora', start: '12:45', end: '13:30', isBreak: false },
+      { label: '6ta Hora', start: '13:30', end: '14:15', isBreak: false },
+      { label: 'RECREO', start: '14:15', end: '14:30', isBreak: true },
+      { label: '7ma Hora', start: '14:30', end: '15:15', isBreak: false },
+      { label: '8va Hora', start: '15:15', end: '16:00', isBreak: false }
+    ]);
   };
 
   const applyCyclePreset = (minutes: number, preCount = 3, postCount = 3, customBreakDur?: number) => {
@@ -1106,6 +1125,7 @@ export const PreferencesForm = () => {
                 >
                   <option value="Matutina">Matutina</option>
                   <option value="Vespertina">Vespertina</option>
+                  <option value="Extendida">Jornada Extendida (7:30 - 4:00)</option>
                 </select>
               </div>
             </div>
@@ -1115,6 +1135,14 @@ export const PreferencesForm = () => {
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mr-1">
                 Plantillas rápidas:
               </span>
+              <button
+                type="button"
+                onClick={applyExtendedDayPreset}
+                className="px-3 py-1.5 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Estructura oficial MINERD Jornada Extendida: 7:30 a 4:00 (8 Horas + Acogida, Acto, Desayuno, 2 Recreos y Almuerzo)"
+              >
+                <Sparkles size={13} /> Jornada Extendida 7:30 a 4:00 (8 Horas)
+              </button>
               <button
                 type="button"
                 onClick={() => applyCyclePreset(45, 3, 3)}
@@ -1242,7 +1270,7 @@ export const PreferencesForm = () => {
                       onClick={() => {
                         const copy = [...cycleSlots];
                         copy[idx].isBreak = !copy[idx].isBreak;
-                        if (copy[idx].isBreak && !copy[idx].label.toLowerCase().includes('recreo')) {
+                        if (copy[idx].isBreak && (!copy[idx].label || copy[idx].label.includes('Hora'))) {
                           copy[idx].label = 'RECREO';
                         }
                         setCycleSlots(copy);

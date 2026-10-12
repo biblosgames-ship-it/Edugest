@@ -36,7 +36,9 @@ import {
   findCycleTimeBlocks,
   getSlotsFromCycleConfig,
   calculateCleanSlotDurations,
-  isCourseInicial
+  isCourseInicial,
+  getStandardExtendedDaySlots,
+  isExtendedSchedule
 } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 import { sortCourses } from '../utils/courseSorter';
@@ -74,7 +76,7 @@ export const ScheduleViewer = () => {
     } catch {}
     return 'Matutina';
   });
-  const [filterType, setFilterType] = useState<'all' | 'course' | 'teacher'>(() => {
+  const [filterType, setFilterType] = useState<'all' | 'course' | 'teacher' | 'inicial'>(() => {
     if (profile?.role === 'student' || isParentRole) return 'course';
     return 'all';
   });
@@ -566,23 +568,26 @@ export const ScheduleViewer = () => {
     if (!c) return false;
     const t = (c.tanda || '').toLowerCase();
     const lvl = (c.level || '').toLowerCase();
+    if (t.includes('ext') || t.includes('jor')) return false;
     return t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
   }, []);
 
   const getEntryShift = useCallback((entry: any): 'Matutina' | 'Vespertina' => {
     const sShift = (entry?.shift || '').toLowerCase();
     if (sShift.includes('ves') || sShift.includes('tar')) return 'Vespertina';
-    if (sShift.includes('mat') || sShift.includes('mañ')) return 'Matutina';
+    if (sShift.includes('mat') || sShift.includes('mañ') || sShift.includes('ext') || sShift.includes('jor')) return 'Matutina';
 
     const course = (state.courses || []).find((c: any) => String(c.id) === String(entry?.course_id || entry?.courseId));
     if (course) {
+      const cT = (course.tanda || '').toLowerCase();
+      if (cT.includes('ext') || cT.includes('jor')) return 'Matutina';
       return isVespertinaCourse(course) ? 'Vespertina' : 'Matutina';
     }
 
     const sTime = entry?.start_time || '';
     if (sTime) {
       const [h] = sTime.split(':').map(Number);
-      if (h >= 12) return 'Vespertina';
+      if (h >= 14) return 'Vespertina';
     }
     return 'Matutina';
   }, [state.courses, isVespertinaCourse]);
@@ -976,6 +981,11 @@ export const ScheduleViewer = () => {
       }
     }
 
+    const isExtendedCourse = isExtendedSchedule(course, courseStartT, courseEndT, courseOfficial) || isExtendedSchedule(courseShiftName);
+    if (isExtendedCourse) {
+      return getStandardExtendedDaySlots();
+    }
+
     const isBreakInShift = (timeStr: string, isMorn: boolean) => {
       const rawMins = toMins(timeStr);
       const isBpMorning = rawMins >= 420 && rawMins < 780;
@@ -1318,6 +1328,57 @@ export const ScheduleViewer = () => {
       }
     }
 
+    // 0. Si hay una estructura de bloques por ciclo personalizada guardada en el centro, usarla
+    if ((state.cycleTimeBlocks || []).length > 0) {
+      const activeCycleConfig = (state.cycleTimeBlocks || []).find((cfg: any) => {
+        const s = (cfg.shift || '').toLowerCase();
+        if (s.includes('ext') || s.includes('jor')) return true;
+        return isMorning ? !s.includes('ves') && !s.includes('tar') : s.includes('ves') || s.includes('tar');
+      });
+      if (activeCycleConfig) {
+        const cSlots = getSlotsFromCycleConfig(activeCycleConfig);
+        if (cSlots && cSlots.length > 0) {
+          const firstBreak = cSlots.find((s: any) => s.isBreak && s.label?.includes('RECREO'));
+          return {
+            slots: cSlots,
+            startT,
+            endT,
+            masterBPref: firstBreak
+              ? { startTime: firstBreak.start, durationMinutes: toMins(firstBreak.end) - toMins(firstBreak.start) }
+              : masterBPref
+          };
+        }
+      }
+    }
+
+    // 0.1 Si es Jornada Extendida (por tanda del centro, horarios oficiales de 7:30 a 16:00 o cursos extendidos):
+    const shiftOfficialCheck =
+      findOfficialSchedule(state.levelSchedules, isMorning ? 'Primario' : 'Secundario', effectiveShift) ||
+      (state.levelSchedules || []).find((ls: any) => {
+        const lsShift = (ls.shift || '').toLowerCase();
+        return lsShift.includes('ext') || lsShift.includes('jor');
+      });
+
+    const isExtendedGeneral = isMorning && (
+      (shiftOfficialCheck && (
+        (toMins(shiftOfficialCheck.end_time) - toMins(shiftOfficialCheck.start_time) >= 450) ||
+        (shiftOfficialCheck.shift || '').toLowerCase().includes('ext') ||
+        (shiftOfficialCheck.shift || '').toLowerCase().includes('jor')
+      )) ||
+      (state.courses || []).some((c: any) => (c.tanda || '').toLowerCase().includes('ext') || (c.tanda || '').toLowerCase().includes('jor')) ||
+      (endT - startT >= 450)
+    );
+
+    if (isExtendedGeneral) {
+      const extSlots = getStandardExtendedDaySlots();
+      return {
+        slots: extSlots,
+        startT: 450,
+        endT: 960,
+        masterBPref: { startTime: '09:45:00', durationMinutes: 30 }
+      };
+    }
+
     // VISTA GENERAL (O CURSO SIN HORARIOS OFICIALES)
     const slots: any[] = [];
     let bStartMaster = toMins(masterBPref.startTime);
@@ -1393,6 +1454,7 @@ export const ScheduleViewer = () => {
   }, [
     state.levelSchedules,
     state.breakPreferences,
+    state.cycleTimeBlocks,
     state.assignments,
     effectiveShift,
     isMorning,
@@ -1465,7 +1527,7 @@ export const ScheduleViewer = () => {
         const isEntryAfternoon =
           cTanda.includes('ves') ||
           cTanda.includes('tar') ||
-          ((entryCourse?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat'));
+          ((entryCourse?.level || '').toLowerCase().includes('secun') && !cTanda.includes('mat') && !cTanda.includes('ext') && !cTanda.includes('jor'));
 
         if (isEntryAfternoon && eMins < 720 && eMins > 0) {
           eMins += 720;

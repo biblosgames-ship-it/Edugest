@@ -1140,6 +1140,8 @@ export const dataService = {
       assignments: any[];
     }
   ) {
+    const activeSchoolYear = (schoolYear && schoolYear.trim()) || '2026-2027';
+
     // 1. Centro (Si viene en el Excel)
     if (data.center) {
       const { error } = await supabase.from('centers').update(data.center).eq('id', centerId);
@@ -1151,7 +1153,7 @@ export const dataService = {
       .from('courses')
       .select('*')
       .eq('center_id', centerId)
-      .eq('school_year', schoolYear);
+      .eq('school_year', activeSchoolYear);
 
     const courseMap = new Map<string, string>(); // 'nivel_grado_seccion_tanda' -> UUID
     const courseMapFallback = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
@@ -1197,7 +1199,7 @@ export const dataService = {
           .from('courses')
           .insert({
             center_id: centerId,
-            school_year: schoolYear,
+            school_year: activeSchoolYear,
             level: c.level,
             grade: c.grade,
             section: c.section,
@@ -1385,7 +1387,13 @@ export const dataService = {
 
       const studentPayload: any = {
         center_id: centerId,
-        school_year: schoolYear,
+        school_year: (s.school_year && String(s.school_year).trim()) || activeSchoolYear,
+        order_number:
+          s.order_number !== undefined && s.order_number !== null && !isNaN(Number(s.order_number))
+            ? Number(s.order_number)
+            : match?.order_number !== undefined
+            ? match.order_number
+            : null,
         names: cleanNames || 'Estudiante',
         first_name: cleanNames || 'Estudiante',
         first_surname: cleanFirstSurname || 'S/A',

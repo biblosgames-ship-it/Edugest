@@ -28,6 +28,7 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
   const downloadTemplate = () => {
     const template = [
       {
+        'No.': 1,
         Nombres: 'Juan Alberto',
         'Primer Apellido': 'Pérez',
         'Segundo Apellido': 'García',
@@ -70,7 +71,7 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
 
         // MAPEADO ULTRA-FLEXIBLE
         const mapped = data
-          .map((row: any) => {
+          .map((row: any, idx: number) => {
             const findVal = (keys: string[]) => {
               const key = Object.keys(row).find((k) => {
                 const cleanK = k
@@ -83,12 +84,18 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
               return key ? String(row[key]).trim() : '';
             };
 
+            const rawOrder = findVal(['noorden', 'orden', 'numeroorden', 'numorden', 'numero', 'no', '#', 'posicion', 'ord']);
+            const orderNumber = (rawOrder && !isNaN(Number(rawOrder)) && Number(rawOrder) > 0)
+              ? Number(rawOrder)
+              : (idx + 1);
+
             const names = findVal(['nombre']);
             const firstSurname = findVal(['primer apellido', 'apellido paterno']);
             const secondSurname = findVal(['segundo apellido', 'apellido materno']);
             const combinedSurnames = findVal(['apellidos', 'last name', 'surname']);
 
             return {
+              order_number: orderNumber,
               names: names,
               // Si hay apellidos combinados y no hay primer apellido separado, usar el combinado
               first_surname: firstSurname || combinedSurnames || '',
@@ -161,6 +168,7 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
         try {
           const studentData = {
             center_id: profile.center_id,
+            order_number: student.order_number,
             names: student.names,
             first_name: student.names,
             first_surname: student.first_surname,
@@ -281,6 +289,9 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
               <table className="w-full text-left border-collapse bg-white">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-12">
+                      No.
+                    </th>
                     <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       Nombres
                     </th>
@@ -301,6 +312,9 @@ export const BulkImport = ({ gradeId, selectedYear, onComplete }: BulkImportProp
                       key={i}
                       className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                     >
+                      <td className="p-4 text-center font-black text-indigo-600 text-xs">
+                        {row.order_number || i + 1}
+                      </td>
                       <td className="p-4 font-bold text-slate-700">{row.names}</td>
                       <td className="p-4 font-bold text-slate-700">
                         {row.first_surname} {row.second_surname}
