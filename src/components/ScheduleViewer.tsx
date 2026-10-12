@@ -22,7 +22,8 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Baby
+  Baby,
+  Upload
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import * as XLSX from 'xlsx';
