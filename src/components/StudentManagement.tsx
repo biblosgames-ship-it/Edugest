@@ -5,6 +5,7 @@ import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';
 import { supabase } from '../lib/supabase';
 import { sortCourses } from '../utils/courseSorter';
+import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 import {
   GraduationCap,
   Trash2,
@@ -122,7 +123,7 @@ export const StudentManagement = () => {
       });
     }
 
-    return result.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
+    return sortStudents(result);
   }, [allStudents, selectedCourseId, selectedShiftFilter, searchTerm, state.courses]);
 
   const handleDownloadPDF = async (s: any) => {

@@ -49,6 +49,7 @@ import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
 import { enqueueSyncAction } from '../utils/offlineSync';
+import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -412,20 +413,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   // Estudiantes del curso seleccionado
   const courseStudents = useMemo(() => {
     if (!selectedCourseId) return [];
-    return (allStudents || [])
-      .filter((s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId)
-      .sort((a: any, b: any) => {
-        const numA = (a.order_number !== undefined && a.order_number !== null && a.order_number !== '') ? Number(a.order_number) : null;
-        const numB = (b.order_number !== undefined && b.order_number !== null && b.order_number !== '') ? Number(b.order_number) : null;
-
-        if (numA !== null && numB !== null) {
-          return numA - numB;
-        }
-        if (numA !== null) return -1;
-        if (numB !== null) return 1;
-
-        return getSortKeyBySurname(a).localeCompare(getSortKeyBySurname(b));
-      });
+    const list = (allStudents || []).filter(
+      (s: any) => s.course_id === selectedCourseId || s.courseId === selectedCourseId
+    );
+    return sortStudents(list);
   }, [allStudents, selectedCourseId]);
 
   // 1. CARGAR ASISTENCIA (DESDE SUPABASE Y RESPALDO LOCAL)

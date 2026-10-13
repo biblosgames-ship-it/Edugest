@@ -7,6 +7,7 @@ import autoTable from 'jspdf-autotable';
 import { useApp } from '../context/AppContext';
 import { exportStudentsToExcel } from '../utils/listPdfGenerator';
 import { toast } from 'react-hot-toast';
+import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 
 export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
   const { state, center, selectedYear, refreshData } = useApp();
@@ -23,7 +24,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
         const matching = state.students.filter(
           (s: any) => String(s.course_id) === String(gradeId) || String(s.courseId) === String(gradeId)
         );
-        setStudents(matching);
+        setStudents(sortStudents(matching));
         setIsLoading(false);
         return;
       }
@@ -34,7 +35,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
         targetCid,
         year
       );
-      setStudents(data || []);
+      setStudents(sortStudents(data || []));
     } catch (e) {
       console.error(e);
     } finally {
@@ -75,13 +76,11 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
       { align: 'center' }
     );
 
-    const head = [['Nº', 'CÓDIGO SIGERD', 'NOMBRES Y APELLIDOS', 'SEXO', 'CÉDULA']];
-    const body = [...students]
-      .sort((a: any, b: any) => (a.order_number || a.orderNumber || 99) - (b.order_number || b.orderNumber || 99))
+    const body = sortStudents(students)
       .map((s: any, idx) => [
-        s.order_number || s.orderNumber || idx + 1,
+        getStudentOrderNumber(s) ?? (idx + 1),
         s.sigerd_code || s.sigerdCode || '---',
-        `${s.first_surname || s.lastName} ${s.second_surname || ''}, ${s.names || s.firstName}`.toUpperCase(),
+        `${s.first_surname || s.lastName || ''} ${s.second_surname || ''}, ${s.names || s.firstName || ''}`.trim().toUpperCase(),
         s.sex || '-',
         s.idCard || s.id_card || '---'
       ]);
@@ -173,12 +172,11 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
               </td>
             </tr>
           ) : (
-            students
-              .sort((a: any, b: any) => (a.order_number || a.orderNumber || 99) - (b.order_number || b.orderNumber || 99))
+            sortStudents(students)
               .map((s: any, idx) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-3 py-0.5 text-center text-[10px] font-black text-indigo-600">
-                    {s.order_number || s.orderNumber || idx + 1}
+                    {getStudentOrderNumber(s) ?? (idx + 1)}
                   </td>
                   <td className="px-3 py-0.5 font-mono text-[9px] font-bold text-slate-600">
                     {s.sigerd_code || s.sigerdCode || '---'}

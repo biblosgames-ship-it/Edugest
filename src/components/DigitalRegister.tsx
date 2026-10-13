@@ -24,6 +24,7 @@ import { useCourses } from '../hooks/useCourses';
 import { useSubjects } from '../hooks/useSubjects';
 import { useAssignments } from '../hooks/useAssignments';
 import { useTeacherIdentity } from '../utils/teacherUtils';
+import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 
 export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, profile, selectedYear, center } = useApp();
@@ -257,7 +258,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
   const students = useMemo(() => {
     if (!selectedCourseId) return [];
-    return (allStudents || []).filter((s) => s.course_id === selectedCourseId);
+    const list = (allStudents || []).filter(
+      (s) => s.course_id === selectedCourseId || s.courseId === selectedCourseId
+    );
+    return sortStudents(list);
   }, [allStudents, selectedCourseId]);
 
   // Sincronizar notas de la caché al estado local para edición evitando sobrescribir cambios en progreso
@@ -670,9 +674,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     head.push(headerRow2);
 
     const body = students.map((s, idx) => {
+      const orderNum = (getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0');
+      const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+      const names = s.names || s.firstName || s.first_name || s.name || '';
+      const fullName = surname && names ? `${surname}, ${names}`.toUpperCase() : (surname || names || 'ESTUDIANTE').toUpperCase();
       const row: any[] = [
-        (idx + 1).toString().padStart(2, '0'),
-        `${s.first_surname} ${s.names}`.toUpperCase()
+        orderNum,
+        fullName
       ];
 
       config.competencies.forEach((c) => {
@@ -1884,12 +1892,16 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 {students.map((s, idx) => (
                   <tr key={s.id} className="hover:bg-brand-bg transition-all">
                     <td className="p-1 border-r border-border-main sticky left-0 bg-surface z-10 text-center text-text-muted">
-                      {(idx + 1).toString().padStart(2, '0')}
+                      {(getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0')}
                     </td>
                     <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main max-w-[220px]">
                       <div className="flex items-center justify-between gap-2 w-full">
                         <span className="truncate">
-                          {s.first_surname} {s.names}
+                          {(() => {
+                            const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+                            const names = s.names || s.firstName || s.first_name || s.name || '';
+                            return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
+                          })()}
                         </span>
                         <button
                           type="button"
