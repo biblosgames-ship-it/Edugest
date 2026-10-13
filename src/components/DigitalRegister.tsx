@@ -13,7 +13,11 @@ import {
   FileText,
   X,
   ScrollText,
-  Lock
+  Lock,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -65,6 +69,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   } = useGrades(selectedCourseId, selectedSubjectId);
   const [localGrades, setLocalGrades] = useState<Record<string, any>>({});
   const [showSaveStatus, setShowSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [hideStudentNames, setHideStudentNames] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Estados para el resumen de notas consolidado (Boletín del alumno)
@@ -1789,6 +1794,20 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 </div>
               )}
               <button
+                type="button"
+                onClick={() => setHideStudentNames((prev) => !prev)}
+                className={`px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  hideStudentNames
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-500/20'
+                    : 'bg-brand-bg hover:bg-slate-200 dark:hover:bg-slate-800 text-text-main border-border-main'
+                }`}
+                title={hideStudentNames ? 'Mostrar nombres completos de estudiantes' : 'Ocultar nombres para ver más columnas de notas en pantalla'}
+              >
+                {hideStudentNames ? <Eye size={15} /> : <EyeOff size={15} />}
+                <span className="hidden sm:inline">{hideStudentNames ? 'Mostrar Nombres' : 'Ocultar Nombres'}</span>
+                <span className="sm:hidden">{hideStudentNames ? 'Nombres' : 'Ocultar'}</span>
+              </button>
+              <button
                 onClick={handleImportFromMiAula}
                 className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all cursor-pointer border border-purple-400/30"
                 title="Importar promedios de parciales registrados en Mi Aula para este curso y asignatura"
@@ -1817,35 +1836,53 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 {activeTab === 'grades' ? (
                   <>
                     <tr className="bg-slate-900 text-white text-[7px] font-black uppercase tracking-tight">
-                      <th className="p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 w-10 text-center">
-                        Nº
+                      <th
+                        className={`p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 text-center transition-all ${
+                          hideStudentNames ? 'w-14' : 'w-10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span>Nº</span>
+                          <button
+                            type="button"
+                            onClick={() => setHideStudentNames((prev) => !prev)}
+                            className="p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                            title={hideStudentNames ? 'Mostrar nombres de estudiantes' : 'Ocultar nombres para ver más columnas'}
+                          >
+                            {hideStudentNames ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
+                          </button>
+                        </div>
                       </th>
-                      <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
-                        Estudiante
-                      </th>
+                      {!hideStudentNames && (
+                        <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
+                          Estudiante
+                        </th>
+                      )}
                       {config.competencies.map((c) => (
                         <th
                           key={c.id}
                           colSpan={8}
                           className="p-1 text-center border-r border-white/10 align-middle leading-tight h-10"
                         >
-                          <div className="line-clamp-2 px-2">{c.name}</div>
+                          <div className="line-clamp-2 px-2 text-[9px] font-black">{c.name}</div>
                         </th>
                       ))}
                     </tr>
                     <tr className="bg-slate-50 text-[7px] font-black uppercase text-slate-400 text-center">
-                      <th className="p-0 border-r border-slate-200 sticky left-0 bg-slate-50"></th>
-                      <th className="p-0 border-r border-slate-200 sticky left-10 bg-slate-50"></th>
+                      <th className={`p-0 border-r border-slate-200 sticky left-0 bg-slate-50 ${hideStudentNames ? 'w-14' : 'w-10'}`}></th>
+                      {!hideStudentNames && (
+                        <th className="p-0 border-r border-slate-200 sticky left-10 bg-slate-50 w-56"></th>
+                      )}
                       {config.competencies.map((c) =>
                         config.periods.map((p) => (
                           <React.Fragment key={`${c.id}_${p}`}>
                             <th
-                              className={`p-1.5 border-r border-slate-200 ${c.color} text-slate-700`}
+                              className={`p-1 border-r border-slate-200 ${c.color} text-slate-700 w-12 min-w-[44px] text-center font-black`}
                             >
                               {p}
                             </th>
                             <th
-                              className={`p-1.5 border-r border-slate-200 ${c.rColor} text-slate-400 font-normal w-8`}
+                              className={`p-1 border-r border-slate-200 ${c.rColor} text-slate-400 font-normal w-10 min-w-[36px] text-center`}
                             >
                               R
                             </th>
@@ -1856,12 +1893,24 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   </>
                 ) : (
                   <tr className="bg-slate-900 text-white text-[7px] font-black uppercase tracking-tight">
-                    <th className="p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 w-10 text-center">
-                      Nº
+                    <th className={`p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 text-center transition-all ${hideStudentNames ? 'w-14' : 'w-10'}`}>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <span>Nº</span>
+                        <button
+                          type="button"
+                          onClick={() => setHideStudentNames((prev) => !prev)}
+                          className="p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                          title={hideStudentNames ? 'Mostrar nombres' : 'Ocultar nombres'}
+                        >
+                          {hideStudentNames ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
+                        </button>
+                      </div>
                     </th>
-                    <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
-                      Estudiante
-                    </th>
+                    {!hideStudentNames && (
+                      <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
+                        Estudiante
+                      </th>
+                    )}
                     {config.competencies.map((c) => (
                       <th key={`res_${c.id}`} className="p-2 text-center border-r border-white/10">
                         {c.short}
@@ -1891,28 +1940,49 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               <tbody className="divide-y divide-slate-100 text-[10px] font-black">
                 {students.map((s, idx) => (
                   <tr key={s.id} className="hover:bg-brand-bg transition-all">
-                    <td className="p-1 border-r border-border-main sticky left-0 bg-surface z-10 text-center text-text-muted">
-                      {(getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0')}
-                    </td>
-                    <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main max-w-[220px]">
-                      <div className="flex items-center justify-between gap-2 w-full">
-                        <span className="truncate">
-                          {(() => {
-                            const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
-                            const names = s.names || s.firstName || s.first_name || s.name || '';
-                            return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
-                          })()}
+                    <td
+                      className={`p-1 border-r border-border-main sticky left-0 bg-surface z-10 text-center transition-all ${
+                        hideStudentNames ? 'w-14' : 'w-10'
+                      }`}
+                      title={(() => {
+                        const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+                        const names = s.names || s.firstName || s.first_name || s.name || '';
+                        return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
+                      })()}
+                    >
+                      {hideStudentNames ? (
+                        <div className="flex items-center justify-center">
+                          <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 font-mono text-[11px] font-black border border-indigo-100 dark:border-indigo-900">
+                            #{getStudentOrderNumber(s) ?? (idx + 1)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-text-muted font-mono font-bold">
+                          {(getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0')}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => fetchStudentConsolidatedGrades(s)}
-                          title="Ver Boletín de Calificaciones"
-                          className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700"
-                        >
-                          <FileText size={12} />
-                        </button>
-                      </div>
+                      )}
                     </td>
+                    {!hideStudentNames && (
+                      <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main max-w-[220px] w-56">
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <span className="truncate">
+                            {(() => {
+                              const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+                              const names = s.names || s.firstName || s.first_name || s.name || '';
+                              return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
+                            })()}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fetchStudentConsolidatedGrades(s)}
+                            title="Ver Boletín de Calificaciones"
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700"
+                          >
+                            <FileText size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                     {activeTab === 'grades' ? (
                       config.competencies.map((c) =>
                         config.periods.map((p) => {
@@ -1921,7 +1991,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                           const kRec = `${c.id}_r${pL}`;
                           return (
                             <React.Fragment key={`${s.id}_${c.id}_${p}`}>
-                              <td className={`p-0 border-r border-border-main ${c.color}`}>
+                              <td className={`p-0 border-r border-border-main ${c.color} text-center align-middle w-12 min-w-[44px]`}>
                                 <input
                                   ref={(el) => {
                                     inputRefs.current[`${s.id}_${kVal}`] = el;
@@ -1933,12 +2003,12 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
                                   onPaste={(e) => handleGradePaste(e, idx, kVal)}
                                   onFocus={(e) => e.target.select()}
-                                  className="w-9 h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="w-full h-8 bg-transparent text-center px-0 font-black text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
                                   disabled={!isEditable}
                                 />
                               </td>
-                              <td className={`p-0 border-r border-border-main ${c.rColor}`}>
+                              <td className={`p-0 border-r border-border-main ${c.rColor} text-center align-middle w-10 min-w-[36px]`}>
                                 <input
                                   ref={(el) => {
                                     inputRefs.current[`${s.id}_${kRec}`] = el;
@@ -1950,7 +2020,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
                                   onPaste={(e) => handleGradePaste(e, idx, kRec)}
                                   onFocus={(e) => e.target.select()}
-                                  className="w-8 h-8 bg-transparent text-center text-[9px] text-text-muted outline-none focus:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="w-full h-8 bg-transparent text-center px-0 font-bold text-[10px] leading-none text-text-muted outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed"
                                   placeholder=""
                                   disabled={!isEditable}
                                 />
