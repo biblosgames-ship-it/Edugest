@@ -890,12 +890,10 @@ export const CampaignsManager: React.FC = () => {
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
                                   Abono: RD$ {resp.amount_paid?.toLocaleString()}
                                 </span>
-                              ) : status === 'yes' ? (
+                              ) : (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
                                   Pendiente (RD$ {activeCampaign.price.toLocaleString()})
                                 </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">--</span>
                               )}
                             </td>
                           )}
@@ -903,7 +901,7 @@ export const CampaignsManager: React.FC = () => {
                           {/* Acciones */}
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {activeCampaign.price > 0 && status === 'yes' && (
+                              {activeCampaign.price > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenPaymentModal(st)}
