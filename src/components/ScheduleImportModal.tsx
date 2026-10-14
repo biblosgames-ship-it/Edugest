@@ -266,46 +266,100 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           });
         };
 
-        // Función para resolver materia
+        // Función para resolver materia con precisión quirúrgica
         const resolveSubject = (subStr: string, courseId?: string) => {
           if (!subStr) return null;
           const clean = norm(subStr);
+          const allSubs = state.subjects || [];
 
-          // 1. Coincidencia exacta o directa con materias del centro
-          let match = (state.subjects || []).find((s: any) => {
+          // 1. Si se proporciona courseId, buscar prioritariamente en las materias asignadas a este curso
+          if (courseId) {
+            const courseAssigns = (state.assignments || []).filter(
+              (a: any) => String(a.course_id || a.courseId) === String(courseId)
+            );
+            const courseSubIds = new Set(courseAssigns.map((a: any) => String(a.subject_id)));
+            const courseSubjects = allSubs.filter((s: any) => courseSubIds.has(String(s.id)));
+
+            // 1A. Coincidencia exacta en materias del curso
+            const exactCourse = courseSubjects.find((s: any) => {
+              const sName = norm(s.name);
+              const sCode = norm(s.code || '');
+              return clean === sName || (sCode && clean === sCode);
+            });
+            if (exactCourse) return exactCourse;
+
+            // 1B. Si busca 'ingles', preferir la materia de inglés del curso (Lengua Extranjera Inglés) y descartar 'apreciacion literaria'
+            if (clean === 'ingles' || clean === 'ingle' || clean.includes('ingles') || clean.includes('english')) {
+              const inglesCourse = courseSubjects.find((s: any) => {
+                const sName = norm(s.name);
+                return (sName.includes('ingle') || sName.includes('english')) && !sName.includes('aprec') && !sName.includes('literari');
+              });
+              if (inglesCourse) return inglesCourse;
+            }
+
+            // 1C. Coincidencia parcial dentro de materias del curso
+            const partialCourse = courseSubjects.find((s: any) => {
+              const sName = norm(s.name);
+              if (clean.includes('espanol') || clean.includes('lenguaespanola')) {
+                return (sName.includes('espanol') || sName.includes('lengua')) && !sName.includes('extranjera');
+              }
+              return sName.includes(clean) || clean.includes(sName);
+            });
+            if (partialCourse) return partialCourse;
+          }
+
+          // 2. Coincidencia EXACTA a nivel general de todo el centro
+          const exactCenter = allSubs.find((s: any) => {
             const sName = norm(s.name);
             const sCode = norm(s.code || '');
-            return (
-              clean === sName ||
-              (sCode && clean === sCode) ||
-              clean.includes(sName) ||
-              sName.includes(clean)
-            );
+            return clean === sName || (sCode && clean === sCode);
+          });
+          if (exactCenter) return exactCenter;
+
+          // 3. Regla específica para 'inglés': evitar falsos positivos con 'apreciación literaria'
+          if (clean === 'ingles' || clean === 'ingle' || clean.includes('ingles') || clean.includes('english')) {
+            const pureIngles = allSubs.find((s: any) => {
+              const sName = norm(s.name);
+              return (sName.includes('ingle') || sName.includes('english')) && !sName.includes('aprec') && !sName.includes('literari');
+            });
+            if (pureIngles) return pureIngles;
+          }
+
+          // 4. Regla específica para 'francés'
+          if (clean === 'frances' || clean === 'francés' || clean.includes('france')) {
+            const pureFrances = allSubs.find((s: any) => {
+              const sName = norm(s.name);
+              return sName.includes('france') && !sName.includes('aprec');
+            });
+            if (pureFrances) return pureFrances;
+          }
+
+          // 5. Regla específica para 'español'
+          if (clean.includes('espanol') || clean.includes('lenguaespanola')) {
+            const pureLengua = allSubs.find((s: any) => {
+              const sName = norm(s.name);
+              return (sName.includes('espanol') || sName.includes('lengua')) && !sName.includes('extranjera');
+            });
+            if (pureLengua) return pureLengua;
+          }
+
+          // 6. Si no coincide, buscar por palabras clave educativas estándar
+          let match = allSubs.find((s: any) => {
+            const sNorm = norm(s.name);
+            if (clean.includes('mate')) return sNorm.includes('mate');
+            if (clean.includes('social')) return sNorm.includes('social');
+            if (clean.includes('natural')) return sNorm.includes('natural');
+            if (clean.includes('fisica') || clean.includes('edufis')) {
+              return sNorm.includes('fisica') || sNorm.includes('edufis');
+            }
+            if (clean.includes('art')) return sNorm.includes('art');
+            if (clean.includes('formacion') || clean.includes('integral')) {
+              return sNorm.includes('formacion') || sNorm.includes('integral') || sNorm.includes('relig');
+            }
+            return sNorm.includes(clean) || clean.includes(sNorm);
           });
 
-          // 2. Si no coincide, buscar por palabras clave educativas dominicanas
-          if (!match) {
-            match = (state.subjects || []).find((s: any) => {
-              const sNorm = norm(s.name);
-              if (clean.includes('espanol') || clean.includes('lengua')) {
-                return sNorm.includes('espanol') || sNorm.includes('lengua');
-              }
-              if (clean.includes('mate')) return sNorm.includes('mate');
-              if (clean.includes('social')) return sNorm.includes('social');
-              if (clean.includes('natural')) return sNorm.includes('natural');
-              if (clean.includes('fisica') || clean.includes('edufis')) {
-                return sNorm.includes('fisica') || sNorm.includes('edufis');
-              }
-              if (clean.includes('ingle')) return sNorm.includes('ingle');
-              if (clean.includes('france')) return sNorm.includes('france');
-              if (clean.includes('art')) return sNorm.includes('art');
-              if (clean.includes('formacion') || clean.includes('integral')) {
-                return sNorm.includes('formacion') || sNorm.includes('integral') || sNorm.includes('relig');
-              }
-              return false;
-            });
-          }
-          return match;
+          return match || null;
         };
 
         // Función para resolver docente

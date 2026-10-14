@@ -34,21 +34,22 @@ import { toast } from 'react-hot-toast';
 import { getLocalDateString } from '../../utils/dateUtils';
 
 export const CampaignsManager: React.FC = () => {
-  const { profile, center, state } = useApp();
+  const { profile, center, state, selectedYear } = useApp();
   const centerId = profile?.center_id || center?.id;
+  const activeYear = selectedYear || '2026-2027';
 
   const [campaigns, setCampaigns] = useState<SchoolCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [responses, setResponses] = useState<SchoolCampaignResponse[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [courses, setCourses] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>(state.students || []);
+  const [courses, setCourses] = useState<any[]>(state.courses || []);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingResponses, setLoadingResponses] = useState<boolean>(false);
 
-  // Filtros
+  // Filtros: por defecto 'yes' para mostrar primero los alumnos confirmados
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('ALL');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('yes');
   const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<string>('ALL');
 
   // Modal de Crear / Editar Campaña
@@ -99,27 +100,54 @@ export const CampaignsManager: React.FC = () => {
   // Ref para impresión de lista de viaje
   const printSheetRef = useRef<HTMLDivElement>(null);
 
-  // Cargar campañas, cursos y estudiantes del centro
+  // Cargar campañas, cursos y estudiantes del centro para el ciclo escolar activo
   const fetchData = async () => {
     if (!centerId) return;
     try {
       setLoading(true);
 
-      // Cursos
-      const { data: cData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('center_id', centerId)
-        .order('grade', { ascending: true });
-      if (cData) setCourses(cData);
+      // Cursos: Priorizar cursos del ciclo escolar activo
+      let coursesList: any[] = [];
+      if (state.courses && state.courses.length > 0) {
+        coursesList = state.courses;
+      } else {
+        const { data: cData } = await supabase
+          .from('courses')
+          .select('*')
+          .eq('center_id', centerId)
+          .eq('school_year', activeYear)
+          .order('grade', { ascending: true });
+        coursesList = cData || [];
+      }
+      setCourses(coursesList);
 
-      // Estudiantes
-      const { data: sData } = await supabase
-        .from('students')
-        .select('*')
-        .eq('center_id', centerId)
-        .order('last_name', { ascending: true });
-      if (sData) setStudents(sData);
+      // Estudiantes: Tomar los estudiantes del ciclo escolar activo sin límite de 1000
+      if (state.students && state.students.length > 0) {
+        setStudents(state.students);
+      } else {
+        const activeCourseIds = coursesList.map((c: any) => c.id);
+        if (activeCourseIds.length > 0) {
+          let allStudents: any[] = [];
+          let from = 0;
+          const step = 1000;
+          while (true) {
+            const { data: sChunk, error: sErr } = await supabase
+              .from('students')
+              .select('*')
+              .eq('center_id', centerId)
+              .in('course_id', activeCourseIds)
+              .order('last_name', { ascending: true })
+              .range(from, from + step - 1);
+            if (sErr || !sChunk || sChunk.length === 0) break;
+            allStudents = allStudents.concat(sChunk);
+            if (sChunk.length < step) break;
+            from += step;
+          }
+          setStudents(allStudents);
+        } else {
+          setStudents([]);
+        }
+      }
 
       // Campañas
       const { data: campData, error: campErr } = await supabase
@@ -144,7 +172,20 @@ export const CampaignsManager: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [centerId]);
+  }, [centerId, activeYear]);
+
+  // Mantener cursos y estudiantes sincronizados con el AppContext
+  useEffect(() => {
+    if (state.courses && state.courses.length > 0) {
+      setCourses(state.courses);
+    }
+  }, [state.courses]);
+
+  useEffect(() => {
+    if (state.students && state.students.length > 0) {
+      setStudents(state.students);
+    }
+  }, [state.students]);
 
   // Cargar respuestas de la campaña seleccionada
   const loadResponses = async () => {
@@ -704,6 +745,98 @@ export const CampaignsManager: React.FC = () => {
 
           {/* CONTENEDOR DE LA TABLA Y HERRAMIENTAS */}
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-6">
+            {/* Pestañas de Vista Rápida / Segmented Pills */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStatusFilter('yes');
+                    setSelectedPaymentFilter('ALL');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                    selectedStatusFilter === 'yes' && selectedPaymentFilter === 'ALL'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Confirmados (Sí van)</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                    selectedStatusFilter === 'yes' && selectedPaymentFilter === 'ALL'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                  }`}>
+                    {stats.confirmedCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPaymentFilter('paid');
+                    setSelectedStatusFilter('ALL');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                    selectedPaymentFilter === 'paid'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                  title="Alumnos con saldo completamente pagado"
+                >
+                  <span>🏆 Listado Seguro (Pagados)</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                    selectedPaymentFilter === 'paid'
+                      ? 'bg-indigo-700 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                  }`}>
+                    {stats.paidCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStatusFilter('undecided');
+                    setSelectedPaymentFilter('ALL');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                    selectedStatusFilter === 'undecided' && selectedPaymentFilter === 'ALL'
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <span>⏳ Pendientes de Respuesta</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                    selectedStatusFilter === 'undecided' && selectedPaymentFilter === 'ALL'
+                      ? 'bg-amber-700 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                  }`}>
+                    {stats.undecidedCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStatusFilter('ALL');
+                    setSelectedPaymentFilter('ALL');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                    selectedStatusFilter === 'ALL' && selectedPaymentFilter === 'ALL'
+                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <span>👥 Todos ({stats.totalEligible})</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] font-bold text-slate-400">
+                Mostrando <span className="text-slate-700 dark:text-slate-200 font-black">{filteredStudents.length}</span> de <span className="text-slate-700 dark:text-slate-200 font-black">{stats.totalEligible}</span> estudiantes
+              </div>
+            </div>
+
             {/* Barra de Filtros y Búsqueda */}
             <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3 flex-1">
@@ -753,7 +886,7 @@ export const CampaignsManager: React.FC = () => {
                     className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-none"
                   >
                     <option value="ALL">Cualquier Pago</option>
-                    <option value="paid">Totalmente Pagado</option>
+                    <option value="paid">Totalmente Pagado (Listado Seguro)</option>
                     <option value="partial">Con Abono Parcial</option>
                     <option value="pending">Pendiente de Pago</option>
                   </select>
@@ -802,8 +935,30 @@ export const CampaignsManager: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
-                        No se encontraron estudiantes para los filtros seleccionados.
+                      <td colSpan={6} className="py-12 text-center">
+                        <div className="max-w-md mx-auto space-y-2">
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            {selectedStatusFilter === 'yes' && selectedPaymentFilter === 'ALL'
+                              ? 'Aún no hay alumnos con asistencia confirmada (Sí van).'
+                              : selectedPaymentFilter === 'paid'
+                              ? 'Aún no hay alumnos con pago completado (Listado Seguro).'
+                              : 'No se encontraron estudiantes para los filtros seleccionados.'}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {selectedStatusFilter === 'yes' || selectedPaymentFilter === 'paid' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStatusFilter('ALL');
+                                  setSelectedPaymentFilter('ALL');
+                                }}
+                                className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                              >
+                                Ver todos los alumnos convocados ({stats.totalEligible})
+                              </button>
+                            ) : null}
+                          </p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -1371,11 +1526,19 @@ export const CampaignsManager: React.FC = () => {
       <div style={{ display: 'none' }}>
         <div ref={printSheetRef}>
           <h1>{center?.name || 'Centro Educativo'}</h1>
-          <h2>Hoja de Ruta y Lista de Asistentes - {activeCampaign?.title}</h2>
+          <h2>
+            Hoja de Ruta y Lista de Asistentes - {activeCampaign?.title}{' '}
+            {selectedPaymentFilter === 'paid'
+              ? '(Listado Seguro - Pagados)'
+              : selectedStatusFilter === 'yes'
+              ? '(Confirmados)'
+              : ''}
+          </h2>
           <div className="meta">
             <div><strong>Destino:</strong> {activeCampaign?.location || 'No especificado'}</div>
             <div><strong>Fecha:</strong> {activeCampaign?.event_date ? new Date(activeCampaign.event_date).toLocaleDateString() : 'Por definir'}</div>
-            <div><strong>Total Asistentes:</strong> {filteredStudents.filter((s) => responsesMap[s.id]?.response === 'yes').length} alumnos</div>
+            <div><strong>Filtro / Estado:</strong> {selectedPaymentFilter === 'paid' ? 'Listado Seguro (Pagados)' : selectedStatusFilter === 'yes' ? 'Confirmados (Sí van)' : 'Lista de Alumnos'}</div>
+            <div><strong>Total en Hoja:</strong> {filteredStudents.length} alumnos</div>
           </div>
 
           <table>
@@ -1391,31 +1554,29 @@ export const CampaignsManager: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredStudents
-                .filter((st) => responsesMap[st.id]?.response === 'yes')
-                .map((st, i) => {
-                  const resp = responsesMap[st.id];
-                  const cObj = coursesMap[st.course_id];
-                  return (
-                    <tr key={st.id}>
-                      <td>{i + 1}</td>
-                      <td><strong>{st.first_name} {st.last_name}</strong></td>
-                      <td>{cObj ? `${cObj.grade} ${cObj.section}` : '--'}</td>
-                      <td>{resp?.permission_signed_by || 'Autorizado'}</td>
-                      <td><strong>{resp?.emergency_contact_phone || '--'}</strong></td>
-                      <td className="notes">{resp?.medical_notes || 'Ninguna'}</td>
-                      <td>
-                        {resp?.payment_status === 'paid' ? (
-                          <span className="badge-paid">PAGADO</span>
-                        ) : resp?.payment_status === 'partial' ? (
-                          <span>ABONO RD$ {resp.amount_paid}</span>
-                        ) : (
-                          <span className="badge-pending">PENDIENTE</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+              {filteredStudents.map((st, i) => {
+                const resp = responsesMap[st.id];
+                const cObj = coursesMap[st.course_id];
+                return (
+                  <tr key={st.id}>
+                    <td>{i + 1}</td>
+                    <td><strong>{st.first_name} {st.last_name}</strong></td>
+                    <td>{cObj ? `${cObj.grade} ${cObj.section}` : '--'}</td>
+                    <td>{resp?.permission_signed_by || (resp?.permission_granted ? 'Autorizado' : 'Pendiente')}</td>
+                    <td><strong>{resp?.emergency_contact_phone || '--'}</strong></td>
+                    <td className="notes">{resp?.medical_notes || 'Ninguna'}</td>
+                    <td>
+                      {resp?.payment_status === 'paid' ? (
+                        <span className="badge-paid">PAGADO</span>
+                      ) : resp?.payment_status === 'partial' ? (
+                        <span>ABONO RD$ {resp.amount_paid}</span>
+                      ) : (
+                        <span className="badge-pending">PENDIENTE</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
