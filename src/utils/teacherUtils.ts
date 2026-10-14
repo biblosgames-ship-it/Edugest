@@ -17,15 +17,72 @@ export const areTeacherNamesMatching = (name1?: string | null, name2?: string | 
   if (!n1 || !n2) return false;
   if (n1 === n2) return true;
 
-  const t1 = n1.split(' ').filter(Boolean);
-  const t2 = n2.split(' ').filter(Boolean);
+  // Comparación limpia sin espacios ni puntuación
+  const clean1 = n1.replace(/[^a-z0-9]/g, '');
+  const clean2 = n2.replace(/[^a-z0-9]/g, '');
+  if (clean1 && clean1 === clean2) return true;
+
+  // 1. Verificación de marcadores numéricos / ordinales / romanos / sufijos distintivos
+  // Ejemplos: "I" vs "II", "1" vs "2", "No 1" vs "No 2", "Primero" vs "Segundo"
+  const parseMarker = (tok: string): string | null => {
+    const c = tok.replace(/[^a-z0-9]/g, '');
+    if (!c) return null;
+    if (/^\d+$/.test(c)) return c;
+    const romanMap: Record<string, string> = {
+      i: '1', ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10',
+      uno: '1', dos: '2', tres: '3', cuatro: '4', cinco: '5',
+      primero: '1', segundo: '2', tercero: '3',
+      primer: '1'
+    };
+    if (romanMap[c]) return romanMap[c];
+    return null;
+  };
+
+  const getMarker = (tokens: string[]): string | null => {
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const m = parseMarker(tokens[i]);
+      if (m) return m;
+    }
+    return null;
+  };
+
+  const rawTokens1 = n1.split(' ').filter(Boolean);
+  const rawTokens2 = n2.split(' ').filter(Boolean);
+
+  const marker1 = getMarker(rawTokens1);
+  const marker2 = getMarker(rawTokens2);
+
+  // Si uno o ambos tienen marcador numérico/ordinal/romano diferente, NUNCA son la misma persona
+  if (marker1 || marker2) {
+    if (marker1 !== marker2) return false;
+  }
+
+  // 2. Títulos y prefijos honoríficos que NO deben contarse como nombres de pila
+  const TITLES = new Set([
+    'prof', 'profe', 'profesor', 'profesora',
+    'lic', 'licdo', 'licda', 'licenciado', 'licenciada',
+    'docente', 'maestro', 'maestra',
+    'ing', 'ingeniero', 'ingeniera',
+    'dr', 'dra', 'doctor', 'doctora',
+    'mr', 'mrs', 'ms', 'miss'
+  ]);
+
+  const stripTitleTokens = (tokens: string[]) => {
+    return tokens.filter((t) => {
+      const c = t.replace(/[^a-z0-9]/g, '');
+      return !TITLES.has(c) && c !== 'no' && c !== 'num' && c !== 'numero';
+    });
+  };
+
+  const t1 = stripTitleTokens(rawTokens1);
+  const t2 = stripTitleTokens(rawTokens2);
 
   if (t1.length === 0 || t2.length === 0) return false;
 
-  // Comparación sin espacios
-  if (n1.replace(/\s+/g, '') === n2.replace(/\s+/g, '')) return true;
+  // Comparación limpia sin títulos
+  if (t1.join('') === t2.join('')) return true;
 
-  // Si el primer nombre coincide
+  // Si el primer nombre real coincide
   if (t1[0] === t2[0]) {
     if (t1.length === 1 && t2.length === 1) return true;
 

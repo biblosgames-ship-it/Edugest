@@ -19,6 +19,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { getStandardExtendedDaySlots } from '../services/scheduleService';
+import { areTeacherNamesMatching } from '../utils/teacherUtils';
 
 interface ScheduleImportModalProps {
   isOpen: boolean;
@@ -362,18 +363,21 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           return match || null;
         };
 
-        // Función para resolver docente
+        // Función para resolver docente con precisión quirúrgica
         const resolveTeacher = (tStr: string, courseId?: string, subjectId?: string) => {
-          if (tStr) {
-            const clean = norm(tStr);
-            const direct = (state.teachers || []).find((t: any) => {
-              const tName = norm(t.name);
-              return clean === tName || clean.includes(tName) || tName.includes(clean);
-            });
-            if (direct) return direct;
-          }
+          if (!tStr) return null;
+          const clean = norm(tStr);
+          const teachers = state.teachers || [];
 
-          // Fallback inteligente: buscar en las asignaciones previas del curso y materia
+          // 1. Coincidencia exacta
+          const exact = teachers.find((t: any) => norm(t.name) === clean);
+          if (exact) return exact;
+
+          // 2. Coincidencia inteligente usando areTeacherNamesMatching (distingue I vs II, 1 vs 2, etc.)
+          const smart = teachers.find((t: any) => areTeacherNamesMatching(t.name, tStr));
+          if (smart) return smart;
+
+          // 3. Fallback inteligente: buscar en las asignaciones previas del curso y materia
           if (courseId && subjectId) {
             const assign = (state.assignments || []).find(
               (a: any) =>
@@ -381,7 +385,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 (a.subject_id === subjectId || a.subjectId === subjectId)
             );
             if (assign) {
-              const tFromAssign = (state.teachers || []).find(
+              const tFromAssign = teachers.find(
                 (t: any) => t.id === assign.teacher_id || t.id === assign.teacherId
               );
               if (tFromAssign) return tFromAssign;
@@ -577,13 +581,53 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
     setIsSaving(true);
     try {
-      // A) Asegurar que los docentes existan en tabla teachers para evitar violación de FK
+      // A) Asegurar que todos los docentes nombrados en el Excel existan en tabla teachers
+      const missingTeacherNames = new Set<string>();
+      parsedEntries.forEach((e) => {
+        const rawName = (e.teacherName || '').trim();
+        if (!e.teacher_id && rawName && rawName !== '(Sin docente)' && rawName !== '--') {
+          missingTeacherNames.add(rawName);
+        }
+      });
+
+      if (missingTeacherNames.size > 0 && centerId) {
+        for (const rawName of missingTeacherNames) {
+          const { data: foundT } = await supabase
+            .from('teachers')
+            .select('id, name')
+            .eq('center_id', centerId)
+            .ilike('name', rawName)
+            .maybeSingle();
+
+          let targetId = foundT?.id;
+          if (!targetId) {
+            const { data: newT, error: newErr } = await supabase
+              .from('teachers')
+              .insert([{ center_id: centerId, name: rawName, hours_available: 40 }])
+              .select('id')
+              .single();
+            if (!newErr && newT) {
+              targetId = newT.id;
+            }
+          }
+
+          if (targetId) {
+            parsedEntries.forEach((e) => {
+              if ((e.teacherName || '').trim() === rawName) {
+                e.teacher_id = targetId;
+              }
+            });
+          }
+        }
+      }
+
       const uniqueTeacherIds = Array.from(
         new Set(parsedEntries.map((e) => e.teacher_id).filter(Boolean))
       );
       if (uniqueTeacherIds.length > 0 && centerId) {
         const teachersToUpsert = uniqueTeacherIds.map((tId) => {
-          const tName = state.teachers?.find((t: any) => t.id === tId)?.name || 'Docente';
+          const tObj = state.teachers?.find((t: any) => t.id === tId);
+          const tName = tObj?.name || parsedEntries.find((e) => e.teacher_id === tId)?.teacherName || 'Docente';
           return {
             id: tId,
             center_id: centerId,
