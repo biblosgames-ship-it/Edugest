@@ -227,7 +227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // hidratamos de inmediato para renderizado instantáneo (0ms) sin congelar la pantalla.
         let hasLoadedFromSnapshot = false;
         try {
-          const snapshot = await getStateSnapshot(targetCid);
+          const snapshot = await getStateSnapshot(targetCid, selectedYear || undefined);
           if (snapshot) {
             console.log('[AppContext] Stale-While-Revalidate: snapshot cargado para renderizado instantáneo:', targetCid);
             setState((prev) => ({
@@ -716,10 +716,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // 1. Cursos del año escolar activo y resolución de equivalencias
           const rawCourses = cRes.data || [];
           const activeCourses = rawCourses.filter((c: any) => {
-            if (currentFetchYear === '2026-2027') return c.school_year === '2026-2027';
-            return c.school_year === currentFetchYear || !c.school_year || c.school_year === '2025-2026';
+            if (c.school_year) return c.school_year === currentFetchYear;
+            return false;
           });
-          const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
+          const finalActiveCourses = activeCourses.length > 0
+            ? activeCourses
+            : rawCourses.filter((c: any) => !c.school_year || c.school_year === currentFetchYear);
           const activeCourseIdSet = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
           // Mapeo canónico de cursos (por nivel, grado, sección y tanda) para preservar división matutina/vespertina y cambios de turno
@@ -884,22 +886,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
                 }
 
-                if (s.school_year !== currentFetchYear || (studentCourseId && s.course_id !== studentCourseId)) {
-                  studentsToHeal2026.push({ id: s.id, course_id: studentCourseId, school_year: currentFetchYear });
+                if (!s.school_year || s.school_year === '2026-2027') {
+                  if (s.school_year !== currentFetchYear || (studentCourseId && s.course_id !== studentCourseId)) {
+                    studentsToHeal2026.push({ id: s.id, course_id: studentCourseId, school_year: currentFetchYear });
+                  }
                 }
                 s.school_year = currentFetchYear;
                 s.course_id = studentCourseId;
                 filteredStudents.push(s);
               }
             });
+          } else if (currentFetchYear === '2025-2026') {
+            // Ciclo 2025-2026: mostrar los alumnos históricos reales de 2025-2026
+            rawStudents.forEach((s: any) => {
+              const st = (s.status || '').toLowerCase().trim();
+              if (st === 'retirado' || st === 'inactivo' || st === 'expulsado') return;
+
+              const firstName = (s.names || s.first_name || '').trim();
+              const lastName = (s.first_surname || s.last_name || '').trim();
+              const secondSurname = (s.second_surname || '').trim();
+              s.names = firstName || lastName;
+              s.first_name = firstName || lastName;
+              s.first_surname = lastName || firstName;
+              s.second_surname = secondSurname;
+              s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
+
+              const key = normIdentity(s);
+              if (!key) return;
+
+              // En Génesis: no incluir alumnos que fueron inscritos por primera vez en 2026
+              const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
+              if (isGenesis && is2026New && !gradSet.has(key)) {
+                return;
+              }
+
+              // Si el registro pertenece explícitamente a un año posterior a 2025-2026 y es nuevo, ignorar
+              if (s.school_year && s.school_year > '2025-2026' && is2026New) {
+                return;
+              }
+
+              if (!seenIdentities.has(key)) {
+                seenIdentities.add(key);
+                filteredStudents.push({
+                  ...s,
+                  school_year: '2025-2026'
+                });
+              }
+            });
           } else {
-            // Ciclo 2025-2026: mostrar los 540+ alumnos históricos reales
+            // Ciclo Futuro o Genérico (ej. 2027-2028, 2028-2029 en adelante)
             rawStudents.forEach((s: any) => {
               const st = (s.status || '').toLowerCase().trim();
               if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
+              const firstName = (s.names || s.first_name || '').trim();
+              const lastName = (s.first_surname || s.last_name || '').trim();
+              const secondSurname = (s.second_surname || '').trim();
+              s.names = firstName || lastName;
+              s.first_name = firstName || lastName;
+              s.first_surname = lastName || firstName;
+              s.second_surname = secondSurname;
+              s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
+
               const key = normIdentity(s);
-              if (key && !seenIdentities.has(key)) {
+              if (!key) return;
+
+              // Un alumno pertenece al año seleccionado si fue matriculado explícitamente en este ciclo o asignado a uno de sus cursos
+              const matchesYear = s.school_year === currentFetchYear;
+              const matchesCourse = s.course_id && activeCourseIdSet.has(String(s.course_id));
+
+              if (!matchesYear && !matchesCourse) {
+                return;
+              }
+
+              if (!seenIdentities.has(key)) {
                 seenIdentities.add(key);
                 filteredStudents.push(s);
               }
@@ -1097,7 +1157,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
 
             // Guardar copia local offline de forma asíncrona
-            saveStateSnapshot(targetCid, nextState).catch((snapshotErr) => {
+            saveStateSnapshot(targetCid, nextState, currentFetchYear).catch((snapshotErr) => {
               console.warn('[AppContext] Error al guardar snapshot offline:', snapshotErr);
             });
 

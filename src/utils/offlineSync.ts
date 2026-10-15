@@ -188,7 +188,7 @@ export const clearOfflineSession = () => {
 // ==========================================
 // 2. SNAPSHOT DE DATOS ESCOLARES (LECTURA)
 // ==========================================
-export const saveStateSnapshot = async (centerId: string, data: any) => {
+export const saveStateSnapshot = async (centerId: string, data: any, schoolYear?: string) => {
   if (!centerId || !data) return;
   const snapshotData = {
     courses: data.courses || [],
@@ -206,11 +206,18 @@ export const saveStateSnapshot = async (centerId: string, data: any) => {
     cycleTimeBlocks: data.cycleTimeBlocks || []
   };
 
+  if (schoolYear) {
+    await idbSet('snapshots', `state_${centerId}_${schoolYear}`, snapshotData);
+  }
   await idbSet('snapshots', `state_${centerId}`, snapshotData);
 };
 
-export const getStateSnapshot = async (centerId: string): Promise<any | null> => {
+export const getStateSnapshot = async (centerId: string, schoolYear?: string): Promise<any | null> => {
   if (!centerId) return null;
+  if (schoolYear) {
+    const yearSpecific = await idbGet('snapshots', `state_${centerId}_${schoolYear}`);
+    if (yearSpecific) return yearSpecific;
+  }
   return await idbGet('snapshots', `state_${centerId}`);
 };
 

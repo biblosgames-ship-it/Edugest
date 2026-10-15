@@ -57,7 +57,9 @@ export const useStudents = () => {
       const rawCourses = coursesRes.data || [];
 
       const activeCourses = rawCourses.filter((c: any) => c.school_year === schoolYear);
-      const finalActiveCourses = activeCourses.length > 0 ? activeCourses : rawCourses;
+      const finalActiveCourses = activeCourses.length > 0
+        ? activeCourses
+        : rawCourses.filter((c: any) => !c.school_year || c.school_year === schoolYear);
       const activeCourseIds = new Set(finalActiveCourses.map((c: any) => String(c.id)));
 
       const normStr = (str: string) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -153,8 +155,13 @@ export const useStudents = () => {
           const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
           if (isGenesis && !is2026New && gradSet.has(key)) return;
 
-          // Si el registro pertenece explícitamente al ciclo escolar 2025-2026 y no fue reinscrito en 2026, dejar en el historial de 2025-2026 (solo aplicable a reglas estrictas de Génesis)
+          // Si el registro pertenece explícitamente al ciclo escolar 2025-2026 y no fue reinscrito en 2026, dejar en el historial de 2025-2026
           if (isGenesis && s.school_year === '2025-2026' && !is2026New && (!s.course_id || !activeCourseIds.has(String(s.course_id)))) {
+            return;
+          }
+
+          // Si un registro pertenece explícitamente a un año futuro, no incluirlo en 2026-2027
+          if (s.school_year && s.school_year > '2026-2027' && (!s.course_id || !activeCourseIds.has(String(s.course_id)))) {
             return;
           }
 
@@ -185,14 +192,68 @@ export const useStudents = () => {
             unified.push(s);
           }
         });
+      } else if (schoolYear === '2025-2026') {
+        // Ciclo 2025-2026: mostrar los alumnos históricos reales de 2025-2026
+        raw.forEach((s: any) => {
+          const st = (s.status || '').toLowerCase().trim();
+          if (st === 'retirado' || st === 'inactivo' || st === 'expulsado') return;
+
+          const firstName = (s.names || s.first_name || '').trim();
+          const lastName = (s.first_surname || s.last_name || '').trim();
+          const secondSurname = (s.second_surname || '').trim();
+          s.names = firstName || lastName;
+          s.first_name = firstName || lastName;
+          s.first_surname = lastName || firstName;
+          s.second_surname = secondSurname;
+          s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
+
+          const key = normIdentity(s);
+          if (!key) return;
+
+          // En Génesis: no incluir alumnos que fueron inscritos por primera vez en 2026
+          const is2026New = (s.created_at && s.created_at >= '2026-08-01') || s.school_year === '2026-2027';
+          if (isGenesis && is2026New && !gradSet.has(key)) {
+            return;
+          }
+
+          if (s.school_year && s.school_year > '2025-2026' && is2026New) {
+            return;
+          }
+
+          if (!seenIdentities.has(key)) {
+            seenIdentities.add(key);
+            unified.push({
+              ...s,
+              school_year: '2025-2026'
+            });
+          }
+        });
       } else {
-        // Ciclo 2025-2026: mostrar los 540+ alumnos históricos reales
+        // Ciclo Futuro o Genérico (ej. 2027-2028, 2028-2029 en adelante)
         raw.forEach((s: any) => {
           const st = (s.status || '').toLowerCase().trim();
           if (st === 'retirado' || st === 'inactivo' || st === 'graduado' || st === 'egresado' || st === 'expulsado') return;
 
+          const firstName = (s.names || s.first_name || '').trim();
+          const lastName = (s.first_surname || s.last_name || '').trim();
+          const secondSurname = (s.second_surname || '').trim();
+          s.names = firstName || lastName;
+          s.first_name = firstName || lastName;
+          s.first_surname = lastName || firstName;
+          s.second_surname = secondSurname;
+          s.last_name = `${lastName} ${secondSurname}`.trim() || firstName;
+
           const key = normIdentity(s);
-          if (key && !seenIdentities.has(key)) {
+          if (!key) return;
+
+          const matchesYear = s.school_year === schoolYear;
+          const matchesCourse = s.course_id && activeCourseIds.has(String(s.course_id));
+
+          if (!matchesYear && !matchesCourse) {
+            return;
+          }
+
+          if (!seenIdentities.has(key)) {
             seenIdentities.add(key);
             unified.push(s);
           }
