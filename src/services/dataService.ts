@@ -565,6 +565,9 @@ export const dataService = {
     if (data.duration_hours) {
       directTags.push(`DURATION_HOURS:${data.duration_hours}`);
     }
+    if (data.category) {
+      directTags.push(`CATEGORY:${data.category}`);
+    }
 
     const mergedRoles = Array.from(new Set([...(data.target_roles || []), ...directTags]));
 
@@ -736,6 +739,9 @@ export const dataService = {
         c.valid_until = new Date(createdMs + durHours * 3600 * 1000).toISOString();
       }
 
+      const cat = roles.find((r: string) => typeof r === 'string' && r.startsWith('CATEGORY:'))?.replace('CATEGORY:', '');
+      if (cat && !c.category) c.category = cat;
+
       c.target_roles = roles.filter((r: string) =>
         typeof r === 'string' &&
         !r.startsWith('USER:') &&
@@ -744,7 +750,8 @@ export const dataService = {
         !r.startsWith('STUDENT_NAME:') &&
         !r.startsWith('VALID_UNTIL:') &&
         !r.startsWith('EXCUSE_COLOR:') &&
-        !r.startsWith('DURATION_HOURS:')
+        !r.startsWith('DURATION_HOURS:') &&
+        !r.startsWith('CATEGORY:')
       );
     });
 
@@ -828,15 +835,39 @@ export const dataService = {
         if (c.sender_id === userId) return true;
         if ((c.target_user_ids || []).includes(userId)) return true;
 
+        // FILTRO DE SEGURIDAD ESTRICTA: Las comunicaciones financieras (recibos, cobros, facturas)
+        // son confidenciales entre Administración/Finanzas y los Padres/Tutores. NUNCA deben llegar a los docentes.
+        const isFinancial =
+          c.category === 'finance' ||
+          (c.motive || '').toLowerCase().includes('recibo') ||
+          (c.motive || '').toLowerCase().includes('pago') ||
+          (c.motive || '').toLowerCase().includes('factura') ||
+          (c.motive || '').toLowerCase().includes('mensualidad') ||
+          (c.motive || '').toLowerCase().includes('colegiatura') ||
+          (c.motive || '').toLowerCase().includes('cobro');
+
+        if (isFinancial) {
+          return false;
+        }
+
         const isDirectTeacher =
           (c.target_teachers || []).includes(userId) ||
           (c.target_teachers || []).some((tid: string) => candidateTeacherIds.has(tid));
         if (isDirectTeacher) return true;
 
-        // Si es un mensaje directo a un estudiante que pertenece a sus cursos
+        // Si es un mensaje directo a un estudiante que pertenece a sus cursos (SOLO excusas médicas o avisos académicos)
         const targetCourses = c.target_courses || [];
         const matchesTeacherCourse = targetCourses.some((cid: string) => teacherCourseIds.includes(cid));
-        if ((c.target_student_ids || []).length > 0 && matchesTeacherCourse) {
+        const isExcuseOrAcademic =
+          (c.motive || '').toLowerCase().includes('excus') ||
+          (c.motive || '').toLowerCase().includes('ausenc') ||
+          (c.motive || '').toLowerCase().includes('médic') ||
+          (c.motive || '').toLowerCase().includes('salud') ||
+          (c.motive || '').toLowerCase().includes('permiso') ||
+          (c.motive || '').toLowerCase().includes('academ') ||
+          (c.motive || '').toLowerCase().includes('aviso');
+
+        if ((c.target_student_ids || []).length > 0 && matchesTeacherCourse && isExcuseOrAcademic) {
           return true;
         }
 
@@ -844,7 +875,24 @@ export const dataService = {
         const hasRoles = targetRoles.length > 0;
         const hasCourses = targetCourses.length > 0;
 
-        const roleMatches = !hasRoles || targetRoles.includes('Docentes') || targetRoles.includes('Toda la comunidad');
+        // Si la comunicación está dirigida exclusivamente a Padres o Alumnos (sin incluir Docentes), no debe mostrarse al docente
+        const explicitlyExcludesTeachers =
+          hasRoles &&
+          !targetRoles.some((r: string) =>
+            ['docentes', 'profesores', 'docente', 'profesor', 'toda la comunidad', 'todos', 'all'].includes(
+              (r || '').toLowerCase()
+            )
+          );
+
+        if (explicitlyExcludesTeachers) {
+          return false;
+        }
+
+        const roleMatches = !hasRoles || targetRoles.some((r: string) =>
+          ['docentes', 'profesores', 'docente', 'profesor', 'toda la comunidad', 'todos', 'all'].includes(
+            (r || '').toLowerCase()
+          )
+        );
         const courseMatches = !hasCourses || matchesTeacherCourse;
 
         return roleMatches && courseMatches;

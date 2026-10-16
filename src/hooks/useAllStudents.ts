@@ -22,14 +22,33 @@ export const useAllStudents = () => {
         let from = 0;
         const step = 1000;
         while (true) {
-          const { data, error } = await queryFn(from, from + step - 1);
-          if (error) {
-            console.warn('[useAllStudents] Error fetching paginated chunk:', error);
+          let chunkData: any[] | null = null;
+          let chunkError: any = null;
+
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const res = await queryFn(from, from + step - 1);
+              if (!res.error) {
+                chunkData = res.data;
+                chunkError = null;
+                break;
+              }
+              chunkError = res.error;
+            } catch (e) {
+              chunkError = e;
+            }
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+            }
+          }
+
+          if (chunkError) {
+            console.warn('[useAllStudents] Error fetching paginated chunk tras reintentos:', chunkError);
             break;
           }
-          if (!data || data.length === 0) break;
-          allRows = allRows.concat(data);
-          if (data.length < step) break;
+          if (!chunkData || chunkData.length === 0) break;
+          allRows = allRows.concat(chunkData);
+          if (chunkData.length < step) break;
           from += step;
         }
         return { data: allRows, error: null };

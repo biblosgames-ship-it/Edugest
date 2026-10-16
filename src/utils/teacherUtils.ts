@@ -77,28 +77,46 @@ export const areTeacherNamesMatching = (name1?: string | null, name2?: string | 
   const t1 = stripTitleTokens(rawTokens1);
   const t2 = stripTitleTokens(rawTokens2);
 
-  if (t1.length === 0 || t2.length === 0) return false;
+  const cleanTokens1 = t1.map((tok) => tok.replace(/[^a-z0-9]/g, '')).filter((t) => t && !TITLES.has(t) && t !== 'no' && t !== 'num');
+  const cleanTokens2 = t2.map((tok) => tok.replace(/[^a-z0-9]/g, '')).filter((t) => t && !TITLES.has(t) && t !== 'no' && t !== 'num');
 
-  // Comparación limpia sin títulos
-  if (t1.join('') === t2.join('')) return true;
+  if (cleanTokens1.length === 0 || cleanTokens2.length === 0) return false;
+  if (cleanTokens1.join('') === cleanTokens2.join('')) return true;
 
-  // Si el primer nombre real coincide
-  if (t1[0] === t2[0]) {
-    if (t1.length === 1 && t2.length === 1) return true;
+  // Si todas las palabras del nombre más corto están presentes en el más largo (ej: "Jose Reyes" en "Jose Luis Reyes Mercedes")
+  const shorter = cleanTokens1.length <= cleanTokens2.length ? cleanTokens1 : cleanTokens2;
+  const longer = cleanTokens1.length <= cleanTokens2.length ? cleanTokens2 : cleanTokens1;
+  if (shorter.length >= 2 && shorter.every((tok) => longer.includes(tok))) {
+    return true;
+  }
 
-    const sur1 = t1.slice(1);
-    const sur2 = t2.slice(1);
+  // Verificación de iniciales intermedias (ej: "Junior A. Ubiera" vs "Junior Alexis Ubiera")
+  if (cleanTokens1.length === cleanTokens2.length && cleanTokens1.length >= 2) {
+    let matchesWithInitials = true;
+    for (let i = 0; i < cleanTokens1.length; i++) {
+      const a = cleanTokens1[i];
+      const b = cleanTokens2[i];
+      if (a === b) continue;
+      if ((a.length === 1 && b.startsWith(a)) || (b.length === 1 && a.startsWith(b))) continue;
+      matchesWithInitials = false;
+      break;
+    }
+    if (matchesWithInitials) return true;
+  }
 
-    // Comparten al menos un apellido
-    if (sur1.length > 0 && sur2.length > 0) {
-      const hasCommonSurname = sur1.some((s) => sur2.includes(s));
-      if (hasCommonSurname) return true;
+  // Si el primer nombre coincide y comparten apellidos reales
+  if (cleanTokens1[0] === cleanTokens2[0]) {
+    const last1 = cleanTokens1[cleanTokens1.length - 1];
+    const last2 = cleanTokens2[cleanTokens2.length - 1];
+
+    // Si tienen apellidos finales completamente distintos que no aparecen en el otro nombre, NUNCA son la misma persona
+    if (!longer.includes(last1) || !longer.includes(last2)) {
+      return false;
     }
 
-    // Todas las palabras del nombre más corto están en el más largo
-    const shorter = t1.length <= t2.length ? t1 : t2;
-    const longer = t1.length <= t2.length ? t2 : t1;
-    if (shorter.length >= 2 && shorter.every((tok) => longer.includes(tok))) {
+    const sur1 = cleanTokens1.slice(-2);
+    const sur2 = cleanTokens2.slice(-2);
+    if (sur1.some((s) => sur2.includes(s))) {
       return true;
     }
   }

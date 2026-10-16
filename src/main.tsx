@@ -77,12 +77,16 @@ window.addEventListener('error', (event) => {
   }
 });
 
-// Crear el cliente de React Query
+// Crear el cliente de React Query optimizado para resiliencia en redes escolares
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutos de cache por defecto
-      retry: 1
+      staleTime: 1000 * 60 * 15, // 15 minutos de cache activo
+      gcTime: 1000 * 60 * 60 * 24, // 24 horas retenido en memoria antes de ser descartado
+      retry: 3, // Reintentar hasta 3 veces antes de marcar error
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // 1s, 2s, 4s...
+      refetchOnWindowFocus: false, // Evita saturar la conexión cada vez que cambia de ventana
+      refetchOnReconnect: true // Auto-recargar datos en cuanto vuelve la conexión
     }
   }
 });

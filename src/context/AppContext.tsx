@@ -200,6 +200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
   const lastFetchedYearRef = useRef<string | null>(null);
   const userRef = useRef<any | null>(null);
+  const refreshDataRef = useRef<any>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -272,6 +273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           // Helper para consultar todas las páginas en tablas grandes superando el límite de 1000 filas de PostgREST
+          // con reintentos automáticos resistentes a fallas de red
           const fetchAllPaginated = async (
             queryFn: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }> | any
           ) => {
@@ -279,34 +281,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             let from = 0;
             const step = 1000;
             while (true) {
-              const { data, error } = await queryFn(from, from + step - 1);
-              if (error) {
-                console.warn('[AppContext] Error fetching paginated chunk:', error);
+              let chunkData: any[] | null = null;
+              let chunkError: any = null;
+
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                  const res = await queryFn(from, from + step - 1);
+                  if (!res.error) {
+                    chunkData = res.data;
+                    chunkError = null;
+                    break;
+                  }
+                  chunkError = res.error;
+                } catch (e) {
+                  chunkError = e;
+                }
+                if (attempt < 2) {
+                  await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+                }
+              }
+
+              if (chunkError) {
+                console.warn('[AppContext] Error fetching paginated chunk tras reintentos:', chunkError);
                 break;
               }
-              if (!data || data.length === 0) break;
-              allRows = allRows.concat(data);
-              if (data.length < step) break;
+              if (!chunkData || chunkData.length === 0) break;
+              allRows = allRows.concat(chunkData);
+              if (chunkData.length < step) break;
               from += step;
             }
             return { data: allRows, error: null };
           };
 
+          const safeQuery = async (p: Promise<any> | PromiseLike<any>, fallback: any = []) => {
+            try {
+              const res = await p;
+              if (res?.error) {
+                console.warn('[AppContext] Consulta secundaria con advertencia:', res.error);
+                return { data: res.data ?? fallback, error: null };
+              }
+              return { data: res?.data ?? fallback, error: null };
+            } catch (err) {
+              console.warn('[AppContext] Excepción en consulta secundaria:', err);
+              return { data: fallback, error: null };
+            }
+          };
+
           // --- FASE 1A: METADATOS ESENCIALES RÁPIDOS (Centro, Licencia y Años Lectivos) ---
           const [centRes, licRes, syRes] = await Promise.all([
-            supabase.from('centers').select('*').eq('id', targetCid).single(),
-            supabase
-              .from('saas_licenses')
-              .select('*, plan:saas_plans(*)')
-              .eq('used_by_center', targetCid)
-              .maybeSingle(),
+            safeQuery(supabase.from('centers').select('*').eq('id', targetCid).single(), null),
+            safeQuery(
+              supabase
+                .from('saas_licenses')
+                .select('*, plan:saas_plans(*)')
+                .eq('used_by_center', targetCid)
+                .maybeSingle(),
+              null
+            ),
             resolvedSyResData
               ? Promise.resolve({ data: resolvedSyResData, error: null })
-              : supabase
-                  .from('school_years')
-                  .select('*')
-                  .eq('center_id', targetCid)
-                  .order('name', { ascending: false })
+              : safeQuery(
+                  supabase
+                    .from('school_years')
+                    .select('*')
+                    .eq('center_id', targetCid)
+                    .order('name', { ascending: false }),
+                  []
+                )
           ]);
 
           if (centRes.data) {
@@ -370,27 +411,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fetchAllPaginated((from, to) =>
               supabase.from('teachers').select('*').eq('center_id', targetCid).range(from, to)
             ),
-            supabase.from('academic_requirements').select('*').eq('center_id', targetCid),
-            supabase.from('teacher_preferences').select('*').eq('center_id', targetCid),
-            supabase.from('break_preferences').select('*').eq('center_id', targetCid),
-            supabase
-              .from('winter_schedule_preferences')
-              .select('*')
-              .eq('center_id', targetCid)
-              .single(),
-            supabase.from('rooms').select('*').eq('center_id', targetCid),
-            supabase.from('time_blocks').select('*').eq('center_id', targetCid),
+            safeQuery(supabase.from('academic_requirements').select('*').eq('center_id', targetCid)),
+            safeQuery(supabase.from('teacher_preferences').select('*').eq('center_id', targetCid)),
+            safeQuery(supabase.from('break_preferences').select('*').eq('center_id', targetCid)),
+            safeQuery(
+              supabase
+                .from('winter_schedule_preferences')
+                .select('*')
+                .eq('center_id', targetCid)
+                .single(),
+              null
+            ),
+            safeQuery(supabase.from('rooms').select('*').eq('center_id', targetCid)),
+            safeQuery(supabase.from('time_blocks').select('*').eq('center_id', targetCid)),
             fetchAllPaginated((from, to) =>
               supabase.from('schedule_entries').select('*').eq('center_id', targetCid).range(from, to)
             ),
-            supabase
-              .from('performance_alerts')
-              .select('*')
-              .eq('center_id', targetCid)
-              .order('date', { ascending: false })
-              .limit(200),
-            supabase.from('level_schedules').select('*').eq('center_id', targetCid),
-            supabase.from('fixed_events').select('*').eq('center_id', targetCid),
+            safeQuery(
+              supabase
+                .from('performance_alerts')
+                .select('*')
+                .eq('center_id', targetCid)
+                .order('date', { ascending: false })
+                .limit(200)
+            ),
+            safeQuery(supabase.from('level_schedules').select('*').eq('center_id', targetCid)),
+            safeQuery(supabase.from('fixed_events').select('*').eq('center_id', targetCid)),
             fetchAllPaginated((from, to) =>
               supabase
                 .from('students')
@@ -421,12 +467,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return { data: [], error: null };
               }
             })(),
-            supabase.from('priority_preferences').select('*').eq('center_id', targetCid)
+            safeQuery(supabase.from('priority_preferences').select('*').eq('center_id', targetCid))
           ]);
 
           const normalize = (t: any, priority: number) => {
             const name = (t.name || t.full_name || 'Sin Nombre').trim();
-            let rawRole = (t.team || t.role || t.cargo || t.position || '').toLowerCase();
+            let rawRole = (
+              t.team ||
+              t.role ||
+              t.cargo ||
+              t.position ||
+              t.area ||
+              ''
+            ).toLowerCase();
 
             const isStudent =
               rawRole.includes('student') ||
@@ -466,6 +519,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               rawRole.includes('gest') ||
               rawRole.includes('direc') ||
               rawRole.includes('coord') ||
+              rawRole.includes('orientad') ||
+              rawRole.includes('psicolog') ||
               rawRole.includes('management');
 
             const isTeacher =
@@ -1203,6 +1258,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [profile?.center_id, selectedYear]
   );
 
+  useEffect(() => {
+    refreshDataRef.current = refreshData;
+  }, [refreshData]);
+
   const addSchoolYear = async (year: any) => {
     if (!profile?.center_id) return;
     const { error } = await supabase
@@ -1319,6 +1378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setUser(session.user);
           saveCachedUser(session.user);
         }
+        // Auto-recarga inmediata de datos al restablecerse la conexión (evita tener que pulsar Cmd+R)
+        refreshDataRef.current?.(undefined, true)?.catch?.(() => {});
       }).catch((err) => {
         console.warn('[AppContext] Error al reconectar sesión:', err);
       });

@@ -282,13 +282,14 @@ ${notesStr ? `\n📌 *Nota:* ${notesStr}` : ''}
         sender_name: profile?.full_name || centerTitle,
         motive: `Recibo de Pago ${receiptNoStr} - ${studentFullName}`,
         message: messageContent,
+        category: 'finance',
         target_roles: ['Padres', 'Alumnos', 'parent', 'student'],
         target_student_ids: [student.id],
         target_student_id: student.id,
         target_student_name: studentFullName,
         target_parent_ids: parentProfileIds,
         target_user_ids: parentProfileIds,
-        target_courses: student.course_id ? [student.course_id] : []
+        target_courses: []
       });
 
       setInternalMsgStatus('sent');

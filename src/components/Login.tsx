@@ -1,14 +1,29 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Sparkles, ShieldCheck, WifiOff, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { SEO } from './SEO';
 import { useSupabase } from '../context/AppContext';
 import { getOfflineSession } from '../utils/offlineSync';
+import { LandingPage } from './LandingPage';
 
 export const Login = () => {
   const [loading, setLoading] = useState(false);
+  const [showLanding, setShowLanding] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.hash === '#conoce-mas' || window.location.hash === '#landing';
+    }
+    return false;
+  });
   const { loginOffline } = useSupabase();
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setShowLanding(window.location.hash === '#conoce-mas' || window.location.hash === '#landing');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const offlineSession = useMemo(() => {
     return getOfflineSession();
@@ -30,6 +45,19 @@ export const Login = () => {
   const handleOfflineEnter = () => {
     loginOffline();
   };
+
+  if (showLanding) {
+    return (
+      <LandingPage
+        onBackToLogin={() => {
+          setShowLanding(false);
+          if (typeof window !== 'undefined') {
+            window.history.pushState(null, '', window.location.pathname);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden p-6">
@@ -119,6 +147,23 @@ export const Login = () => {
             <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-black uppercase tracking-wider">
               <ShieldCheck size={14} className="text-emerald-500" />
               Acceso Seguro y Encriptado
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLanding(true);
+                  if (typeof window !== 'undefined') {
+                    window.history.pushState(null, '', '#conoce-mas');
+                  }
+                }}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-brand-blue/20 via-indigo-900/30 to-brand-accent/20 hover:from-brand-blue/30 hover:to-brand-accent/30 text-white border border-brand-blue/30 hover:border-brand-accent/60 text-xs font-black uppercase tracking-wider transition-all shadow-lg hover:shadow-brand-accent/20 group cursor-pointer active:scale-95 flex items-center justify-center gap-2.5"
+              >
+                <Sparkles size={15} className="text-brand-accent group-hover:rotate-12 transition-transform" />
+                <span>Conoce más de EduGest</span>
+                <ArrowRight size={15} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+              </button>
             </div>
           </div>
 

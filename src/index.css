@@ -78,6 +78,25 @@
   animation: gradient-x 15s ease infinite;
 }
 
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-infinite {
+  display: flex;
+  width: max-content;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-marquee-infinite:hover {
+  animation-play-state: paused;
+}
+
 .glass-premium {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(20px);

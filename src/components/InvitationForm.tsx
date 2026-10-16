@@ -323,7 +323,7 @@ export const InvitationForm = () => {
           if (s.email && s.email.trim().toLowerCase() !== user.email?.trim().toLowerCase()) {
             return false;
           }
-          const t = (s.team || '').toLowerCase();
+          const t = (s.team || s.role || s.position || s.area || '').toLowerCase();
           if (targetTeam === 'support') {
             return t.includes('support') || t.includes('apoyo') || t.includes('cons');
           } else if (targetTeam === 'teacher') {
@@ -337,6 +337,8 @@ export const InvitationForm = () => {
               t.includes('admin') ||
               t.includes('secret') ||
               t.includes('coord') ||
+              t.includes('orientad') ||
+              t.includes('psicolog') ||
               t.includes('management_teacher')
             );
           }

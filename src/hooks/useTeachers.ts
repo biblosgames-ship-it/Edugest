@@ -50,6 +50,8 @@ export const useTeachers = () => {
         rawRole.includes('gest') ||
         rawRole.includes('direc') ||
         rawRole.includes('coord') ||
+        rawRole.includes('orientad') ||
+        rawRole.includes('psicolog') ||
         rawRole.includes('management');
 
       const isTeacher =
@@ -126,12 +128,15 @@ export const useTeachers = () => {
             member.role ||
             member.cargo ||
             member.position ||
+            member.area ||
             ''
           ).toLowerCase();
           const mIsManagement =
             mRole.includes('gest') ||
             mRole.includes('direc') ||
             mRole.includes('coord') ||
+            mRole.includes('orientad') ||
+            mRole.includes('psicolog') ||
             mRole.includes('management');
           const mIsTeacher =
             mRole.includes('docente') ||
@@ -182,13 +187,55 @@ export const useTeachers = () => {
         }
       }
 
-      const { data, error } = await supabase
-        .from('staff')
-        .insert([{ ...newTeacher, center_id: centerId }])
+      let staffRow: any = null;
+      let lastError: any = null;
+
+      try {
+        const { data, error } = await supabase
+          .from('staff')
+          .insert([{ ...newTeacher, center_id: centerId }])
+          .select()
+          .single();
+        if (error) {
+          lastError = error;
+          console.warn('Error insertando en staff:', error);
+        } else {
+          staffRow = data;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn('Excepción insertando en staff:', err);
+      }
+
+      // Sincronizar también con la tabla teachers para módulos de horarios y listados generales
+      const resolvedId = staffRow?.id || crypto.randomUUID();
+      const teacherName = (newTeacher.name || newTeacher.full_name || '').trim();
+
+      const { data: teacherData, error: tErr } = await supabase
+        .from('teachers')
+        .upsert({
+          id: resolvedId,
+          center_id: centerId,
+          name: teacherName,
+          area: newTeacher.position || (isManagement ? 'Equipo de Gestión' : 'General'),
+          hours_available: 40
+        })
         .select()
         .single();
-      if (error) throw error;
-      return data;
+
+      if (tErr) {
+        console.warn('Aviso sincronizando en tabla teachers:', tErr);
+      }
+
+      if (!staffRow && !teacherData) {
+        throw new Error(
+          lastError?.message ||
+          tErr?.message ||
+          'No se pudo registrar el colaborador en la base de datos.'
+        );
+      }
+
+      return staffRow || teacherData || { id: resolvedId, ...newTeacher };
     },
     onSuccess: () => {
       refreshData(centerId, true);

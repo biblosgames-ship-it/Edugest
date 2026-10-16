@@ -124,10 +124,12 @@ export const ControlDashboard = () => {
 
       // Filtrado por Tanda
       if (activeTanda !== 'Todas') {
+        const normTanda = (course.tanda || '').toLowerCase();
+        const isExtendida = normTanda.includes('extendida') || normTanda.includes('jornada');
         if (activeTanda === 'Matutina') {
-          if (course.tanda !== 'Matutina' && course.tanda !== 'Extendida') return false;
+          if (!normTanda.includes('matutin') && !isExtendida) return false;
         } else if (activeTanda === 'Vespertina') {
-          if (course.tanda !== 'Vespertina') return false;
+          if (!normTanda.includes('vespertin') && !isExtendida) return false;
         }
       }
 
