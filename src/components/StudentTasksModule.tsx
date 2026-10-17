@@ -62,6 +62,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
   const [course, setCourse] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [taskSubmissions, setTaskSubmissions] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -183,12 +184,15 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
         if (currentCourse) {
           setCourse(currentCourse);
-          const [tasksData, annData] = await Promise.all([
+          const targetStudentId = profile?.student_id || profile?.id;
+          const [tasksData, annData, subsData] = await Promise.all([
             dataService.getTasks(currentCourse.id),
-            dataService.getAnnouncements(currentCourse.id)
+            dataService.getAnnouncements(currentCourse.id),
+            targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([])
           ]);
           setTasks(tasksData || []);
           setAnnouncements(annData || []);
+          setTaskSubmissions(subsData || []);
         }
       } catch (err) {
         console.error('[StudentTasksModule] Error fetching course tasks & announcements:', err);
@@ -298,15 +302,36 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     return stats;
   }, [courseSubjects, tasks, announcements]);
 
-  // Total global
+  // Mapa de entregas de tareas del estudiante
+  const submissionsMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    (taskSubmissions || []).forEach((sub) => {
+      if (sub.task_id) map[sub.task_id] = sub;
+    });
+    return map;
+  }, [taskSubmissions]);
+
+  // Total global y porcentaje de cumplimiento
   const globalStats = useMemo(() => {
-    const pending = tasks.filter((t: any) => !t.due_date || new Date(t.due_date) >= new Date()).length;
+    const total = tasks.length;
+    const completed = tasks.filter((t) => submissionsMap[t.id]?.status === 'completed').length;
+    const missing = tasks.filter(
+      (t) =>
+        submissionsMap[t.id]?.status === 'uncompleted' ||
+        (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
+    ).length;
+    const pending = Math.max(0, total - completed - missing);
+    const compliancePct = total > 0 ? Math.round((completed / total) * 100) : 100;
+
     return {
-      totalTasks: tasks.length,
+      totalTasks: total,
+      completedTasks: completed,
+      missingTasks: missing,
       pendingTasks: pending,
+      compliancePct: compliancePct,
       announcements: announcements.length
     };
-  }, [tasks, announcements]);
+  }, [tasks, submissionsMap, announcements]);
 
   // Materia activa
   const activeSubjectData = useMemo(() => {
@@ -456,30 +481,38 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
         </div>
 
         {/* Resumen de Métricas Rápidas */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/10">
-          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/10">
+          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
             <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
               Materias Activas
             </span>
-            <span className="text-xl font-black text-white">{courseSubjects.length}</span>
+            <span className="text-lg font-black text-white">{courseSubjects.length}</span>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/5">
+          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
             <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Tareas Pendientes
+              Cumplimiento
             </span>
-            <span className="text-xl font-black text-amber-400">{globalStats.pendingTasks}</span>
+            <span className={`text-lg font-black ${globalStats.compliancePct >= 80 ? 'text-emerald-400' : globalStats.compliancePct >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
+              {globalStats.compliancePct}%
+            </span>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/5">
+          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
+              Entregadas
+            </span>
+            <span className="text-lg font-black text-emerald-400">{globalStats.completedTasks}</span>
+          </div>
+          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
+              Por Entregar
+            </span>
+            <span className="text-lg font-black text-amber-400">{globalStats.pendingTasks}</span>
+          </div>
+          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
             <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
               Total de Tareas
             </span>
-            <span className="text-xl font-black text-white">{globalStats.totalTasks}</span>
-          </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Anuncios del Curso
-            </span>
-            <span className="text-xl font-black text-indigo-200">{globalStats.announcements}</span>
+            <span className="text-lg font-black text-white">{globalStats.totalTasks}</span>
           </div>
         </div>
       </div>
@@ -851,15 +884,38 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                             )}
                           </div>
 
-                          <span
-                            className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                              isLate
-                                ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                                : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                            }`}
-                          >
-                            {isLate ? 'VENCIDA' : 'PENDIENTE'}
-                          </span>
+                          {(() => {
+                            const sub = submissionsMap[t.id];
+                            const isCompleted = sub?.status === 'completed';
+                            const isUncompleted = sub?.status === 'uncompleted';
+
+                            if (isCompleted) {
+                              return (
+                                <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  ✓ ENTREGADA {sub.score !== null && sub.score !== undefined ? `• ${sub.score}/100` : ''}
+                                </span>
+                              );
+                            }
+                            if (isUncompleted) {
+                              return (
+                                <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs">
+                                  ✕ NO ENTREGADA
+                                </span>
+                              );
+                            }
+                            if (isLate) {
+                              return (
+                                <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-100">
+                                  VENCIDA
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                                ⏳ POR ENTREGAR
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Título de la tarea */}
@@ -896,6 +952,12 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                               className="text-xs sm:text-sm font-medium leading-relaxed"
                               allowExpand={true}
                             />
+                          </div>
+                        )}
+
+                        {submissionsMap[t.id]?.feedback && (
+                          <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-xs">
+                            <span className="font-black text-emerald-800">Nota del docente:</span> {submissionsMap[t.id].feedback}
                           </div>
                         )}
                       </div>

@@ -495,12 +495,18 @@ export const useFinance = (options?: {
       if (!invs) return;
 
       for (const inv of invs) {
-        let newAmount = Number(inv.amount_original);
+        let newAmount = Number(inv.amount_original ?? inv.amount_final ?? 0);
         let discount = 0;
 
-        // Solo aplicar si aplica a este concepto
-        const isEnrollment = inv.concept.toLowerCase().includes('inscripción');
-        const isMonthly = inv.concept.toLowerCase().includes('mensualidad');
+        // Solo aplicar si aplica a este concepto (incluyendo 'Cuota 01', 'Mensualidad', 'Inscripción')
+        const conceptLower = String(inv.concept || '').toLowerCase();
+        const isEnrollment =
+          conceptLower.includes('inscripción') || conceptLower.includes('inscripcion');
+        const isMonthly =
+          !inv.product_id &&
+          (conceptLower.includes('mensualidad') ||
+            conceptLower.includes('cuota') ||
+            conceptLower.includes('colegiatura'));
 
         const shouldApply =
           scholarship.applies_to === 'both' ||

@@ -256,7 +256,7 @@ export const SaaSAdminPanel: React.FC = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (isRetry = false) => {
     setIsLoading(true);
     setFetchError(null);
     try {
@@ -276,6 +276,13 @@ export const SaaSAdminPanel: React.FC = () => {
       console.error('Error fetching SaaS data:', error);
       if (error.name === 'AbortError' || error.message?.includes('Lock was stolen')) {
         // Ignorar silenciosamente ya que otra consulta paralela resolverá y cargará la información
+        return;
+      }
+      // Reintento automático silencioso tras 1.2 segundos si hubo un microcorte de conexión o token en refresco
+      if (!isRetry && (error.message?.includes('Failed to fetch') || error.message?.includes('fetch failed') || error.name === 'TypeError')) {
+        setTimeout(() => {
+          fetchData(true);
+        }, 1200);
         return;
       }
       const errMsg = error.message || 'Error de conexión con el servidor';

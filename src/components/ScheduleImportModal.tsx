@@ -58,6 +58,61 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
 
   const centerId = profile?.center_id || state.courses?.[0]?.center_id;
+  const backupKey = `edugens_schedule_backup_${centerId}_${schoolYear || '2026-2027'}`;
+  const [hasBackup, setHasBackup] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem(`edugens_schedule_backup_${profile?.center_id || state.courses?.[0]?.center_id}_${schoolYear || '2026-2027'}`));
+    } catch {
+      return false;
+    }
+  });
+
+  const handleRestoreBackup = async () => {
+    try {
+      const raw = localStorage.getItem(backupKey);
+      if (!raw) {
+        toast.error('No hay ninguna copia de respaldo guardada para este centro.');
+        return;
+      }
+      const bData = JSON.parse(raw);
+      if (
+        !confirm(
+          `¿Deseas restaurar la copia de respaldo de ${bData.entries?.length || 0} clases guardada el ${new Date(
+            bData.timestamp
+          ).toLocaleString()}?\n\nEsta acción revertirá las asignaciones de los cursos afectados a su estado previo.`
+        )
+      ) {
+        return;
+      }
+      setIsSaving(true);
+      await supabase
+        .from('schedule_entries')
+        .delete()
+        .eq('center_id', centerId)
+        .eq('school_year', bData.schoolYear)
+        .in('course_id', bData.courseIds);
+
+      const chunkSize = 200;
+      for (let i = 0; i < (bData.entries || []).length; i += chunkSize) {
+        const chunk = bData.entries.slice(i, i + chunkSize);
+        let { error: insErr } = await supabase.from('schedule_entries').insert(chunk);
+        if (insErr && (insErr.message?.includes('is_locked') || insErr.code === 'PGRST204')) {
+          const fallbackChunk = chunk.map(({ is_locked, ...rest }: any) => rest);
+          insErr = (await supabase.from('schedule_entries').insert(fallbackChunk)).error;
+        }
+        if (insErr) throw insErr;
+      }
+
+      toast.success('✅ ¡Horario restaurado exitosamente desde la copia de respaldo!');
+      await refreshData(undefined, true);
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Error al restaurar respaldo: ' + (err.message || err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Cursos del centro para la tanda
   const relevantCourses = useMemo(() => {
@@ -251,11 +306,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
         const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
-        // Función para resolver curso
+        // Función para resolver curso con alta tolerancia
         const resolveCourse = (courseStr: string) => {
           if (!courseStr) return null;
           const clean = norm(courseStr);
-          return (state.courses || []).find((c: any) => {
+          const allCourses = state.courses || [];
+
+          // 1. Coincidencia directa o por inclusión
+          const direct = allCourses.find((c: any) => {
             const cGradeSec = norm(`${c.grade} ${c.section || ''}`);
             const cGrade = norm(c.grade);
             return (
@@ -265,21 +323,61 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               clean === cGrade
             );
           });
+          if (direct) return direct;
+
+          // 2. Extracción inteligente de grado y sección tolerando comillas y modalidades (ej. "4to Sec. Matematicas \"B\"")
+          const sanitized = clean.replace(/[\"\'\.\,\(\)\-]/g, ' ').replace(/\s+/g, ' ').trim();
+          const gradeMatch = sanitized.match(/(\d+)\s*(?:ro|ero|do|to|er|no)?/i);
+          const gradeNum = gradeMatch ? parseInt(gradeMatch[1], 10) : null;
+
+          // Buscar sección (letra única A-Z)
+          const secMatch = sanitized.match(/\b([a-z])\b/i);
+          const section = secMatch ? secMatch[1].toUpperCase() : null;
+
+          if (gradeNum && section) {
+            const match = allCourses.find((c: any) => {
+              const cGradeNumMatch = norm(c.grade).match(/(\d+)/);
+              const cGradeNum = cGradeNumMatch ? parseInt(cGradeNumMatch[1], 10) : null;
+              const cSec = (c.section || '').toUpperCase().trim();
+              return cGradeNum === gradeNum && cSec === section;
+            });
+            if (match) return match;
+          }
+
+          // 3. Tolerancia de "1ero" vs "1ro", "2do", "3ero" vs "3ro" con sección
+          if (section) {
+            const match = allCourses.find((c: any) => {
+              const cSec = (c.section || '').toUpperCase().trim();
+              if (cSec !== section) return false;
+              const cGradeNorm = norm(c.grade);
+              if (gradeNum === 1) return cGradeNorm.includes('1') || cGradeNorm.includes('primero') || cGradeNorm.includes('1ero') || cGradeNorm.includes('1ro');
+              if (gradeNum === 2) return cGradeNorm.includes('2') || cGradeNorm.includes('segundo') || cGradeNorm.includes('2do');
+              if (gradeNum === 3) return cGradeNorm.includes('3') || cGradeNorm.includes('tercero') || cGradeNorm.includes('3ero') || cGradeNorm.includes('3ro');
+              if (gradeNum === 4) return cGradeNorm.includes('4') || cGradeNorm.includes('cuarto') || cGradeNorm.includes('4to');
+              if (gradeNum === 5) return cGradeNorm.includes('5') || cGradeNorm.includes('quinto') || cGradeNorm.includes('5to');
+              if (gradeNum === 6) return cGradeNorm.includes('6') || cGradeNorm.includes('sexto') || cGradeNorm.includes('6to');
+              return false;
+            });
+            if (match) return match;
+          }
+
+          return null;
         };
 
-        // Función para resolver materia con precisión quirúrgica
+        // Función para resolver materia con precisión quirúrgica y soporte de optativas
         const resolveSubject = (subStr: string, courseId?: string) => {
           if (!subStr) return null;
           const clean = norm(subStr);
           const allSubs = state.subjects || [];
 
           // 1. Si se proporciona courseId, buscar prioritariamente en las materias asignadas a este curso
+          let courseSubjects: any[] = [];
           if (courseId) {
             const courseAssigns = (state.assignments || []).filter(
               (a: any) => String(a.course_id || a.courseId) === String(courseId)
             );
             const courseSubIds = new Set(courseAssigns.map((a: any) => String(a.subject_id)));
-            const courseSubjects = allSubs.filter((s: any) => courseSubIds.has(String(s.id)));
+            courseSubjects = allSubs.filter((s: any) => courseSubIds.has(String(s.id)));
 
             // 1A. Coincidencia exacta en materias del curso
             const exactCourse = courseSubjects.find((s: any) => {
@@ -309,7 +407,51 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             if (partialCourse) return partialCourse;
           }
 
-          // 2. Coincidencia EXACTA a nivel general de todo el centro
+          // 2. Mapeo inteligente de Aliases Curriculares (Optativas / Módulos de Modalidad)
+          // A) Matemática Financiera / Tecnología -> Opt. Matemática
+          if ((clean.includes('financiera') || clean.includes('tecnologia')) && clean.includes('mate')) {
+            const optMate = courseSubjects.find((s: any) => norm(s.name).includes('opt') && norm(s.name).includes('mate')) ||
+                            allSubs.find((s: any) => norm(s.name).includes('opt') && norm(s.name).includes('mate'));
+            if (optMate) return optMate;
+          }
+          // B) Química y Computación / Biología y Computación / Física y Computación -> Opt. Naturales
+          if ((clean.includes('quimica') || clean.includes('biologia') || clean.includes('fisica')) && (clean.includes('computacion') || clean.includes('comp'))) {
+            const optNat = courseSubjects.find((s: any) => norm(s.name).includes('opt') && (norm(s.name).includes('nat') || norm(s.name).includes('cien'))) ||
+                           allSubs.find((s: any) => norm(s.name).includes('opt') && (norm(s.name).includes('nat') || norm(s.name).includes('cien')));
+            if (optNat) return optNat;
+          }
+          // C) Filosofía Social y Pensamiento Dominicano -> Opt. Sociales
+          if (clean.includes('filosofia')) {
+            const optSoc = courseSubjects.find((s: any) => norm(s.name).includes('opt') && norm(s.name).includes('soc')) ||
+                           allSubs.find((s: any) => norm(s.name).includes('opt') && norm(s.name).includes('soc'));
+            if (optSoc) return optSoc;
+          }
+          // D) Ciudadanía y Democracia
+          if (clean.includes('ciudadania') || clean.includes('democracia')) {
+            const ciu = courseSubjects.find((s: any) => norm(s.name).includes('ciudadania') || norm(s.name).includes('democracia')) ||
+                        allSubs.find((s: any) => norm(s.name).includes('ciudadania') || norm(s.name).includes('democracia'));
+            if (ciu) return ciu;
+          }
+          // E) Geografía Humana y Demografía
+          if (clean.includes('geografia') || clean.includes('demografia')) {
+            const geo = courseSubjects.find((s: any) => norm(s.name).includes('geografia') || norm(s.name).includes('demografia')) ||
+                        allSubs.find((s: any) => norm(s.name).includes('geografia') || norm(s.name).includes('demografia'));
+            if (geo) return geo;
+          }
+          // F) Apreciación Literaria y Producción Literaria e Inglés / Apreciación y Producción Literaria
+          if (clean.includes('apreciacion') || clean.includes('literaria')) {
+            const aprec = courseSubjects.find((s: any) => norm(s.name).includes('aprec') || norm(s.name).includes('literar')) ||
+                          allSubs.find((s: any) => norm(s.name).includes('aprec') || norm(s.name).includes('literar'));
+            if (aprec) return aprec;
+          }
+          // G) Moral y Cívica
+          if (clean.includes('moral') || clean.includes('civica')) {
+            const moral = courseSubjects.find((s: any) => norm(s.name).includes('moral') || norm(s.name).includes('civic')) ||
+                          allSubs.find((s: any) => norm(s.name).includes('moral') || norm(s.name).includes('civic'));
+            if (moral) return moral;
+          }
+
+          // 3. Coincidencia EXACTA a nivel general de todo el centro
           const exactCenter = allSubs.find((s: any) => {
             const sName = norm(s.name);
             const sCode = norm(s.code || '');
@@ -317,7 +459,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           });
           if (exactCenter) return exactCenter;
 
-          // 3. Regla específica para 'inglés': evitar falsos positivos con 'apreciación literaria'
+          // 4. Regla específica para 'inglés': evitar falsos positivos con 'apreciación literaria'
           if (clean === 'ingles' || clean === 'ingle' || clean.includes('ingles') || clean.includes('english')) {
             const pureIngles = allSubs.find((s: any) => {
               const sName = norm(s.name);
@@ -326,7 +468,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             if (pureIngles) return pureIngles;
           }
 
-          // 4. Regla específica para 'francés'
+          // 5. Regla específica para 'francés'
           if (clean === 'frances' || clean === 'francés' || clean.includes('france')) {
             const pureFrances = allSubs.find((s: any) => {
               const sName = norm(s.name);
@@ -335,7 +477,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             if (pureFrances) return pureFrances;
           }
 
-          // 5. Regla específica para 'español'
+          // 6. Regla específica para 'español'
           if (clean.includes('espanol') || clean.includes('lenguaespanola')) {
             const pureLengua = allSubs.find((s: any) => {
               const sName = norm(s.name);
@@ -344,7 +486,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             if (pureLengua) return pureLengua;
           }
 
-          // 6. Si no coincide, buscar por palabras clave educativas estándar
+          // 7. Si no coincide, buscar por palabras clave educativas estándar
           let match = allSubs.find((s: any) => {
             const sNorm = norm(s.name);
             if (clean.includes('mate')) return sNorm.includes('mate');
@@ -363,31 +505,32 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           return match || null;
         };
 
-        // Función para resolver docente con precisión quirúrgica
+        // Función para resolver docente con precisión quirúrgica y fallback a asignaciones
         const resolveTeacher = (tStr: string, courseId?: string, subjectId?: string) => {
-          if (!tStr) return null;
           const clean = norm(tStr);
           const teachers = state.teachers || [];
 
-          // 1. Coincidencia exacta
-          const exact = teachers.find((t: any) => norm(t.name) === clean);
-          if (exact) return exact;
+          if (clean && clean !== 'sindocente' && clean !== 'desconocido' && clean !== '--') {
+            // 1. Coincidencia exacta
+            const exact = teachers.find((t: any) => norm(t.name) === clean);
+            if (exact) return exact;
 
-          // 2. Coincidencia inteligente usando areTeacherNamesMatching (distingue I vs II, 1 vs 2, etc.)
-          const smart = teachers.find((t: any) => areTeacherNamesMatching(t.name, tStr));
-          if (smart) return smart;
+            // 2. Coincidencia inteligente usando areTeacherNamesMatching (distingue I vs II, 1 vs 2, etc.)
+            const smart = teachers.find((t: any) => areTeacherNamesMatching(t.name, tStr));
+            if (smart) return smart;
+          }
 
-          // 3. Fallback inteligente: buscar en las asignaciones previas del curso y materia
+          // 3. Fallback inteligente primordial: Si no viene nombre de docente en la celda
+          // o no coincidió, buscar automáticamente en las asignaciones de carga docente del centro
           if (courseId && subjectId) {
             const assign = (state.assignments || []).find(
               (a: any) =>
-                (a.course_id === courseId || a.courseId === courseId) &&
-                (a.subject_id === subjectId || a.subjectId === subjectId)
+                (String(a.course_id || a.courseId) === String(courseId)) &&
+                (String(a.subject_id || a.subjectId) === String(subjectId))
             );
             if (assign) {
-              const tFromAssign = teachers.find(
-                (t: any) => t.id === assign.teacher_id || t.id === assign.teacherId
-              );
+              const targetTeacherId = assign.teacher_id || assign.teacherId;
+              const tFromAssign = teachers.find((t: any) => String(t.id) === String(targetTeacherId));
               if (tFromAssign) return tFromAssign;
             }
           }
@@ -428,13 +571,24 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               row['grado'] ||
               row['CURSO'] ||
               '';
+
+            // Detectar y omitir cabeceras secundarias o tablas anexadas (ej. formato lista o carga docente pegada abajo)
+            const courseValNorm = norm(String(courseVal));
+            if (courseValNorm === 'curso' || courseValNorm === 'numerohora' || courseValNorm === 'dia') {
+              return;
+            }
+
             if (courseVal) {
               const matched = resolveCourse(String(courseVal));
-              if (matched) currentCourse = matched;
+              if (matched) {
+                currentCourse = matched;
+              } else {
+                currentCourse = null;
+                warnings.push(`Fila ${rowIdx + 2}: No se pudo determinar el curso "${courseVal}".`);
+              }
             }
 
             if (!currentCourse) {
-              warnings.push(`Fila ${rowIdx + 2}: No se pudo determinar el curso.`);
               return;
             }
 
@@ -638,7 +792,34 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         await supabase.from('teachers').upsert(teachersToUpsert, { onConflict: 'id' });
       }
 
-      // B) Eliminar horarios previos ÚNICAMENTE de los cursos afectados en este centro y año escolar
+      // B) CREAR BACKUP DE SEGURIDAD PREVIO (Snapshot Undo)
+      let previousEntries: any[] = [];
+      try {
+        const { data: prevData } = await supabase
+          .from('schedule_entries')
+          .select('*')
+          .eq('center_id', centerId)
+          .eq('school_year', targetYear)
+          .in('course_id', affectedCourseIds);
+        if (prevData && prevData.length > 0) {
+          previousEntries = prevData;
+          localStorage.setItem(
+            backupKey,
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              centerId,
+              schoolYear: targetYear,
+              courseIds: affectedCourseIds,
+              entries: prevData
+            })
+          );
+          setHasBackup(true);
+        }
+      } catch (bErr) {
+        console.warn('Nota sobre creación de respaldo previo:', bErr);
+      }
+
+      // C) Eliminar horarios previos ÚNICAMENTE de los cursos afectados en este centro y año escolar
       // (AISLAMIENTO TOTAL: otros cursos y otros centros nunca son afectados)
       await supabase
         .from('schedule_entries')
@@ -647,7 +828,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         .eq('school_year', targetYear)
         .in('course_id', affectedCourseIds);
 
-      // C) Insertar en lotes (chunks) de 200 registros con candado activado
+      // D) Insertar en lotes (chunks) de 200 registros con candado activado
       const entriesToInsert = parsedEntries.map((e) => ({
         center_id: centerId,
         school_year: targetYear,
@@ -670,11 +851,17 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           insErr = (await supabase.from('schedule_entries').insert(fallbackChunk)).error;
         }
         if (insErr) {
+          // Rollback automático de emergencia: restaurar previousEntries para que ningún curso quede vacío
+          if (previousEntries.length > 0) {
+            try {
+              await supabase.from('schedule_entries').upsert(previousEntries, { onConflict: 'id' });
+            } catch {}
+          }
           throw new Error('Error al insertar horario: ' + insErr.message);
         }
       }
 
-      // D) Guardar backup local en localStorage para carga offline
+      // E) Guardar backup local en localStorage para carga offline
       try {
         const storageKey = centerId ? `edugens_custom_schedule_${centerId}` : 'edugens_custom_schedule_entries';
         const existingLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
@@ -760,6 +947,18 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            {hasBackup && (
+              <button
+                type="button"
+                onClick={handleRestoreBackup}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+                title="Restaura la copia de seguridad previa de horarios de este centro"
+              >
+                <Clock size={14} className="text-amber-700" />
+                Restaurar Respaldo Anterior
+              </button>
+            )}
             <button
               type="button"
               onClick={handleDownloadTemplate}
@@ -894,21 +1093,41 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
               {/* Vista A: Resumen de Cursos */}
               {previewTab === 'summary' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {courseSummary.map((c) => (
-                    <div
-                      key={c.name}
-                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="text-xs font-black text-slate-800">{c.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedShift}</p>
-                      </div>
-                      <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 font-black text-xs rounded-lg">
-                        {c.count} horas
-                      </span>
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {courseSummary.map((c) => {
+                      const isComplete = c.count >= 38;
+                      const isPartial = c.count >= 20 && c.count < 38;
+                      return (
+                        <div
+                          key={c.name}
+                          className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                            isComplete
+                              ? 'bg-slate-50 border-slate-200'
+                              : isPartial
+                              ? 'bg-amber-50/60 border-amber-200'
+                              : 'bg-rose-50/60 border-rose-200'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs font-black text-slate-800">{c.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedShift}</p>
+                          </div>
+                          <span
+                            className={`px-2.5 py-1 font-black text-xs rounded-lg flex items-center gap-1 ${
+                              isComplete
+                                ? 'bg-indigo-100 text-indigo-700'
+                                : isPartial
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {c.count} horas {!isComplete && '⚠️'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { useSupabase, useApp } from '../context/AppContext';
 import {
   saveCachedGrades,
@@ -27,12 +27,14 @@ export const useGrades = (courseId: string, subjectId: string) => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('student_grades')
-          .select('*')
-          .eq('course_id', courseId)
-          .eq('subject_id', subjectId)
-          .eq('school_year', effectiveYear);
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('student_grades')
+            .select('*')
+            .eq('course_id', courseId)
+            .eq('subject_id', subjectId)
+            .eq('school_year', effectiveYear)
+        );
 
         if (error) throw error;
 

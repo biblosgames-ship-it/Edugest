@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TeacherRecordForm } from './TeacherRecordForm';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 
 export const TeacherPerformanceModule = () => {
   const { state, center } = useApp();
@@ -14,10 +14,12 @@ export const TeacherPerformanceModule = () => {
       if (!center?.id) return;
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .eq('center_id', center.id);
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('attendance_records')
+            .select('*')
+            .eq('center_id', center.id)
+        );
 
         if (error) throw error;
         setAttendanceRecords(data || []);

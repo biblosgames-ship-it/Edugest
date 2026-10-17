@@ -48,7 +48,7 @@ import MasterDirectoryReport from './MasterDirectoryReport';
 import { DailyMinerdAttendanceReport } from './DailyMinerdAttendanceReport';
 import GradeRegisterReport from './GradeRegisterReport';
 import { useApp, useSupabase } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -581,10 +581,12 @@ export const GeneralReports = () => {
     try {
       let attendanceData: any[] = [];
       if (center?.id) {
-        const { data, error } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .eq('center_id', center.id);
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('attendance_records')
+            .select('*')
+            .eq('center_id', center.id)
+        );
         if (error) throw error;
         attendanceData = data || [];
       }
@@ -1092,16 +1094,20 @@ export const GeneralReports = () => {
             .select('id, level')
             .eq('center_id', centerId)
             .eq('school_year', currentYear),
-          supabase
-            .from('students')
-            .select('course_id')
-            .eq('center_id', centerId)
-            .eq('school_year', currentYear),
-          supabase
-            .from('student_grades')
-            .select('subject_id, period, grade')
-            .eq('center_id', centerId)
-            .eq('school_year', currentYear)
+          fetchAllRows(() =>
+            supabase
+              .from('students')
+              .select('course_id')
+              .eq('center_id', centerId)
+              .eq('school_year', currentYear)
+          ),
+          fetchAllRows(() =>
+            supabase
+              .from('student_grades')
+              .select('subject_id, period, grade')
+              .eq('center_id', centerId)
+              .eq('school_year', currentYear)
+          )
         ]);
 
         // 2. Mapear niveles a cursos

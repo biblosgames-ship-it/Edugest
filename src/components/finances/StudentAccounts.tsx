@@ -157,6 +157,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
         const currentCenterId = profile?.center_id || student.center_id;
 
         const isNewStudent = (student.student_type || '').toLowerCase() === 'nuevo';
+        const studentScholarship = scholarships.find((s) => s.student_id === student.id);
 
         // Calcular Inscripción con beca si corresponde
         const rawEnrollment = (isNewStudent && plan.has_dual_pricing && plan.enrollment_fee_new != null && Number(plan.enrollment_fee_new) > 0)
@@ -345,7 +346,14 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
         // 2. Determinar nuevo precio
         const targetStudent = students.find((s: any) => s.id === inv.student_id);
         const isNewStudent = (targetStudent?.student_type || '').toLowerCase() === 'nuevo';
-        const isEnrollment = inv.concept.toLowerCase().includes('inscripción');
+        const conceptLower = String(inv.concept || '').toLowerCase();
+        const isEnrollment =
+          conceptLower.includes('inscripción') || conceptLower.includes('inscripcion');
+        const isMonthly =
+          !inv.product_id &&
+          (conceptLower.includes('mensualidad') ||
+            conceptLower.includes('cuota') ||
+            conceptLower.includes('colegiatura'));
         let newPrice = isEnrollment ? Number(plan.enrollment_fee) : Number(plan.monthly_fee);
 
         if (isNewStudent && plan.has_dual_pricing) {
@@ -356,13 +364,31 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
           }
         }
 
-        // 3. Solo actualizar si el precio cambió
-        if (Number(inv.amount_original) !== newPrice) {
+        // Calcular descuento de beca si el estudiante tiene una activa
+        const studentScholarship = scholarships.find((s) => s.student_id === inv.student_id);
+        let discount = 0;
+        if (studentScholarship) {
+          const shouldApply =
+            studentScholarship.applies_to === 'both' ||
+            (studentScholarship.applies_to === 'enrollment' && isEnrollment) ||
+            (studentScholarship.applies_to === 'monthly' && isMonthly);
+          if (shouldApply) {
+            discount =
+              studentScholarship.type === 'percentage'
+                ? newPrice * (Number(studentScholarship.value) / 100)
+                : Number(studentScholarship.value);
+          }
+        }
+        const finalPrice = Math.max(0, newPrice - discount);
+
+        // 3. Solo actualizar si el precio o el descuento cambió
+        if (Number(inv.amount_original) !== newPrice || Number(inv.amount_final) !== finalPrice) {
           const { error } = await supabase
             .from('finance_invoices')
             .update({
               amount_original: newPrice,
-              amount_final: newPrice // Aquí podrías restar descuentos si existieran
+              amount_final: finalPrice,
+              discount_applied: discount
             })
             .eq('id', inv.id);
 

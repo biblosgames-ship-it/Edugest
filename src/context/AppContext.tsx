@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import graduatedList from '../data/graduated_2025_students.json';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
 import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesManager';
@@ -1912,11 +1912,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (state.grades && state.grades.length > 0) return state.grades;
 
           try {
-            const { data, error } = await supabase
-              .from('student_grades')
-              .select('*')
-              .eq('center_id', targetCid)
-              .eq('school_year', selectedYear);
+            const { data, error } = await fetchAllRows(() =>
+              supabase
+                .from('student_grades')
+                .select('*')
+                .eq('center_id', targetCid)
+                .eq('school_year', selectedYear)
+            );
 
             if (error) throw error;
             if (data) {

@@ -32,3 +32,33 @@ if (typeof window !== 'undefined') {
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).supabase = supabase;
 }
+
+/**
+ * Descarga todas las filas de una consulta Supabase paginando automáticamente de 1,000 en 1,000
+ * para evitar el truncamiento por defecto de PostgREST cuando un curso o centro supera los 1,000 registros.
+ */
+export async function fetchAllRows<T = any>(
+  buildQuery: () => any,
+  pageSize = 1000
+): Promise<{ data: T[]; error: any }> {
+  const allRows: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) {
+      return { data: allRows, error };
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+    allRows.push(...data);
+    if (data.length < pageSize) {
+      break;
+    }
+    from += pageSize;
+  }
+
+  return { data: allRows, error: null };
+}
+

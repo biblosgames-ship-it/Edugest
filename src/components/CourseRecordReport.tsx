@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import {
   PieChart,
   Pie,
@@ -58,10 +58,12 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
       if (!selectedCourseId) return;
       setLoadingGrades(true);
       try {
-        const { data, error } = await supabase
-          .from('student_grades')
-          .select('*')
-          .eq('course_id', selectedCourseId);
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('student_grades')
+            .select('*')
+            .eq('course_id', selectedCourseId)
+        );
 
         if (error) throw error;
         setCourseGrades(data || []);

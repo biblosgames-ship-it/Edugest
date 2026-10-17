@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { dataService } from '../services/dataService';
 import * as XLSX from 'xlsx';
 import { CourseRecordReport } from './CourseRecordReport';
@@ -130,11 +130,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
         const [stdData, { data: gData }] = await Promise.all([
           dataService.getStudents(selectedCourseId, centerId, forceYear),
-          supabase
-            .from('student_grades')
-            .select('*')
-            .eq('course_id', selectedCourseId)
-            .eq('school_year', forceYear)
+          fetchAllRows(() =>
+            supabase
+              .from('student_grades')
+              .select('*')
+              .eq('course_id', selectedCourseId)
+              .eq('school_year', forceYear)
+          )
         ]);
 
         if (!stdData || stdData.length === 0) {
@@ -537,11 +539,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
       // 2. Obtener TODAS las calificaciones de este curso y año
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
 
       // Mapear calificaciones: grades[studentId][subjectId] = { 'c1_p1': 90, 'final_rec': 85, etc }
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
@@ -823,11 +827,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       }
       students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
 
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
@@ -1229,11 +1235,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       }
       students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
 
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
@@ -1283,11 +1291,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
@@ -1562,11 +1572,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const assignments = state.assignments?.filter((a) => a.course_id === selectedCourseId) || [];
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
@@ -1776,11 +1788,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
@@ -1975,11 +1989,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
@@ -2219,11 +2235,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       ]);
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
@@ -2372,11 +2390,13 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       const assignments = state.assignments?.filter((a) => a.course_id === selectedCourseId) || [];
       const courseSubjects = getCourseSubjects();
 
-      const { data: gData } = await supabase
-        .from('student_grades')
-        .select('*')
-        .eq('course_id', selectedCourseId)
-        .eq('school_year', forceYear);
+      const { data: gData } = await fetchAllRows(() =>
+        supabase
+          .from('student_grades')
+          .select('*')
+          .eq('course_id', selectedCourseId)
+          .eq('school_year', forceYear)
+      );
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {

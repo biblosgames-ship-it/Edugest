@@ -346,6 +346,71 @@ export const dataService = {
     if (error) throw error;
   },
 
+  // ENTREGAS Y ESTADOS DE TAREAS (ALUMNOS Y PADRES)
+  async getTaskSubmissions(taskId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('task_submissions')
+        .select('*')
+        .eq('task_id', taskId);
+      if (error) {
+        console.warn('[dataService] getTaskSubmissions cloud error, fallback local:', error.message);
+        const local = localStorage.getItem(`edugens_task_submissions_${taskId}`);
+        return local ? JSON.parse(local) : [];
+      }
+      return data || [];
+    } catch (e) {
+      const local = localStorage.getItem(`edugens_task_submissions_${taskId}`);
+      return local ? JSON.parse(local) : [];
+    }
+  },
+
+  async getStudentTaskSubmissions(studentId: string, centerId?: string) {
+    try {
+      let query = supabase
+        .from('task_submissions')
+        .select('*')
+        .eq('student_id', studentId);
+      if (centerId) {
+        query = query.eq('center_id', centerId);
+      }
+      const { data, error } = await query;
+      if (error) {
+        console.warn('[dataService] getStudentTaskSubmissions cloud error, fallback local:', error.message);
+        const local = localStorage.getItem(`edugens_student_task_subs_${studentId}`);
+        return local ? JSON.parse(local) : [];
+      }
+      if (data) {
+        localStorage.setItem(`edugens_student_task_subs_${studentId}`, JSON.stringify(data));
+      }
+      return data || [];
+    } catch (e) {
+      const local = localStorage.getItem(`edugens_student_task_subs_${studentId}`);
+      return local ? JSON.parse(local) : [];
+    }
+  },
+
+  async saveTaskSubmissions(submissions: any[]) {
+    if (!submissions || submissions.length === 0) return;
+    const taskId = submissions[0]?.task_id;
+    if (taskId) {
+      try {
+        localStorage.setItem(`edugens_task_submissions_${taskId}`, JSON.stringify(submissions));
+      } catch (e) {}
+    }
+    try {
+      const { error } = await supabase
+        .from('task_submissions')
+        .upsert(submissions, { onConflict: 'task_id,student_id' });
+      if (error) {
+        console.warn('[dataService] Error saving task_submissions to cloud:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[dataService] Exception saving task_submissions:', err);
+    }
+  },
+
+
   async savePlatformLinks(params: {
     center_id: string;
     course_id: string;
@@ -1528,12 +1593,13 @@ export const dataService = {
       }
     }
 
-    // 6. Asignaciones (Limpieza e Inserción)
-    // Borrar asignaciones existentes para evitar duplicados al re-subir
-    await supabase.from('assignments').delete().eq('center_id', centerId);
+    // 6. Asignaciones (Limpieza e Inserción SEGURA)
+    // Solo actualizar si el archivo contiene asignaciones; si no vienen, PRESERVAR las existentes
+    if (data.assignments && data.assignments.length > 0) {
+      await supabase.from('assignments').delete().eq('center_id', centerId);
 
-    for (const a of data.assignments) {
-      if (!a.docente || !a.materia) continue;
+      for (const a of data.assignments) {
+        if (!a.docente || !a.materia) continue;
       const cleanDocente = (a.docente || '').trim();
       const docKey = cleanDocente.toLowerCase();
       const cleanMateria = (a.materia || '').trim().toLowerCase();
@@ -1551,6 +1617,25 @@ export const dataService = {
             teacherId = sId;
             break;
           }
+        }
+      }
+      if (!teacherId && cleanDocente) {
+        // Si no se encontró el docente en staff, crearlo automáticamente para no perder su asignación
+        const { data: newStaff } = await supabase
+          .from('staff')
+          .insert({
+            center_id: centerId,
+            name: cleanDocente,
+            full_name: cleanDocente,
+            team: 'teacher',
+            position: 'Docente',
+            grades_editable: true
+          })
+          .select('id')
+          .single();
+        if (newStaff) {
+          teacherId = newStaff.id;
+          staffMap.set(docKey, teacherId);
         }
       }
 
@@ -1593,6 +1678,20 @@ export const dataService = {
         continue;
       }
 
+      // Asegurar que el docente existe en tabla 'teachers' para la planificación de horarios
+      await supabase
+        .from('teachers')
+        .upsert(
+          {
+            id: teacherId,
+            center_id: centerId,
+            name: cleanDocente,
+            hours_available: 40
+          },
+          { onConflict: 'id' }
+        )
+        .catch(() => {});
+
       const { error: aErr } = await supabase.from('assignments').insert({
         center_id: centerId,
         course_id: courseId,
@@ -1602,7 +1701,8 @@ export const dataService = {
       });
       if (aErr) console.error('Error insertando asignación:', aErr);
     }
-  },
+  }
+},
 
   async cloneSchoolYear(
     centerId: string,

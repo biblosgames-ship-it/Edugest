@@ -1980,7 +1980,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   }, [courseStudents, partialScores, activeCompetencies, profile?.center_id, center?.id]);
 
   // Abrir modal de corrección y calificaciones de tarea
-  const handleOpenGradeTask = (task: any) => {
+  const handleOpenGradeTask = async (task: any) => {
     setSelectedTaskForGrading(task);
     const centerId = profile?.center_id || center?.id || 'default_center';
     const storageKey = `edugens_task_grades_${centerId}_${task.id}`;
@@ -1999,6 +1999,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     const targetActId = `task_act_${task.id}`;
     const initialState: Record<string, { status: 'completed' | 'pending' | 'uncompleted'; score?: number | string; feedback?: string }> = {};
 
+    const defaultMax = Number(partialLink.maxScore) || 100;
+
     courseStudents.forEach((s: any) => {
       const local = savedGrades[s.id];
       const pScore = partialScores[s.id]?.[targetActId] ?? partialScores[s.id]?.[task.id];
@@ -2010,16 +2012,18 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           score: pScore,
           feedback: local?.feedback || ''
         };
-      } else if (local) {
+      } else if (local && (local.status || (local.score !== undefined && local.score !== ''))) {
         initialState[s.id] = {
           status: local.status || (local.score !== undefined && local.score !== '' ? 'completed' : 'pending'),
           score: local.score !== undefined ? local.score : '',
           feedback: local.feedback || ''
         };
       } else {
+        // Por defecto: todos arrancan en 'completed' (Hecha) con nota máxima
+        // Al igual que pasar lista, el docente solo marca las pendientes o no hechas
         initialState[s.id] = {
-          status: 'pending',
-          score: '',
+          status: 'completed',
+          score: defaultMax,
           feedback: ''
         };
       }
@@ -2029,6 +2033,28 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     setGradingSearch('');
     setGradingStatusFilter('all');
     setBulkGradeValue('');
+
+    // Sincronizar desde la nube (task_submissions) si existen datos previos
+    try {
+      const cloudSubs = await dataService.getTaskSubmissions(task.id);
+      if (cloudSubs && cloudSubs.length > 0) {
+        setTaskGradingState((prev) => {
+          const merged = { ...prev };
+          cloudSubs.forEach((sub: any) => {
+            if (sub.student_id && merged[sub.student_id]) {
+              merged[sub.student_id] = {
+                status: sub.status || merged[sub.student_id].status,
+                score: sub.score !== null && sub.score !== undefined ? sub.score : merged[sub.student_id].score,
+                feedback: sub.feedback || merged[sub.student_id].feedback || ''
+              };
+            }
+          });
+          return merged;
+        });
+      }
+    } catch (e) {
+      console.warn('[ClassroomManager] Error al sincronizar task_submissions:', e);
+    }
   };
 
   // Guardar correcciones y notas de tarea
@@ -2040,73 +2066,208 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       const year = selectedYear || '2026-2027';
       const storageKey = `edugens_task_grades_${centerId}_${selectedTaskForGrading.id}`;
 
-      // 1. Guardar en almacenamiento de calificaciones de tareas
+      // 1. Guardar en almacenamiento local
       localStorage.setItem(storageKey, JSON.stringify(taskGradingState));
 
-      // 2. Si está vinculado a Calificaciones Parciales
+      // 2. Guardar en Supabase task_submissions (Entregas y estados para alumnos y padres)
+      const submissionsToSave = courseStudents.map((s: any) => {
+        const rec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
+        const numScore = rec.score !== undefined && rec.score !== '' ? Number(rec.score) : null;
+        const validNum = numScore !== null && !isNaN(numScore) ? numScore : null;
+        const finalStatus = rec.status || (validNum !== null ? 'completed' : 'pending');
+        return {
+          center_id: centerId !== 'default_center' ? centerId : null,
+          task_id: selectedTaskForGrading.id,
+          student_id: s.id,
+          status: finalStatus,
+          score: validNum,
+          feedback: rec.feedback || null,
+          submitted_at: finalStatus === 'completed' || validNum !== null ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString()
+        };
+      });
+      await dataService.saveTaskSubmissions(submissionsToSave);
+
+      // 3. FUSIÓN SEGURA CON CALIFICACIONES PARCIALES (Si está vinculada a una competencia)
       if (gradingIsLinkedToPartial) {
         const targetActId = `task_act_${selectedTaskForGrading.id}`;
         const compId = gradingCompetencyId || 'c1';
+        const targetMaxScore = Number(gradingMaxScore) || 100;
+        const partialPeriod = parseTaskPeriod(selectedTaskForGrading) || selectedPeriod || 'P1';
+        const targetSubjectId = selectedTaskForGrading.subject_id || selectedSubjectId;
 
-        // Asegurar que la actividad esté en competencyActivities
-        const updatedActivities = { ...competencyActivities };
-        const existingActs = updatedActivities[compId] ? [...updatedActivities[compId]] : [];
-        const actIndex = existingActs.findIndex((a) => a.id === targetActId);
+        // A. Consultar actividades y notas existentes de esa materia/periodo en Supabase para NO borrar nada
+        let existingActivities: Record<string, any[]> = { ...competencyActivities };
+        let existingScores: Record<string, Record<string, number>> = { ...partialScores };
+        let existingStudentNotes: Record<string, string> = { ...studentNotes };
+        let currentCalcMode = competencyCalcMode || 'average';
+
+        try {
+          let selQuery = supabase
+            .from('student_partial_activities')
+            .select('*')
+            .eq('course_id', selectedCourseId)
+            .eq('subject_id', targetSubjectId)
+            .eq('period', partialPeriod)
+            .eq('school_year', year);
+
+          if (centerId && centerId !== 'default_center') {
+            selQuery = selQuery.eq('center_id', centerId);
+          }
+
+          const { data: cloudRowData } = await selQuery.order('updated_at', { ascending: false }).limit(1);
+
+          if (cloudRowData && cloudRowData.length > 0 && cloudRowData[0].scores) {
+            const rawPayload = cloudRowData[0].scores;
+            if (rawPayload.activities) existingActivities = rawPayload.activities;
+            if (rawPayload.scores) existingScores = rawPayload.scores;
+            if (rawPayload.studentNotes || rawPayload.notes) {
+              existingStudentNotes = rawPayload.studentNotes || rawPayload.notes;
+            }
+            if (rawPayload.calcMode) currentCalcMode = rawPayload.calcMode;
+          }
+        } catch (fetchErr) {
+          console.warn('[ClassroomManager] Error al consultar datos previos de parciales en nube:', fetchErr);
+        }
+
+        // B. Inyectar o actualizar la columna de la Tarea en la competencia elegida (MERGE ADITIVO)
+        const actsInComp = existingActivities[compId] ? [...existingActivities[compId]] : [];
+        const actIndex = actsInComp.findIndex((a) => a.id === targetActId);
 
         const newActData = {
           id: targetActId,
           name: selectedTaskForGrading.title,
-          maxScore: Number(gradingMaxScore) || 100
+          maxScore: targetMaxScore
         };
 
         if (actIndex >= 0) {
-          existingActs[actIndex] = newActData;
+          actsInComp[actIndex] = newActData;
         } else {
-          existingActs.push(newActData);
+          actsInComp.push(newActData);
         }
-        updatedActivities[compId] = existingActs;
-        setCompetencyActivities(updatedActivities);
+        existingActivities[compId] = actsInComp;
 
-        // Actualizar partialScores con las notas ingresadas
-        const updatedScores = { ...partialScores };
+        // C. Inyectar notas de los estudiantes para esta tarea preservando 100% las demás notas
         courseStudents.forEach((s: any) => {
           const rec = taskGradingState[s.id];
           if (rec && rec.score !== undefined && rec.score !== '') {
             const num = Number(rec.score);
             if (!isNaN(num)) {
-              if (!updatedScores[s.id]) updatedScores[s.id] = {};
-              updatedScores[s.id][targetActId] = Math.min(Number(gradingMaxScore) || 100, Math.max(0, num));
+              if (!existingScores[s.id]) existingScores[s.id] = {};
+              existingScores[s.id][targetActId] = Math.min(targetMaxScore, Math.max(0, num));
             }
           }
         });
-        setPartialScores(updatedScores);
 
-        // Guardar en almacenamiento local de parciales
-        const partialPeriod = parseTaskPeriod(selectedTaskForGrading) || selectedPeriod || 'P1';
-        const targetSubjectId = selectedTaskForGrading.subject_id || selectedSubjectId;
+        // D. Recalcular calificaciones por competencia y actualizar student_grades (Registro Digital)
+        const competencyGrades: any[] = [];
+        courseStudents.forEach((s: any) => {
+          const sScores = existingScores[s.id] || {};
+          const compActs = existingActivities[compId] || [];
+          const validScores = compActs
+            .map((a) => sScores[a.id])
+            .filter((v) => typeof v === 'number' && !isNaN(v));
 
-        const partialPayloadData = {
-          scores: updatedScores,
-          activities: updatedActivities,
-          calcMode: competencyCalcMode,
-          period: partialPeriod,
-          subjectId: targetSubjectId,
-          courseId: selectedCourseId,
-          teacherId: profile?.teacher_id || profile?.id,
-          centerId: centerId,
-          year: year,
-          updatedAt: new Date().toISOString()
+          if (validScores.length > 0) {
+            let compGrade: number;
+            if (currentCalcMode === 'sum') {
+              compGrade = Math.min(100, Math.round(validScores.reduce((a, b) => a + b, 0)));
+            } else {
+              compGrade = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+            }
+
+            competencyGrades.push({
+              center_id: centerId !== 'default_center' ? centerId : null,
+              student_id: s.id,
+              course_id: selectedCourseId,
+              subject_id: targetSubjectId,
+              period: partialPeriod,
+              competency_id: compId,
+              grade: compGrade,
+              school_year: year,
+              updated_at: new Date().toISOString()
+            });
+          }
+        });
+
+        // E. Guardar en student_partial_activities en Supabase de forma segura
+        const fullScoresPayload = {
+          scores: existingScores,
+          studentNotes: existingStudentNotes,
+          notes: existingStudentNotes,
+          activities: existingActivities,
+          calcMode: currentCalcMode
         };
 
-        const targetScopeKey = `edugens_partials_${centerId}_${year}_${profile?.teacher_id || profile?.id}_${selectedCourseId}_${targetSubjectId}_${partialPeriod}`;
-        localStorage.setItem(targetScopeKey, JSON.stringify(partialPayloadData));
+        try {
+          let checkQuery = supabase
+            .from('student_partial_activities')
+            .select('id')
+            .eq('course_id', selectedCourseId)
+            .eq('subject_id', targetSubjectId)
+            .eq('period', partialPeriod)
+            .eq('school_year', year);
 
-        // Actualizar la descripción de la tarea con los metadatos de vinculación parcial
+          if (centerId && centerId !== 'default_center') {
+            checkQuery = checkQuery.eq('center_id', centerId);
+          }
+
+          const { data: existingRows } = await checkQuery;
+
+          if (existingRows && existingRows.length > 0) {
+            const primaryId = existingRows[0].id;
+            await supabase
+              .from('student_partial_activities')
+              .update({
+                scores: fullScoresPayload,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', primaryId);
+          } else {
+            await supabase
+              .from('student_partial_activities')
+              .insert([{
+                center_id: centerId !== 'default_center' ? centerId : null,
+                course_id: selectedCourseId,
+                subject_id: targetSubjectId,
+                period: partialPeriod,
+                school_year: year,
+                competency_id: 'all',
+                activity_name: 'Desglose de Parciales',
+                max_score: 100,
+                scores: fullScoresPayload,
+                updated_at: new Date().toISOString()
+              }]);
+          }
+        } catch (savePartialErr) {
+          console.warn('[ClassroomManager] Error al sincronizar student_partial_activities:', savePartialErr);
+        }
+
+        // F. Sincronizar calificaciones con student_grades (Boletín / Registro Digital)
+        if (competencyGrades.length > 0) {
+          try {
+            await supabase
+              .from('student_grades')
+              .upsert(competencyGrades, {
+                onConflict: 'student_id,course_id,subject_id,period,competency_id'
+              });
+          } catch (gradeSyncErr) {
+            console.warn('[ClassroomManager] Error al actualizar student_grades:', gradeSyncErr);
+          }
+        }
+
+        // G. Si el docente está viendo actualmente esta misma asignatura y periodo, actualizar el estado React inmediato
+        if (targetSubjectId === selectedSubjectId && partialPeriod === selectedPeriod) {
+          setCompetencyActivities(existingActivities);
+          setPartialScores(existingScores);
+        }
+
+        // H. Actualizar metadatos en la tarea
         const clean = getCleanDescription(selectedTaskForGrading.description);
         const meta = JSON.stringify({
           linked: true,
           competencyId: compId,
-          maxScore: Number(gradingMaxScore) || 100
+          maxScore: targetMaxScore
         });
         const newDesc = `<!--partial_link:${meta}-->\n${clean}`;
         await dataService.updateTask(selectedTaskForGrading.id, {
@@ -2114,34 +2275,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           period: partialPeriod
         });
         await loadTasksAndLinks();
-
-        // Si tenemos conexión, sincronizar con Supabase student_partial_activities
-        if (typeof navigator !== 'undefined' && navigator.onLine && centerId && selectedCourseId && targetSubjectId) {
-          try {
-            await supabase.from('student_partial_activities').upsert({
-              center_id: centerId,
-              course_id: selectedCourseId,
-              subject_id: targetSubjectId,
-              period: partialPeriod,
-              school_year: year,
-              competency_id: compId,
-              activity_name: selectedTaskForGrading.title,
-              max_score: Number(gradingMaxScore) || 100,
-              scores: {
-                scores: updatedScores,
-                activities: updatedActivities,
-                calcMode: competencyCalcMode
-              },
-              updated_at: new Date().toISOString()
-            });
-          } catch (cloudErr) {
-            console.warn('Error al sincronizar parciales en la nube:', cloudErr);
-          }
-        }
       }
 
       setGradingSuccess(true);
-      toast.success('¡Corrección y notas guardadas correctamente!');
+      toast.success('¡Corrección, notas y estado de entrega guardados exitosamente!');
       setTimeout(() => {
         setGradingSuccess(false);
         setSelectedTaskForGrading(null);
@@ -2155,12 +2292,16 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   };
 
   const handleMarkAllCompleted = () => {
+    const defaultMax = Number(gradingMaxScore) || 100;
     setTaskGradingState((prev) => {
       const updated = { ...prev };
       courseStudents.forEach((s: any) => {
+        const cur = updated[s.id];
+        const validScore = cur && cur.score !== undefined && cur.score !== '' && Number(cur.score) > 0 ? cur.score : defaultMax;
         updated[s.id] = {
-          ...updated[s.id],
-          status: 'completed'
+          ...cur,
+          status: 'completed',
+          score: validScore
         };
       });
       return updated;
@@ -4287,9 +4428,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           type="button"
                           onClick={handleMarkAllCompleted}
                           className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
-                          title="Marcar a todos los alumnos como Entregado"
+                          title="Marcar a todos los alumnos como Hecha"
                         >
-                          <CheckCircle2 size={13} /> Marcar Todos Entregados
+                          <CheckCircle2 size={13} /> Marcar Todos Hechas
                         </button>
 
                         <div className="flex items-center gap-1">
@@ -4338,8 +4479,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             filteredStudents.map((s: any, idx: number) => {
                               const studentOrder = s.order_number || idx + 1;
                               const studentName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.name || 'Estudiante';
-                              const currentRec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
-                              const isCompleted = currentRec.status === 'completed' || (currentRec.score !== undefined && currentRec.score !== '');
+                              const currentRec = taskGradingState[s.id] || { status: 'completed', score: Number(gradingMaxScore) || 100, feedback: '' };
+                              const isCompleted = currentRec.status === 'completed';
 
                               return (
                                 <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
@@ -4371,7 +4512,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             ...prev,
                                             [s.id]: {
                                               ...prev[s.id],
-                                              status: 'completed'
+                                              status: 'completed',
+                                              score: prev[s.id]?.score !== undefined && prev[s.id]?.score !== '' && Number(prev[s.id]?.score) > 0 ? prev[s.id].score : Number(gradingMaxScore) || 100
                                             }
                                           }));
                                         }}
@@ -4381,7 +4523,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-emerald-50 hover:text-emerald-600'
                                         }`}
                                       >
-                                        ✓ Entregado
+                                        ✓ Hecha
                                       </button>
                                       <button
                                         type="button"
@@ -4396,7 +4538,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                           }));
                                         }}
                                         className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
-                                          currentRec.status === 'pending' && !currentRec.score
+                                          currentRec.status === 'pending'
                                             ? 'bg-amber-500 text-white shadow-xs'
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-amber-50 hover:text-amber-600'
                                         }`}
@@ -4421,7 +4563,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-rose-50 hover:text-rose-600'
                                         }`}
                                       >
-                                        ✗ No
+                                        ✗ No hecha
                                       </button>
                                     </div>
                                   </td>

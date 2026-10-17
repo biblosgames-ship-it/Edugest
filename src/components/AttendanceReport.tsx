@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { FileSpreadsheet, UserCheck, Users } from 'lucide-react';
 import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 import { DailyMinerdAttendanceReport } from './DailyMinerdAttendanceReport';
@@ -18,13 +18,15 @@ export const AttendanceReport = () => {
       if (!startDate || !endDate || !center?.id) return;
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .eq('center_id', center.id)
-          .gte('date', startDate)
-          .lte('date', endDate)
-          .order('date', { ascending: false });
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('attendance_records')
+            .select('*')
+            .eq('center_id', center.id)
+            .gte('date', startDate)
+            .lte('date', endDate)
+            .order('date', { ascending: false })
+        );
 
         if (error) throw error;
         setFilteredRecords(data || []);

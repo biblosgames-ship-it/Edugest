@@ -84,6 +84,7 @@ export const StudentDashboard = ({
   const [familyStudents, setFamilyStudents] = useState<any[]>([]);
   const hasCheckedSiblings = React.useRef(false);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [taskSubmissions, setTaskSubmissions] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [coursePlatformLinks, setCoursePlatformLinks] = useState<{
     classroom_url?: string;
@@ -278,14 +279,23 @@ export const StudentDashboard = ({
 
         if (currentCourse) {
           setCourse(currentCourse);
-          const [tasksData, annData, linksData] = await Promise.all([
+
+          let targetStudentId = profile?.student_id || profile?.id;
+          if (profile?.role === 'parent' && familyStudents.length > 0) {
+            const foundChild = familyStudents.find((s: any) => s.course_id === currentCourse.id);
+            if (foundChild) targetStudentId = foundChild.id;
+          }
+
+          const [tasksData, annData, linksData, subsData] = await Promise.all([
             dataService.getTasks(currentCourse.id),
             dataService.getAnnouncements(currentCourse.id),
-            dataService.getPlatformLinks(currentCourse.id)
+            dataService.getPlatformLinks(currentCourse.id),
+            targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([])
           ]);
           setTasks(tasksData);
           setAnnouncements(annData);
           setCoursePlatformLinks(linksData);
+          setTaskSubmissions(subsData || []);
         }
       } catch (error) {
         console.error('Error loading active course data:', error);
@@ -380,6 +390,15 @@ export const StudentDashboard = ({
     });
     return grouped;
   }, [filteredTasks]);
+
+  // Mapa de entregas del estudiante para acceso instantáneo O(1)
+  const submissionsMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    (taskSubmissions || []).forEach((sub) => {
+      if (sub.task_id) map[sub.task_id] = sub;
+    });
+    return map;
+  }, [taskSubmissions]);
 
   const [isLinking, setIsLinking] = useState(false);
 
@@ -1956,7 +1975,24 @@ export const StudentDashboard = ({
               ['P1', 'P2', 'P3', 'P4'].map((periodKey) => {
                 const periodTasks = tasksByPeriod[periodKey] || [];
                 const isCollapsed = !!collapsedPeriods[periodKey];
-                const pendingCount = periodTasks.filter((t) => !t.due_date || new Date(t.due_date) >= new Date()).length;
+
+                const completedTasks = periodTasks.filter((t) => submissionsMap[t.id]?.status === 'completed');
+                const missingTasks = periodTasks.filter(
+                  (t) =>
+                    submissionsMap[t.id]?.status === 'uncompleted' ||
+                    (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
+                );
+                const pendingTasks = periodTasks.filter(
+                  (t) =>
+                    (!submissionsMap[t.id] || submissionsMap[t.id]?.status === 'pending') &&
+                    (!t.due_date || new Date(t.due_date) >= new Date())
+                );
+
+                const completedCount = completedTasks.length;
+                const missingCount = missingTasks.length;
+                const pendingCount = pendingTasks.length;
+                const totalCount = periodTasks.length;
+                const compliancePct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
 
                 // Solo mostrar períodos que tengan tareas o si el filtro es general
                 if (periodTasks.length === 0 && selectedSubjectFilter !== 'ALL') return null;
@@ -1983,17 +2019,23 @@ export const StudentDashboard = ({
                           <p className="text-[9px] text-slate-500 font-bold">
                             {periodTasks.length === 0
                               ? 'Sin tareas asignadas'
-                              : `${periodTasks.length} tarea${periodTasks.length === 1 ? '' : 's'}${
-                                  pendingCount > 0 ? ` • ${pendingCount} pendiente${pendingCount === 1 ? '' : 's'}` : ''
-                                }`}
+                              : `${periodTasks.length} tarea${periodTasks.length === 1 ? '' : 's'} • ${compliancePct}% cumplimiento`}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         {periodTasks.length > 0 && (
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                            {isCollapsed ? 'Oculto' : 'Visible'}
+                          <span
+                            className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                              compliancePct >= 80
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : compliancePct >= 60
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}
+                          >
+                            {compliancePct}% CUMPLIMIENTO
                           </span>
                         )}
                         <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500">
@@ -2005,6 +2047,44 @@ export const StudentDashboard = ({
                     {/* Contenido del Periodo (Tareas) */}
                     {!isCollapsed && (
                       <div className="p-4 space-y-3 bg-slate-50/30 border-t border-slate-100">
+                        {periodTasks.length > 0 && (
+                          <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`w-2.5 h-2.5 rounded-full ${
+                                    compliancePct >= 80 ? 'bg-emerald-500' : compliancePct >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                                  }`}
+                                />
+                                <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                                  Cumplimiento de Tareas: {compliancePct}%
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase">
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  ✓ {completedCount} Entregada{completedCount === 1 ? '' : 's'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                                  ⏳ {pendingCount} Por entregar
+                                </span>
+                                {missingCount > 0 && (
+                                  <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                                    ✕ {missingCount} Sin entregar
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  compliancePct >= 80 ? 'bg-emerald-500' : compliancePct >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                                }`}
+                                style={{ width: `${compliancePct}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {periodTasks.length === 0 ? (
                           <p className="text-center py-4 text-[10px] text-slate-400 italic font-medium">
                             No hay asignaciones para este período.
@@ -2014,6 +2094,9 @@ export const StudentDashboard = ({
                             const subject = state.subjects.find((s) => s.id === t.subject_id);
                             const isLate = t.due_date && new Date(t.due_date) < new Date();
                             const cleanDesc = getCleanDescription(t.description);
+                            const sub = submissionsMap[t.id];
+                            const isCompleted = sub?.status === 'completed';
+                            const isUncompleted = sub?.status === 'uncompleted';
 
                             return (
                               <div
@@ -2029,16 +2112,30 @@ export const StudentDashboard = ({
                                       {t.title}
                                     </h5>
                                   </div>
-                                  <span
-                                    className={`px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                                      isLate
-                                        ? 'bg-rose-50 text-rose-500 border border-rose-100'
-                                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                    }`}
-                                  >
-                                    {isLate ? 'VENCIDA' : 'PENDIENTE'}
-                                  </span>
+                                  {isCompleted ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                      ✓ ENTREGADA {sub.score !== null && sub.score !== undefined ? `• ${sub.score}/100` : ''}
+                                    </span>
+                                  ) : isUncompleted ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs">
+                                      ✕ NO ENTREGADA
+                                    </span>
+                                  ) : isLate ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-rose-50 text-rose-500 border border-rose-100">
+                                      VENCIDA
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-200">
+                                      ⏳ POR ENTREGAR
+                                    </span>
+                                  )}
                                 </div>
+
+                                {sub?.feedback && (
+                                  <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-xs">
+                                    <span className="font-black text-emerald-800">Nota del docente:</span> {sub.feedback}
+                                  </div>
+                                )}
 
                                 {cleanDesc && (
                                   <div

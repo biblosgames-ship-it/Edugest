@@ -8,4 +8,7 @@ coverage/
 !.env.example
 .vercel
 scratch/
+archivos_locales_privados/
 public/*.xlsx
+public/*.pdf
+public/*.json
