@@ -2070,12 +2070,20 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       localStorage.setItem(storageKey, JSON.stringify(taskGradingState));
 
       // 2. Guardar en Supabase task_submissions (Entregas y estados para alumnos y padres)
-      const submissionsToSave = courseStudents.map((s: any) => {
-        const rec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
-        const numScore = rec.score !== undefined && rec.score !== '' ? Number(rec.score) : null;
+      const defaultMax = Number(gradingMaxScore) || 100;
+      const seenStudentIds = new Set<string>();
+      const submissionsToSave: any[] = [];
+
+      courseStudents.forEach((s: any) => {
+        if (!s || !s.id || seenStudentIds.has(s.id)) return;
+        seenStudentIds.add(s.id);
+
+        const rec = taskGradingState[s.id] || { status: 'completed', score: defaultMax, feedback: '' };
+        const numScore = rec.score !== undefined && rec.score !== '' ? Number(rec.score) : (rec.status === 'completed' ? defaultMax : null);
         const validNum = numScore !== null && !isNaN(numScore) ? numScore : null;
         const finalStatus = rec.status || (validNum !== null ? 'completed' : 'pending');
-        return {
+
+        submissionsToSave.push({
           center_id: centerId !== 'default_center' ? centerId : null,
           task_id: selectedTaskForGrading.id,
           student_id: s.id,
@@ -2084,8 +2092,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           feedback: rec.feedback || null,
           submitted_at: finalStatus === 'completed' || validNum !== null ? new Date().toISOString() : null,
           updated_at: new Date().toISOString()
-        };
+        });
       });
+
       await dataService.saveTaskSubmissions(submissionsToSave);
 
       // 3. FUSIÓN SEGURA CON CALIFICACIONES PARCIALES (Si está vinculada a una competencia)

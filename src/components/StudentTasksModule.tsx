@@ -29,6 +29,7 @@ import { dataService } from '../services/dataService';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
 import { supabase } from '../lib/supabase';
+import { resolveStudentForUser } from '../utils/studentResolver';
 
 interface StudentTasksModuleProps {
   userData: any;
@@ -168,95 +169,41 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     }
   }, [allCourses, linkedParentCourses, selectedCourseId, profile?.course_id]);
 
-  // Resolver estudiantes vinculados para el rol de padre/familiar
+  // Resolver estudiantes vinculados para el rol de padre o alumno
   useEffect(() => {
-    const resolveFamilyStudents = async () => {
-      if (!isParentRole || !profile?.id || !profile?.center_id) {
-        if (profile?.student_id) setSelectedStudentId(profile.student_id);
-        else if (profile?.id) setSelectedStudentId(profile.id);
-        return;
-      }
-
+    let isCancelled = false;
+    const resolveStudents = async () => {
       try {
-        let resolvedStudents: any[] = [];
+        const res = await resolveStudentForUser({
+          profile,
+          courseId: selectedCourseId,
+          selectedStudentId,
+          stateStudents: state.students,
+          centerId: profile?.center_id
+        });
 
-        // 1. Consulta en la tabla parents
-        const { data: parentLinks, error: pErr } = await supabase
-          .from('parents')
-          .select('student_id, students(id, names, first_surname, second_surname, family_id, course_id)')
-          .eq('profile_id', profile.id);
-
-        if (!pErr && parentLinks && parentLinks.length > 0) {
-          parentLinks.forEach((link: any) => {
-            if (link.students) resolvedStudents.push(link.students);
-            else if (link.student_id) {
-              const fromState = (state.students || []).find((s: any) => s.id === link.student_id);
-              if (fromState) resolvedStudents.push(fromState);
-            }
-          });
-        }
-
-        // 2. Extraer del perfil y consultar en BD Supabase / state.students
-        let studentNamePart = (profile.full_name || '').toLowerCase()
-          .replace('(padre/madre)', '')
-          .replace('(tutor)', '')
-          .replace('(encargado)', '')
-          .trim();
-
-        // Consultar estudiantes del centro directamente en Supabase
-        const { data: centerStudents, error: sErr } = await supabase
-          .from('students')
-          .select('id, names, first_surname, second_surname, family_id, course_id')
-          .eq('center_id', profile.center_id)
-          .eq('school_year', selectedYear || '2026-2027');
-
-        const availableStudents = (!sErr && centerStudents && centerStudents.length > 0)
-          ? centerStudents
-          : (state.students || []);
-
-        if (resolvedStudents.length === 0) {
-          const match = availableStudents.find((s: any) => {
-            const sNames = s.names || '';
-            const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
-            return fullName.includes(studentNamePart) || (sNames && studentNamePart.includes(sNames.toLowerCase()));
-          });
-
-          if (match) {
-            resolvedStudents.push(match);
-            if (match.family_id) {
-              const siblings = availableStudents.filter((s: any) => s.family_id === match.family_id);
-              resolvedStudents.push(...siblings);
-            }
+        if (!isCancelled) {
+          if (res.familyStudents && res.familyStudents.length > 0) {
+            setFamilyStudents(res.familyStudents);
           }
-        }
-
-        // 3. Fallback: buscar alumnos en el curso activo
-        if (resolvedStudents.length === 0 && selectedCourseId) {
-          const courseKids = availableStudents.filter((s: any) => s.course_id === selectedCourseId);
-          if (courseKids.length > 0) {
-            resolvedStudents.push(courseKids[0]);
+          if (res.studentId && res.studentId !== selectedStudentId) {
+            setSelectedStudentId(res.studentId);
           }
-        }
-
-        const unique = Array.from(new Map(resolvedStudents.map((s) => [s.id, s])).values());
-        setFamilyStudents(unique);
-
-        const currentKid = unique.find((s: any) => s.course_id === selectedCourseId) || unique[0];
-        if (currentKid) {
-          setSelectedStudentId(currentKid.id);
-        } else if (profile?.student_id) {
-          setSelectedStudentId(profile.student_id);
         }
       } catch (e) {
-        console.warn('[StudentTasksModule] Error resolving linked family students:', e);
+        console.warn('[StudentTasksModule] Error resolving students:', e);
       }
     };
 
-    resolveFamilyStudents();
-  }, [profile, isParentRole, selectedCourseId, selectedYear, state.students]);
+    resolveStudents();
+    return () => {
+      isCancelled = true;
+    };
+  }, [profile, isParentRole, selectedCourseId, state.students]);
 
   // Cargar tareas y anuncios del curso activo
   useEffect(() => {
+    let isCancelled = false;
     const fetchCourseData = async () => {
       if (!selectedCourseId) {
         setLoading(false);
@@ -268,7 +215,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
         const coursesList =
           allCourses.length > 0
             ? allCourses
-            : await dataService.getCourses(profile.center_id, selectedYear || '2026-2027');
+            : await dataService.getCourses(profile?.center_id, selectedYear || '2026-2027');
 
         const currentCourse = coursesList.find(
           (c: any) => c.id === selectedCourseId || c.code === selectedCourseId
@@ -277,45 +224,24 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
         if (currentCourse) {
           setCourse(currentCourse);
 
-          // Determinar ID real del estudiante (no el ID del padre)
-          let targetStudentId = selectedStudentId || profile?.student_id;
-          if (!targetStudentId && isParentRole && familyStudents.length > 0) {
-            const foundChild = familyStudents.find((s: any) => s.course_id === currentCourse.id) || familyStudents[0];
-            if (foundChild) targetStudentId = foundChild.id;
-          }
+          // Resolver de forma infalible el ID físico del estudiante (en la tabla 'students')
+          let targetStudentId = selectedStudentId;
+          const resolved = await resolveStudentForUser({
+            profile,
+            courseId: currentCourse.id,
+            selectedStudentId,
+            stateStudents: state.students,
+            centerId: profile?.center_id
+          });
 
-          // Respaldo directo en BD si todavía no se ha establecido el ID del alumno
-          if (!targetStudentId && isParentRole && profile?.center_id) {
-            try {
-              let sPart = (profile.full_name || '').toLowerCase()
-                .replace('(padre/madre)', '')
-                .replace('(tutor)', '')
-                .replace('(encargado)', '')
-                .trim();
-              const { data: dbStudents } = await supabase
-                .from('students')
-                .select('id, names, first_surname, second_surname, family_id, course_id')
-                .eq('center_id', profile.center_id)
-                .eq('course_id', currentCourse.id);
-
-              if (dbStudents && dbStudents.length > 0) {
-                const matched = dbStudents.find((s: any) => {
-                  const sNames = s.names || '';
-                  const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
-                  return fullName.includes(sPart) || (sNames && sPart.includes(sNames.toLowerCase()));
-                }) || dbStudents[0];
-                if (matched) {
-                  targetStudentId = matched.id;
-                  setSelectedStudentId(matched.id);
-                }
-              }
-            } catch (errDb) {
-              console.warn('[StudentTasksModule] Error fetching student directly from supabase:', errDb);
+          if (resolved.studentId) {
+            targetStudentId = resolved.studentId;
+            if (targetStudentId !== selectedStudentId) {
+              setSelectedStudentId(resolved.studentId);
             }
           }
-
-          if (!targetStudentId) {
-            targetStudentId = profile?.student_id || profile?.id;
+          if (resolved.familyStudents && resolved.familyStudents.length > 0) {
+            setFamilyStudents(resolved.familyStudents);
           }
 
           const [tasksData, annData, subsData] = await Promise.all([
@@ -323,19 +249,25 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
             dataService.getAnnouncements(currentCourse.id),
             targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([])
           ]);
-          setTasks(tasksData || []);
-          setAnnouncements(annData || []);
-          setTaskSubmissions(subsData || []);
+
+          if (!isCancelled) {
+            setTasks(tasksData || []);
+            setAnnouncements(annData || []);
+            setTaskSubmissions(subsData || []);
+          }
         }
       } catch (err) {
         console.error('[StudentTasksModule] Error fetching course tasks & announcements:', err);
       } finally {
-        setLoading(false);
+        if (!isCancelled) setLoading(false);
       }
     };
 
     fetchCourseData();
-  }, [selectedCourseId, selectedStudentId, allCourses, selectedYear, profile?.center_id, isParentRole, familyStudents]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedCourseId, selectedStudentId, allCourses, selectedYear, profile, isParentRole, state.students]);
 
   // Lista consolidada de todas las materias del curso
   const courseSubjects = useMemo(() => {

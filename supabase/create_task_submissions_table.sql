@@ -15,9 +15,21 @@ CREATE TABLE IF NOT EXISTS public.task_submissions (
     updated_at timestamp with time zone DEFAULT now()
 );
 
--- Índice único para garantizar una sola entrega por estudiante por tarea
+-- Índice y restricción única para garantizar una sola entrega por estudiante por tarea
 CREATE UNIQUE INDEX IF NOT EXISTS idx_task_submissions_task_student 
     ON public.task_submissions(task_id, student_id);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'task_submissions_task_student_unique'
+    ) THEN
+        ALTER TABLE public.task_submissions 
+        ADD CONSTRAINT task_submissions_task_student_unique UNIQUE (task_id, student_id);
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
 
 -- Índices de consulta rápida
 CREATE INDEX IF NOT EXISTS idx_task_submissions_student_center 

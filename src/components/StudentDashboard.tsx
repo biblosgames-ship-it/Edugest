@@ -30,6 +30,7 @@ import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
 import { ParentCampaignBanner } from './campaigns/ParentCampaignBanner';
 import { getSubjectTheme } from '../utils/subjectColors';
+import { resolveStudentForUser } from '../utils/studentResolver';
 import {
   findCycleTimeBlocks,
   getSlotsFromCycleConfig,
@@ -178,12 +179,11 @@ export const StudentDashboard = ({
             .trim();
         }
 
-        // 3. Buscar alumnos del centro en el ciclo escolar activo
+        // 3. Buscar alumnos del centro (sin forzar school_year estricto para evitar vacíos si es null)
         const { data: students, error: sErr } = await supabase
           .from('students')
-          .select('id, names, first_surname, second_surname, family_id, course_id')
-          .eq('center_id', profile.center_id)
-          .eq('school_year', selectedYear || '2026-2027');
+          .select('id, names, first_surname, second_surname, family_id, course_id, order_number')
+          .eq('center_id', profile.center_id);
 
         if (!sErr && students) {
           // Encontrar alumno que coincida con el nombre registrado en el perfil
@@ -280,10 +280,19 @@ export const StudentDashboard = ({
         if (currentCourse) {
           setCourse(currentCourse);
 
-          let targetStudentId = profile?.student_id || profile?.id;
-          if (profile?.role === 'parent' && familyStudents.length > 0) {
-            const foundChild = familyStudents.find((s: any) => s.course_id === currentCourse.id);
-            if (foundChild) targetStudentId = foundChild.id;
+          let targetStudentId: string | null = null;
+          const resolved = await resolveStudentForUser({
+            profile,
+            courseId: currentCourse.id,
+            stateStudents: state.students,
+            centerId: profile?.center_id
+          });
+
+          if (resolved.studentId) {
+            targetStudentId = resolved.studentId;
+          }
+          if (resolved.familyStudents && resolved.familyStudents.length > 0) {
+            setFamilyStudents(resolved.familyStudents);
           }
 
           const [tasksData, annData, linksData, subsData] = await Promise.all([
@@ -292,8 +301,8 @@ export const StudentDashboard = ({
             dataService.getPlatformLinks(currentCourse.id),
             targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([])
           ]);
-          setTasks(tasksData);
-          setAnnouncements(annData);
+          setTasks(tasksData || []);
+          setAnnouncements(annData || []);
           setCoursePlatformLinks(linksData);
           setTaskSubmissions(subsData || []);
         }
@@ -309,7 +318,7 @@ export const StudentDashboard = ({
     } else {
       setLoading(false);
     }
-  }, [selectedCourseId, allCourses, selectedYear, profile?.center_id]);
+  }, [selectedCourseId, allCourses, selectedYear, profile, state.students]);
 
   // Actualizar enlaces fijos de plataforma cuando el estudiante filtra por materia
   useEffect(() => {

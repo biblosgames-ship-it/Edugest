@@ -366,22 +366,29 @@ export const dataService = {
   },
 
   async getStudentTaskSubmissions(studentId: string, centerId?: string) {
+    if (!studentId) return [];
     try {
       let query = supabase
         .from('task_submissions')
         .select('*')
         .eq('student_id', studentId);
-      if (centerId) {
-        query = query.eq('center_id', centerId);
-      }
+      
       const { data, error } = await query;
       if (error) {
         console.warn('[dataService] getStudentTaskSubmissions cloud error, fallback local:', error.message);
         const local = localStorage.getItem(`edugens_student_task_subs_${studentId}`);
         return local ? JSON.parse(local) : [];
       }
-      if (data) {
+      if (data && data.length > 0) {
         localStorage.setItem(`edugens_student_task_subs_${studentId}`, JSON.stringify(data));
+        return data;
+      }
+      const local = localStorage.getItem(`edugens_student_task_subs_${studentId}`);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
       }
       return data || [];
     } catch (e) {
@@ -393,14 +400,25 @@ export const dataService = {
   async saveTaskSubmissions(submissions: any[]) {
     if (!submissions || submissions.length === 0) return;
     const taskId = submissions[0]?.task_id;
+
+    // Deduplicar envíos por (task_id, student_id)
+    const dedupedMap = new Map<string, any>();
+    submissions.forEach((sub) => {
+      if (sub && sub.task_id && sub.student_id) {
+        dedupedMap.set(`${sub.task_id}_${sub.student_id}`, sub);
+      }
+    });
+    const cleanSubmissions = Array.from(dedupedMap.values());
+    if (cleanSubmissions.length === 0) return;
+
     if (taskId) {
       try {
-        localStorage.setItem(`edugens_task_submissions_${taskId}`, JSON.stringify(submissions));
+        localStorage.setItem(`edugens_task_submissions_${taskId}`, JSON.stringify(cleanSubmissions));
       } catch (e) {}
     }
 
     // Sincronizar en localStorage por estudiante para reflejo inmediato en el mismo navegador
-    submissions.forEach((sub: any) => {
+    cleanSubmissions.forEach((sub: any) => {
       if (sub.student_id) {
         try {
           const key = `edugens_student_task_subs_${sub.student_id}`;
@@ -417,9 +435,26 @@ export const dataService = {
     try {
       const { error } = await supabase
         .from('task_submissions')
-        .upsert(submissions, { onConflict: 'task_id,student_id' });
+        .upsert(cleanSubmissions, { onConflict: 'task_id,student_id' });
       if (error) {
-        console.warn('[dataService] Error saving task_submissions to cloud:', error.message);
+        console.warn('[dataService] Error saving task_submissions with upsert, attempting resilient fallback:', error.message);
+        // Fallback resiliente: Delete existing and insert
+        if (taskId) {
+          const studentIds = cleanSubmissions.map((s) => s.student_id).filter(Boolean);
+          if (studentIds.length > 0) {
+            await supabase
+              .from('task_submissions')
+              .delete()
+              .eq('task_id', taskId)
+              .in('student_id', studentIds);
+            const { error: insertErr } = await supabase
+              .from('task_submissions')
+              .insert(cleanSubmissions);
+            if (insertErr) {
+              console.warn('[dataService] Fallback insert error on task_submissions:', insertErr.message);
+            }
+          }
+        }
       }
     } catch (err: any) {
       console.warn('[dataService] Exception saving task_submissions:', err);
