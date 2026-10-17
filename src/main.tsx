@@ -26,7 +26,7 @@ try {
   console.warn('Error checking app build version:', e);
 }
 
-// Registro y actualización forzada automática de la PWA
+// Registro y actualización optimizada de la PWA (protección de cuota CDN)
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
@@ -34,10 +34,20 @@ const updateSW = registerSW({
   },
   onRegistered(r) {
     if (r) {
+      // 1. Verificación inicial al cargar
       r.update();
+
+      // 2. Verificación inteligente cuando el usuario regresa o enfoca la pestaña
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          r.update();
+        }
+      });
+
+      // 3. Verificación periódica suave cada 30 minutos (evita saturar peticiones CDN)
       setInterval(() => {
         r.update();
-      }, 10 * 1000);
+      }, 30 * 60 * 1000);
     }
   }
 });
