@@ -85,6 +85,7 @@ export const CampaignsManager: React.FC = () => {
   // Modal de Cobro / Pago de Alumno
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
   const [selectedResponseForPayment, setSelectedResponseForPayment] = useState<any | null>(null);
+  const [paymentMode, setPaymentMode] = useState<'add' | 'replace'>('add');
   const [paymentForm, setPaymentForm] = useState({
     amount_paid: 0,
     payment_method: 'cash',
@@ -441,9 +442,11 @@ export const CampaignsManager: React.FC = () => {
       pendingAmount
     });
 
+    setPaymentMode('add');
+
     setPaymentForm({
       amount_paid: pendingAmount > 0 ? pendingAmount : unitPrice,
-      payment_method: 'cash',
+      payment_method: resp?.payment_method || 'cash',
       receipt_number: `REC-${Date.now().toString().slice(-6)}`,
       notes: '',
       payment_date: getLocalDateString()
@@ -452,7 +455,64 @@ export const CampaignsManager: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  // Guardar pago
+  // Anular y eliminar abono puesto por error
+  const handleResetPayment = async (studentToReset?: any, respToReset?: any) => {
+    const targetStudent = studentToReset || selectedResponseForPayment?.student;
+    const targetResp = respToReset || selectedResponseForPayment?.response || (targetStudent ? responsesMap[targetStudent.id] : null);
+    if (!targetStudent || !activeCampaign || !centerId) return;
+
+    const currentAmount = Number(targetResp?.amount_paid || 0);
+    const studentName = `${targetStudent.first_name || ''} ${targetStudent.last_name || ''}`.trim() || 'este estudiante';
+
+    if (
+      !window.confirm(
+        `¿Estás seguro de anular y eliminar el abono de RD$ ${currentAmount.toLocaleString()} para ${studentName}?\n\nEl estado financiero del alumno en esta actividad volverá a 'Pendiente' con RD$ 0.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setIsSavingPayment(true);
+      const payload: any = {
+        campaign_id: activeCampaign.id,
+        center_id: centerId,
+        student_id: targetStudent.id,
+        response: targetResp?.response || 'yes',
+        permission_granted: targetResp?.permission_granted ?? true,
+        payment_status: 'pending',
+        amount_paid: 0,
+        payment_method: null,
+        receipt_number: null,
+        payment_date: null,
+        notes: targetResp?.notes ? `${targetResp.notes} [Abono anulado el ${new Date().toLocaleDateString()}]` : 'Abono anulado por error',
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('school_campaign_responses')
+        .upsert(payload, { onConflict: 'campaign_id,student_id' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setResponses((prev) => {
+        const filtered = prev.filter((r) => !(r.campaign_id === activeCampaign.id && r.student_id === targetStudent.id));
+        return [...filtered, data];
+      });
+
+      toast.success(`Abono de RD$ ${currentAmount.toLocaleString()} eliminado y restablecido a RD$ 0.`);
+      setShowPaymentModal(false);
+    } catch (err: any) {
+      console.error('Error al anular abono:', err);
+      toast.error('Error al eliminar el abono.');
+    } finally {
+      setIsSavingPayment(false);
+    }
+  };
+
+  // Guardar pago o corrección
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedResponseForPayment || !activeCampaign || !centerId) return;
@@ -461,8 +521,8 @@ export const CampaignsManager: React.FC = () => {
       setIsSavingPayment(true);
       const student = selectedResponseForPayment.student;
       const resp = selectedResponseForPayment.response;
-      const newPaid = Number(paymentForm.amount_paid) || 0;
-      const totalAccumulated = (resp?.amount_paid || 0) + newPaid;
+      const inputAmount = Number(paymentForm.amount_paid) || 0;
+      const totalAccumulated = paymentMode === 'replace' ? inputAmount : (resp?.amount_paid || 0) + inputAmount;
       const unitPrice = activeCampaign.price || 0;
 
       const newStatus = totalAccumulated >= unitPrice ? 'paid' : totalAccumulated > 0 ? 'partial' : 'pending';
@@ -495,7 +555,11 @@ export const CampaignsManager: React.FC = () => {
         return [...filtered, data];
       });
 
-      toast.success(`Pago de RD$ ${newPaid.toLocaleString()} registrado con éxito.`);
+      toast.success(
+        paymentMode === 'replace'
+          ? `Monto total actualizado a RD$ ${totalAccumulated.toLocaleString()}.`
+          : `Pago de RD$ ${inputAmount.toLocaleString()} registrado con éxito.`
+      );
       setShowPaymentModal(false);
     } catch (err: any) {
       console.error('Error al registrar pago:', err);
@@ -1057,15 +1121,27 @@ export const CampaignsManager: React.FC = () => {
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {activeCampaign.price > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenPaymentModal(st)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                                  title="Registrar cobro en caja"
-                                >
-                                  <Receipt size={12} />
-                                  <span>{isPaid ? 'Recibo' : 'Cobrar'}</span>
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenPaymentModal(st)}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                                    title="Registrar cobro en caja"
+                                  >
+                                    <Receipt size={12} />
+                                    <span>{isPaid ? 'Recibo' : 'Cobrar'}</span>
+                                  </button>
+                                  {Number(resp?.amount_paid || 0) > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResetPayment(st, resp)}
+                                      className="p-1.5 rounded-lg text-rose-500 hover:text-white hover:bg-rose-600 transition-colors cursor-pointer"
+                                      title={`Anular / eliminar abono de RD$ ${(resp?.amount_paid || 0).toLocaleString()} puesto por error`}
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
+                                </>
                               )}
 
                               {resp?.permission_granted && (
@@ -1374,18 +1450,78 @@ export const CampaignsManager: React.FC = () => {
                 </div>
               </div>
 
+              {/* Selector de modo si ya tiene un abono previo */}
+              {selectedResponseForPayment.currentPaid > 0 && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/60 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+                    <span>Acción sobre el abono:</span>
+                    <div className="flex gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-amber-200 dark:border-amber-700/50">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentMode('add');
+                          setPaymentForm((prev) => ({
+                            ...prev,
+                            amount_paid: Math.max(0, selectedResponseForPayment.unitPrice - selectedResponseForPayment.currentPaid)
+                          }));
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
+                          paymentMode === 'add'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        + Sumar Abono
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentMode('replace');
+                          setPaymentForm((prev) => ({
+                            ...prev,
+                            amount_paid: selectedResponseForPayment.currentPaid
+                          }));
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${
+                          paymentMode === 'replace'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        ✏️ Corregir Total
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleResetPayment()}
+                    disabled={isSavingPayment}
+                    className="w-full py-2 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Trash2 size={13} />
+                    <span>Eliminar / Anular Abono de RD$ {selectedResponseForPayment.currentPaid.toLocaleString()} (Puesto por error)</span>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Monto a Cobrar (RD$) *
+                  {paymentMode === 'replace' ? 'Nuevo Monto Total Pagado (RD$) *' : 'Monto a Cobrar / Abonar (RD$) *'}
                 </label>
                 <input
                   type="number"
-                  min={1}
+                  min={paymentMode === 'replace' ? 0 : 1}
                   required
                   value={paymentForm.amount_paid}
                   onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount_paid: Number(e.target.value) }))}
                   className="w-full text-base font-black px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+                {paymentMode === 'replace' && (
+                  <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                    Este valor sustituirá el saldo pagado anterior. Si ingresas 0, volverá a pendiente.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1444,7 +1580,11 @@ export const CampaignsManager: React.FC = () => {
                   disabled={isSavingPayment}
                   className="flex-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingPayment ? 'Procesando...' : 'Registrar Pago en Caja'}
+                  {isSavingPayment
+                    ? 'Procesando...'
+                    : paymentMode === 'replace'
+                    ? 'Actualizar Monto'
+                    : 'Registrar Pago en Caja'}
                 </button>
               </div>
             </form>
