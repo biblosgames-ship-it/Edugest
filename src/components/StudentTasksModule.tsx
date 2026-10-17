@@ -4,6 +4,7 @@ import {
   Calendar,
   Clock,
   CheckCircle2,
+  CheckCheck,
   AlertCircle,
   Video,
   Link as LinkIcon,
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
   FolderOpen,
   User,
+  Users,
   Sparkles,
   School,
   Globe
@@ -26,6 +28,7 @@ import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
+import { supabase } from '../lib/supabase';
 
 interface StudentTasksModuleProps {
   userData: any;
@@ -61,6 +64,8 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
   });
 
   const [course, setCourse] = useState<any>(null);
+  const [familyStudents, setFamilyStudents] = useState<any[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(() => profile?.student_id || '');
   const [tasks, setTasks] = useState<any[]>([]);
   const [taskSubmissions, setTaskSubmissions] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -72,7 +77,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
   );
   const [activeTab, setActiveTab] = useState<'tasks' | 'announcements'>('tasks');
   const [periodFilter, setPeriodFilter] = useState<'ALL' | 'P1' | 'P2' | 'P3' | 'P4'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'LATE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'PENDING' | 'LATE'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Referencia para scroll automático suave hacia las tareas
@@ -163,6 +168,93 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     }
   }, [allCourses, linkedParentCourses, selectedCourseId, profile?.course_id]);
 
+  // Resolver estudiantes vinculados para el rol de padre/familiar
+  useEffect(() => {
+    const resolveFamilyStudents = async () => {
+      if (!isParentRole || !profile?.id || !profile?.center_id) {
+        if (profile?.student_id) setSelectedStudentId(profile.student_id);
+        else if (profile?.id) setSelectedStudentId(profile.id);
+        return;
+      }
+
+      try {
+        let resolvedStudents: any[] = [];
+
+        // 1. Consulta en la tabla parents
+        const { data: parentLinks, error: pErr } = await supabase
+          .from('parents')
+          .select('student_id, students(id, names, first_surname, second_surname, family_id, course_id)')
+          .eq('profile_id', profile.id);
+
+        if (!pErr && parentLinks && parentLinks.length > 0) {
+          parentLinks.forEach((link: any) => {
+            if (link.students) resolvedStudents.push(link.students);
+            else if (link.student_id) {
+              const fromState = (state.students || []).find((s: any) => s.id === link.student_id);
+              if (fromState) resolvedStudents.push(fromState);
+            }
+          });
+        }
+
+        // 2. Extraer del perfil y consultar en BD Supabase / state.students
+        let studentNamePart = (profile.full_name || '').toLowerCase()
+          .replace('(padre/madre)', '')
+          .replace('(tutor)', '')
+          .replace('(encargado)', '')
+          .trim();
+
+        // Consultar estudiantes del centro directamente en Supabase
+        const { data: centerStudents, error: sErr } = await supabase
+          .from('students')
+          .select('id, names, first_surname, second_surname, family_id, course_id')
+          .eq('center_id', profile.center_id)
+          .eq('school_year', selectedYear || '2026-2027');
+
+        const availableStudents = (!sErr && centerStudents && centerStudents.length > 0)
+          ? centerStudents
+          : (state.students || []);
+
+        if (resolvedStudents.length === 0) {
+          const match = availableStudents.find((s: any) => {
+            const sNames = s.names || '';
+            const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
+            return fullName.includes(studentNamePart) || (sNames && studentNamePart.includes(sNames.toLowerCase()));
+          });
+
+          if (match) {
+            resolvedStudents.push(match);
+            if (match.family_id) {
+              const siblings = availableStudents.filter((s: any) => s.family_id === match.family_id);
+              resolvedStudents.push(...siblings);
+            }
+          }
+        }
+
+        // 3. Fallback: buscar alumnos en el curso activo
+        if (resolvedStudents.length === 0 && selectedCourseId) {
+          const courseKids = availableStudents.filter((s: any) => s.course_id === selectedCourseId);
+          if (courseKids.length > 0) {
+            resolvedStudents.push(courseKids[0]);
+          }
+        }
+
+        const unique = Array.from(new Map(resolvedStudents.map((s) => [s.id, s])).values());
+        setFamilyStudents(unique);
+
+        const currentKid = unique.find((s: any) => s.course_id === selectedCourseId) || unique[0];
+        if (currentKid) {
+          setSelectedStudentId(currentKid.id);
+        } else if (profile?.student_id) {
+          setSelectedStudentId(profile.student_id);
+        }
+      } catch (e) {
+        console.warn('[StudentTasksModule] Error resolving linked family students:', e);
+      }
+    };
+
+    resolveFamilyStudents();
+  }, [profile, isParentRole, selectedCourseId, selectedYear, state.students]);
+
   // Cargar tareas y anuncios del curso activo
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -184,7 +276,48 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
         if (currentCourse) {
           setCourse(currentCourse);
-          const targetStudentId = profile?.student_id || profile?.id;
+
+          // Determinar ID real del estudiante (no el ID del padre)
+          let targetStudentId = selectedStudentId || profile?.student_id;
+          if (!targetStudentId && isParentRole && familyStudents.length > 0) {
+            const foundChild = familyStudents.find((s: any) => s.course_id === currentCourse.id) || familyStudents[0];
+            if (foundChild) targetStudentId = foundChild.id;
+          }
+
+          // Respaldo directo en BD si todavía no se ha establecido el ID del alumno
+          if (!targetStudentId && isParentRole && profile?.center_id) {
+            try {
+              let sPart = (profile.full_name || '').toLowerCase()
+                .replace('(padre/madre)', '')
+                .replace('(tutor)', '')
+                .replace('(encargado)', '')
+                .trim();
+              const { data: dbStudents } = await supabase
+                .from('students')
+                .select('id, names, first_surname, second_surname, family_id, course_id')
+                .eq('center_id', profile.center_id)
+                .eq('course_id', currentCourse.id);
+
+              if (dbStudents && dbStudents.length > 0) {
+                const matched = dbStudents.find((s: any) => {
+                  const sNames = s.names || '';
+                  const fullName = `${sNames} ${s.first_surname || ''} ${s.second_surname || ''}`.toLowerCase().trim();
+                  return fullName.includes(sPart) || (sNames && sPart.includes(sNames.toLowerCase()));
+                }) || dbStudents[0];
+                if (matched) {
+                  targetStudentId = matched.id;
+                  setSelectedStudentId(matched.id);
+                }
+              }
+            } catch (errDb) {
+              console.warn('[StudentTasksModule] Error fetching student directly from supabase:', errDb);
+            }
+          }
+
+          if (!targetStudentId) {
+            targetStudentId = profile?.student_id || profile?.id;
+          }
+
           const [tasksData, annData, subsData] = await Promise.all([
             dataService.getTasks(currentCourse.id),
             dataService.getAnnouncements(currentCourse.id),
@@ -202,7 +335,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     };
 
     fetchCourseData();
-  }, [selectedCourseId, allCourses, selectedYear, profile?.center_id]);
+  }, [selectedCourseId, selectedStudentId, allCourses, selectedYear, profile?.center_id, isParentRole, familyStudents]);
 
   // Lista consolidada de todas las materias del curso
   const courseSubjects = useMemo(() => {
@@ -283,25 +416,6 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     return result;
   }, [course, state.assignments, state.subjects, state.teachers, tasks, announcements]);
 
-  // Contadores por materia
-  const subjectStats = useMemo(() => {
-    const stats: Record<string, { totalTasks: number; pendingTasks: number; announcements: number }> = {};
-
-    courseSubjects.forEach(({ subject }) => {
-      const subTasks = tasks.filter((t: any) => t.subject_id === subject.id);
-      const pending = subTasks.filter((t: any) => !t.due_date || new Date(t.due_date) >= new Date()).length;
-      const subAnnouncements = announcements.filter((a: any) => a.subject_id === subject.id);
-
-      stats[subject.id] = {
-        totalTasks: subTasks.length,
-        pendingTasks: pending,
-        announcements: subAnnouncements.length
-      };
-    });
-
-    return stats;
-  }, [courseSubjects, tasks, announcements]);
-
   // Mapa de entregas de tareas del estudiante
   const submissionsMap = useMemo(() => {
     const map: Record<string, any> = {};
@@ -310,6 +424,42 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     });
     return map;
   }, [taskSubmissions]);
+
+  // Contadores y estado de cumplimiento exacto por materia
+  const subjectStats = useMemo(() => {
+    const stats: Record<string, {
+      totalTasks: number;
+      completedTasks: number;
+      pendingTasks: number;
+      missingTasks: number;
+      compliancePct: number;
+      announcements: number;
+    }> = {};
+
+    courseSubjects.forEach(({ subject }) => {
+      const subTasks = tasks.filter((t: any) => t.subject_id === subject.id);
+      const total = subTasks.length;
+      const completed = subTasks.filter((t: any) => submissionsMap[t.id]?.status === 'completed').length;
+      const missing = subTasks.filter(
+        (t: any) =>
+          submissionsMap[t.id]?.status === 'uncompleted' ||
+          (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
+      ).length;
+      const pending = Math.max(0, total - completed - missing);
+      const compliancePct = total > 0 ? Math.round((completed / total) * 100) : 100;
+
+      stats[subject.id] = {
+        totalTasks: total,
+        completedTasks: completed,
+        pendingTasks: pending,
+        missingTasks: missing,
+        compliancePct: compliancePct,
+        announcements: (announcements || []).filter((a: any) => a.subject_id === subject.id).length
+      };
+    });
+
+    return stats;
+  }, [courseSubjects, tasks, submissionsMap, announcements]);
 
   // Total global y porcentaje de cumplimiento
   const globalStats = useMemo(() => {
@@ -351,10 +501,18 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
       list = list.filter((t: any) => (t.period || 'P1').toUpperCase() === periodFilter);
     }
 
-    if (statusFilter === 'PENDING') {
-      list = list.filter((t: any) => !t.due_date || new Date(t.due_date) >= new Date());
+    if (statusFilter === 'COMPLETED') {
+      list = list.filter((t: any) => submissionsMap[t.id]?.status === 'completed');
+    } else if (statusFilter === 'PENDING') {
+      list = list.filter((t: any) => {
+        const sub = submissionsMap[t.id];
+        return (!sub || sub.status === 'pending') && (!t.due_date || new Date(t.due_date) >= new Date());
+      });
     } else if (statusFilter === 'LATE') {
-      list = list.filter((t: any) => t.due_date && new Date(t.due_date) < new Date());
+      list = list.filter((t: any) => {
+        const sub = submissionsMap[t.id];
+        return sub?.status === 'uncompleted' || (!sub && t.due_date && new Date(t.due_date) < new Date());
+      });
     }
 
     if (searchTerm.trim()) {
@@ -372,7 +530,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
       const dateB = b.due_date ? new Date(b.due_date).getTime() : 0;
       return dateB - dateA;
     });
-  }, [tasks, selectedSubjectId, periodFilter, statusFilter, searchTerm]);
+  }, [tasks, selectedSubjectId, periodFilter, statusFilter, searchTerm, submissionsMap]);
 
   // Anuncios filtrados para la materia activa (o todos)
   const displayedAnnouncements = useMemo(() => {
@@ -393,6 +551,21 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
     return list;
   }, [announcements, selectedSubjectId, searchTerm]);
+
+  // Estadísticas del contexto activo (materia específica o todas)
+  const currentActiveStats = useMemo(() => {
+    if (selectedSubjectId === 'ALL') return globalStats;
+    return (
+      subjectStats[selectedSubjectId] || {
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0,
+        missingTasks: 0,
+        compliancePct: 100,
+        announcements: 0
+      }
+    );
+  }, [selectedSubjectId, globalStats, subjectStats]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
@@ -445,6 +618,39 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {/* Selector de Hijo/a para Padres */}
+            {isParentRole && familyStudents.length > 0 && (
+              <div className="bg-white/10 p-1.5 px-3 rounded-2xl border border-white/10 flex items-center gap-2">
+                <Users size={14} className="text-emerald-300" />
+                {familyStudents.length > 1 ? (
+                  <select
+                    value={selectedStudentId}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setSelectedStudentId(newId);
+                      const kid = familyStudents.find((s) => s.id === newId);
+                      if (kid?.course_id && kid.course_id !== selectedCourseId) {
+                        setSelectedCourseId(kid.course_id);
+                        localStorage.setItem('selected_course_id', kid.course_id);
+                      }
+                      setSelectedSubjectId('ALL');
+                    }}
+                    className="bg-transparent text-white font-black text-xs outline-none cursor-pointer"
+                  >
+                    {familyStudents.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                        {s.names} {s.first_surname || ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-bold text-white">
+                    Estudiante: <span className="text-emerald-300 font-black">{familyStudents[0].names} {familyStudents[0].first_surname || ''}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Selector de Cursos de Hermanos (Padres) */}
             {isParentRole && linkedParentCourses.length > 1 && (
               <div className="bg-white/10 p-1.5 rounded-2xl border border-white/10 flex items-center gap-2">
@@ -482,37 +688,84 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
         {/* Resumen de Métricas Rápidas */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/10">
-          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Materias Activas
-            </span>
-            <span className="text-lg font-black text-white">{courseSubjects.length}</span>
+          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
+                Progreso General
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-2xl font-black ${
+                  globalStats.compliancePct >= 80 ? 'text-emerald-400' : globalStats.compliancePct >= 60 ? 'text-amber-400' : 'text-rose-400'
+                }`}>
+                  {globalStats.compliancePct}%
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold">cumplimiento</span>
+              </div>
+            </div>
+            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-2">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  globalStats.compliancePct >= 80 ? 'bg-emerald-400' : globalStats.compliancePct >= 60 ? 'bg-amber-400' : 'bg-rose-400'
+                }`}
+                style={{ width: `${globalStats.compliancePct}%` }}
+              />
+            </div>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Cumplimiento
-            </span>
-            <span className={`text-lg font-black ${globalStats.compliancePct >= 80 ? 'text-emerald-400' : globalStats.compliancePct >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
-              {globalStats.compliancePct}%
-            </span>
+
+          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-300 block mb-1">
+                Corregidas / Hechas
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black text-emerald-400">{globalStats.completedTasks}</span>
+                <span className="text-xs font-bold text-slate-400">de {globalStats.totalTasks}</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-emerald-300 font-bold mt-1">
+              {globalStats.completedTasks === 1 ? '1 tarea corregida' : `${globalStats.completedTasks} tareas corregidas`}
+            </p>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Entregadas
-            </span>
-            <span className="text-lg font-black text-emerald-400">{globalStats.completedTasks}</span>
+
+          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 block mb-1">
+                Por Entregar
+              </span>
+              <span className="text-2xl font-black text-amber-400">{globalStats.pendingTasks}</span>
+            </div>
+            <p className="text-[10px] text-amber-300 font-bold mt-1">
+              {globalStats.pendingTasks === 0 ? 'Sin tareas pendientes' : 'Pendientes a tiempo'}
+            </p>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Por Entregar
-            </span>
-            <span className="text-lg font-black text-amber-400">{globalStats.pendingTasks}</span>
+
+          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-rose-300 block mb-1">
+                Sin Entregar
+              </span>
+              <span className={`text-2xl font-black ${globalStats.missingTasks > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                {globalStats.missingTasks}
+              </span>
+            </div>
+            <p className="text-[10px] text-rose-300 font-bold mt-1">
+              {globalStats.missingTasks === 0 ? '¡Al día, 0 vencidas!' : 'Vencidas / No hechas'}
+            </p>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
-            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
-              Total de Tareas
-            </span>
-            <span className="text-lg font-black text-white">{globalStats.totalTasks}</span>
+
+          <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 block mb-1">
+                Materias Activas
+              </span>
+              <span className="text-2xl font-black text-white">{courseSubjects.length}</span>
+            </div>
+            <p className="text-[10px] text-indigo-300 font-bold mt-1">
+              {courseSubjects.filter((cs) => {
+                const st = subjectStats[cs.subject.id];
+                return st && st.totalTasks > 0 && st.missingTasks === 0 && st.pendingTasks === 0;
+              }).length} al día 100%
+            </p>
           </div>
         </div>
       </div>
@@ -544,74 +797,139 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
         </div>
 
         {/* Cuadrícula compacta de materias optimizada para móvil y pantalla completa */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 pt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-1">
           {/* Tarjeta General: Todas */}
           <button
             type="button"
             onClick={() => handleSelectSubject('ALL')}
-            className={`p-2.5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
+            className={`p-3 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
               selectedSubjectId === 'ALL'
                 ? 'bg-indigo-50 border-indigo-600 shadow-md ring-2 ring-indigo-500/20'
                 : 'bg-slate-50/70 border-slate-200/80 hover:border-indigo-300 hover:bg-white'
             }`}
           >
-            <div className="flex items-center justify-between gap-1.5 mb-1">
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
               <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
                 <BookOpen size={12} />
               </div>
-              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
-                {globalStats.totalTasks} tareas
+              <span className={`text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                globalStats.compliancePct === 100
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-indigo-100 text-indigo-700'
+              }`}>
+                {globalStats.completedTasks}/{globalStats.totalTasks} hechas
               </span>
             </div>
 
             <div>
-              <h3 className="font-black text-slate-900 text-xs tracking-tight truncate">
-                Todas las Materias
-              </h3>
-              <p className="text-[9px] text-amber-600 font-bold truncate">
-                {globalStats.pendingTasks > 0 ? `${globalStats.pendingTasks} pendientes` : 'Al día'}
+              <div className="flex items-center justify-between gap-1 mb-0.5">
+                <h3 className="font-black text-slate-900 text-xs tracking-tight truncate">
+                  Todas las Materias
+                </h3>
+                <span className="text-[10px] font-black text-indigo-600 shrink-0">
+                  {globalStats.compliancePct}%
+                </span>
+              </div>
+              <p className="text-[9.5px] font-bold truncate">
+                {globalStats.missingTasks > 0 ? (
+                  <span className="text-rose-600">✕ {globalStats.missingTasks} sin entregar</span>
+                ) : globalStats.pendingTasks > 0 ? (
+                  <span className="text-amber-600">⏳ {globalStats.pendingTasks} pendientes</span>
+                ) : (
+                  <span className="text-emerald-600">✓ 100% al día</span>
+                )}
               </p>
             </div>
           </button>
 
           {/* Tarjetas individuales de materias */}
           {courseSubjects.map(({ subject, teacher }) => {
-            const stats = subjectStats[subject.id] || { totalTasks: 0, pendingTasks: 0, announcements: 0 };
+            const stats = subjectStats[subject.id] || {
+              totalTasks: 0,
+              completedTasks: 0,
+              pendingTasks: 0,
+              missingTasks: 0,
+              compliancePct: 100,
+              announcements: 0
+            };
             const isSelected = selectedSubjectId === subject.id;
+            const hasMissing = stats.missingTasks > 0;
+            const isAllDone = stats.totalTasks > 0 && stats.missingTasks === 0 && stats.pendingTasks === 0;
+            const hasPending = stats.pendingTasks > 0;
 
             return (
               <button
                 key={subject.id}
                 type="button"
                 onClick={() => handleSelectSubject(subject.id)}
-                className={`p-2.5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
+                className={`p-3 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between active:scale-95 ${
                   isSelected
                     ? 'bg-indigo-50 border-indigo-600 shadow-md ring-2 ring-indigo-500/20'
+                    : hasMissing
+                    ? 'bg-rose-50/20 border-rose-200/80 hover:border-rose-400 hover:bg-rose-50/40'
+                    : isAllDone
+                    ? 'bg-emerald-50/20 border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-50/40'
                     : 'bg-white border-slate-200/80 hover:border-indigo-300 hover:bg-slate-50'
                 }`}
               >
-                <div className="flex items-center justify-between gap-1.5 mb-1">
-                  <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-[9px] uppercase shadow-xs shrink-0">
+                <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                  <div className={`w-6 h-6 rounded-lg text-white flex items-center justify-center font-black text-[9px] uppercase shadow-xs shrink-0 ${
+                    hasMissing ? 'bg-rose-600' : isAllDone ? 'bg-emerald-600' : 'bg-slate-900'
+                  }`}>
                     {(subject?.name || 'MT').substring(0, 2)}
                   </div>
-                  {stats.pendingTasks > 0 ? (
-                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500 text-white shadow-xs animate-pulse">
-                      {stats.pendingTasks} pend.
+
+                  {stats.totalTasks === 0 ? (
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-400">
+                      Sin tareas
+                    </span>
+                  ) : hasMissing ? (
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-500 text-white shadow-xs">
+                      ✕ {stats.missingTasks} falta{stats.missingTasks > 1 ? 'n' : ''}
+                    </span>
+                  ) : hasPending ? (
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500 text-white shadow-xs">
+                      ⏳ {stats.pendingTasks} pend.
                     </span>
                   ) : (
-                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
-                      {stats.totalTasks} tar.
+                    <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500 text-white shadow-xs">
+                      ✓ Al día
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <h3 className="font-black text-slate-900 text-xs tracking-tight truncate leading-tight" title={subject?.name || 'Materia'}>
-                    {subject?.name || 'Materia'}
-                  </h3>
-                  <p className="text-[9px] text-slate-400 font-medium truncate" title={teacher ? (teacher.name || teacher.full_name) : ''}>
-                    {teacher ? (teacher.name || teacher.full_name) : `${stats.totalTasks} tareas`}
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <h3 className="font-black text-slate-900 text-xs tracking-tight truncate leading-tight" title={subject?.name || 'Materia'}>
+                      {subject?.name || 'Materia'}
+                    </h3>
+                    {stats.totalTasks > 0 && (
+                      <span className={`text-[9px] font-black shrink-0 ${
+                        isAllDone ? 'text-emerald-600' : hasMissing ? 'text-rose-600' : 'text-amber-600'
+                      }`}>
+                        {stats.compliancePct}%
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[9px] font-medium truncate flex items-center justify-between text-slate-500" title={teacher ? (teacher.name || teacher.full_name) : ''}>
+                    <span className="truncate">{teacher ? (teacher.name || teacher.full_name) : 'Docente'}</span>
+                    <span className="text-[8.5px] font-bold text-slate-600 ml-1 shrink-0">
+                      {stats.completedTasks}/{stats.totalTasks}
+                    </span>
                   </p>
+
+                  {/* Barra de progreso de la materia */}
+                  {stats.totalTasks > 0 && (
+                    <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-1.5">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          isAllDone ? 'bg-emerald-500' : hasMissing ? 'bg-rose-500' : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${stats.compliancePct}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </button>
             );
@@ -623,7 +941,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
       <div ref={tasksSectionRef} className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-6 scroll-mt-24">
         {/* Banner de la materia activa */}
         <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 bg-indigo-600 text-white rounded-md text-[9px] font-black uppercase tracking-widest">
                 {selectedSubjectId === 'ALL' ? 'Todas las áreas' : 'Materia Seleccionada'}
@@ -638,6 +956,34 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               {selectedSubjectId === 'ALL' ? 'Todas las Materias' : (activeSubjectData?.subject?.name || 'Materia')}
             </h2>
+
+            {/* Estado de cumplimiento de la materia seleccionada */}
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <span className={`px-2.5 py-1 rounded-xl text-[10.5px] font-black uppercase tracking-wider border shadow-2xs ${
+                currentActiveStats.compliancePct >= 80
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : currentActiveStats.compliancePct >= 50
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-rose-50 text-rose-800 border-rose-200'
+              }`}>
+                {currentActiveStats.completedTasks} de {currentActiveStats.totalTasks} corregidas/hechas ({currentActiveStats.compliancePct}% cumplimiento)
+              </span>
+              {currentActiveStats.missingTasks > 0 && (
+                <span className="px-2 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">
+                  {currentActiveStats.missingTasks} sin entregar
+                </span>
+              )}
+              {currentActiveStats.pendingTasks > 0 && (
+                <span className="px-2 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider bg-amber-100 text-amber-800">
+                  {currentActiveStats.pendingTasks} por entregar
+                </span>
+              )}
+              {currentActiveStats.totalTasks > 0 && currentActiveStats.missingTasks === 0 && currentActiveStats.pendingTasks === 0 && (
+                <span className="px-2 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                  ✓ Al día
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Switcher de Pestañas: Tareas vs Anuncios */}
@@ -806,33 +1152,44 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                   onClick={() => setStatusFilter('ALL')}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                     statusFilter === 'ALL'
-                      ? 'bg-white text-indigo-600 shadow-sm border border-slate-200'
+                      ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Todas
+                  Todas ({currentActiveStats.totalTasks})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('COMPLETED')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    statusFilter === 'COMPLETED'
+                      ? 'bg-emerald-600 text-white font-black shadow-sm'
+                      : 'text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  ✓ Hechas ({currentActiveStats.completedTasks})
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter('PENDING')}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                     statusFilter === 'PENDING'
-                      ? 'bg-emerald-50 text-emerald-700 font-black shadow-sm border border-emerald-200'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-amber-500 text-white font-black shadow-sm'
+                      : 'text-amber-700 hover:bg-amber-50'
                   }`}
                 >
-                  Pendientes
+                  ⏳ Pendientes ({currentActiveStats.pendingTasks})
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter('LATE')}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                     statusFilter === 'LATE'
-                      ? 'bg-rose-50 text-rose-700 font-black shadow-sm border border-rose-200'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-rose-600 text-white font-black shadow-sm'
+                      : 'text-rose-700 hover:bg-rose-50'
                   }`}
                 >
-                  Vencidas
+                  ✕ Sin entregar ({currentActiveStats.missingTasks})
                 </button>
               </div>
             </div>
@@ -892,7 +1249,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                             if (isCompleted) {
                               return (
                                 <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                                  ✓ ENTREGADA {sub.score !== null && sub.score !== undefined ? `• ${sub.score}/100` : ''}
+                                  ✓ CORREGIDA / HECHA {sub.score !== null && sub.score !== undefined ? `• ${sub.score}/100` : ''}
                                 </span>
                               );
                             }

@@ -398,6 +398,22 @@ export const dataService = {
         localStorage.setItem(`edugens_task_submissions_${taskId}`, JSON.stringify(submissions));
       } catch (e) {}
     }
+
+    // Sincronizar en localStorage por estudiante para reflejo inmediato en el mismo navegador
+    submissions.forEach((sub: any) => {
+      if (sub.student_id) {
+        try {
+          const key = `edugens_student_task_subs_${sub.student_id}`;
+          const current = localStorage.getItem(key);
+          const list: any[] = current ? JSON.parse(current) : [];
+          const idx = list.findIndex((x) => x.task_id === sub.task_id);
+          if (idx >= 0) list[idx] = sub;
+          else list.push(sub);
+          localStorage.setItem(key, JSON.stringify(list));
+        } catch (e) {}
+      }
+    });
+
     try {
       const { error } = await supabase
         .from('task_submissions')

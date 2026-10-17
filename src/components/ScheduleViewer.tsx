@@ -2865,10 +2865,16 @@ export const ScheduleViewer = () => {
             <button
               onClick={() => setIsScheduleImportModalOpen(true)}
               className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md transition-all no-print cursor-pointer"
-              title="Importar horario escolar completo desde archivo Excel para esta tanda"
+              title={
+                filterType === 'course' && selectedCourseObj
+                  ? `Subir o importar horario en Excel para ${selectedCourseObj.grade} "${selectedCourseObj.section || ''}"`
+                  : 'Importar horario escolar desde archivo Excel'
+              }
             >
               <Upload size={14} className="text-white" />
-              Subir Horario Excel
+              {filterType === 'course' && selectedCourseObj
+                ? `Subir Horario (${selectedCourseObj.grade} "${selectedCourseObj.section || ''}")`
+                : 'Subir Horario Excel'}
             </button>
           )}
 
@@ -4608,6 +4614,7 @@ export const ScheduleViewer = () => {
         state={state}
         profile={profile}
         refreshData={refreshData}
+        initialCourseId={filterType === 'course' && filterId ? filterId : undefined}
       />
     </div>
   );

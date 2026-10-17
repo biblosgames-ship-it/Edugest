@@ -20,6 +20,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { getStandardExtendedDaySlots } from '../services/scheduleService';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
+import { sortCourses } from '../utils/courseSorter';
 
 interface ScheduleImportModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ interface ScheduleImportModalProps {
   state: any;
   profile: any;
   refreshData: (centerId?: string, force?: boolean) => Promise<void>;
+  initialCourseId?: string;
 }
 
 export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
@@ -38,15 +40,58 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   schoolYear,
   state,
   profile,
-  refreshData
+  refreshData,
+  initialCourseId
 }) => {
+  // Modo de alcance: Un grado/curso específico o Toda la tanda del centro
+  const [importScope, setImportScope] = useState<'all' | 'single'>(() => {
+    return initialCourseId ? 'single' : 'all';
+  });
+
+  const sortedCenterCourses = useMemo(() => {
+    return sortCourses(state.courses || []);
+  }, [state.courses]);
+
+  const [targetCourseId, setTargetCourseId] = useState<string>(() => {
+    if (initialCourseId) return initialCourseId;
+    return (state.courses || [])[0]?.id || '';
+  });
+
+  // Sincronizar si cambia initialCourseId al abrir el modal
+  useEffect(() => {
+    if (initialCourseId) {
+      setImportScope('single');
+      setTargetCourseId(initialCourseId);
+    }
+  }, [initialCourseId, isOpen]);
+
+  const selectedTargetCourse = useMemo(() => {
+    return (state.courses || []).find((c: any) => c.id === targetCourseId);
+  }, [state.courses, targetCourseId]);
+
   const [selectedShift, setSelectedShift] = useState<'Matutina' | 'Vespertina' | 'Extendida'>(() => {
+    if (selectedTargetCourse?.tanda) {
+      const t = selectedTargetCourse.tanda.toLowerCase();
+      if (t.includes('ext') || t.includes('jor')) return 'Extendida';
+      if (t.includes('ves') || t.includes('tar')) return 'Vespertina';
+      return 'Matutina';
+    }
     const hasExt = (state.courses || []).some((c: any) => {
       const t = (c.tanda || '').toLowerCase();
       return t.includes('ext') || t.includes('jor');
     });
     return hasExt ? 'Extendida' : activeShift;
   });
+
+  // Sincronizar automáticamente la tanda si se selecciona un curso específico con tanda asignada
+  useEffect(() => {
+    if (importScope === 'single' && selectedTargetCourse?.tanda) {
+      const t = selectedTargetCourse.tanda.toLowerCase();
+      if (t.includes('ext') || t.includes('jor')) setSelectedShift('Extendida');
+      else if (t.includes('ves') || t.includes('tar')) setSelectedShift('Vespertina');
+      else setSelectedShift('Matutina');
+    }
+  }, [importScope, selectedTargetCourse]);
 
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -58,20 +103,36 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
 
   const centerId = profile?.center_id || state.courses?.[0]?.center_id;
-  const backupKey = `edugens_schedule_backup_${centerId}_${schoolYear || '2026-2027'}`;
+  const backupKey =
+    importScope === 'single' && targetCourseId
+      ? `edugens_schedule_backup_${centerId}_course_${targetCourseId}_${schoolYear || '2026-2027'}`
+      : `edugens_schedule_backup_${centerId}_${schoolYear || '2026-2027'}`;
+
   const [hasBackup, setHasBackup] = useState(() => {
     try {
-      return Boolean(localStorage.getItem(`edugens_schedule_backup_${profile?.center_id || state.courses?.[0]?.center_id}_${schoolYear || '2026-2027'}`));
+      const cId = profile?.center_id || state.courses?.[0]?.center_id;
+      const bKey = initialCourseId
+        ? `edugens_schedule_backup_${cId}_course_${initialCourseId}_${schoolYear || '2026-2027'}`
+        : `edugens_schedule_backup_${cId}_${schoolYear || '2026-2027'}`;
+      return Boolean(localStorage.getItem(bKey));
     } catch {
       return false;
     }
   });
 
+  useEffect(() => {
+    try {
+      setHasBackup(Boolean(localStorage.getItem(backupKey)));
+    } catch {
+      setHasBackup(false);
+    }
+  }, [backupKey]);
+
   const handleRestoreBackup = async () => {
     try {
       const raw = localStorage.getItem(backupKey);
       if (!raw) {
-        toast.error('No hay ninguna copia de respaldo guardada para este centro.');
+        toast.error('No hay ninguna copia de respaldo guardada para este centro o curso.');
         return;
       }
       const bData = JSON.parse(raw);
@@ -114,8 +175,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
   };
 
-  // Cursos del centro para la tanda
+  // Cursos del centro para la tanda o curso individual
   const relevantCourses = useMemo(() => {
+    if (importScope === 'single') {
+      return selectedTargetCourse ? [selectedTargetCourse] : [];
+    }
     return (state.courses || []).filter((c: any) => {
       const t = (c.tanda || '').toLowerCase();
       if (selectedShift === 'Vespertina') {
@@ -124,7 +188,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       // Matutina / Extendida
       return !t.includes('ves') && !t.includes('tar');
     });
-  }, [state.courses, selectedShift]);
+  }, [state.courses, selectedShift, importScope, selectedTargetCourse]);
 
   // Bloques horarios estándar
   const standardSlots = useMemo(() => {
@@ -217,7 +281,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       XLSX.utils.book_append_sheet(wb, wsList, 'Horario_Lista');
 
       // HOJA 3: REFERENCIA DE ASIGNACIONES DOCENTES (Para copiar y pegar con exactitud)
-      const refRows = (state.assignments || []).map((a: any) => {
+      const assignmentsPool =
+        importScope === 'single' && selectedTargetCourse
+          ? (state.assignments || []).filter(
+              (a: any) => String(a.course_id || a.courseId) === String(selectedTargetCourse.id)
+            )
+          : (state.assignments || []);
+
+      let refRows = assignmentsPool.map((a: any) => {
         const c = state.courses.find((x: any) => x.id === a.course_id || x.id === a.courseId);
         const s = state.subjects.find((x: any) => x.id === a.subject_id || x.id === a.subjectId);
         const t = state.teachers.find((x: any) => x.id === a.teacher_id || x.id === a.teacherId);
@@ -230,6 +301,22 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           Texto_Sugerido_Para_Pegar: `${s?.name || ''} (${t?.name || ''})`.trim()
         };
       });
+
+      // Si es un curso específico y aún no tiene asignaciones configuradas, listar materias de su nivel
+      if (importScope === 'single' && selectedTargetCourse && refRows.length === 0) {
+        const cLvl = (selectedTargetCourse.level || '').toLowerCase().substring(0, 5);
+        const matchingSubs = (state.subjects || []).filter((s: any) =>
+          cLvl ? (s.level || '').toLowerCase().includes(cLvl) : true
+        );
+        refRows = matchingSubs.map((s: any) => ({
+          Curso: `${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}"`.trim(),
+          Nivel: selectedTargetCourse.level || '---',
+          Materia: s.name,
+          Docente: 'Por asignar',
+          Horas_Semanales: 4,
+          Texto_Sugerido_Para_Pegar: s.name
+        }));
+      }
 
       const wsRef = XLSX.utils.json_to_sheet(refRows);
       XLSX.utils.book_append_sheet(wb, wsRef, 'Referencia_Asignaciones');
@@ -244,9 +331,21 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       const wsBlocks = XLSX.utils.json_to_sheet(blocksRows);
       XLSX.utils.book_append_sheet(wb, wsBlocks, 'Horas_y_Bloques');
 
-      const fileName = `Edugest_Plantilla_Horario_${selectedShift}_${schoolYear || '2026-2027'}.xlsx`;
+      const cleanCourseName = selectedTargetCourse
+        ? `${selectedTargetCourse.grade}_${selectedTargetCourse.section || 'A'}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : 'Grado';
+
+      const fileName =
+        importScope === 'single' && selectedTargetCourse
+          ? `Edugest_Plantilla_Horario_${cleanCourseName}_${schoolYear || '2026-2027'}.xlsx`
+          : `Edugest_Plantilla_Horario_${selectedShift}_${schoolYear || '2026-2027'}.xlsx`;
+
       XLSX.writeFile(wb, fileName);
-      toast.success('Plantilla de horario descargada con éxito');
+      toast.success(
+        importScope === 'single' && selectedTargetCourse
+          ? `Plantilla para ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" descargada con éxito`
+          : 'Plantilla de horario descargada con éxito'
+      );
     } catch (e: any) {
       console.error(e);
       toast.error('Error al generar plantilla: ' + (e.message || e));
@@ -578,13 +677,22 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               return;
             }
 
-            if (courseVal) {
-              const matched = resolveCourse(String(courseVal));
-              if (matched) {
-                currentCourse = matched;
+            if (importScope === 'single' && selectedTargetCourse) {
+              if (courseVal) {
+                const matched = resolveCourse(String(courseVal));
+                currentCourse = matched || selectedTargetCourse;
               } else {
-                currentCourse = null;
-                warnings.push(`Fila ${rowIdx + 2}: No se pudo determinar el curso "${courseVal}".`);
+                currentCourse = selectedTargetCourse;
+              }
+            } else {
+              if (courseVal) {
+                const matched = resolveCourse(String(courseVal));
+                if (matched) {
+                  currentCourse = matched;
+                } else {
+                  currentCourse = null;
+                  warnings.push(`Fila ${rowIdx + 2}: No se pudo determinar el curso "${courseVal}".`);
+                }
               }
             }
 
@@ -659,7 +767,10 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         else {
           rawData.forEach((row, rowIdx) => {
             const courseVal = row['Curso'] || row['curso'] || row['Grado'] || '';
-            const course = resolveCourse(String(courseVal));
+            let course = resolveCourse(String(courseVal));
+            if (!course && importScope === 'single' && selectedTargetCourse) {
+              course = selectedTargetCourse;
+            }
             if (!course) {
               warnings.push(`Fila ${rowIdx + 2}: Curso "${courseVal}" no reconocido.`);
               return;
@@ -697,11 +808,21 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           });
         }
 
-        if (entries.length === 0) {
-          errors.push('No se pudieron extraer clases válidas del archivo. Revisa que los nombres de los cursos y materias coincidan.');
+        // Si estamos en modo de grado/curso específico, filtrar para asegurar que solo se procesen clases de ese grado
+        const finalEntries =
+          importScope === 'single' && selectedTargetCourse
+            ? entries.filter((e) => e.course_id === selectedTargetCourse.id)
+            : entries;
+
+        if (finalEntries.length === 0) {
+          errors.push(
+            importScope === 'single' && selectedTargetCourse
+              ? `No se encontraron clases válidas para ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}". Revisa que los nombres de materias coincidan.`
+              : 'No se pudieron extraer clases válidas del archivo. Revisa que los nombres de los cursos y materias coincidan.'
+          );
         }
 
-        setParsedEntries(entries);
+        setParsedEntries(finalEntries);
         setParseErrors(errors);
         setParseWarnings(warnings);
       } catch (err: any) {
@@ -722,12 +843,20 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
 
     const targetYear = schoolYear || '2026-2027';
-    const affectedCourseIds = Array.from(new Set(parsedEntries.map((e) => e.course_id)));
+    const isSingle = importScope === 'single' && selectedTargetCourse;
+    const courseLabel = selectedTargetCourse ? `${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}"` : '';
+    const affectedCourseIds =
+      isSingle && selectedTargetCourse
+        ? [selectedTargetCourse.id]
+        : Array.from(new Set(parsedEntries.map((e) => e.course_id)));
 
     if (
       !confirm(
-        `¿Deseas aplicar e importar ${parsedEntries.length} clases para ${affectedCourseIds.length} cursos en el Año Escolar ${targetYear}?\n\n` +
-          `🔒 Todas las materias quedarán blindadas con candado y listas para usarse inmediatamente.`
+        isSingle
+          ? `¿Deseas aplicar e importar el horario de ${parsedEntries.length} clases exclusivamente para el curso ${courseLabel} (Año Escolar ${targetYear})?\n\n` +
+            `🔒 Solo se reemplazará el horario de este grado/curso. Todos los demás cursos del centro permanecerán intactos.`
+          : `¿Deseas aplicar e importar ${parsedEntries.length} clases para ${affectedCourseIds.length} cursos en el Año Escolar ${targetYear}?\n\n` +
+            `🔒 Todas las materias quedarán blindadas con candado y listas para usarse inmediatamente.`
       )
     ) {
       return;
@@ -870,7 +999,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         localStorage.setItem(storageKey, JSON.stringify(updatedLocal));
       } catch {}
 
-      toast.success(`✅ ¡${parsedEntries.length} clases importadas con éxito!`);
+      toast.success(
+        isSingle
+          ? `✅ ¡Horario de ${courseLabel} importado con éxito (${entriesToInsert.length} clases)!`
+          : `✅ ¡${entriesToInsert.length} clases importadas con éxito para ${affectedCourseIds.length} cursos!`
+      );
       await refreshData(undefined, true);
       onClose();
     } catch (err: any) {
@@ -910,9 +1043,15 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               <FileSpreadsheet className="text-emerald-400" size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight">Carga Masiva de Horarios desde Excel</h2>
+              <h2 className="text-lg font-black tracking-tight">
+                {importScope === 'single' && selectedTargetCourse
+                  ? `Subir Horario de ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" desde Excel`
+                  : 'Carga de Horarios desde Excel'}
+              </h2>
               <p className="text-xs text-indigo-200">
-                Replica el horario exacto del centro sin subir hora por hora
+                {importScope === 'single' && selectedTargetCourse
+                  ? `Actualiza o reemplaza únicamente el horario de este grado sin afectar los demás cursos`
+                  : 'Replica el horario exacto del centro o de un grado específico en segundos'}
               </p>
             </div>
           </div>
@@ -924,50 +1063,135 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           </button>
         </div>
 
-        {/* Barra de Controles y Selector de Tanda */}
-        <div className="p-6 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Tanda de Trabajo:</span>
-            <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-              {(['Extendida', 'Matutina', 'Vespertina'] as const).map((sh) => (
+        {/* Barra de Controles y Selector de Modo / Alcance */}
+        <div className="p-5 bg-slate-50 border-b border-slate-200 space-y-3.5">
+          {/* Fila 1: Selector de Modo (Un Grado Específico vs Tanda Completa) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                Alcance:
+              </span>
+              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
                 <button
-                  key={sh}
                   type="button"
-                  onClick={() => setSelectedShift(sh)}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    selectedShift === sh
+                  onClick={() => {
+                    setImportScope('single');
+                    if (parsedEntries.length > 0) {
+                      setParsedEntries([]);
+                      setFile(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    importScope === 'single'
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {sh === 'Extendida' ? 'Jornada Extendida (8h)' : sh}
+                  <Layers size={13} />
+                  Un Grado / Curso Específico
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportScope('all');
+                    if (parsedEntries.length > 0) {
+                      setParsedEntries([]);
+                      setFile(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    importScope === 'all'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <BookOpen size={13} />
+                  Tanda Completa (Todos)
+                </button>
+              </div>
+            </div>
+
+            {/* Acciones de Respaldo y Descarga de Plantilla */}
+            <div className="flex items-center gap-2">
+              {hasBackup && (
+                <button
+                  type="button"
+                  onClick={handleRestoreBackup}
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+                  title="Restaura la copia de seguridad previa de horarios"
+                >
+                  <Clock size={13} className="text-amber-700" />
+                  Restaurar Respaldo
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+                title={
+                  importScope === 'single'
+                    ? 'Descarga la plantilla Excel exclusiva para este grado'
+                    : 'Descarga la plantilla con todos los cursos del centro'
+                }
+              >
+                <Download size={14} className="text-indigo-600" />
+                {importScope === 'single' ? 'Descargar Plantilla del Grado' : 'Descargar Plantilla Excel'}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {hasBackup && (
-              <button
-                type="button"
-                onClick={handleRestoreBackup}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-                title="Restaura la copia de seguridad previa de horarios de este centro"
-              >
-                <Clock size={14} className="text-amber-700" />
-                Restaurar Respaldo Anterior
-              </button>
+          {/* Fila 2: Selector contextual según el modo elegido */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200/60">
+            {importScope === 'single' ? (
+              <div className="flex flex-wrap items-center gap-2 w-full">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                  Grado / Curso a subir:
+                </span>
+                <select
+                  value={targetCourseId}
+                  onChange={(e) => {
+                    setTargetCourseId(e.target.value);
+                    if (parsedEntries.length > 0) {
+                      setParsedEntries([]);
+                      setFile(null);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-white border-2 border-indigo-200 focus:border-indigo-600 rounded-xl text-xs font-black text-slate-800 shadow-2xs outline-none cursor-pointer"
+                >
+                  {sortedCenterCourses.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.grade} "{c.section || ''}" • {c.level || ''} ({c.tanda || 'Matutina'})
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                  ✓ Aislamiento Total: Solo se modificará este curso. Los demás no se tocan.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                  Tanda:
+                </span>
+                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                  {(['Extendida', 'Matutina', 'Vespertina'] as const).map((sh) => (
+                    <button
+                      key={sh}
+                      type="button"
+                      onClick={() => setSelectedShift(sh)}
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        selectedShift === sh
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {sh === 'Extendida' ? 'Jornada Extendida (8h)' : sh}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-              title="Descarga la plantilla con tus cursos y docentes precargados"
-            >
-              <Download size={14} className="text-indigo-600" />
-              Descargar Plantilla Excel
-            </button>
           </div>
         </div>
 
@@ -979,20 +1203,37 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 flex items-start gap-3 text-sky-950">
                 <Info size={20} className="text-sky-600 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
-                  <p className="font-bold">¿Cómo funciona la carga rápida?</p>
+                  <p className="font-bold">
+                    {importScope === 'single'
+                      ? `¿Cómo subir el horario para ${selectedTargetCourse?.grade || 'este curso'} "${selectedTargetCourse?.section || ''}"?`
+                      : '¿Cómo funciona la carga rápida del horario escolar?'}
+                  </p>
                   <ul className="list-disc list-inside text-sky-800 space-y-0.5 text-[11px]">
-                    <li>
-                      Descarga la plantilla: contiene la hoja <strong>Horario_Matriz</strong> (cuadrícula por curso) y la hoja <strong>Referencia_Asignaciones</strong> con tus docentes y materias exactas.
-                    </li>
-                    <li>
-                      Puedes escribir solo la materia (ej. <em>"Español"</em>) y el sistema asignará automáticamente al docente que ya tienes en el sistema.
-                    </li>
-                    <li>
-                      O puedes escribir <em>"Español (Idaliza)"</em> para especificarlo directamente.
-                    </li>
-                    <li>
-                      Al subir el archivo, todo se guardará con candado 🔒 sin modificar los demás centros.
-                    </li>
+                    {importScope === 'single' ? (
+                      <>
+                        <li>
+                          Haz clic en <strong>Descargar Plantilla del Grado</strong> para obtener la matriz exclusiva de este curso y su lista de asignaturas docentes.
+                        </li>
+                        <li>
+                          Llena las casillas de cada día (Lunes a Viernes) escribiendo solo el nombre de la materia (ej. <em>"Español"</em>, <em>"Matemáticas"</em>) o materia y profesor (ej. <em>"Español (Idaliza)"</em>).
+                        </li>
+                        <li>
+                          Al subir el archivo, <strong>solo se actualizará este grado</strong> sin afectar ningún otro curso de la escuela.
+                        </li>
+                      </>
+                    ) : (
+                      <>
+                        <li>
+                          Descarga la plantilla: contiene la hoja <strong>Horario_Matriz</strong> con todos los cursos y la hoja <strong>Referencia_Asignaciones</strong> con tus docentes y materias exactas.
+                        </li>
+                        <li>
+                          Puedes escribir solo la materia (ej. <em>"Español"</em>) y el sistema asignará automáticamente al docente que ya tienes registrado.
+                        </li>
+                        <li>
+                          Al subir el archivo, todo se guardará con candado 🔒 y respaldo automático previo.
+                        </li>
+                      </>
+                    )}
                   </ul>
                 </div>
               </div>
@@ -1214,12 +1455,16 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 {isSaving ? (
                   <>
                     <Loader2 size={15} className="animate-spin" />
-                    Guardando Horario...
+                    {importScope === 'single' && selectedTargetCourse
+                      ? `Guardando Horario de ${selectedTargetCourse.grade}...`
+                      : 'Guardando Horario...'}
                   </>
                 ) : (
                   <>
                     <Sparkles size={15} />
-                    Guardar Horario en el Sistema 🔒
+                    {importScope === 'single' && selectedTargetCourse
+                      ? `Guardar Horario de ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" 🔒`
+                      : 'Guardar Horario en el Sistema 🔒'}
                   </>
                 )}
               </button>
