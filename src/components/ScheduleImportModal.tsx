@@ -80,7 +80,9 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       const t = (c.tanda || '').toLowerCase();
       return t.includes('ext') || t.includes('jor');
     });
-    return hasExt ? 'Extendida' : activeShift;
+    if (hasExt) return 'Extendida';
+    if (activeShift === 'Vespertina') return 'Vespertina';
+    return 'Extendida';
   });
 
   // Sincronizar automáticamente la tanda si se selecciona un curso específico con tanda asignada
@@ -89,7 +91,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       const t = selectedTargetCourse.tanda.toLowerCase();
       if (t.includes('ext') || t.includes('jor')) setSelectedShift('Extendida');
       else if (t.includes('ves') || t.includes('tar')) setSelectedShift('Vespertina');
-      else setSelectedShift('Matutina');
+      else if (t.includes('mat') || t.includes('mañ')) setSelectedShift('Matutina');
     }
   }, [importScope, selectedTargetCourse]);
 
@@ -190,37 +192,49 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     });
   }, [state.courses, selectedShift, importScope, selectedTargetCourse]);
 
-  // Bloques horarios estándar
-  const standardSlots = useMemo(() => {
+  // Estructura completa de bloques para la plantilla (incluye recesos y almuerzo claramente demarcados)
+  const templateSlots = useMemo(() => {
     if (selectedShift === 'Extendida') {
-      return getStandardExtendedDaySlots().filter((s) => !s.isBreak);
+      return [
+        { start: '08:15:00', end: '09:00:00', label: '1ra Hora (08:15 - 09:00)', isBreak: false, slotNum: 1 },
+        { start: '09:00:00', end: '09:45:00', label: '2da Hora (09:00 - 09:45)', isBreak: false, slotNum: 2 },
+        { start: '09:45:00', end: '10:15:00', label: '🔔 RECREO (09:45 - 10:15)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
+        { start: '10:15:00', end: '11:00:00', label: '3ra Hora (10:15 - 11:00)', isBreak: false, slotNum: 3 },
+        { start: '11:00:00', end: '11:45:00', label: '4ta Hora (11:00 - 11:45)', isBreak: false, slotNum: 4 },
+        { start: '11:45:00', end: '12:45:00', label: '🍽️ ALMUERZO (11:45 - 12:45)', isBreak: true, defaultVal: '--- ALMUERZO ESCOLAR ---' },
+        { start: '12:45:00', end: '13:30:00', label: '5ta Hora (12:45 - 13:30)', isBreak: false, slotNum: 5 },
+        { start: '13:30:00', end: '14:15:00', label: '6ta Hora (13:30 - 14:15)', isBreak: false, slotNum: 6 },
+        { start: '14:15:00', end: '14:30:00', label: '🔔 RECREO (14:15 - 14:30)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
+        { start: '14:30:00', end: '15:15:00', label: '7ma Hora (14:30 - 15:15)', isBreak: false, slotNum: 7 },
+        { start: '15:15:00', end: '16:00:00', label: '8va Hora (15:15 - 16:00)', isBreak: false, slotNum: 8 }
+      ];
     }
-    // Regular mañana (08:00 a 12:30) o tarde (14:00 a 18:15)
-    const isMorn = selectedShift === 'Matutina';
-    const cleanDuration = isMorn ? 45 : 40;
-    const count = isMorn ? 5 : 6;
-    const startMins = isMorn ? 480 : 840;
-    const slots = [];
-    let cur = startMins;
-    for (let i = 0; i < count; i++) {
-      if (i === 3) {
-        // Pausa recreo
-        cur += isMorn ? 30 : 20;
-      }
-      const sH = Math.floor(cur / 60).toString().padStart(2, '0');
-      const sM = (cur % 60).toString().padStart(2, '0');
-      const endMins = cur + cleanDuration;
-      const eH = Math.floor(endMins / 60).toString().padStart(2, '0');
-      const eM = (endMins % 60).toString().padStart(2, '0');
-      slots.push({
-        start: `${sH}:${sM}:00`,
-        end: `${eH}:${eM}:00`,
-        label: `${i + 1}ra Hora`
-      });
-      cur = endMins;
+    if (selectedShift === 'Matutina') {
+      return [
+        { start: '08:00:00', end: '08:45:00', label: '1ra Hora (08:00 - 08:45)', isBreak: false, slotNum: 1 },
+        { start: '08:45:00', end: '09:30:00', label: '2da Hora (08:45 - 09:30)', isBreak: false, slotNum: 2 },
+        { start: '09:30:00', end: '10:15:00', label: '3ra Hora (09:30 - 10:15)', isBreak: false, slotNum: 3 },
+        { start: '10:15:00', end: '10:45:00', label: '🔔 RECREO (10:15 - 10:45)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
+        { start: '10:45:00', end: '11:30:00', label: '4ta Hora (10:45 - 11:30)', isBreak: false, slotNum: 4 },
+        { start: '11:30:00', end: '12:15:00', label: '5ta Hora (11:30 - 12:15)', isBreak: false, slotNum: 5 }
+      ];
     }
-    return slots;
+    // Vespertina
+    return [
+      { start: '14:00:00', end: '14:40:00', label: '1ra Hora (14:00 - 14:40)', isBreak: false, slotNum: 1 },
+      { start: '14:40:00', end: '15:20:00', label: '2da Hora (14:40 - 15:20)', isBreak: false, slotNum: 2 },
+      { start: '15:20:00', end: '16:00:00', label: '3ra Hora (15:20 - 16:00)', isBreak: false, slotNum: 3 },
+      { start: '16:00:00', end: '16:20:00', label: '🔔 RECREO (16:00 - 16:20)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
+      { start: '16:20:00', end: '17:00:00', label: '4ta Hora (16:20 - 17:00)', isBreak: false, slotNum: 4 },
+      { start: '17:00:00', end: '17:40:00', label: '5ta Hora (17:00 - 17:40)', isBreak: false, slotNum: 5 },
+      { start: '17:40:00', end: '18:15:00', label: '6ta Hora (17:40 - 18:15)', isBreak: false, slotNum: 6 }
+    ];
   }, [selectedShift]);
+
+  // Bloques horarios estándar lectivos (sin recesos)
+  const standardSlots = useMemo(() => {
+    return templateSlots.filter((s) => !s.isBreak);
+  }, [templateSlots]);
 
   // Normalizador de texto para comparaciones
   const norm = (str: string) =>
@@ -240,16 +254,16 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       const matrixRows: any[] = [];
       relevantCourses.forEach((c: any) => {
         const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
-        standardSlots.forEach((slot, idx) => {
+        templateSlots.forEach((slot) => {
           matrixRows.push({
             Curso: courseLabel,
             Nivel: c.level || 'Secundario',
-            Bloque: `${idx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`,
-            Lunes: '',
-            Martes: '',
-            Miércoles: '',
-            Jueves: '',
-            Viernes: ''
+            Bloque: slot.label,
+            Lunes: slot.isBreak ? slot.defaultVal : '',
+            Martes: slot.isBreak ? slot.defaultVal : '',
+            Miércoles: slot.isBreak ? slot.defaultVal : '',
+            Jueves: slot.isBreak ? slot.defaultVal : '',
+            Viernes: slot.isBreak ? slot.defaultVal : ''
           });
         });
       });
@@ -322,11 +336,12 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       XLSX.utils.book_append_sheet(wb, wsRef, 'Referencia_Asignaciones');
 
       // HOJA 4: CATÁLOGO DE BLOQUES Y HORAS
-      const blocksRows = standardSlots.map((s, idx) => ({
-        Numero_Hora: idx + 1,
+      const blocksRows = templateSlots.map((s, idx) => ({
+        Numero_Orden: idx + 1,
         Nombre_Bloque: s.label,
         Hora_Inicio: s.start.substring(0, 5),
-        Hora_Fin: s.end.substring(0, 5)
+        Hora_Fin: s.end.substring(0, 5),
+        Tipo: s.isBreak ? 'Pausa / Receso' : 'Hora de Docencia'
       }));
       const wsBlocks = XLSX.utils.json_to_sheet(blocksRows);
       XLSX.utils.book_append_sheet(wb, wsBlocks, 'Horas_y_Bloques');
@@ -636,31 +651,84 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           return null;
         };
 
-        // Función para resolver bloque/hora
-        const resolveSlot = (slotStr: string, rowIdx: number) => {
+        // Detectar si la fila es un receso, almuerzo o pausa escolar
+        const isBreakRow = (rowObj: any) => {
+          const rowText = (
+            String(rowObj['Bloque'] || rowObj['bloque'] || rowObj['Hora'] || rowObj['hora'] || rowObj['Horario'] || '') + ' ' +
+            String(rowObj['Lunes'] || rowObj['lunes'] || '') + ' ' +
+            String(rowObj['Materia'] || rowObj['materia'] || '')
+          ).toLowerCase();
+
+          return (
+            rowText.includes('recreo') ||
+            rowText.includes('almuerzo') ||
+            rowText.includes('receso') ||
+            rowText.includes('merienda') ||
+            rowText.includes('acogida') ||
+            rowText.includes('acto a la bandera') ||
+            rowText.includes('desayuno')
+          );
+        };
+
+        const activeSlots = (selectedShift === 'Extendida' ||
+          JSON.stringify(rawData).toLowerCase().includes('almuerzo') ||
+          JSON.stringify(rawData).toLowerCase().includes('8va') ||
+          JSON.stringify(rawData).toLowerCase().includes('15:15'))
+          ? [
+              { start: '08:15:00', end: '09:00:00', label: '1ra Hora' },
+              { start: '09:00:00', end: '09:45:00', label: '2da Hora' },
+              { start: '10:15:00', end: '11:00:00', label: '3ra Hora' },
+              { start: '11:00:00', end: '11:45:00', label: '4ta Hora' },
+              { start: '12:45:00', end: '13:30:00', label: '5ta Hora' },
+              { start: '13:30:00', end: '14:15:00', label: '6ta Hora' },
+              { start: '14:30:00', end: '15:15:00', label: '7ma Hora' },
+              { start: '15:15:00', end: '16:00:00', label: '8va Hora' }
+            ]
+          : standardSlots;
+
+        // Auto-seleccionar Extendida en la UI si se detecta en los datos del archivo
+        if (activeSlots.length === 8 && selectedShift !== 'Extendida') {
+          setSelectedShift('Extendida');
+          toast('🌟 Se ha detectado Horario de Jornada Extendida (8 bloques con almuerzo y recesos).', {
+            icon: 'ℹ️'
+          });
+        }
+
+        // Función para resolver bloque/hora con precisión quirúrgica
+        const resolveSlot = (slotStr: string, teachingIdx: number) => {
           if (slotStr) {
             const clean = slotStr.toLowerCase();
             // Buscar número de bloque 1ra, 2da, 1, 2, etc.
             const matchNum = clean.match(/(\d+)/);
             if (matchNum) {
               const num = parseInt(matchNum[1], 10);
-              if (num >= 1 && num <= standardSlots.length) {
-                return standardSlots[num - 1];
+              if (num >= 1 && num <= activeSlots.length) {
+                return activeSlots[num - 1];
               }
             }
-            // Buscar coincidencia de hora (ej. 08:15)
-            const matchSlot = standardSlots.find((s) => clean.includes(s.start.substring(0, 5)));
+            if (clean.includes('primera') || clean.includes('1ra') || clean.includes('1ro')) return activeSlots[0];
+            if (clean.includes('segunda') || clean.includes('2da') || clean.includes('2do')) return activeSlots[1];
+            if (clean.includes('tercera') || clean.includes('3ra') || clean.includes('3ro')) return activeSlots[2];
+            if (clean.includes('cuarta') || clean.includes('4ta') || clean.includes('4to')) return activeSlots[3];
+            if (clean.includes('quinta') || clean.includes('5ta') || clean.includes('5to')) return activeSlots[4];
+            if (clean.includes('sexta') || clean.includes('6ta') || clean.includes('6to')) return activeSlots[5];
+            if (clean.includes('septima') || clean.includes('séptima') || clean.includes('7ma') || clean.includes('7mo')) return activeSlots[6];
+            if (clean.includes('octava') || clean.includes('8va') || clean.includes('8vo')) return activeSlots[7];
+
+            // Buscar coincidencia de hora (ej. 08:15, 12:45, 14:30)
+            const matchSlot = activeSlots.find((s) => clean.includes(s.start.substring(0, 5)));
             if (matchSlot) return matchSlot;
           }
 
-          // Por defecto tomar según el índice relativo
-          const slotIdx = rowIdx % standardSlots.length;
-          return standardSlots[slotIdx];
+          // Por defecto tomar según el índice secuencial de horas de docencia
+          const slotIdx = teachingIdx % activeSlots.length;
+          return activeSlots[slotIdx];
         };
 
         // A) PROCESAR FORMATO MATRIZ
         if (isMatrix) {
           let currentCourse: any = null;
+          const courseTeachingCount: Record<string, number> = {};
 
           rawData.forEach((row, rowIdx) => {
             const courseVal =
@@ -700,6 +768,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               return;
             }
 
+            // Omitir franjas de recreo o almuerzo para que no consuman slots lectivos
+            if (isBreakRow(row)) {
+              return;
+            }
+
             const slotVal =
               row['Bloque'] ||
               row['bloque'] ||
@@ -707,7 +780,9 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               row['hora'] ||
               row['Horario'] ||
               '';
-            const slot = resolveSlot(String(slotVal), rowIdx);
+            const currentIdx = courseTeachingCount[currentCourse.id] || 0;
+            const slot = resolveSlot(String(slotVal), currentIdx);
+            courseTeachingCount[currentCourse.id] = currentIdx + 1;
 
             days.forEach((dayName) => {
               // Buscar clave del día (tolerar acentos y mayúsculas)
@@ -715,7 +790,13 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               if (!dayKey) return;
 
               const cellVal = String(row[dayKey] || '').trim();
-              if (!cellVal || norm(cellVal) === 'libre' || norm(cellVal).includes('recreo') || norm(cellVal).includes('almuerzo')) {
+              if (
+                !cellVal ||
+                norm(cellVal) === 'libre' ||
+                norm(cellVal).includes('recreo') ||
+                norm(cellVal).includes('almuerzo') ||
+                norm(cellVal).includes('pausa')
+              ) {
                 return;
               }
 
@@ -758,13 +839,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 start_time: slot.start,
                 end_time: slot.end,
                 slotLabel: slot.label,
-                shift: selectedShift === 'Vespertina' ? 'Vespertina' : (currentCourse.tanda || selectedShift)
+                shift: selectedShift === 'Extendida' || activeSlots.length === 8 ? 'Extendida' : (selectedShift === 'Vespertina' ? 'Vespertina' : (currentCourse.tanda || selectedShift))
               });
             });
           });
         }
         // B) PROCESAR FORMATO LISTA PLANA
         else {
+          const courseTeachingCount: Record<string, number> = {};
           rawData.forEach((row, rowIdx) => {
             const courseVal = row['Curso'] || row['curso'] || row['Grado'] || '';
             let course = resolveCourse(String(courseVal));
@@ -776,11 +858,15 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               return;
             }
 
+            if (isBreakRow(row)) return;
+
             const dayVal = row['Dia'] || row['dia'] || row['Día'] || 'Lunes';
             const matchedDay = days.find((d) => norm(d).startsWith(norm(String(dayVal)).substring(0, 3))) || 'Lunes';
 
             const slotVal = row['Bloque_o_Hora'] || row['Bloque'] || row['Hora'] || '';
-            const slot = resolveSlot(String(slotVal), rowIdx);
+            const currentIdx = courseTeachingCount[course.id] || 0;
+            const slot = resolveSlot(String(slotVal), currentIdx);
+            courseTeachingCount[course.id] = currentIdx + 1;
 
             const subjectVal = row['Materia'] || row['materia'] || row['Asignatura'] || '';
             const subject = resolveSubject(String(subjectVal), course.id);
@@ -803,7 +889,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               start_time: slot.start,
               end_time: slot.end,
               slotLabel: slot.label,
-              shift: selectedShift === 'Vespertina' ? 'Vespertina' : (course.tanda || selectedShift)
+              shift: selectedShift === 'Extendida' || activeSlots.length === 8 ? 'Extendida' : (selectedShift === 'Vespertina' ? 'Vespertina' : (course.tanda || selectedShift))
             });
           });
         }
@@ -948,14 +1034,39 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         console.warn('Nota sobre creación de respaldo previo:', bErr);
       }
 
-      // C) Eliminar horarios previos ÚNICAMENTE de los cursos afectados en este centro y año escolar
+      // C) Eliminar horarios previos ÚNICAMENTE de los cursos afectados para evitar duplicados o triplicados
       // (AISLAMIENTO TOTAL: otros cursos y otros centros nunca son afectados)
-      await supabase
-        .from('schedule_entries')
-        .delete()
-        .eq('center_id', centerId)
-        .eq('school_year', targetYear)
-        .in('course_id', affectedCourseIds);
+      // Se eliminan todas las entradas de estos cursos (independientemente de si school_year era nulo o de otro año)
+      if (centerId) {
+        await supabase
+          .from('schedule_entries')
+          .delete()
+          .eq('center_id', centerId)
+          .in('course_id', affectedCourseIds);
+      } else {
+        await supabase
+          .from('schedule_entries')
+          .delete()
+          .in('course_id', affectedCourseIds);
+      }
+
+      // Si se importó Jornada Extendida, actualizar automáticamente la tanda en la tabla courses
+      // para que el visor y MINERD desplieguen los 8 bloques con recesos y almuerzo
+      if (selectedShift === 'Extendida') {
+        try {
+          await supabase
+            .from('courses')
+            .update({ tanda: 'Jornada Extendida' })
+            .in('id', affectedCourseIds);
+
+          affectedCourseIds.forEach((cId) => {
+            const cObj = (state.courses || []).find((c: any) => c.id === cId);
+            if (cObj) cObj.tanda = 'Jornada Extendida';
+          });
+        } catch (cErr) {
+          console.warn('Nota al actualizar tanda del curso a Jornada Extendida:', cErr);
+        }
+      }
 
       // D) Insertar en lotes (chunks) de 200 registros con candado activado
       const entriesToInsert = parsedEntries.map((e) => ({
@@ -965,7 +1076,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         subject_id: e.subject_id,
         teacher_id: e.teacher_id,
         day: e.day,
-        shift: e.shift || selectedShift,
+        shift: selectedShift === 'Extendida' ? 'Extendida' : (e.shift || selectedShift),
         start_time: e.start_time,
         end_time: e.end_time,
         is_locked: true
@@ -990,13 +1101,22 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         }
       }
 
-      // E) Guardar backup local en localStorage para carga offline
+      // E) Limpiar y sincronizar copias locales en localStorage para evitar que revivan entradas viejas
       try {
-        const storageKey = centerId ? `edugens_custom_schedule_${centerId}` : 'edugens_custom_schedule_entries';
-        const existingLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        const filteredLocal = existingLocal.filter((s: any) => !affectedCourseIds.includes(s.course_id));
-        const updatedLocal = [...filteredLocal, ...entriesToInsert];
-        localStorage.setItem(storageKey, JSON.stringify(updatedLocal));
+        const keysToClean = [
+          'edugens_custom_schedule_entries',
+          centerId ? `edugens_custom_schedule_${centerId}` : null
+        ].filter(Boolean);
+
+        keysToClean.forEach((k: any) => {
+          try {
+            const raw = localStorage.getItem(k);
+            const list = raw ? JSON.parse(raw) : [];
+            const filtered = list.filter((s: any) => !affectedCourseIds.includes(s.course_id));
+            const merged = [...filtered, ...entriesToInsert];
+            localStorage.setItem(k, JSON.stringify(merged));
+          } catch {}
+        });
       } catch {}
 
       toast.success(
@@ -1142,11 +1262,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           </div>
 
           {/* Fila 2: Selector contextual según el modo elegido */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200/60">
-            {importScope === 'single' ? (
-              <div className="flex flex-wrap items-center gap-2 w-full">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60">
+            {importScope === 'single' && (
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                  Grado / Curso a subir:
+                  Grado / Curso:
                 </span>
                 <select
                   value={targetCourseId}
@@ -1161,37 +1281,48 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 >
                   {sortedCenterCourses.map((c: any) => (
                     <option key={c.id} value={c.id}>
-                      {c.grade} "{c.section || ''}" • {c.level || ''} ({c.tanda || 'Matutina'})
+                      {c.grade} "{c.section || ''}" • {c.level || ''} ({c.tanda || 'Extendida'})
                     </option>
                   ))}
                 </select>
                 <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                  ✓ Aislamiento Total: Solo se modificará este curso. Los demás no se tocan.
+                  ✓ Aislamiento Total: Solo este curso
                 </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                  Tanda:
-                </span>
-                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                  {(['Extendida', 'Matutina', 'Vespertina'] as const).map((sh) => (
-                    <button
-                      key={sh}
-                      type="button"
-                      onClick={() => setSelectedShift(sh)}
-                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                        selectedShift === sh
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {sh === 'Extendida' ? 'Jornada Extendida (8h)' : sh}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
+
+            {/* Selector de Tanda visible SIEMPRE (en modo curso individual y en modo escuela completa) */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                Modalidad:
+              </span>
+              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                {(['Extendida', 'Matutina', 'Vespertina'] as const).map((sh) => (
+                  <button
+                    key={sh}
+                    type="button"
+                    onClick={() => {
+                      setSelectedShift(sh);
+                      if (parsedEntries.length > 0) {
+                        setParsedEntries([]);
+                        setFile(null);
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      selectedShift === sh
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {sh === 'Extendida'
+                      ? '🌟 Jornada Extendida (8h)'
+                      : sh === 'Matutina'
+                      ? '☀️ Matutina (5h)'
+                      : '🌙 Vespertina (5h)'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

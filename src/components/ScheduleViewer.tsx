@@ -572,13 +572,19 @@ export const ScheduleViewer = () => {
     const t = (c.tanda || '').toLowerCase();
     const lvl = (c.level || '').toLowerCase();
     if (t.includes('ext') || t.includes('jor')) return false;
+    const hasExtSchedule = (state.schedule || []).some(
+      (s: any) =>
+        String(s.course_id || s.courseId) === String(c.id) &&
+        ((s.shift || '').toLowerCase().includes('ext') || (s.start_time && toMins(s.start_time) >= 765))
+    );
+    if (hasExtSchedule) return false;
     return t.includes('ves') || t.includes('tar') || (t === '' && lvl.includes('secun'));
-  }, []);
+  }, [state.schedule]);
 
   const getEntryShift = useCallback((entry: any): 'Matutina' | 'Vespertina' => {
     const sShift = (entry?.shift || '').toLowerCase();
+    if (sShift.includes('ext') || sShift.includes('jor') || sShift.includes('mat') || sShift.includes('mañ')) return 'Matutina';
     if (sShift.includes('ves') || sShift.includes('tar')) return 'Vespertina';
-    if (sShift.includes('mat') || sShift.includes('mañ') || sShift.includes('ext') || sShift.includes('jor')) return 'Matutina';
 
     const course = (state.courses || []).find((c: any) => String(c.id) === String(entry?.course_id || entry?.courseId));
     if (course) {
@@ -590,7 +596,7 @@ export const ScheduleViewer = () => {
     const sTime = entry?.start_time || '';
     if (sTime) {
       const [h] = sTime.split(':').map(Number);
-      if (h >= 14) return 'Vespertina';
+      if (h >= 14 && !sShift.includes('ext')) return 'Vespertina';
     }
     return 'Matutina';
   }, [state.courses, isVespertinaCourse]);
@@ -984,7 +990,16 @@ export const ScheduleViewer = () => {
       }
     }
 
-    const isExtendedCourse = isExtendedSchedule(course, courseStartT, courseEndT, courseOfficial) || isExtendedSchedule(courseShiftName);
+    const hasExtendedEntries = (state.schedule || []).some(
+      (s: any) =>
+        String(s.course_id || s.courseId) === String(course?.id) &&
+        ((s.shift || '').toLowerCase().includes('ext') || (s.start_time && toMins(s.start_time) >= 765))
+    );
+
+    const isExtendedCourse =
+      isExtendedSchedule(course, courseStartT, courseEndT, courseOfficial) ||
+      isExtendedSchedule(courseShiftName) ||
+      hasExtendedEntries;
     if (isExtendedCourse) {
       return getStandardExtendedDaySlots();
     }
