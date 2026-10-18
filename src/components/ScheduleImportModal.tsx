@@ -254,20 +254,20 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     try {
       const wb = XLSX.utils.book_new();
 
-      // HOJA 1: MATRIZ SEMANAL POR CURSO (El formato más visual y cómodo)
+      // HOJA 1: MATRIZ SEMANAL POR CURSO (Exclusivamente los bloques de clases lectivas)
       const matrixRows: any[] = [];
       relevantCourses.forEach((c: any) => {
         const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
-        templateSlots.forEach((slot) => {
+        standardSlots.forEach((slot, idx) => {
           matrixRows.push({
             Curso: courseLabel,
             Nivel: c.level || 'Secundario',
-            Bloque: slot.label,
-            Lunes: slot.isBreak ? slot.defaultVal : '',
-            Martes: slot.isBreak ? slot.defaultVal : '',
-            Miércoles: slot.isBreak ? slot.defaultVal : '',
-            Jueves: slot.isBreak ? slot.defaultVal : '',
-            Viernes: slot.isBreak ? slot.defaultVal : ''
+            Bloque: `${idx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`,
+            Lunes: '',
+            Martes: '',
+            Miércoles: '',
+            Jueves: '',
+            Viernes: ''
           });
         });
       });
@@ -340,12 +340,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       XLSX.utils.book_append_sheet(wb, wsRef, 'Referencia_Asignaciones');
 
       // HOJA 4: CATÁLOGO DE BLOQUES Y HORAS
-      const blocksRows = templateSlots.map((s, idx) => ({
-        Numero_Orden: idx + 1,
-        Nombre_Bloque: s.label,
+      const blocksRows = standardSlots.map((s, idx) => ({
+        Numero_Hora: idx + 1,
+        Nombre_Bloque: `${idx + 1}ra Hora`,
         Hora_Inicio: s.start.substring(0, 5),
-        Hora_Fin: s.end.substring(0, 5),
-        Tipo: s.isBreak ? 'Pausa / Receso' : 'Hora de Docencia'
+        Hora_Fin: s.end.substring(0, 5)
       }));
       const wsBlocks = XLSX.utils.json_to_sheet(blocksRows);
       XLSX.utils.book_append_sheet(wb, wsBlocks, 'Horas_y_Bloques');
