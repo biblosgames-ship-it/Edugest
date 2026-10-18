@@ -192,10 +192,13 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     });
   }, [state.courses, selectedShift, importScope, selectedTargetCourse]);
 
-  // Estructura completa de bloques para la plantilla (incluye recesos y almuerzo claramente demarcados)
+  // Estructura completa de bloques para la plantilla (incluye acogida, acto cívico, desayuno, recesos y almuerzo claramente demarcados)
   const templateSlots = useMemo(() => {
     if (selectedShift === 'Extendida') {
       return [
+        { start: '07:30:00', end: '07:45:00', label: '🤝 Acogida (07:30 - 07:45)', isBreak: true, defaultVal: '--- ACOGIDA / ENTRADA ---' },
+        { start: '07:45:00', end: '08:00:00', label: '🇩🇴 Acto a la Bandera (07:45 - 08:00)', isBreak: true, defaultVal: '--- ACTO CÍVICO / BANDERA ---' },
+        { start: '08:00:00', end: '08:15:00', label: '🥪 Desayuno Escolar (08:00 - 08:15)', isBreak: true, defaultVal: '--- DESAYUNO ESCOLAR ---' },
         { start: '08:15:00', end: '09:00:00', label: '1ra Hora (08:15 - 09:00)', isBreak: false, slotNum: 1 },
         { start: '09:00:00', end: '09:45:00', label: '2da Hora (09:00 - 09:45)', isBreak: false, slotNum: 2 },
         { start: '09:45:00', end: '10:15:00', label: '🔔 RECREO (09:45 - 10:15)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
@@ -211,6 +214,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
     if (selectedShift === 'Matutina') {
       return [
+        { start: '07:45:00', end: '08:00:00', label: '🇩🇴 Acto a la Bandera (07:45 - 08:00)', isBreak: true, defaultVal: '--- ACTO CÍVICO / BANDERA ---' },
         { start: '08:00:00', end: '08:45:00', label: '1ra Hora (08:00 - 08:45)', isBreak: false, slotNum: 1 },
         { start: '08:45:00', end: '09:30:00', label: '2da Hora (08:45 - 09:30)', isBreak: false, slotNum: 2 },
         { start: '09:30:00', end: '10:15:00', label: '3ra Hora (09:30 - 10:15)', isBreak: false, slotNum: 3 },
@@ -666,7 +670,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             rowText.includes('merienda') ||
             rowText.includes('acogida') ||
             rowText.includes('acto a la bandera') ||
-            rowText.includes('desayuno')
+            rowText.includes('acto cívico') ||
+            rowText.includes('acto civico') ||
+            rowText.includes('bandera') ||
+            rowText.includes('desayuno') ||
+            rowText.includes('oracion') ||
+            rowText.includes('oración') ||
+            rowText.includes('pausa') ||
+            rowText.includes('salida')
           );
         };
 
