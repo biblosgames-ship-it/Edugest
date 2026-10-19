@@ -34,6 +34,7 @@ import {
   Check
 } from 'lucide-react';
 import { Logo } from './Logo';
+import { EdugestPromoVideo } from './EdugestPromoVideo';
 import { supabase } from '../lib/supabase';
 
 interface LandingPageProps {
@@ -959,89 +960,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
         </div>
       </section>
 
-      {/* SECCIÓN: VIDEO DE YOUTUBE CON TESTIMONIOS Y DEMOSTRACIÓN */}
+      {/* SECCIÓN: VIDEO OFICIAL ANIMADO DE CONECTIVIDAD Y DEMOSTRACIÓN */}
       <section id="video-testimonios" className="py-24 px-6 border-t border-white/5 bg-slate-900/40 relative">
         <div className="max-w-5xl mx-auto space-y-12">
           <div className="text-center max-w-3xl mx-auto space-y-4">
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest text-brand-accent bg-brand-accent/10 border border-brand-accent/20">
-              <Video size={14} /> Demostración Audiovisual
+              <Video size={14} /> Video Oficial en Animación
             </span>
             <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
-              Historias de éxito y EduGest en acción
+              Conectividad total de la comunidad educativa
             </h2>
             <p className="text-slate-400 font-medium text-sm sm:text-base">
-              Mira cómo funciona la plataforma en video, con testimonios y recorrido por las herramientas que facilitan el trabajo escolar.
+              Descubre cómo el icono de EduGest enlaza en tiempo real a Gestores, Docentes, Padres y Alumnos modernizando todo tu centro a un precio único.
             </p>
           </div>
 
-          {/* Contenedor del Video de YouTube Estilizado y Responsivo */}
-          <div className="relative rounded-[2.5rem] overflow-hidden border border-white/15 bg-slate-950 shadow-2xl p-2 sm:p-4 group">
-            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-900 relative">
-              {!isPlayingVideo ? (
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex flex-col items-center justify-center p-6 text-center space-y-6">
-                  {/* Botón Central Play */}
-                  <button
-                    type="button"
-                    onClick={() => setIsPlayingVideo(true)}
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-brand-blue to-brand-accent text-white flex items-center justify-center shadow-2xl shadow-brand-blue/50 hover:scale-110 active:scale-95 transition-all cursor-pointer group"
-                    aria-label="Reproducir Video"
-                  >
-                    <Play size={36} className="ml-1 text-white fill-white group-hover:scale-110 transition-transform" />
-                  </button>
-
-                  <div className="space-y-2 max-w-lg">
-                    <h3 className="text-xl sm:text-2xl font-black text-white">
-                      EduGest: Presentación Oficial y Testimonios
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-300 font-medium">
-                      Descubre cómo los centros optimizan su tiempo y eliminan el estrés del fin de período evaluativo.
-                    </p>
-                  </div>
-
-                  <div className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 bg-white/10 px-4 py-1.5 rounded-full backdrop-blur-md">
-                    <span>Duración estimada: 3:30 min</span>
-                    <span>•</span>
-                    <span className="text-emerald-400 font-bold">HD 1080p</span>
-                  </div>
-                </div>
-              ) : (
-                <iframe
-                  className="w-full h-full rounded-2xl"
-                  src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&rel=0`}
-                  title="EduGest Video de Testimonios"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              )}
-            </div>
-
-            {/* Barra inferior del reproductor con opción de personalizar o contactar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-3 text-xs text-slate-400">
-              <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-brand-accent" />
-                <span>EduGest Dominicana • Canal Oficial de Capacitación</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hola,%20vi%20el%20video%20de%20EduGest%20y%20me%20gustaria%20agendar%20una%20demostracion.`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5"
-                >
-                  <MessageCircle size={13} />
-                  <span>Chatear por WhatsApp</span>
-                </a>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={() => setIsPlayingVideo(!isPlayingVideo)}
-                  className="text-xs font-bold text-white hover:text-brand-accent transition-colors cursor-pointer"
-                >
-                  {isPlayingVideo ? 'Cerrar Reproductor' : 'Reproducir Video'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <EdugestPromoVideo />
         </div>
       </section>
 
