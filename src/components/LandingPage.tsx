@@ -960,18 +960,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
         </div>
       </section>
 
-      {/* SECCIÓN: VIDEO OFICIAL ANIMADO DE CONECTIVIDAD Y DEMOSTRACIÓN */}
+      {/* SECCIÓN: VIDEO OFICIAL Y RECORRIDO INTERACTIVO */}
       <section id="video-testimonios" className="py-24 px-6 border-t border-white/5 bg-slate-900/40 relative">
         <div className="max-w-5xl mx-auto space-y-12">
           <div className="text-center max-w-3xl mx-auto space-y-4">
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest text-brand-accent bg-brand-accent/10 border border-brand-accent/20">
-              <Video size={14} /> Video Oficial en Animación
+              <Video size={14} /> Video Oficial
             </span>
             <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
               Conectividad total de la comunidad educativa
             </h2>
             <p className="text-slate-400 font-medium text-sm sm:text-base">
-              Descubre cómo el icono de EduGest enlaza en tiempo real a Gestores, Docentes, Padres y Alumnos modernizando todo tu centro a un precio único.
+              Descubre cómo Edugest enlaza en tiempo real a Gestores, Docentes, Padres y Alumnos modernizando todo tu centro a un precio único.
             </p>
           </div>
 

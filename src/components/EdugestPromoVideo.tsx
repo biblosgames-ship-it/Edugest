@@ -168,47 +168,47 @@ export const EdugestPromoVideo: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Selector superior: Video Oficial vs Mapa Interactivo + Botón de Descarga Directa */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 p-3 rounded-2xl border border-white/10 backdrop-blur-md">
+      {/* Selector superior: Video Oficial vs Recorrido Interactivo + Botón de Descarga discreto */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 p-2.5 rounded-2xl border border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setViewMode('video')}
-            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
               viewMode === 'video'
                 ? 'bg-gradient-to-r from-brand-blue to-brand-accent text-white shadow-lg shadow-brand-blue/30'
                 : 'text-slate-400 hover:text-white hover:bg-white/5'
             }`}
           >
             <Film size={15} />
-            <span>Video Oficial Animado (Con Voz)</span>
+            <span>Video Oficial</span>
           </button>
 
           <button
             type="button"
             onClick={() => setViewMode('interactive')}
-            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
               viewMode === 'interactive'
                 ? 'bg-gradient-to-r from-brand-blue to-brand-accent text-white shadow-lg shadow-brand-blue/30'
                 : 'text-slate-400 hover:text-white hover:bg-white/5'
             }`}
           >
             <Network size={15} />
-            <span>Recorrido Interactivo en Vivo</span>
+            <span>Recorrido Interactivo</span>
           </button>
         </div>
 
         <a
           href="/edugest-promo.mp4"
-          download="EduGest_Video_Promocional_1080p.mp4"
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-950/50 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+          download="Edugest_Video_Oficial.mp4"
+          title="Descargar video"
+          className="p-1.5 text-slate-600 hover:text-slate-400 opacity-35 hover:opacity-80 transition-opacity flex items-center gap-1 text-[10px] rounded-lg"
         >
-          <Download size={15} />
-          <span>Descargar Video MP4 (Full HD)</span>
+          <Download size={12} />
         </a>
       </div>
 
-      {/* MODO 1: REPRODUCTOR DE VIDEO MP4 CON NARRACIÓN PROFESIONAL */}
+      {/* MODO 1: REPRODUCTOR DE VIDEO OFICIAL */}
       {viewMode === 'video' && (
         <div className="relative rounded-[2.5rem] overflow-hidden border border-white/15 bg-slate-950 shadow-2xl p-2 sm:p-4 group">
           <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 relative">
@@ -223,7 +223,7 @@ export const EdugestPromoVideo: React.FC = () => {
               onPause={() => setIsPlaying(false)}
             />
 
-            {/* Overlay elegante antes de iniciar reproducción */}
+            {/* Overlay limpio antes de iniciar reproducción */}
             {!isPlaying && (
               <div
                 onClick={handleTogglePlay}
@@ -234,7 +234,7 @@ export const EdugestPromoVideo: React.FC = () => {
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-brand-blue via-indigo-600 to-brand-accent p-3 shadow-2xl border border-white/30 flex items-center justify-center relative group-hover:scale-110 transition-transform duration-300">
                     <img
                       src="/pwa-512x512.png"
-                      alt="EduGest Icon"
+                      alt="Edugest Icon"
                       className="w-full h-full object-contain rounded-2xl"
                     />
                     <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-slate-950">
@@ -244,23 +244,12 @@ export const EdugestPromoVideo: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 max-w-xl">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-blue/20 border border-brand-blue/40 text-indigo-300 text-[10px] font-black uppercase tracking-widest">
-                    <Sparkles size={12} /> Presentación Oficial • Voz Profesional
-                  </span>
                   <h3 className="text-xl sm:text-3xl font-black text-white tracking-tight">
                     Conectando a Gestores, Docentes, Padres y Alumnos
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-300 font-medium">
-                    Haz clic para reproducir el recorrido animado por todo el ecosistema EduGest con narración en español.
+                    Descubre cómo Edugest enlaza a toda tu comunidad educativa en un solo ecosistema en tiempo real.
                   </p>
-                </div>
-
-                <div className="inline-flex items-center gap-3 text-xs font-bold text-slate-300 bg-slate-900/90 border border-white/10 px-4 py-2 rounded-full">
-                  <span className="text-emerald-400">● Full HD 1080p</span>
-                  <span>•</span>
-                  <span>Con Narración Profesional</span>
-                  <span>•</span>
-                  <span>1:12 min</span>
                 </div>
               </div>
             )}
@@ -303,7 +292,7 @@ export const EdugestPromoVideo: React.FC = () => {
         </div>
       )}
 
-      {/* MODO 2: RECORRIDO INTERACTIVO ANIMADO EN VIVO */}
+      {/* MODO 2: RECORRIDO INTERACTIVO */}
       {viewMode === 'interactive' && (
         <div className="rounded-[2.5rem] border border-white/15 bg-slate-950 p-6 sm:p-10 shadow-2xl relative overflow-hidden">
           <style>{`
@@ -319,7 +308,7 @@ export const EdugestPromoVideo: React.FC = () => {
           `}</style>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Columna Izquierda: Red de Conectividad con el Icono de EduGest en el Centro */}
+            {/* Columna Izquierda: Red de Conectividad con el Icono de Edugest en el Centro */}
             <div className="lg:col-span-5 relative h-[420px] bg-slate-900/70 rounded-3xl border border-white/10 p-4 flex items-center justify-center overflow-hidden">
               {/* Líneas SVG de conexión desde el centro (50%, 50%) hacia los 4 nodos */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -327,7 +316,6 @@ export const EdugestPromoVideo: React.FC = () => {
                   const isSelected = idx === selectedRoleIdx;
                   return (
                     <g key={role.id}>
-                      {/* Línea base */}
                       <line
                         x1="50"
                         y1="50"
@@ -337,7 +325,6 @@ export const EdugestPromoVideo: React.FC = () => {
                         strokeWidth={isSelected ? '1.4' : '0.6'}
                         strokeOpacity={isSelected ? '0.45' : '0.2'}
                       />
-                      {/* Línea animada con flujo de datos */}
                       <line
                         x1="50"
                         y1="50"
@@ -391,18 +378,18 @@ export const EdugestPromoVideo: React.FC = () => {
                 );
               })}
 
-              {/* Icono Central de EduGest */}
+              {/* Icono Central de Edugest */}
               <div className="relative z-20 flex flex-col items-center">
                 <div className="absolute -inset-6 rounded-full bg-brand-blue/30 blur-2xl animate-pulse" />
                 <div className="w-24 h-24 rounded-[1.8rem] bg-slate-950 p-2 border-2 border-indigo-400 shadow-2xl shadow-brand-blue/50 flex items-center justify-center relative">
                   <img
                     src="/pwa-512x512.png"
-                    alt="EduGest Icon"
+                    alt="Edugest Icon"
                     className="w-full h-full object-contain rounded-2xl"
                   />
                 </div>
                 <span className="mt-2 px-3 py-0.5 rounded-full bg-brand-blue text-white text-[9px] font-black uppercase tracking-widest shadow-md">
-                  EduGest Hub
+                  Edugest
                 </span>
               </div>
             </div>
