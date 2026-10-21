@@ -31,7 +31,12 @@ import {
   School,
   Play,
   PhoneCall,
-  Check
+  Check,
+  Wifi,
+  CalendarClock,
+  Wrench,
+  FileBarChart,
+  MessageSquare
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { EdugestPromoVideo } from './EdugestPromoVideo';
@@ -497,8 +502,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
           {/* Logo EduGest Grande Arriba + Frase Oficial Centralizada en 2 Líneas */}
           <div className="flex flex-col items-center justify-center space-y-4">
             {/* Logo EduGest Mucho Más Grande */}
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-[2.2rem] bg-gradient-to-br from-brand-blue via-indigo-600 to-brand-accent p-5 flex items-center justify-center shadow-2xl shadow-brand-blue/50 border border-white/20 ring-4 ring-white/10 hover:scale-105 transition-all duration-300">
-              <Logo className="w-full h-full text-white filter drop-shadow-xl" />
+            <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-[2.2rem] overflow-hidden flex items-center justify-center shadow-2xl shadow-brand-blue/50 border border-white/20 ring-4 ring-white/10 hover:scale-105 transition-all duration-300 bg-[#003b7a]">
+              <img
+                src="/icono 512x512.jpeg"
+                alt="EduGest Logo"
+                className="w-full h-full object-cover scale-[1.08]"
+              />
             </div>
 
             {/* Texto en dos líneas centralizado */}
@@ -534,48 +543,146 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-            <button
-              type="button"
-              onClick={onBackToLogin}
-              className="px-8 py-4 bg-gradient-to-r from-brand-blue to-indigo-600 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-sm uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-brand-blue/30 active:scale-95 flex items-center gap-3 cursor-pointer"
-            >
-              <span>Acceder a Mi Centro</span>
-              <ArrowRight size={18} />
-            </button>
-
-            <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hola,%20me%20gustaria%20hablar%20con%20un%20asesor%20sobre%20EduGest.`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-wider rounded-2xl border border-emerald-500/40 transition-all flex items-center gap-3 shadow-lg shadow-emerald-950/40 active:scale-95 cursor-pointer"
-            >
-              <MessageCircle size={18} />
-              <span>Hablar con un Asesor por WhatsApp</span>
-            </a>
+          {/* Cuadrícula de Capacidades y Características Clave */}
+          <div className="pt-10 grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 sm:gap-4 max-w-7xl mx-auto text-center">
+            {[
+              {
+                isLogo: true,
+                logoSrc: '/minerd_logo.webp',
+                title: '100%',
+                subtitle: 'Alineado al MINERD',
+                iconBg: 'bg-white p-1.5',
+                accentColor: 'text-white'
+              },
+              {
+                icon: Wifi,
+                title: 'Online / Offline',
+                subtitle: 'Resistencia a caídas de red',
+                iconBg: 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400',
+                accentColor: 'text-emerald-400'
+              },
+              {
+                icon: CalendarClock,
+                title: 'Generador de Horarios',
+                subtitle: 'Cursos y Docentes',
+                iconBg: 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400',
+                accentColor: 'text-indigo-400'
+              },
+              {
+                icon: Users,
+                title: 'Multi-Usuario',
+                subtitle: 'Gestores, Docentes, Padres y Alumnos',
+                iconBg: 'bg-amber-500/15 border border-amber-500/30 text-amber-400',
+                accentColor: 'text-amber-400'
+              },
+              {
+                icon: Smartphone,
+                title: 'Web / App',
+                subtitle: 'Android y iOS',
+                iconBg: 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-400',
+                accentColor: 'text-cyan-400'
+              },
+              {
+                icon: Activity,
+                title: 'Monitoreo en Tiempo Real',
+                subtitle: 'Supervisión en vivo del centro',
+                iconBg: 'bg-rose-500/15 border border-rose-500/30 text-rose-400',
+                accentColor: 'text-rose-400'
+              },
+              {
+                icon: Calendar,
+                title: 'Calendario Inteligente',
+                subtitle: 'Agenda y Efemérides',
+                iconBg: 'bg-purple-500/15 border border-purple-500/30 text-purple-400',
+                accentColor: 'text-purple-400'
+              },
+              {
+                icon: GraduationCap,
+                title: 'Gestión de Alumnos y Personal',
+                subtitle: 'Matrícula y Expedientes',
+                iconBg: 'bg-sky-500/15 border border-sky-500/30 text-sky-400',
+                accentColor: 'text-sky-400'
+              },
+              {
+                icon: FileSpreadsheet,
+                title: 'Módulos de Calificaciones',
+                subtitle: 'Registro, Docentes y Padres',
+                iconBg: 'bg-blue-500/15 border border-blue-500/30 text-blue-400',
+                accentColor: 'text-blue-400'
+              },
+              {
+                icon: BookOpen,
+                title: 'Asignación y Revisión de Tareas',
+                subtitle: 'Docentes, Padres y Alumnos',
+                iconBg: 'bg-fuchsia-500/15 border border-fuchsia-500/30 text-fuchsia-400',
+                accentColor: 'text-fuchsia-400'
+              },
+              {
+                icon: MessageSquare,
+                title: 'Mensajería Inteligente',
+                subtitle: 'Mensajes, Comunicados y Excusas',
+                iconBg: 'bg-teal-500/15 border border-teal-500/30 text-teal-400',
+                accentColor: 'text-teal-400'
+              },
+              {
+                icon: Wrench,
+                title: 'Gestión del Plantel',
+                subtitle: 'Espacios y Mantenimiento',
+                iconBg: 'bg-orange-500/15 border border-orange-500/30 text-orange-400',
+                accentColor: 'text-orange-400'
+              },
+              {
+                icon: FileBarChart,
+                title: 'Generador Reportes',
+                subtitle: 'Administrativos, Académicos y por Alumnos',
+                iconBg: 'bg-violet-500/15 border border-violet-500/30 text-violet-400',
+                accentColor: 'text-violet-400'
+              },
+              {
+                icon: DollarSign,
+                title: 'Gestión Financiera',
+                subtitle: 'Cuentas y Cuotas',
+                iconBg: 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400',
+                accentColor: 'text-emerald-400'
+              }
+            ].map((item, idx) => {
+              const IconComponent = item.icon;
+              return (
+                <div
+                  key={idx}
+                  className="p-4 sm:p-5 rounded-2xl bg-white/5 hover:bg-white/[0.08] border border-white/10 hover:border-white/20 backdrop-blur-md flex flex-col items-center justify-between text-center space-y-3 transition-all duration-300 hover:-translate-y-1 group shadow-lg min-h-[155px]"
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 ${item.iconBg}`}>
+                    {item.isLogo ? (
+                      <img
+                        src={item.logoSrc}
+                        alt="Logo MINERD"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      IconComponent && <IconComponent size={24} />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <p className={`text-sm sm:text-base font-black ${item.accentColor} leading-tight`}>
+                      {item.title}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-300 mt-1 leading-snug">
+                      {item.subtitle}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Estadísticas de Confianza */}
-          <div className="pt-12 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto text-left">
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <p className="text-3xl font-black text-white">100%</p>
-              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Alineado al MINERD</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">P1, P2, P3, P4, RP y Final</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <p className="text-3xl font-black text-emerald-400">Offline</p>
-              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Resistente a Caídas</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Sigue trabajando sin luz ni red</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <p className="text-3xl font-black text-indigo-400">0%</p>
-              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Choques Horarios</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Matutina, Vesp. y Extendida</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <p className="text-3xl font-black text-amber-400">Multi-Año</p>
-              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Historial Intacto</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Audita ciclos pasados sin alteración</p>
+          {/* Frase Destacada de Cierre de Capacidades */}
+          <div className="pt-4 sm:pt-5 text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center gap-3 px-6 sm:px-8 py-3.5 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-md shadow-xl">
+              <Sparkles size={20} className="text-amber-400 shrink-0 animate-pulse" />
+              <p className="text-base sm:text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-white tracking-tight">
+                La herramienta de gestión educativa más potente y completa.
+              </p>
             </div>
           </div>
         </div>

@@ -109,13 +109,14 @@ body {
   @apply font-sans bg-brand-bg text-text-main antialiased selection:bg-brand-blue selection:text-white transition-colors duration-300;
 }
 
-/* Scrollbar minimalista */
+/* Scrollbar minimalista y accesible para scroll lateral */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;

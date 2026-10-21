@@ -32,6 +32,7 @@ import { CenterRegistrationForm } from './components/CenterRegistrationForm';
 import { FacilityDashboard } from './components/facility/FacilityDashboard';
 import { ClassroomManager } from './components/ClassroomManager';
 import { DigitalContractSigner } from './components/DigitalContractSigner';
+import { ParentGradesModule } from './components/ParentGradesModule';
 import { AppProvider, useApp, useSupabase } from './context/AppContext';
 import {
   LayoutDashboard,
@@ -152,12 +153,12 @@ const ROLE_FALLBACKS: Record<string, string[]> = {
     'facility'
   ],
   teacher: ['dashboard', 'classroom', 'digital-register', 'tasks', 'communications'],
-  student: ['dashboard', 'communications'],
-  parent: ['dashboard', 'communications'],
-  padre: ['dashboard', 'communications'],
-  tutor: ['dashboard', 'communications'],
-  madre: ['dashboard', 'communications'],
-  familiar: ['dashboard', 'communications'],
+  student: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
+  parent: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
+  padre: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
+  tutor: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
+  madre: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
+  familiar: ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'],
   support: ['dashboard', 'facility', 'agenda'],
   supervisor: ['dashboard', 'facility', 'agenda'],
   conserje: ['dashboard', 'facility', 'agenda'],
@@ -240,7 +241,7 @@ function AppContent() {
 
     // Para padres y alumnos: acceso a su aula virtual, tareas por materias, horario de clases, agenda del centro y mensajería interna
     if (isStudentOrParent) {
-      return ['dashboard', 'tasks', 'schedule', 'agenda', 'communications'];
+      return ['dashboard', 'tasks', 'parent-grades', 'schedule', 'agenda', 'communications'];
     }
 
     let panels = [...rawAllowed];
@@ -467,6 +468,7 @@ function AppContent() {
     { id: 'classroom', label: 'Mi Aula', icon: UserCheck },
     { id: 'students', label: 'Alumnos', icon: Users },
     { id: 'digital-register', label: 'Calificaciones', icon: FileSpreadsheet },
+    { id: 'parent-grades', label: 'Calificaciones', icon: FileSpreadsheet },
     { id: 'data', label: 'Datos', icon: PlusCircle },
     {
       id: 'schedule',
@@ -660,6 +662,16 @@ function AppContent() {
               ) : (
                 <TeacherTaskAnnouncement userData={profile} />
               )}
+            </div>
+          </div>
+        )}
+
+        {allowed.includes('parent-grades') && isStudentOrParent && (
+          <div
+            className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'parent-grades' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+          >
+            <div className="max-w-7xl mx-auto">
+              <ParentGradesModule userData={profile} onViewChange={setActiveView} />
             </div>
           </div>
         )}

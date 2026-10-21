@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { playSchoolBellSound, SoundStyle } from '../utils/schoolBellAudio';
 import { getDefaultMinerdEphemerides } from '../components/SchoolEphemeridesManager';
+import { getStandardExtendedDaySlots } from '../services/scheduleService';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -11,6 +12,7 @@ export interface BellSlot {
   type: 'class' | 'break' | 'assembly' | 'dismissal';
 }
 
+// Bloques estándar matutinos (cuando el centro no tiene configurada estructura propia)
 const DEFAULT_SCHEDULE_MATUTINA: BellSlot[] = [
   { time: '07:45', label: 'Acto Cívico / Entrada', type: 'assembly' },
   { time: '08:00', label: '1ra Hora de Clase', type: 'class' },
@@ -19,12 +21,11 @@ const DEFAULT_SCHEDULE_MATUTINA: BellSlot[] = [
   { time: '10:15', label: 'Recreo Matutino', type: 'break' },
   { time: '10:45', label: '4ta Hora de Clase', type: 'class' },
   { time: '11:30', label: '5ta Hora de Clase', type: 'class' },
-  { time: '12:15', label: '6ta Hora / Almuerzo', type: 'break' },
-  { time: '13:00', label: '7ma Hora de Clase', type: 'class' },
-  { time: '13:45', label: '8va Hora de Clase', type: 'class' },
-  { time: '14:30', label: '9na Hora / Salida Jornada Extendida', type: 'dismissal' }
+  { time: '12:15', label: '6ta Hora de Clase', type: 'class' },
+  { time: '13:00', label: 'Salida Tanda Matutina', type: 'dismissal' }
 ];
 
+// Bloques estándar vespertinos
 const DEFAULT_SCHEDULE_VESPERTINA: BellSlot[] = [
   { time: '14:00', label: '1ra Hora Vespertina', type: 'class' },
   { time: '14:45', label: '2da Hora Vespertina', type: 'class' },
@@ -35,28 +36,71 @@ const DEFAULT_SCHEDULE_VESPERTINA: BellSlot[] = [
   { time: '18:00', label: 'Salida Tanda Vespertina', type: 'dismissal' }
 ];
 
-export const useSchoolBell = () => {
-  const { state, center, selectedYear } = useApp();
+// Bloques oficiales MINERD Jornada Extendida (8 bloques, 2 recreos y almuerzo)
+const DEFAULT_SCHEDULE_EXTENDIDA: BellSlot[] = [
+  { time: '07:45', label: 'Acto a la Bandera / Entrada', type: 'assembly' },
+  { time: '08:00', label: 'Desayuno Escolar', type: 'break' },
+  { time: '08:15', label: '1ra Hora de Clase', type: 'class' },
+  { time: '09:00', label: '2da Hora de Clase', type: 'class' },
+  { time: '09:45', label: 'Recreo Matutino', type: 'break' },
+  { time: '10:15', label: '3ra Hora de Clase', type: 'class' },
+  { time: '11:00', label: '4ta Hora de Clase', type: 'class' },
+  { time: '11:45', label: 'Almuerzo Escolar', type: 'break' },
+  { time: '12:45', label: '5ta Hora de Clase', type: 'class' },
+  { time: '13:30', label: '6ta Hora de Clase', type: 'class' },
+  { time: '14:15', label: 'Recreo de la Tarde', type: 'break' },
+  { time: '14:30', label: '7ma Hora de Clase', type: 'class' },
+  { time: '15:15', label: '8va Hora de Clase', type: 'class' },
+  { time: '16:00', label: 'Salida Jornada Extendida', type: 'dismissal' }
+];
 
-  // Estado del timbre guardado en localStorage y sincronizado con el centro escolar
+// Prevenir sonar más de 1 vez en el mismo minuto a nivel global del runtime
+let globalLastTriggeredMinute = '';
+
+export const useSchoolBell = () => {
+  const { state, center, selectedYear, profile, user } = useApp();
+  const userId = profile?.id || user?.id || '';
+
+  // Estado del timbre guardado en localStorage y perfil
   const [isBellEnabled, setIsBellEnabled] = useState<boolean>(() => {
     try {
+      if (userId) {
+        const userSaved = localStorage.getItem(`edugens_user_bell_enabled_${userId}`);
+        if (userSaved !== null) return JSON.parse(userSaved);
+      }
       if (center?.id) {
         const centerSpecific = localStorage.getItem(`edugens_school_bell_enabled_${center.id}`);
         if (centerSpecific !== null) return JSON.parse(centerSpecific);
+      }
+      if (profile?.bell_settings?.is_enabled !== undefined) {
+        return !!profile.bell_settings.is_enabled;
       }
       if (center?.bell_settings?.is_enabled !== undefined) {
         return !!center.bell_settings.is_enabled;
       }
       const saved = localStorage.getItem('edugens_school_bell_enabled');
-      return saved !== null ? JSON.parse(saved) : true; // Por defecto activo
+      return saved !== null ? JSON.parse(saved) : true;
     } catch {
       return true;
     }
   });
 
+  // Sonido de timbre con prioridad estricta en el PERFIL del usuario (consistencia permanente)
   const [soundStyle, setSoundStyleState] = useState<SoundStyle>(() => {
     try {
+      if (userId) {
+        const userSaved = localStorage.getItem(`edugens_user_bell_style_${userId}`);
+        if (userSaved) return userSaved as SoundStyle;
+      }
+      if (profile?.bell_sound) {
+        return profile.bell_sound as SoundStyle;
+      }
+      if (profile?.bell_settings?.sound_style) {
+        return profile.bell_settings.sound_style as SoundStyle;
+      }
+      const saved = localStorage.getItem('edugens_school_bell_style');
+      if (saved) return saved as SoundStyle;
+
       if (center?.id) {
         const centerSpecific = localStorage.getItem(`edugens_school_bell_style_${center.id}`);
         if (centerSpecific) return centerSpecific as SoundStyle;
@@ -64,8 +108,7 @@ export const useSchoolBell = () => {
       if (center?.bell_settings?.sound_style) {
         return center.bell_settings.sound_style as SoundStyle;
       }
-      const saved = localStorage.getItem('edugens_school_bell_style');
-      return (saved as SoundStyle) || 'traditional';
+      return 'traditional';
     } catch {
       return 'traditional';
     }
@@ -73,9 +116,16 @@ export const useSchoolBell = () => {
 
   const [volume, setVolumeState] = useState<number>(() => {
     try {
+      if (userId) {
+        const userVol = localStorage.getItem(`edugens_user_bell_volume_${userId}`);
+        if (userVol) return Number(userVol);
+      }
       if (center?.id) {
         const centerSpecific = localStorage.getItem(`edugens_school_bell_volume_${center.id}`);
         if (centerSpecific) return Number(centerSpecific);
+      }
+      if (profile?.bell_settings?.volume !== undefined) {
+        return Number(profile.bell_settings.volume);
       }
       if (center?.bell_settings?.volume !== undefined) {
         return Number(center.bell_settings.volume);
@@ -90,51 +140,39 @@ export const useSchoolBell = () => {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const lastTriggeredMinuteRef = useRef<string>('');
 
-  // Sincronizar automáticamente si el centro tiene configuración institucional en la nube
+  // Sincronizar desde profile o center (SOLO si no hay una preferencia ya fijada por el usuario)
   useEffect(() => {
-    if (center?.bell_settings) {
-      if (center.bell_settings.sound_style) {
-        setSoundStyleState(center.bell_settings.sound_style as SoundStyle);
-        localStorage.setItem('edugens_school_bell_style', center.bell_settings.sound_style);
-        if (center.id) {
-          localStorage.setItem(`edugens_school_bell_style_${center.id}`, center.bell_settings.sound_style);
-        }
-      }
-      if (center.bell_settings.volume !== undefined) {
-        const volNum = Number(center.bell_settings.volume);
-        setVolumeState(volNum);
-        localStorage.setItem('edugens_school_bell_volume', String(volNum));
-        if (center.id) {
-          localStorage.setItem(`edugens_school_bell_volume_${center.id}`, String(volNum));
-        }
-      }
-      if (center.bell_settings.is_enabled !== undefined) {
-        const enBool = !!center.bell_settings.is_enabled;
-        setIsBellEnabled(enBool);
-        localStorage.setItem('edugens_school_bell_enabled', JSON.stringify(enBool));
-        if (center.id) {
-          localStorage.setItem(`edugens_school_bell_enabled_${center.id}`, JSON.stringify(enBool));
-        }
-      }
+    if (profile?.bell_sound && profile.bell_sound !== soundStyle) {
+      setSoundStyleState(profile.bell_sound as SoundStyle);
+      if (userId) localStorage.setItem(`edugens_user_bell_style_${userId}`, profile.bell_sound);
+      return;
     }
-  }, [center?.id, center?.bell_settings]);
+    const hasUserPref = (userId && localStorage.getItem(`edugens_user_bell_style_${userId}`)) || profile?.bell_sound;
+    if (!hasUserPref && center?.bell_settings?.sound_style && center.bell_settings.sound_style !== soundStyle) {
+      setSoundStyleState(center.bell_settings.sound_style as SoundStyle);
+    }
+  }, [profile?.bell_sound, userId, center?.bell_settings?.sound_style]);
 
   const toggleBell = useCallback(() => {
     setIsBellEnabled((prev) => {
       const next = !prev;
+      if (userId) {
+        localStorage.setItem(`edugens_user_bell_enabled_${userId}`, JSON.stringify(next));
+      }
       localStorage.setItem('edugens_school_bell_enabled', JSON.stringify(next));
       if (center?.id) {
         localStorage.setItem(`edugens_school_bell_enabled_${center.id}`, JSON.stringify(next));
-        try {
-          supabase.from('centers').update({
-            bell_settings: {
-              sound_style: soundStyle,
-              volume: volume,
-              is_enabled: next,
-              updated_at: new Date().toISOString()
-            }
-          }).eq('id', center.id).then(() => {}).catch(() => {});
-        } catch {}
+      }
+
+      if (profile?.id) {
+        supabase.from('profiles').update({
+          bell_settings: {
+            sound_style: soundStyle,
+            volume: volume,
+            is_enabled: next,
+            updated_at: new Date().toISOString()
+          }
+        }).eq('id', profile.id).catch(() => {});
       }
 
       if (next) {
@@ -145,13 +183,55 @@ export const useSchoolBell = () => {
       }
       return next;
     });
-  }, [soundStyle, volume, center?.id]);
+  }, [soundStyle, volume, center?.id, profile?.id, userId]);
 
+  // Guardar modelo de timbre en el perfil de forma PERMANENTE
   const setSoundStyle = (style: SoundStyle) => {
     setSoundStyleState(style);
+
+    // 1. Persistencia local inmediata vinculada a este usuario
+    if (userId) {
+      localStorage.setItem(`edugens_user_bell_style_${userId}`, style);
+    }
     localStorage.setItem('edugens_school_bell_style', style);
     if (center?.id) {
       localStorage.setItem(`edugens_school_bell_style_${center.id}`, style);
+    }
+
+    // 2. Actualizar perfil en memoria
+    if (profile) {
+      profile.bell_sound = style;
+      if (!profile.bell_settings) profile.bell_settings = {};
+      profile.bell_settings.sound_style = style;
+    }
+
+    // 3. Persistir en la base de datos (profiles)
+    if (profile?.id) {
+      supabase.from('profiles').update({
+        bell_sound: style,
+        bell_settings: {
+          sound_style: style,
+          volume: volume,
+          is_enabled: isBellEnabled,
+          updated_at: new Date().toISOString()
+        }
+      }).eq('id', profile.id).then(({ error }) => {
+        if (error) {
+          // Si la columna bell_sound aún no se ha creado vía migración, guardar en bell_settings
+          supabase.from('profiles').update({
+            bell_settings: {
+              sound_style: style,
+              volume: volume,
+              is_enabled: isBellEnabled,
+              updated_at: new Date().toISOString()
+            }
+          }).eq('id', profile.id).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // 4. Si es administrador, actualizar también a nivel institucional del centro
+    if (center?.id && (profile?.role === 'admin' || profile?.role === 'creator' || profile?.is_superadmin)) {
       try {
         supabase.from('centers').update({
           bell_settings: {
@@ -163,24 +243,29 @@ export const useSchoolBell = () => {
         }).eq('id', center.id).then(() => {}).catch(() => {});
       } catch {}
     }
-    toast.success('Tipo de sonido guardado permanentemente', { duration: 2000 });
+
+    toast.success('Modelo de timbre guardado permanentemente', { duration: 2500 });
   };
 
   const setVolume = (vol: number) => {
     setVolumeState(vol);
+    if (userId) {
+      localStorage.setItem(`edugens_user_bell_volume_${userId}`, String(vol));
+    }
     localStorage.setItem('edugens_school_bell_volume', String(vol));
     if (center?.id) {
       localStorage.setItem(`edugens_school_bell_volume_${center.id}`, String(vol));
-      try {
-        supabase.from('centers').update({
-          bell_settings: {
-            sound_style: soundStyle,
-            volume: vol,
-            is_enabled: isBellEnabled,
-            updated_at: new Date().toISOString()
-          }
-        }).eq('id', center.id).then(() => {}).catch(() => {});
-      } catch {}
+    }
+
+    if (profile?.id) {
+      supabase.from('profiles').update({
+        bell_settings: {
+          sound_style: soundStyle,
+          volume: vol,
+          is_enabled: isBellEnabled,
+          updated_at: new Date().toISOString()
+        }
+      }).eq('id', profile.id).catch(() => {});
     }
   };
 
@@ -190,92 +275,217 @@ export const useSchoolBell = () => {
 
   // Detectar si el centro tiene tanda vespertina activa
   const hasAfternoonShift = useMemo(() => {
-    // 1. Verificar si hay cursos en la tarde
     const hasVespCourse = (state.courses || []).some((c: any) => {
       const t = (c.tanda || '').toLowerCase().trim();
       return t.includes('ves') || t.includes('tar');
     });
-    // 2. Verificar si en levelSchedules hay tanda vespertina
     const hasVespSchedule = (state.levelSchedules || []).some((ls: any) => {
       const s = (ls.shift || '').toLowerCase().trim();
       return s.includes('ves') || s.includes('tar');
     });
-    // 3. Verificar si en el horario generado hay clases en la tarde
     const hasVespEntries = (state.schedule || []).some((s: any) => {
       const sh = (s.shift || '').toLowerCase().trim();
       return sh.includes('ves') || sh.includes('tar');
     });
-    return hasVespCourse || hasVespSchedule || hasVespEntries;
-  }, [state.courses, state.levelSchedules, state.schedule]);
+    const hasVespCycleBlock = (state.cycleTimeBlocks || []).some((cfg: any) => {
+      const s = (cfg.shift || '').toLowerCase().trim();
+      return s.includes('ves') || s.includes('tar');
+    });
+    return hasVespCourse || hasVespSchedule || hasVespEntries || hasVespCycleBlock;
+  }, [state.courses, state.levelSchedules, state.schedule, state.cycleTimeBlocks]);
 
-  // Construir los horarios de timbrado activos
+  // Construir los horarios oficiales de timbrado adaptados al docente y al centro
   const bellSlots = useMemo<BellSlot[]>(() => {
     const rawSlots: BellSlot[] = [];
 
-    // 1. Integrar horarios de levelSchedules si existen
-    if (state.levelSchedules && state.levelSchedules.length > 0) {
-      state.levelSchedules.forEach((ls: any) => {
-        const isVespLs = (ls.shift || '').toLowerCase().includes('ves') || (ls.shift || '').toLowerCase().includes('tar');
-        if (!hasAfternoonShift && isVespLs) return;
+    // A. Identificar si el usuario actual es docente y sus cursos asignados
+    const isTeacher = profile?.role === 'teacher' || !!profile?.teacher_id;
+    const teacherId = profile?.teacher_id || (typeof window !== 'undefined' ? localStorage.getItem('selected_teacher_id') : '') || '';
 
-        if (ls.start_time) {
-          const s5 = ls.start_time.substring(0, 5);
-          rawSlots.push({
-            time: s5,
-            label: `Inicio de Clases (${ls.level || 'Nivel'})`,
-            type: 'class'
-          });
+    let teacherCourses: any[] = [];
+    if (teacherId && state.courses) {
+      const assignedCourseIds = new Set<string>();
+      (state.assignments || []).forEach((a: any) => {
+        if (a.teacher_id === teacherId) assignedCourseIds.add(String(a.course_id));
+      });
+      (state.schedule || []).forEach((s: any) => {
+        if (s.teacher_id === teacherId) assignedCourseIds.add(String(s.course_id || s.courseId));
+      });
+      (state.courses || []).forEach((c: any) => {
+        if (c.teacher_id === teacherId || c.headquarter_teacher_id === teacherId) {
+          assignedCourseIds.add(String(c.id));
         }
-        if (ls.end_time) {
-          const e5 = ls.end_time.substring(0, 5);
+      });
+      teacherCourses = (state.courses || []).filter((c: any) => assignedCourseIds.has(String(c.id)));
+    }
+
+    const isTeacherExtended = teacherCourses.some((c: any) => {
+      const t = (c.tanda || '').toLowerCase();
+      return t.includes('ext') || t.includes('jor');
+    });
+    const isTeacherVespertina = !isTeacherExtended && teacherCourses.length > 0 && teacherCourses.every((c: any) => {
+      const t = (c.tanda || '').toLowerCase();
+      return t.includes('ves') || t.includes('tar');
+    });
+
+    // Detectar si el centro en general opera con Jornada Extendida
+    const centerIsExtended = (state.courses || []).some((c: any) => {
+      const t = (c.tanda || '').toLowerCase();
+      return t.includes('ext') || t.includes('jor');
+    }) || (state.levelSchedules || []).some((ls: any) => {
+      const s = (ls.shift || '').toLowerCase();
+      return s.includes('ext') || s.includes('jor');
+    }) || (state.cycleTimeBlocks || []).some((cfg: any) => {
+      const s = (cfg.shift || '').toLowerCase();
+      return s.includes('ext') || s.includes('jor');
+    });
+
+    // 1. PRIORIDAD MÁXIMA: Estructuras de Bloques por Ciclo del Centro (cycleTimeBlocks)
+    const cycleConfigs = state.cycleTimeBlocks || [];
+    if (cycleConfigs.length > 0) {
+      let relevantConfigs = cycleConfigs;
+
+      // Si es docente con cursos identificados, filtrar las configuraciones de su tanda/nivel
+      if (isTeacher && teacherCourses.length > 0) {
+        const teacherLevels = new Set(teacherCourses.map((c: any) => (c.level || '').toLowerCase().trim()));
+        const teacherShifts = new Set(teacherCourses.map((c: any) => (c.tanda || '').toLowerCase().trim()));
+
+        const matched = cycleConfigs.filter((cfg: any) => {
+          const cfgLevel = (cfg.level || '').toLowerCase().trim();
+          const cfgShift = (cfg.shift || '').toLowerCase().trim();
+          const levelMatch = Array.from(teacherLevels).some((tl) => tl && (cfgLevel.includes(tl) || tl.includes(cfgLevel)));
+          const shiftMatch = Array.from(teacherShifts).some((ts) => ts && (cfgShift.includes(ts) || ts.includes(cfgShift)));
+          return levelMatch || shiftMatch;
+        });
+
+        if (matched.length > 0) {
+          relevantConfigs = matched;
+        }
+      }
+
+      // Extraer los slots de cada configuración oficial
+      relevantConfigs.forEach((cfg: any) => {
+        if (!cfg.slots || cfg.slots.length === 0) return;
+
+        let periodCount = 1;
+        cfg.slots.forEach((s: any, idx: number) => {
+          const rawStart = (s.start || '').trim();
+          const start5 = rawStart.substring(0, 5);
+          if (!start5 || start5.length < 4) return;
+
+          const isBreak = !!s.isBreak;
+          const label = s.label || (isBreak ? 'Recreo / Descanso' : `${periodCount}ra Hora de Clase`);
+          if (!isBreak) periodCount++;
+
+          rawSlots.push({
+            time: start5,
+            label,
+            type: isBreak ? 'break' : 'class'
+          });
+
+          // Si es el último bloque de la tanda, registrar también la hora de Salida Oficial
+          if (idx === cfg.slots.length - 1) {
+            const rawEnd = (s.end || '').trim();
+            const end5 = rawEnd.substring(0, 5);
+            if (end5 && end5.length >= 4) {
+              rawSlots.push({
+                time: end5,
+                label: `Salida de Clases (${cfg.shift || 'Oficial'})`,
+                type: 'dismissal'
+              });
+            }
+          }
+        });
+      });
+    }
+
+    // 2. Si no hubo cycleTimeBlocks pero el centro o docente es Jornada Extendida
+    if (rawSlots.length === 0 && (isTeacherExtended || centerIsExtended)) {
+      const extSlots = getStandardExtendedDaySlots();
+      extSlots.forEach((s: any, idx: number) => {
+        const s5 = s.start.substring(0, 5);
+        rawSlots.push({
+          time: s5,
+          label: s.label || (s.isBreak ? 'Recreo / Almuerzo' : 'Hora de Clase'),
+          type: s.isBreak ? 'break' : 'class'
+        });
+        if (idx === extSlots.length - 1) {
+          const e5 = s.end.substring(0, 5);
           rawSlots.push({
             time: e5,
-            label: `Fin de Clases (${ls.level || 'Nivel'})`,
+            label: 'Salida de Clases (Jornada Extendida)',
             type: 'dismissal'
           });
         }
       });
     }
 
-    // 2. Integrar descansos/recreos configurados
-    if (state.breakPreferences && state.breakPreferences.length > 0) {
-      state.breakPreferences.forEach((bp: any) => {
-        const bStart = (bp.startTime || bp.start_time || '').substring(0, 5);
-        if (bStart) {
-          const [h] = bStart.split(':').map(Number);
-          // Si el centro es solo matutino, omitir recreos de la tarde (> 13:30)
-          if (!hasAfternoonShift && h >= 14) return;
+    // 3. Si no hay Jornada Extendida ni cycleTimeBlocks, usar horarios por nivel (levelSchedules) y recreos
+    if (rawSlots.length === 0 && state.levelSchedules && state.levelSchedules.length > 0) {
+      state.levelSchedules.forEach((ls: any) => {
+        const isVespLs = (ls.shift || '').toLowerCase().includes('ves') || (ls.shift || '').toLowerCase().includes('tar');
+        if (!hasAfternoonShift && isVespLs) return;
+
+        if (ls.start_time) {
           rawSlots.push({
-            time: bStart,
-            label: bp.name || 'Recreo / Descanso',
-            type: 'break'
+            time: ls.start_time.substring(0, 5),
+            label: `Inicio de Clases (${ls.level || 'Nivel'})`,
+            type: 'class'
+          });
+        }
+        if (ls.end_time) {
+          rawSlots.push({
+            time: ls.end_time.substring(0, 5),
+            label: `Salida de Clases (${ls.level || 'Nivel'})`,
+            type: 'dismissal'
           });
         }
       });
+
+      if (state.breakPreferences && state.breakPreferences.length > 0) {
+        state.breakPreferences.forEach((bp: any) => {
+          const bStart = (bp.startTime || bp.start_time || '').substring(0, 5);
+          if (bStart) {
+            rawSlots.push({
+              time: bStart,
+              label: bp.name || 'Recreo / Descanso',
+              type: 'break'
+            });
+          }
+        });
+      }
     }
 
-    // Si el centro solo opera en la mañana, usar solo los bloques matutinos
-    const fallbackDefaults = hasAfternoonShift
-      ? [...DEFAULT_SCHEDULE_MATUTINA, ...DEFAULT_SCHEDULE_VESPERTINA]
-      : [...DEFAULT_SCHEDULE_MATUTINA];
-
-    if (rawSlots.length < 3) {
-      return fallbackDefaults;
+    // 4. Fallback ÚNICAMENTE si no existe ninguna configuración registrada en el centro
+    if (rawSlots.length === 0) {
+      if (isTeacherVespertina) {
+        return DEFAULT_SCHEDULE_VESPERTINA;
+      }
+      return hasAfternoonShift
+        ? [...DEFAULT_SCHEDULE_MATUTINA, ...DEFAULT_SCHEDULE_VESPERTINA]
+        : [...DEFAULT_SCHEDULE_MATUTINA];
     }
 
-    // Ordenar y desduplicar por hora
+    // 5. Desduplicar y ordenar por hora (SIN concatenar fallbackDefaults para evitar timbres extra)
     const uniqueMap = new Map<string, BellSlot>();
-    [...rawSlots, ...fallbackDefaults].forEach((slot) => {
-      const [h] = slot.time.split(':').map(Number);
-      // Si el centro solo es matutino, no agregar horas vespertinas
-      if (!hasAfternoonShift && h >= 14 && slot.type !== 'dismissal') return;
+    rawSlots.forEach((slot) => {
       if (!uniqueMap.has(slot.time)) {
         uniqueMap.set(slot.time, slot);
       }
     });
 
     return Array.from(uniqueMap.values()).sort((a, b) => a.time.localeCompare(b.time));
-  }, [state.levelSchedules, state.breakPreferences, hasAfternoonShift]);
+  }, [
+    state.cycleTimeBlocks,
+    state.courses,
+    state.assignments,
+    state.schedule,
+    state.levelSchedules,
+    state.breakPreferences,
+    profile?.role,
+    profile?.teacher_id,
+    hasAfternoonShift
+  ]);
 
   // Actualizar reloj cada segundo
   useEffect(() => {
@@ -411,12 +621,13 @@ export const useSchoolBell = () => {
     const minutes = String(currentTime.getMinutes()).padStart(2, '0');
     const timeKey = `${hours}:${minutes}`;
 
-    // Evitar disparar múltiples veces dentro del mismo minuto
-    if (lastTriggeredMinuteRef.current === timeKey) return;
+    // Evitar disparar múltiples veces dentro del mismo minuto (a nivel local y global)
+    if (lastTriggeredMinuteRef.current === timeKey || globalLastTriggeredMinute === timeKey) return;
 
     const matchingSlot = bellSlots.find((s) => s.time === timeKey);
     if (matchingSlot) {
       lastTriggeredMinuteRef.current = timeKey;
+      globalLastTriggeredMinute = timeKey;
 
       // 1. Sonar timbre
       playSchoolBellSound(soundStyle, volume);

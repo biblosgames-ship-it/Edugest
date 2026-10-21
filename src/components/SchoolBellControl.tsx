@@ -224,10 +224,10 @@ export const SchoolBellControl = () => {
                       <span className="font-bold text-xs uppercase tracking-tight truncate">{s.label}</span>
                       <span
                         className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
-                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-700/80 text-slate-400'
+                          isSelected ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-slate-700/80 text-slate-400'
                         }`}
                       >
-                        {s.badge}
+                        {isSelected ? '✓ Guardado' : s.badge}
                       </span>
                     </div>
                     <div
@@ -269,8 +269,8 @@ export const SchoolBellControl = () => {
           {/* Listado de Horarios de Rotación Programados */}
           <div className="space-y-2 pt-2 border-t border-slate-800">
             <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>Horarios Programados del Centro ({bellSlots.length})</span>
-              <span className="text-slate-500">Formato 24h</span>
+              <span>Horarios Oficiales Programados ({bellSlots.length})</span>
+              <span className="text-slate-500">Horario Oficial</span>
             </div>
 
             <div className="max-h-36 overflow-y-auto pr-1 space-y-1 custom-scrollbar">

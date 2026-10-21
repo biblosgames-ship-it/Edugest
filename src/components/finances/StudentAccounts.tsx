@@ -11,7 +11,8 @@ import {
   FileSpreadsheet,
   Zap,
   RefreshCw,
-  Trash2
+  Trash2,
+  Award
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useFinance } from '../../hooks/useFinance';
@@ -19,6 +20,7 @@ import { useStudents } from '../../hooks/useStudents';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { StudentAccountDetails } from './StudentAccountDetails';
+import { GradesReleaseModal } from './GradesReleaseModal';
 import { getLocalDateString } from '../../utils/dateUtils';
 
 const normalizeInvoiceKey = (inv: any, planStartMonth: number = 8) => {
@@ -83,6 +85,7 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [showGradesReleaseModal, setShowGradesReleaseModal] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const isBatchProcessingRef = useRef(false);
 
@@ -637,6 +640,14 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
             Sincronizar Precios
           </button>
           <button
+            onClick={() => setShowGradesReleaseModal(true)}
+            className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-emerald-600 text-white rounded-[1.8rem] text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-500/20 active:scale-95 cursor-pointer"
+            title="Controlar qué familias pueden ver las calificaciones en su portal"
+          >
+            <Award size={18} />
+            Liberar Notas a Familias
+          </button>
+          <button
             onClick={handleBatchBilling}
             disabled={isBatchProcessing}
             className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-slate-900 text-white rounded-[1.8rem] text-xs font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50"
@@ -804,6 +815,16 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
           );
         })}
       </div>
+
+      {/* MODAL DE LIBERACIÓN DE CALIFICACIONES A FAMILIAS */}
+      <GradesReleaseModal
+        isOpen={showGradesReleaseModal}
+        onClose={() => setShowGradesReleaseModal(false)}
+        centerId={profile?.center_id || ''}
+        schoolYear={selectedYear || '2026-2027'}
+        studentsWithBalances={studentBalances}
+        courses={state.courses || []}
+      />
     </div>
   );
 };

@@ -3031,6 +3031,34 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                 </button>
               </div>
 
+              <div className="flex items-center gap-1 bg-brand-bg px-2.5 py-1.5 rounded-2xl border border-border-main shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('partials-scroll-container');
+                    el?.scrollBy({ left: -320, behavior: 'smooth' });
+                  }}
+                  className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-brand-blue transition-colors cursor-pointer"
+                  title="Desplazar tabla a la izquierda"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span className="text-[10px] font-black uppercase text-text-muted px-1 select-none">
+                  Scroll
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('partials-scroll-container');
+                    el?.scrollBy({ left: 320, behavior: 'smooth' });
+                  }}
+                  className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-brand-blue transition-colors cursor-pointer"
+                  title="Desplazar tabla a la derecha"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setHideStudentNames((prev) => !prev)}
@@ -3062,8 +3090,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
           {/* TABLA MULTI-COMPETENCIAS */}
           <div className="bg-surface rounded-3xl border border-border-main shadow-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div id="partials-scroll-container" className="overflow-x-auto w-full pb-2 touch-pan-x">
+              <table className="w-full min-w-[1000px] text-left border-collapse">
                 <thead>
                   {/* FILA SUPERIOR: TITULOS DE COMPETENCIA */}
                   <tr className="bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider divide-x divide-slate-800">

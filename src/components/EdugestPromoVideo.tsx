@@ -231,13 +231,15 @@ export const EdugestPromoVideo: React.FC = () => {
               >
                 <div className="relative flex items-center justify-center">
                   <div className="absolute -inset-4 rounded-full bg-brand-blue/30 blur-xl animate-pulse" />
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-brand-blue via-indigo-600 to-brand-accent p-3 shadow-2xl border border-white/30 flex items-center justify-center relative group-hover:scale-110 transition-transform duration-300">
-                    <img
-                      src="/pwa-512x512.png"
-                      alt="Edugest Icon"
-                      className="w-full h-full object-contain rounded-2xl"
-                    />
-                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-slate-950">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 relative group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-full h-full rounded-3xl overflow-hidden shadow-2xl border-2 border-white/30 bg-slate-950 flex items-center justify-center">
+                      <img
+                        src="/icono 512x512.jpeg"
+                        alt="Edugest Icon"
+                        className="w-full h-full object-cover scale-[1.08]"
+                      />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-slate-950 z-10">
                       <Play size={18} className="fill-white ml-0.5" />
                     </div>
                   </div>
@@ -381,11 +383,11 @@ export const EdugestPromoVideo: React.FC = () => {
               {/* Icono Central de Edugest */}
               <div className="relative z-20 flex flex-col items-center">
                 <div className="absolute -inset-6 rounded-full bg-brand-blue/30 blur-2xl animate-pulse" />
-                <div className="w-24 h-24 rounded-[1.8rem] bg-slate-950 p-2 border-2 border-indigo-400 shadow-2xl shadow-brand-blue/50 flex items-center justify-center relative">
+                <div className="w-24 h-24 rounded-[1.8rem] bg-slate-950 overflow-hidden border-2 border-indigo-400 shadow-2xl shadow-brand-blue/50 flex items-center justify-center relative">
                   <img
-                    src="/pwa-512x512.png"
+                    src="/icono 512x512.jpeg"
                     alt="Edugest Icon"
-                    className="w-full h-full object-contain rounded-2xl"
+                    className="w-full h-full object-cover scale-[1.08]"
                   />
                 </div>
                 <span className="mt-2 px-3 py-0.5 rounded-full bg-brand-blue text-white text-[9px] font-black uppercase tracking-widest shadow-md">

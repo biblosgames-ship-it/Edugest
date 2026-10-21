@@ -1274,6 +1274,18 @@ export const StudentDashboard = ({
           {onViewChange && (
             <button
               type="button"
+              onClick={() => onViewChange('parent-grades')}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Ver Calificaciones y Boletín"
+            >
+              <FileSpreadsheet size={13} />
+              <span>Calificaciones</span>
+            </button>
+          )}
+
+          {onViewChange && (
+            <button
+              type="button"
               onClick={() => onViewChange('tasks')}
               className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2.5 rounded-xl transition-all font-black text-[9px] uppercase tracking-wider shadow-sm shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               title="Ir a Tareas y Asignaciones"

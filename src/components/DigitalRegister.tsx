@@ -71,6 +71,16 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const [showSaveStatus, setShowSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const handleHorizontalScroll = (direction: 'left' | 'right') => {
+    if (!tableScrollRef.current) return;
+    const scrollAmount = 360;
+    tableScrollRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
+  };
 
   // Estados para el resumen de notas consolidado (Boletín del alumno)
   const [selectedSummaryStudent, setSelectedSummaryStudent] = useState<any | null>(null);
@@ -1778,11 +1788,35 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
       {selectedSubjectId && (
         <div className="bg-surface rounded-[2rem] border border-border-main shadow-2xl overflow-hidden animate-fade-in">
-          <div className="p-3 border-b border-border-main flex items-center justify-between bg-surface">
-            <h3 className="text-[10px] font-black uppercase text-text-main ml-2">
-              {selectedSubject?.name}
-            </h3>
+          <div className="p-3 border-b border-border-main flex flex-wrap items-center justify-between gap-3 bg-surface">
             <div className="flex items-center gap-3">
+              <h3 className="text-[10px] font-black uppercase text-text-main ml-2">
+                {selectedSubject?.name}
+              </h3>
+              {/* Controles rápidos de scroll lateral */}
+              <div className="flex items-center gap-1 bg-brand-bg px-2 py-1 rounded-xl border border-border-main">
+                <button
+                  type="button"
+                  onClick={() => handleHorizontalScroll('left')}
+                  className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-indigo-600 transition-colors cursor-pointer"
+                  title="Desplazar tabla a la izquierda"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span className="text-[9px] font-black uppercase text-text-muted px-1 select-none">
+                  Scroll
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleHorizontalScroll('right')}
+                  className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-indigo-600 transition-colors cursor-pointer"
+                  title="Desplazar tabla a la derecha"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
               {showSaveStatus === 'success' && (
                 <div className="flex items-center gap-1 text-emerald-600 text-[9px] font-black uppercase">
                   <CheckCircle2 size={14} /> ¡Guardado {config.year}!
@@ -1830,15 +1864,22 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse table-fixed">
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto w-full pb-2 touch-pan-x"
+          >
+            <table
+              className={`w-full text-left border-collapse ${
+                activeTab === 'grades' ? 'min-w-[1380px]' : 'min-w-[820px]'
+              }`}
+            >
               <thead>
                 {activeTab === 'grades' ? (
                   <>
                     <tr className="bg-slate-900 text-white text-[7px] font-black uppercase tracking-tight">
                       <th
                         className={`p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 text-center transition-all ${
-                          hideStudentNames ? 'w-14' : 'w-10'
+                          hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'
                         }`}
                       >
                         <div className="flex items-center justify-center gap-0.5">
@@ -1854,7 +1895,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         </div>
                       </th>
                       {!hideStudentNames && (
-                        <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
+                        <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 min-w-[220px] max-w-[220px] shadow-xl">
                           Estudiante
                         </th>
                       )}
@@ -1862,27 +1903,27 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         <th
                           key={c.id}
                           colSpan={8}
-                          className="p-1 text-center border-r border-white/10 align-middle leading-tight h-10"
+                          className="p-1 text-center border-r border-white/10 align-middle leading-tight h-10 min-w-[340px]"
                         >
                           <div className="line-clamp-2 px-2 text-[9px] font-black">{c.name}</div>
                         </th>
                       ))}
                     </tr>
                     <tr className="bg-slate-50 text-[7px] font-black uppercase text-slate-400 text-center">
-                      <th className={`p-0 border-r border-slate-200 sticky left-0 bg-slate-50 ${hideStudentNames ? 'w-14' : 'w-10'}`}></th>
+                      <th className={`p-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-30 ${hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'}`}></th>
                       {!hideStudentNames && (
-                        <th className="p-0 border-r border-slate-200 sticky left-10 bg-slate-50 w-56"></th>
+                        <th className="p-0 border-r border-slate-200 sticky left-10 bg-slate-50 z-30 w-56 min-w-[220px] max-w-[220px]"></th>
                       )}
                       {config.competencies.map((c) =>
                         config.periods.map((p) => (
                           <React.Fragment key={`${c.id}_${p}`}>
                             <th
-                              className={`p-1 border-r border-slate-200 ${c.color} text-slate-700 w-12 min-w-[44px] text-center font-black`}
+                              className={`p-1 border-r border-slate-200 ${c.color} text-slate-700 w-12 min-w-[46px] text-center font-black`}
                             >
                               {p}
                             </th>
                             <th
-                              className={`p-1 border-r border-slate-200 ${c.rColor} text-slate-400 font-normal w-10 min-w-[36px] text-center`}
+                              className={`p-1 border-r border-slate-200 ${c.rColor} text-slate-400 font-normal w-10 min-w-[38px] text-center`}
                             >
                               R
                             </th>
@@ -1893,7 +1934,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   </>
                 ) : (
                   <tr className="bg-slate-900 text-white text-[7px] font-black uppercase tracking-tight">
-                    <th className={`p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 text-center transition-all ${hideStudentNames ? 'w-14' : 'w-10'}`}>
+                    <th className={`p-2 border-r border-white/10 sticky left-0 bg-slate-900 z-40 text-center transition-all ${hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'}`}>
                       <div className="flex items-center justify-center gap-0.5">
                         <span>Nº</span>
                         <button
@@ -1907,31 +1948,31 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                       </div>
                     </th>
                     {!hideStudentNames && (
-                      <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 shadow-xl">
+                      <th className="p-2 border-r border-white/10 sticky left-10 bg-slate-900 z-40 w-56 min-w-[220px] max-w-[220px] shadow-xl">
                         Estudiante
                       </th>
                     )}
                     {config.competencies.map((c) => (
-                      <th key={`res_${c.id}`} className="p-2 text-center border-r border-white/10">
+                      <th key={`res_${c.id}`} className="p-2 text-center border-r border-white/10 min-w-[70px]">
                         {c.short}
                       </th>
                     ))}
-                    <th className="p-2 text-center bg-indigo-800 border-r border-white/10">PROM</th>
+                    <th className="p-2 text-center bg-indigo-800 border-r border-white/10 min-w-[70px]">PROM</th>
                     {isSecundario ? (
                       <>
-                        <th className="p-2 text-center bg-amber-600 border-r border-white/10 w-14">
+                        <th className="p-2 text-center bg-amber-600 border-r border-white/10 w-14 min-w-[56px]">
                           CP
                         </th>
-                        <th className="p-2 text-center bg-orange-700 border-r border-white/10 w-14">
+                        <th className="p-2 text-center bg-orange-700 border-r border-white/10 w-14 min-w-[56px]">
                           EX
                         </th>
-                        <th className="p-2 text-center bg-rose-800 border-r border-white/10 w-14">
+                        <th className="p-2 text-center bg-rose-800 border-r border-white/10 w-14 min-w-[56px]">
                           E1
                         </th>
-                        <th className="p-2 text-center bg-rose-900 w-14">E2</th>
+                        <th className="p-2 text-center bg-rose-900 w-14 min-w-[56px]">E2</th>
                       </>
                     ) : (
-                      <th className="p-2 text-center bg-rose-800">Recuperación Final</th>
+                      <th className="p-2 text-center bg-rose-800 min-w-[110px]">Recuperación Final</th>
                     )}
                     <th className="p-2 text-center bg-slate-950 min-w-[60px]">Final</th>
                   </tr>
@@ -1942,7 +1983,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   <tr key={s.id} className="hover:bg-brand-bg transition-all">
                     <td
                       className={`p-1 border-r border-border-main sticky left-0 bg-surface z-10 text-center transition-all ${
-                        hideStudentNames ? 'w-14' : 'w-10'
+                        hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'
                       }`}
                       title={(() => {
                         const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
@@ -1963,7 +2004,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                       )}
                     </td>
                     {!hideStudentNames && (
-                      <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main max-w-[220px] w-56">
+                      <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main min-w-[220px] max-w-[220px] w-56">
                         <div className="flex items-center justify-between gap-2 w-full">
                           <span className="truncate">
                             {(() => {
@@ -1991,7 +2032,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                           const kRec = `${c.id}_r${pL}`;
                           return (
                             <React.Fragment key={`${s.id}_${c.id}_${p}`}>
-                              <td className={`p-0 border-r border-border-main ${c.color} text-center align-middle w-12 min-w-[44px]`}>
+                              <td className={`p-0 border-r border-border-main ${c.color} text-center align-middle w-12 min-w-[46px]`}>
                                 <input
                                   ref={(el) => {
                                     inputRefs.current[`${s.id}_${kVal}`] = el;
@@ -2008,7 +2049,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   disabled={!isEditable}
                                 />
                               </td>
-                              <td className={`p-0 border-r border-border-main ${c.rColor} text-center align-middle w-10 min-w-[36px]`}>
+                              <td className={`p-0 border-r border-border-main ${c.rColor} text-center align-middle w-10 min-w-[38px]`}>
                                 <input
                                   ref={(el) => {
                                     inputRefs.current[`${s.id}_${kRec}`] = el;
