@@ -10,7 +10,8 @@ import {
   Wallet,
   BookOpen,
   Package,
-  Compass
+  Compass,
+  Award
 } from 'lucide-react';
 import { FinanceDashboard } from './FinanceDashboard';
 import { StudentAccounts } from './StudentAccounts';
@@ -40,21 +41,36 @@ export const FinanceModule = () => {
   return (
     <div className="space-y-6">
       {/* NAVEGACIÓN INTERNA DEL MÓDULO */}
-      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex gap-2 overflow-x-auto custom-scrollbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-              activeTab === tab.id
-                ? 'bg-slate-900 text-white shadow-xl scale-105'
-                : 'text-slate-400 hover:bg-slate-50'
-            }`}
-          >
-            <tab.icon size={16} />
-            {tab.label}
-          </button>
-        ))}
+      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-2 overflow-x-auto custom-scrollbar flex-1 min-w-[280px]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all shrink-0 ${
+                activeTab === tab.id
+                  ? 'bg-slate-900 text-white shadow-xl scale-105'
+                  : 'text-slate-400 hover:bg-slate-50'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => {
+            setActiveTab('students');
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('openGradesReleaseModal'));
+            }, 100);
+          }}
+          className="flex items-center gap-2.5 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 active:scale-95 transition-all shrink-0 cursor-pointer"
+          title="Liberar calificaciones en el portal de padres y alumnos"
+        >
+          <Award size={17} /> Liberar Notas a Familias
+        </button>
       </div>
 
       {/* RENDERIZADO DE SUB-MÓDULOS */}

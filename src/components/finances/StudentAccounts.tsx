@@ -89,6 +89,12 @@ export const StudentAccounts = ({ onTabChange }: { onTabChange?: (tab: string) =
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const isBatchProcessingRef = useRef(false);
 
+  useEffect(() => {
+    const handleOpen = () => setShowGradesReleaseModal(true);
+    window.addEventListener('openGradesReleaseModal', handleOpen);
+    return () => window.removeEventListener('openGradesReleaseModal', handleOpen);
+  }, []);
+
   const handleBatchBilling = async () => {
     if (isBatchProcessing || isBatchProcessingRef.current) return;
     isBatchProcessingRef.current = true;
