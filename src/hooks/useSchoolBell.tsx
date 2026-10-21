@@ -172,7 +172,7 @@ export const useSchoolBell = () => {
             is_enabled: next,
             updated_at: new Date().toISOString()
           }
-        }).eq('id', profile.id).catch(() => {});
+        }).eq('id', profile.id).then(() => {}).catch(() => {});
       }
 
       if (next) {
@@ -225,7 +225,7 @@ export const useSchoolBell = () => {
               is_enabled: isBellEnabled,
               updated_at: new Date().toISOString()
             }
-          }).eq('id', profile.id).catch(() => {});
+          }).eq('id', profile.id).then(() => {}).catch(() => {});
         }
       }).catch(() => {});
     }
@@ -265,7 +265,7 @@ export const useSchoolBell = () => {
           is_enabled: isBellEnabled,
           updated_at: new Date().toISOString()
         }
-      }).eq('id', profile.id).catch(() => {});
+      }).eq('id', profile.id).then(() => {}).catch(() => {});
     }
   };
 
