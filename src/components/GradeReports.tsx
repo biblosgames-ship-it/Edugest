@@ -156,8 +156,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           );
         }
         if (subs.length === 0) subs = state.subjects || [];
-        const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
-        const courseSubjects = uniqueSubs.filter(
+        const courseSubjects = [...subs].filter(
           (s) =>
             !s.name.toLowerCase().includes('lecto') && !s.name.toLowerCase().includes('escritura')
         );
@@ -493,9 +492,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
       );
     }
     if (subs.length === 0) subs = state.subjects || [];
-    // Deduplicar asignaturas por ID único para evitar materias repetidas en boletines y actas
-    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
-    return [...uniqueSubs]
+    return [...subs]
       .filter(
         (s) =>
           !s.name.toLowerCase().includes('lecto') && !s.name.toLowerCase().includes('escritura')
