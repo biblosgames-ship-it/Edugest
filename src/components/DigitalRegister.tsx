@@ -69,9 +69,22 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   } = useGrades(selectedCourseId, selectedSubjectId);
   const [localGrades, setLocalGrades] = useState<Record<string, any>>({});
   const [showSaveStatus, setShowSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Advertir al docente si intenta cerrar la ventana o recargar sin haber guardado
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const handleHorizontalScroll = (direction: 'left' | 'right') => {
     if (!tableScrollRef.current) return;
@@ -193,7 +206,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       if (!profile?.teacher_id) {
         return [];
       }
-      return (allAssignments || [])
+      const rawTeacherSubs = (allAssignments || [])
         .filter(
           (a: any) =>
             (isSameTeacher(a.teacher_id || a.teacherId, profile.teacher_id) || (a.teacher_id || a.teacherId) === profile.teacher_id) &&
@@ -203,6 +216,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
           (allSubjects || []).find((s: any) => s.id === (a.subject_id || a.subjectId))
         )
         .filter(Boolean);
+      return Array.from(new Map(rawTeacherSubs.map((s: any) => [s.id, s])).values());
     }
 
     let subs = (allAssignments || [])
@@ -216,7 +230,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       );
     }
     if (subs.length === 0) subs = allSubjects || [];
-    return [...subs]
+
+    // Deduplicar materias por ID único
+    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
+
+    return [...uniqueSubs]
       .filter(
         (s) =>
           !s.name.toLowerCase().includes('lecto') && !s.name.toLowerCase().includes('escritura')
@@ -235,7 +253,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         };
         return getIdx(a.name) - getIdx(b.name);
       });
-  }, [selectedCourseId, allAssignments, allSubjects, selectedCourse, profile]);
+  }, [selectedCourseId, allAssignments, allSubjects, selectedCourse, profile, isSameTeacher]);
 
   const allCourseSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
@@ -250,7 +268,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       );
     }
     if (subs.length === 0) subs = allSubjects || [];
-    return [...subs]
+
+    // Deduplicar materias por ID único
+    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
+
+    return [...uniqueSubs]
       .filter(
         (s) =>
           !s.name.toLowerCase().includes('lecto') && !s.name.toLowerCase().includes('escritura')
@@ -287,6 +309,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     if (currentScopeRef.current !== activeScope) {
       currentScopeRef.current = activeScope;
       setLocalGrades(loadedGrades || {});
+      setHasUnsavedChanges(false);
       return;
     }
     setLocalGrades((prev) => {
@@ -304,6 +327,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       if (parseInt(value) > 100) return;
     }
     setLocalGrades((prev) => ({ ...prev, [`${studentId}_${key}`]: value }));
+    setHasUnsavedChanges(true);
   };
 
   const getBestGrade = (studentId: string, cId: string, p: string) => {
@@ -443,6 +467,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     if (importedCount > 0) {
       setLocalGrades(newGrades);
+      setHasUnsavedChanges(true);
       setShowSaveStatus('success');
       setTimeout(() => setShowSaveStatus('idle'), 3000);
       alert(`¡Se han importado exitosamente ${importedCount} notas desde Mi Aula (nube y local)! Recuerda pulsar "GUARDAR".`);
@@ -525,6 +550,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       if (updates.length > 0) {
         await saveGrades(updates);
       }
+      setHasUnsavedChanges(false);
       setShowSaveStatus('success');
       setTimeout(() => setShowSaveStatus('idle'), 3000);
     } catch (e) {
@@ -1698,7 +1724,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         </div>
         {onViewChange && (
           <button
-            onClick={() => onViewChange('general-reports')}
+            onClick={() => {
+              if (hasUnsavedChanges) {
+                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de salir a los reportes para no perder los datos digitados.');
+                return;
+              }
+              onViewChange('general-reports');
+            }}
             className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-[10px] shadow-md flex items-center gap-2 transition-all border border-white/20"
           >
             <Printer size={14} /> Imprimir Boletines / Reportes
@@ -1724,6 +1756,10 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 <button
                   key={lvl}
                   onClick={() => {
+                    if (hasUnsavedChanges && lvl !== selectedLevel) {
+                      alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de nivel educativo para no perder los datos digitados.');
+                      return;
+                    }
                     setSelectedLevel(lvl);
                     setSelectedCourseId('');
                     setSelectedSubjectId('');
@@ -1741,7 +1777,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
           <select
             value={selectedCourseId}
             onChange={(e) => {
-              setSelectedCourseId(e.target.value);
+              const newCourseId = e.target.value;
+              if (newCourseId === selectedCourseId) return;
+              if (hasUnsavedChanges) {
+                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de curso para evitar perder los cambios realizados.');
+                return;
+              }
+              setSelectedCourseId(newCourseId);
               setSelectedSubjectId('');
             }}
             className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-2 text-[10px] font-black uppercase focus:border-indigo-500 outline-none"
@@ -1759,7 +1801,14 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             {courseSubjects.map((s: any) => (
               <button
                 key={s.id}
-                onClick={() => setSelectedSubjectId(s.id)}
+                onClick={() => {
+                  if (s.id === selectedSubjectId) return;
+                  if (hasUnsavedChanges) {
+                    alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de asignatura para no perder los datos digitados.');
+                    return;
+                  }
+                  setSelectedSubjectId(s.id);
+                }}
                 className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all border ${selectedSubjectId === s.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg scale-105' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-white hover:text-slate-600'}`}
               >
                 {s.name}
@@ -1778,7 +1827,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             <Edit3 size={14} /> Calificaciones
           </button>
           <button
-            onClick={() => setActiveTab('results')}
+            onClick={() => {
+              if (hasUnsavedChanges && activeTab === 'grades') {
+                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar a la pestaña de Actas y Resultados.');
+                return;
+              }
+              setActiveTab('results');
+            }}
             className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all ${activeTab === 'results' ? 'bg-surface text-emerald-600 shadow-sm' : 'text-text-muted'}`}
           >
             <BarChart3 size={14} /> Ver Promedios
@@ -1788,6 +1843,23 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
       {selectedSubjectId && (
         <div className="bg-surface rounded-[2rem] border border-border-main shadow-2xl overflow-hidden animate-fade-in">
+          {hasUnsavedChanges && (
+            <div className="m-4 mb-2 p-3 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-amber-700 dark:text-amber-300 text-xs font-black animate-pulse">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={18} className="text-amber-500 shrink-0" />
+                <span>⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR. Pulsa GUARDAR antes de salir o cambiar de curso.</span>
+              </div>
+              <button
+                type="button"
+                onClick={save}
+                disabled={isSaving || !isEditable}
+                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase shadow transition-all shrink-0 cursor-pointer"
+              >
+                {isSaving ? 'Guardando...' : 'Guardar Ahora'}
+              </button>
+            </div>
+          )}
+
           <div className="p-3 border-b border-border-main flex flex-wrap items-center justify-between gap-3 bg-surface">
             <div className="flex items-center gap-3">
               <h3 className="text-[10px] font-black uppercase text-text-main ml-2">
@@ -1857,10 +1929,14 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               <button
                 onClick={save}
                 disabled={isSaving || !isEditable}
-                className="px-8 py-2.5 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-8 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all cursor-pointer ${
+                  hasUnsavedChanges
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white ring-4 ring-amber-300 animate-pulse'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{' '}
-                GUARDAR
+                {hasUnsavedChanges ? 'GUARDAR CAMBIOS *' : 'GUARDAR'}
               </button>
             </div>
           </div>
