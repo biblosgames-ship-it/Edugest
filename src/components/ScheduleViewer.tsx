@@ -2102,6 +2102,18 @@ export const ScheduleViewer = () => {
         return;
       }
 
+      // Verificar si el centro o tanda tiene Jornada Extendida
+      const isExt = selectedShift === 'Matutina' && (
+        (state.courses || []).some((c: any) => {
+          const t = (c.tanda || '').toLowerCase();
+          return t.includes('ext') || t.includes('jor');
+        }) ||
+        (state.levelSchedules || []).some((ls: any) => {
+          const s = (ls.shift || '').toLowerCase();
+          return s.includes('ext') || s.includes('jor');
+        })
+      );
+
       // Bloques de docencia estándar según la tanda
       const standardSlotList = selectedShift === 'Vespertina'
         ? [
@@ -2112,7 +2124,7 @@ export const ScheduleViewer = () => {
             { start: '17:00:00', end: '17:40:00', label: '5ta Hora (17:00 - 17:40)' },
             { start: '17:40:00', end: '18:15:00', label: '6ta Hora (17:40 - 18:15)' }
           ]
-        : (isExtendedDay
+        : (isExt
             ? [
                 { start: '08:15:00', end: '09:00:00', label: '1ra Hora (08:15 - 09:00)' },
                 { start: '09:00:00', end: '09:45:00', label: '2da Hora (09:00 - 09:45)' },
@@ -2143,7 +2155,11 @@ export const ScheduleViewer = () => {
           return true;
         });
 
-        standardSlotList.forEach((slot, slotIdx) => {
+        const cRawSlots = getSlotsForCourse(course);
+        const cTeachingSlots = (cRawSlots || []).filter((s: any) => !s.isBreak);
+        const courseSlotList = cTeachingSlots.length > 0 ? cTeachingSlots : standardSlotList;
+
+        courseSlotList.forEach((slot, slotIdx) => {
           const rowData: any = {
             Curso: courseLabel,
             Nivel: course.level || 'Secundario',
