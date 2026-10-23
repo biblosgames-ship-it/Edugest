@@ -220,7 +220,8 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         { start: '09:30:00', end: '10:15:00', label: '3ra Hora (09:30 - 10:15)', isBreak: false, slotNum: 3 },
         { start: '10:15:00', end: '10:45:00', label: '🔔 RECREO (10:15 - 10:45)', isBreak: true, defaultVal: '--- RECREO (Pausa) ---' },
         { start: '10:45:00', end: '11:30:00', label: '4ta Hora (10:45 - 11:30)', isBreak: false, slotNum: 4 },
-        { start: '11:30:00', end: '12:15:00', label: '5ta Hora (11:30 - 12:15)', isBreak: false, slotNum: 5 }
+        { start: '11:30:00', end: '12:15:00', label: '5ta Hora (11:30 - 12:15)', isBreak: false, slotNum: 5 },
+        { start: '12:15:00', end: '13:00:00', label: '6ta Hora (12:15 - 13:00)', isBreak: false, slotNum: 6 }
       ];
     }
     // Vespertina
@@ -249,26 +250,73 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '');
 
-  // 1. DESCARGAR PLANTILLA EXCEL
-  const handleDownloadTemplate = () => {
+  // 1. DESCARGAR PLANTILLA EXCEL (Vacía o con Horario Actual Asignado)
+  const handleDownloadTemplate = (withAssignedSchedule: boolean = false) => {
     try {
       const wb = XLSX.utils.book_new();
 
+      const toMinsHelper = (val: string) => {
+        if (!val) return 0;
+        const parts = val.split(':');
+        return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
+      };
+
       // HOJA 1: MATRIZ SEMANAL POR CURSO (Exclusivamente los bloques de clases lectivas)
       const matrixRows: any[] = [];
+      const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
       relevantCourses.forEach((c: any) => {
         const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
+
+        // Entradas del horario para este curso
+        const courseEntries = (state.schedule || []).filter((s: any) => {
+          if (String(s.course_id || s.courseId) !== String(c.id)) return false;
+          if (schoolYear && s.school_year && s.school_year !== schoolYear) return false;
+          return true;
+        });
+
         standardSlots.forEach((slot, idx) => {
-          matrixRows.push({
+          const rowData: any = {
             Curso: courseLabel,
             Nivel: c.level || 'Secundario',
-            Bloque: `${idx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`,
-            Lunes: '',
-            Martes: '',
-            Miércoles: '',
-            Jueves: '',
-            Viernes: ''
+            Bloque: `${idx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`
+          };
+
+          days.forEach((day) => {
+            if (!withAssignedSchedule) {
+              rowData[day] = '';
+              return;
+            }
+
+            const normDay = norm(day);
+            const dayEntries = courseEntries
+              .filter((e: any) => norm(e.day) === normDay)
+              .sort((a: any, b: any) => toMinsHelper(a.start_time) - toMinsHelper(b.start_time));
+
+            // 1. Coincidencia horaria directa (< 20 mins)
+            let entry = dayEntries.find((e: any) => {
+              const eMins = toMinsHelper(e.start_time);
+              const sMins = toMinsHelper(slot.start);
+              return Math.abs(eMins - sMins) <= 20;
+            });
+
+            // 2. Fallback por posición secuencial de clase en el día
+            if (!entry && dayEntries[idx]) {
+              entry = dayEntries[idx];
+            }
+
+            if (entry) {
+              const subj = (state.subjects || []).find((s: any) => String(s.id) === String(entry.subject_id));
+              const teach = (state.teachers || []).find((t: any) => String(t.id) === String(entry.teacher_id));
+              const subjName = subj?.name || 'Materia';
+              const teachName = teach?.name ? ` (${teach.name})` : '';
+              rowData[day] = `${subjName}${teachName}`;
+            } else {
+              rowData[day] = '';
+            }
           });
+
+          matrixRows.push(rowData);
         });
       });
 
@@ -277,23 +325,53 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
       // HOJA 2: FORMATO LISTA PLANA (Fila por clase)
       const listRows: any[] = [];
-      relevantCourses.slice(0, 2).forEach((c: any) => {
-        const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
-        listRows.push({
-          Curso: courseLabel,
-          Dia: 'Lunes',
-          Bloque_o_Hora: '1ra Hora',
-          Materia: 'Lengua Española',
-          Docente: 'Idaliza Peña'
+      if (withAssignedSchedule) {
+        relevantCourses.forEach((c: any) => {
+          const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
+          const courseEntries = (state.schedule || []).filter((s: any) => {
+            if (String(s.course_id || s.courseId) !== String(c.id)) return false;
+            if (schoolYear && s.school_year && s.school_year !== schoolYear) return false;
+            return true;
+          });
+
+          days.forEach((day) => {
+            const normDay = norm(day);
+            const dayEntries = courseEntries
+              .filter((e: any) => norm(e.day) === normDay)
+              .sort((a: any, b: any) => toMinsHelper(a.start_time) - toMinsHelper(b.start_time));
+
+            dayEntries.forEach((entry: any, eIdx: number) => {
+              const subj = (state.subjects || []).find((s: any) => String(s.id) === String(entry.subject_id));
+              const teach = (state.teachers || []).find((t: any) => String(t.id) === String(entry.teacher_id));
+              listRows.push({
+                Curso: courseLabel,
+                Dia: day,
+                Bloque_o_Hora: `${eIdx + 1}ra Hora`,
+                Materia: subj?.name || 'Materia',
+                Docente: teach?.name || '(Sin docente)'
+              });
+            });
+          });
         });
-        listRows.push({
-          Curso: courseLabel,
-          Dia: 'Lunes',
-          Bloque_o_Hora: '2da Hora',
-          Materia: 'Lengua Española',
-          Docente: 'Idaliza Peña'
+      } else {
+        relevantCourses.slice(0, 2).forEach((c: any) => {
+          const courseLabel = `${c.grade} "${c.section || 'A'}"`.trim();
+          listRows.push({
+            Curso: courseLabel,
+            Dia: 'Lunes',
+            Bloque_o_Hora: '1ra Hora',
+            Materia: 'Lengua Española',
+            Docente: 'Idaliza Peña'
+          });
+          listRows.push({
+            Curso: courseLabel,
+            Dia: 'Lunes',
+            Bloque_o_Hora: '2da Hora',
+            Materia: 'Lengua Española',
+            Docente: 'Idaliza Peña'
+          });
         });
-      });
+      }
 
       const wsList = XLSX.utils.json_to_sheet(listRows);
       XLSX.utils.book_append_sheet(wb, wsList, 'Horario_Lista');
@@ -353,16 +431,22 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         ? `${selectedTargetCourse.grade}_${selectedTargetCourse.section || 'A'}`.replace(/[^a-zA-Z0-9_-]/g, '_')
         : 'Grado';
 
+      const typeLabel = withAssignedSchedule ? 'Horario_Asignado' : 'Plantilla_Vacia';
+
       const fileName =
         importScope === 'single' && selectedTargetCourse
-          ? `Edugest_Plantilla_Horario_${cleanCourseName}_${schoolYear || '2026-2027'}.xlsx`
-          : `Edugest_Plantilla_Horario_${selectedShift}_${schoolYear || '2026-2027'}.xlsx`;
+          ? `Edugest_${typeLabel}_${cleanCourseName}_${schoolYear || '2026-2027'}.xlsx`
+          : `Edugest_${typeLabel}_${selectedShift}_${schoolYear || '2026-2027'}.xlsx`;
 
       XLSX.writeFile(wb, fileName);
       toast.success(
-        importScope === 'single' && selectedTargetCourse
-          ? `Plantilla para ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" descargada con éxito`
-          : 'Plantilla de horario descargada con éxito'
+        withAssignedSchedule
+          ? (importScope === 'single' && selectedTargetCourse
+              ? `Planilla con horario para ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" descargada con éxito`
+              : `Planilla con horario asignado (${selectedShift}) descargada con éxito`)
+          : (importScope === 'single' && selectedTargetCourse
+              ? `Plantilla vacía para ${selectedTargetCourse.grade} "${selectedTargetCourse.section || ''}" descargada con éxito`
+              : `Plantilla vacía (${selectedShift}) descargada con éxito`)
       );
     } catch (e: any) {
       console.error(e);
@@ -423,11 +507,22 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
         const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
-        // Función para resolver curso con alta tolerancia
+        // Función para resolver curso con alta tolerancia (priorizando la tanda seleccionada)
+        const isVesp = selectedShift === 'Vespertina';
+        const sortedCourses = [...(state.courses || [])].sort((a: any, b: any) => {
+          const aT = (a.tanda || '').toLowerCase();
+          const bT = (b.tanda || '').toLowerCase();
+          const aMatch = isVesp ? (aT.includes('ves') || aT.includes('tar')) : (!aT.includes('ves') && !aT.includes('tar'));
+          const bMatch = isVesp ? (bT.includes('ves') || bT.includes('tar')) : (!bT.includes('ves') && !bT.includes('tar'));
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+          return 0;
+        });
+
         const resolveCourse = (courseStr: string) => {
           if (!courseStr) return null;
           const clean = norm(courseStr);
-          const allCourses = state.courses || [];
+          const allCourses = sortedCourses;
 
           // 1. Coincidencia directa o por inclusión
           const direct = allCourses.find((c: any) => {
@@ -1257,16 +1352,21 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
               )}
               <button
                 type="button"
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
-                title={
-                  importScope === 'single'
-                    ? 'Descarga la plantilla Excel exclusiva para este grado'
-                    : 'Descarga la plantilla con todos los cursos del centro'
-                }
+                onClick={() => handleDownloadTemplate(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-black text-xs shadow-xs transition-all cursor-pointer"
+                title="Descarga la planilla con todas las horas y clases asignadas para los cursos de esta tanda"
               >
-                <Download size={14} className="text-indigo-600" />
-                {importScope === 'single' ? 'Descargar Plantilla del Grado' : 'Descargar Plantilla Excel'}
+                <FileSpreadsheet size={14} className="text-emerald-600" />
+                {importScope === 'single' ? 'Descargar con Horario Asignado' : 'Descargar con Horario Asignado'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadTemplate(false)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+                title="Descarga la planilla en blanco para rellenar desde cero"
+              >
+                <Download size={14} className="text-slate-500" />
+                Plantilla Vacía
               </button>
             </div>
           </div>

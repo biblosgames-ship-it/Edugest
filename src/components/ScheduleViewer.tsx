@@ -2069,6 +2069,150 @@ export const ScheduleViewer = () => {
     XLSX.writeFile(workbook, `${filename}.xlsx`);
   };
 
+  const handleExportBulkMatrixExcel = (withAssignedSchedule: boolean = true) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const norm = (str: string) =>
+        (str || '')
+          .toLowerCase()
+          .trim()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]/g, '');
+
+      const toMinsHelper = (val: string) => {
+        if (!val) return 0;
+        const parts = val.split(':');
+        return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
+      };
+
+      // Cursos de la tanda actual (o filtrados por el curso si está seleccionado uno)
+      const targetCourses = (filterType === 'course' && selectedCourseObj)
+        ? [selectedCourseObj]
+        : sortCourses(
+            (state.courses || []).filter((c: any) => {
+              const t = (c.tanda || '').toLowerCase();
+              if (selectedShift === 'Vespertina') return t.includes('ves') || t.includes('tar');
+              return !t.includes('ves') && !t.includes('tar');
+            })
+          );
+
+      if (targetCourses.length === 0) {
+        alert('No hay cursos disponibles para esta tanda.');
+        return;
+      }
+
+      // Bloques de docencia estándar según la tanda
+      const standardSlotList = selectedShift === 'Vespertina'
+        ? [
+            { start: '14:00:00', end: '14:40:00', label: '1ra Hora (14:00 - 14:40)' },
+            { start: '14:40:00', end: '15:20:00', label: '2da Hora (14:40 - 15:20)' },
+            { start: '15:20:00', end: '16:00:00', label: '3ra Hora (15:20 - 16:00)' },
+            { start: '16:20:00', end: '17:00:00', label: '4ta Hora (16:20 - 17:00)' },
+            { start: '17:00:00', end: '17:40:00', label: '5ta Hora (17:00 - 17:40)' },
+            { start: '17:40:00', end: '18:15:00', label: '6ta Hora (17:40 - 18:15)' }
+          ]
+        : (isExtendedDay
+            ? [
+                { start: '08:15:00', end: '09:00:00', label: '1ra Hora (08:15 - 09:00)' },
+                { start: '09:00:00', end: '09:45:00', label: '2da Hora (09:00 - 09:45)' },
+                { start: '10:15:00', end: '11:00:00', label: '3ra Hora (10:15 - 11:00)' },
+                { start: '11:00:00', end: '11:45:00', label: '4ta Hora (11:00 - 11:45)' },
+                { start: '12:45:00', end: '13:30:00', label: '5ta Hora (12:45 - 13:30)' },
+                { start: '13:30:00', end: '14:15:00', label: '6ta Hora (13:30 - 14:15)' },
+                { start: '14:30:00', end: '15:15:00', label: '7ma Hora (14:30 - 15:15)' },
+                { start: '15:15:00', end: '16:00:00', label: '8va Hora (15:15 - 16:00)' }
+              ]
+            : [
+                { start: '08:00:00', end: '08:45:00', label: '1ra Hora (08:00 - 08:45)' },
+                { start: '08:45:00', end: '09:30:00', label: '2da Hora (08:45 - 09:30)' },
+                { start: '09:30:00', end: '10:15:00', label: '3ra Hora (09:30 - 10:15)' },
+                { start: '10:45:00', end: '11:30:00', label: '4ta Hora (10:45 - 11:30)' },
+                { start: '11:30:00', end: '12:15:00', label: '5ta Hora (11:30 - 12:15)' },
+                { start: '12:15:00', end: '13:00:00', label: '6ta Hora (12:15 - 13:00)' }
+              ]);
+
+      const tableDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+      const matrixRows: any[] = [];
+
+      targetCourses.forEach((course: any) => {
+        const courseLabel = `${course.grade} "${course.section || 'A'}"`.trim();
+        const courseEntries = (state.schedule || []).filter((s: any) => {
+          if (String(s.course_id || s.courseId) !== String(course.id)) return false;
+          if (selectedYear && s.school_year && s.school_year !== selectedYear) return false;
+          return true;
+        });
+
+        standardSlotList.forEach((slot, slotIdx) => {
+          const rowData: any = {
+            Curso: courseLabel,
+            Nivel: course.level || 'Secundario',
+            Bloque: `${slotIdx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`
+          };
+
+          tableDays.forEach((day) => {
+            if (!withAssignedSchedule) {
+              rowData[day] = '';
+              return;
+            }
+
+            const normDay = norm(day);
+            const dayEntries = courseEntries
+              .filter((e: any) => norm(e.day) === normDay)
+              .sort((a: any, b: any) => toMinsHelper(a.start_time) - toMinsHelper(b.start_time));
+
+            let entry = dayEntries.find((e: any) => {
+              const eMins = toMinsHelper(e.start_time);
+              const sMins = toMinsHelper(slot.start);
+              return Math.abs(eMins - sMins) <= 20;
+            });
+
+            if (!entry && dayEntries[slotIdx]) {
+              entry = dayEntries[slotIdx];
+            }
+
+            if (entry) {
+              const subj = (state.subjects || []).find((s: any) => String(s.id) === String(entry.subject_id));
+              const teach = (state.teachers || []).find((t: any) => String(t.id) === String(entry.teacher_id));
+              const subjName = subj?.name || 'Materia';
+              const teachName = teach?.name ? ` (${teach.name})` : '';
+              rowData[day] = `${subjName}${teachName}`;
+            } else {
+              rowData[day] = '';
+            }
+          });
+
+          matrixRows.push(rowData);
+        });
+      });
+
+      const wsMatrix = XLSX.utils.json_to_sheet(matrixRows);
+      XLSX.utils.book_append_sheet(wb, wsMatrix, 'Horario_Matriz');
+
+      // Hoja de Referencia
+      const refRows = (state.assignments || []).map((a: any) => {
+        const c = state.courses.find((x: any) => x.id === a.course_id || x.id === a.courseId);
+        const s = state.subjects.find((x: any) => x.id === a.subject_id || x.id === a.subjectId);
+        const t = state.teachers.find((x: any) => x.id === a.teacher_id || x.id === a.teacherId);
+        return {
+          Curso: c ? `${c.grade} "${c.section || ''}"`.trim() : '---',
+          Nivel: c?.level || '---',
+          Materia: s?.name || '---',
+          Docente: t?.name || '---',
+          Horas_Semanales: a.hours_per_week || 4,
+          Texto_Sugerido_Para_Pegar: `${s?.name || ''} (${t?.name || ''})`.trim()
+        };
+      });
+      const wsRef = XLSX.utils.json_to_sheet(refRows);
+      XLSX.utils.book_append_sheet(wb, wsRef, 'Referencia_Asignaciones');
+
+      const fileName = `Planilla_Horario_${withAssignedSchedule ? 'Asignado' : 'Vacia'}_${selectedShift}_${selectedYear || '2026-2027'}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (err: any) {
+      alert('Error al generar planilla Excel: ' + (err.message || err));
+    }
+  };
+
   const handleExportDataPDF = () => {
     try {
       const doc = new jsPDF({
@@ -2883,6 +3027,17 @@ export const ScheduleViewer = () => {
             <FileSpreadsheet size={14} className="text-amber-600" />
             Descargar Excel
           </button>
+
+          {isAdminOrStaff && (
+            <button
+              onClick={() => handleExportBulkMatrixExcel(true)}
+              className="flex items-center gap-2 px-5 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all no-print cursor-pointer"
+              title={`Descargar planilla masiva con todas las clases asignadas de ${selectedShift}`}
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600" />
+              Planilla con Clases ({selectedShift})
+            </button>
+          )}
 
           {isAdminOrStaff && (
             <button
