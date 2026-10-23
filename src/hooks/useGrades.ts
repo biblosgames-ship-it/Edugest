@@ -97,12 +97,16 @@ export const useGrades = (courseId: string, subjectId: string) => {
         return { success: true, offline: true };
       }
 
-      // 3. Si hay conexión, intentar guardar directamente en Supabase
+      // 3. Si hay conexión, intentar guardar directamente en Supabase (en lotes seguros de 50 registros)
       try {
-        const { error } = await supabase
-          .from('student_grades')
-          .upsert(updates, { onConflict: 'student_id,course_id,subject_id,period,competency_id' });
-        if (error) throw error;
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+          const chunk = updates.slice(i, i + CHUNK_SIZE);
+          const { error } = await supabase
+            .from('student_grades')
+            .upsert(chunk, { onConflict: 'student_id,course_id,subject_id,period,competency_id' });
+          if (error) throw error;
+        }
         return { success: true, offline: false };
       } catch (error: any) {
         console.warn('[useGrades] Falla de red al guardar en Supabase. Encolando para sincronización automática:', error);
@@ -114,11 +118,6 @@ export const useGrades = (courseId: string, subjectId: string) => {
         });
         return { success: true, offline: true };
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['grades', centerId, effectiveYear, courseId, subjectId]
-      });
     }
   });
 

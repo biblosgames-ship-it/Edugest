@@ -17,7 +17,9 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  CloudOff
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -70,6 +72,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const [localGrades, setLocalGrades] = useState<Record<string, any>>({});
   const [showSaveStatus, setShowSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [syncState, setSyncState] = useState<'synced' | 'local_saved' | 'saving' | 'offline_queued'>('synced');
+  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -301,23 +306,41 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return sortStudents(list);
   }, [allStudents, selectedCourseId]);
 
-  // Sincronizar notas de la caché al estado local para edición evitando sobrescribir cambios en progreso
+  // Clave de persistencia local inmediata celda por celda (Local-First 0ms)
+  const localDraftKey = useMemo(() => {
+    const cid = profile?.center_id || center?.id || 'nocid';
+    const yr = selectedYear || '2026-2027';
+    if (!selectedCourseId || !selectedSubjectId) return null;
+    return `edugens_grade_draft_${cid}_${yr}_${selectedCourseId}_${selectedSubjectId}`;
+  }, [profile?.center_id, center?.id, selectedYear, selectedCourseId, selectedSubjectId]);
+
+  // Sincronizar notas de la caché y borrador local al estado para edición evitando pérdida de datos
   const currentScopeRef = useRef<string>('');
   const activeScope = `${selectedCourseId}_${selectedSubjectId}`;
 
   useEffect(() => {
+    let draftData: Record<string, any> = {};
+    if (localDraftKey) {
+      try {
+        const raw = localStorage.getItem(localDraftKey);
+        if (raw) draftData = JSON.parse(raw);
+      } catch {}
+    }
+
     if (currentScopeRef.current !== activeScope) {
       currentScopeRef.current = activeScope;
-      setLocalGrades(loadedGrades || {});
-      setHasUnsavedChanges(false);
+      const initial = { ...(loadedGrades || {}), ...draftData };
+      setLocalGrades(initial);
+      const hasDraft = Object.keys(draftData).length > 0;
+      setHasUnsavedChanges(hasDraft);
+      setSyncState(hasDraft ? 'local_saved' : 'synced');
       return;
     }
     setLocalGrades((prev) => {
-      if (!prev || Object.keys(prev).length === 0) return loadedGrades || {};
-      // Mantener las notas locales ya digitadas y rellenar las no editadas desde la caché
-      return { ...(loadedGrades || {}), ...prev };
+      // Mantener las notas locales ya digitadas y rellenar las no editadas desde la caché o borrador
+      return { ...(loadedGrades || {}), ...draftData, ...prev };
     });
-  }, [loadedGrades, activeScope]);
+  }, [loadedGrades, activeScope, localDraftKey]);
 
   const grades = localGrades;
 
@@ -326,8 +349,19 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       if (!/^\d+$/.test(value)) return;
       if (parseInt(value) > 100) return;
     }
-    setLocalGrades((prev) => ({ ...prev, [`${studentId}_${key}`]: value }));
+    setLocalGrades((prev) => {
+      const updated = { ...prev, [`${studentId}_${key}`]: value };
+      // Guardado inmediato en el disco del dispositivo (0ms sin depender de internet)
+      if (localDraftKey) {
+        try {
+          localStorage.setItem(localDraftKey, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
     setHasUnsavedChanges(true);
+    setSyncState('local_saved');
+    setLastSavedTime(new Date());
   };
 
   const getBestGrade = (studentId: string, cId: string, p: string) => {
@@ -476,13 +510,31 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     }
   };
 
-  const save = async () => {
+  // Auto-guardado en segundo plano (Debounce de 2.5 segundos tras terminar de escribir)
+  useEffect(() => {
+    if (!hasUnsavedChanges || isSaving || !selectedCourseId || !selectedSubjectId) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      triggerSave(true);
+    }, 2500);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [localGrades, hasUnsavedChanges, isSaving, selectedCourseId, selectedSubjectId]);
+
+  const triggerSave = async (isSilent = false) => {
     if (!selectedCourseId || !selectedSubjectId || isSaving) return;
     try {
+      if (isSilent) setSyncState('saving');
       const updates = [];
       const cid = profile?.center_id || center?.id;
       if (!cid) {
-        alert('Error: No se encontró el centro escolar asociado a su perfil.');
+        if (!isSilent) alert('Error: No se encontró el centro escolar asociado a su perfil.');
         return;
       }
       for (const student of students) {
@@ -547,16 +599,40 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
           });
         }
       }
-      if (updates.length > 0) {
-        await saveGrades(updates);
+
+      // 1. Guardar de inmediato en el disco del equipo (Local-First)
+      if (localDraftKey) {
+        try {
+          localStorage.setItem(localDraftKey, JSON.stringify(grades));
+        } catch {}
       }
+
+      // 2. Enviar a Supabase
+      if (updates.length > 0) {
+        const res = await saveGrades(updates);
+        if (res && res.offline) {
+          setSyncState('offline_queued');
+        } else {
+          setSyncState('synced');
+        }
+      } else {
+        setSyncState('synced');
+      }
+
       setHasUnsavedChanges(false);
+      setLastSavedTime(new Date());
       setShowSaveStatus('success');
       setTimeout(() => setShowSaveStatus('idle'), 3000);
     } catch (e) {
-      console.error('Error saving grades:', e);
-      setShowSaveStatus('error');
+      console.warn('Error saving grades to cloud:', e);
+      // Las notas ya están 100% protegidas en localStorage
+      setSyncState('offline_queued');
+      setShowSaveStatus(isSilent ? 'idle' : 'error');
     }
+  };
+
+  const save = async () => {
+    await triggerSave(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, studentIdx: number, key: string) => {
@@ -619,8 +695,16 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
           updated[`${student.id}_${baseKey}`] = numVal.toString();
         }
       });
+      if (localDraftKey) {
+        try {
+          localStorage.setItem(localDraftKey, JSON.stringify(updated));
+        } catch {}
+      }
       return updated;
     });
+    setHasUnsavedChanges(true);
+    setSyncState('local_saved');
+    setLastSavedTime(new Date());
   };
 
   const printGradesPDF = () => {
@@ -1757,8 +1841,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   key={lvl}
                   onClick={() => {
                     if (hasUnsavedChanges && lvl !== selectedLevel) {
-                      alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de nivel educativo para no perder los datos digitados.');
-                      return;
+                      triggerSave(true);
                     }
                     setSelectedLevel(lvl);
                     setSelectedCourseId('');
@@ -1780,8 +1863,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               const newCourseId = e.target.value;
               if (newCourseId === selectedCourseId) return;
               if (hasUnsavedChanges) {
-                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de curso para evitar perder los cambios realizados.');
-                return;
+                triggerSave(true);
               }
               setSelectedCourseId(newCourseId);
               setSelectedSubjectId('');
@@ -1804,8 +1886,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 onClick={() => {
                   if (s.id === selectedSubjectId) return;
                   if (hasUnsavedChanges) {
-                    alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar de asignatura para no perder los datos digitados.');
-                    return;
+                    triggerSave(true);
                   }
                   setSelectedSubjectId(s.id);
                 }}
@@ -1843,22 +1924,55 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
       {selectedSubjectId && (
         <div className="bg-surface rounded-[2rem] border border-border-main shadow-2xl overflow-hidden animate-fade-in">
-          {hasUnsavedChanges && (
-            <div className="m-4 mb-2 p-3 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-amber-700 dark:text-amber-300 text-xs font-black animate-pulse">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={18} className="text-amber-500 shrink-0" />
-                <span>⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR. Pulsa GUARDAR antes de salir o cambiar de curso.</span>
-              </div>
-              <button
-                type="button"
-                onClick={save}
-                disabled={isSaving || !isEditable}
-                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase shadow transition-all shrink-0 cursor-pointer"
-              >
-                {isSaving ? 'Guardando...' : 'Guardar Ahora'}
-              </button>
+          {/* Barra de Protección Local-First y Auto-guardado */}
+          <div className="mx-4 mt-3 mb-1 px-4 py-2.5 bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex h-2.5 w-2.5 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="font-bold text-emerald-800 dark:text-emerald-300 text-[11px] truncate">
+                🛡️ Modo Seguro Activo: Cada nota se guarda al instante en tu equipo (inmune a fallas de internet).
+              </span>
             </div>
-          )}
+            <div className="flex items-center gap-3 shrink-0">
+              {syncState === 'saving' && (
+                <span className="text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase flex items-center gap-1 animate-pulse">
+                  <Loader2 size={13} className="animate-spin" /> Guardando en la nube...
+                </span>
+              )}
+              {syncState === 'synced' && (
+                <span className="text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase flex items-center gap-1">
+                  <CheckCircle2 size={13} /> Sincronizado en la nube
+                </span>
+              )}
+              {syncState === 'local_saved' && (
+                <span className="text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase flex items-center gap-1">
+                  <ShieldCheck size={14} className="text-emerald-600" /> A salvo en este equipo
+                </span>
+              )}
+              {syncState === 'offline_queued' && (
+                <span className="text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase flex items-center gap-1">
+                  <CloudOff size={13} /> Sin señal: Notas seguras localmente
+                </span>
+              )}
+              {lastSavedTime && (
+                <span className="text-slate-400 font-medium normal-case text-[9px]">
+                  ({lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                </span>
+              )}
+              {hasUnsavedChanges && (
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={isSaving || !isEditable}
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase shadow transition-all shrink-0 cursor-pointer"
+                >
+                  {isSaving ? 'Guardando...' : 'Sincronizar Ya'}
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="p-3 border-b border-border-main flex flex-wrap items-center justify-between gap-3 bg-surface">
             <div className="flex items-center gap-3">
@@ -1942,7 +2056,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
           </div>
           <div
             ref={tableScrollRef}
-            className="overflow-x-auto w-full pb-2 touch-pan-x"
+            className="overflow-x-auto w-full pb-2"
           >
             <table
               className={`w-full text-left border-collapse ${
@@ -2120,7 +2234,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
                                   onPaste={(e) => handleGradePaste(e, idx, kVal)}
                                   onFocus={(e) => e.target.select()}
-                                  className="w-full h-8 bg-transparent text-center px-0 font-black text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className={`w-full h-8 bg-transparent text-center px-0 text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isSecundario && grades[`${s.id}_${kVal}`] !== undefined && grades[`${s.id}_${kVal}`] !== '' && parseInt(grades[`${s.id}_${kVal}`]) < 70
+                                      ? 'text-rose-600 dark:text-rose-400 font-black'
+                                      : 'font-black text-slate-900 dark:text-white'
+                                  }`}
                                   placeholder=""
                                   disabled={!isEditable}
                                 />
@@ -2137,7 +2255,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                   onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
                                   onPaste={(e) => handleGradePaste(e, idx, kRec)}
                                   onFocus={(e) => e.target.select()}
-                                  className="w-full h-8 bg-transparent text-center px-0 font-bold text-[10px] leading-none text-text-muted outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isSecundario && grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < 70
+                                      ? 'text-rose-600 dark:text-rose-400 font-black'
+                                      : 'font-bold text-text-muted'
+                                  }`}
                                   placeholder=""
                                   disabled={!isEditable}
                                 />
@@ -2148,17 +2270,31 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                       )
                     ) : (
                       <>
-                        {config.competencies.map((c) => (
-                          <td
-                            key={`res_val_${c.id}`}
-                            className="p-0 border-r border-border-main bg-surface text-center text-indigo-700 h-8 leading-8 font-black"
-                          >
-                            {calculateCompAvg(s.id, c.id).toFixed(0)}
-                          </td>
-                        ))}
-                        <td className="p-0 border-r border-border-main bg-indigo-50/10 text-center text-indigo-500 text-sm font-black h-8 leading-8">
-                          {calculateAreaFinal(s.id)}
-                        </td>
+                        {config.competencies.map((c) => {
+                          const compAvg = calculateCompAvg(s.id, c.id);
+                          const isFail = isSecundario && compAvg > 0 && compAvg < 70;
+                          return (
+                            <td
+                              key={`res_val_${c.id}`}
+                              className={`p-0 border-r border-border-main bg-surface text-center h-8 leading-8 font-black ${
+                                isFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-700 dark:text-indigo-400'
+                              }`}
+                            >
+                              {compAvg.toFixed(0)}
+                            </td>
+                          );
+                        })}
+                        {(() => {
+                          const finalVal = calculateAreaFinal(s.id);
+                          const isFinalFail = isSecundario && finalVal > 0 && finalVal < 70;
+                          return (
+                            <td className={`p-0 border-r border-border-main bg-indigo-50/10 text-center text-sm font-black h-8 leading-8 ${
+                              isFinalFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-500'
+                            }`}>
+                              {finalVal}
+                            </td>
+                          );
+                        })()}
 
                         {isSecundario ? (
                           <>
@@ -2175,7 +2311,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
                                 onPaste={(e) => handleGradePaste(e, idx, 'comp')}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full h-8 bg-transparent text-center text-amber-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  grades[`${s.id}_comp`] && parseInt(grades[`${s.id}_comp`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700'
+                                }`}
                                 placeholder="EX"
                                 disabled={!isEditable}
                               />
@@ -2193,7 +2331,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
                                 onPaste={(e) => handleGradePaste(e, idx, 'extra')}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full h-8 bg-transparent text-center text-orange-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  grades[`${s.id}_extra`] && parseInt(grades[`${s.id}_extra`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-orange-700'
+                                }`}
                                 placeholder="EX"
                                 disabled={!isEditable}
                               />
@@ -2211,7 +2351,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
                                 onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full h-8 bg-transparent text-center text-rose-700 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  grades[`${s.id}_esp1`] && parseInt(grades[`${s.id}_esp1`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-700'
+                                }`}
                                 disabled={!isEditable}
                               />
                             </td>
@@ -2228,7 +2370,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
                                 onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full h-8 bg-transparent text-center text-rose-900 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  grades[`${s.id}_esp2`] && parseInt(grades[`${s.id}_esp2`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-900'
+                                }`}
                                 disabled={!isEditable}
                               />
                             </td>
@@ -2253,38 +2397,55 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         )}
 
                         {/* CALCULO NOTA FINAL DEFINITIVA */}
-                        <td className="p-0 bg-slate-900 text-center text-white font-black text-xs h-8 leading-8">
-                          {(() => {
-                            const areaFinal = parseInt(calculateAreaFinal(s.id).toString()) || 0;
-                            if (!isSecundario) {
-                              const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
-                              return Math.max(areaFinal, recFinal) || '-';
+                        {(() => {
+                          const areaFinal = parseInt(calculateAreaFinal(s.id).toString()) || 0;
+                          let defFinal: number | string = '-';
+                          let isDefFail = false;
+
+                          if (!isSecundario) {
+                            const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
+                            defFinal = Math.max(areaFinal, recFinal) || '-';
+                          } else {
+                            if (areaFinal >= 70) {
+                              defFinal = areaFinal;
+                            } else {
+                              const cpExam = parseInt(grades[`${s.id}_comp`]) || 0;
+                              if (cpExam > 0) {
+                                const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
+                                if (cpFinal >= 70) defFinal = cpFinal;
+                              }
+                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                const exExam = parseInt(grades[`${s.id}_extra`]) || 0;
+                                if (exExam > 0) {
+                                  const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
+                                  if (exFinal >= 70) defFinal = exFinal;
+                                }
+                              }
+                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                const esp1 = parseInt(grades[`${s.id}_esp1`]) || 0;
+                                if (esp1 >= 70) defFinal = esp1;
+                              }
+                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                const esp2 = parseInt(grades[`${s.id}_esp2`]) || 0;
+                                if (esp2 >= 70) defFinal = esp2;
+                              }
+                              if (defFinal === '-' || typeof defFinal !== 'number') {
+                                defFinal = areaFinal > 0 ? areaFinal : '-';
+                              }
                             }
-
-                            // LÓGICA SECUNDARIA
-                            if (areaFinal >= 70) return areaFinal;
-
-                            const cpExam = parseInt(grades[`${s.id}_comp`]) || 0;
-                            if (cpExam > 0) {
-                              const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
-                              if (cpFinal >= 70) return cpFinal;
+                            if (typeof defFinal === 'number' && defFinal > 0 && defFinal < 70) {
+                              isDefFail = true;
                             }
+                          }
 
-                            const exExam = parseInt(grades[`${s.id}_extra`]) || 0;
-                            if (exExam > 0) {
-                              const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
-                              if (exFinal >= 70) return exFinal;
-                            }
-
-                            const esp1 = parseInt(grades[`${s.id}_esp1`]) || 0;
-                            if (esp1 >= 70) return esp1;
-
-                            const esp2 = parseInt(grades[`${s.id}_esp2`]) || 0;
-                            if (esp2 >= 70) return esp2;
-
-                            return areaFinal > 0 ? areaFinal : '-';
-                          })()}
-                        </td>
+                          return (
+                            <td className={`p-0 text-center font-black text-xs h-8 leading-8 ${
+                              isDefFail ? 'bg-rose-950 text-rose-300 ring-1 ring-rose-500' : 'bg-slate-900 text-white'
+                            }`}>
+                              {defFinal}
+                            </td>
+                          );
+                        })()}
                       </>
                     )}
                   </tr>
@@ -2634,25 +2795,54 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                               {sub.name}
                             </td>
                             {cfValues.map((val, idx) => (
-                              <td key={idx} className="p-3 border border-slate-100 text-center">
+                              <td
+                                key={idx}
+                                className={`p-3 border border-slate-100 text-center ${
+                                  isStudentSecundario && val > 0 && val < 70
+                                    ? 'text-rose-600 font-black'
+                                    : ''
+                                }`}
+                              >
                                 {val || '-'}
                               </td>
                             ))}
-                            <td className="p-3 border border-slate-100 text-center bg-indigo-50/40 text-indigo-700 font-black">
+                            <td
+                              className={`p-3 border border-slate-100 text-center bg-indigo-50/40 font-black ${
+                                isStudentSecundario && finalArea > 0 && finalArea < 70
+                                  ? 'text-rose-600'
+                                  : 'text-indigo-700'
+                              }`}
+                            >
                               {finalArea || '-'}
                             </td>
                             {isStudentSecundario ? (
                               <>
-                                <td className="p-3 border border-slate-100 text-center text-amber-700">
+                                <td
+                                  className={`p-3 border border-slate-100 text-center font-black ${
+                                    cp > 0 && cp < 70 ? 'text-rose-600' : 'text-amber-700'
+                                  }`}
+                                >
                                   {cp || '-'}
                                 </td>
-                                <td className="p-3 border border-slate-100 text-center text-orange-700">
+                                <td
+                                  className={`p-3 border border-slate-100 text-center font-black ${
+                                    ex > 0 && ex < 70 ? 'text-rose-600' : 'text-orange-700'
+                                  }`}
+                                >
                                   {ex || '-'}
                                 </td>
-                                <td className="p-3 border border-slate-100 text-center text-rose-700">
+                                <td
+                                  className={`p-3 border border-slate-100 text-center font-black ${
+                                    e1 > 0 && e1 < 70 ? 'text-rose-600' : 'text-rose-700'
+                                  }`}
+                                >
                                   {e1 || '-'}
                                 </td>
-                                <td className="p-3 border border-slate-100 text-center text-rose-900">
+                                <td
+                                  className={`p-3 border border-slate-100 text-center font-black ${
+                                    e2 > 0 && e2 < 70 ? 'text-rose-600' : 'text-rose-900'
+                                  }`}
+                                >
                                   {e2 || '-'}
                                 </td>
                               </>
@@ -2661,7 +2851,13 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 {rp || '-'}
                               </td>
                             )}
-                            <td className="p-3 border border-slate-100 text-center bg-slate-900 text-white font-black">
+                            <td
+                              className={`p-3 border border-slate-100 text-center font-black ${
+                                isStudentSecundario && defFinal > 0 && defFinal < 70
+                                  ? 'bg-rose-950 text-rose-300 ring-1 ring-rose-500'
+                                  : 'bg-slate-900 text-white'
+                              }`}
+                            >
                               {defFinal || '-'}
                             </td>
                           </tr>

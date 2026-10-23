@@ -990,16 +990,20 @@ export const ScheduleViewer = () => {
       }
     }
 
-    const hasExtendedEntries = (state.schedule || []).some(
+    const isVespertinoCourse = !courseIsMorning || cTanda.includes('ves') || cTanda.includes('tar');
+
+    const hasExtendedEntries = !isVespertinoCourse && (state.schedule || []).some(
       (s: any) =>
         String(s.course_id || s.courseId) === String(course?.id) &&
-        ((s.shift || '').toLowerCase().includes('ext') || (s.start_time && toMins(s.start_time) >= 765))
+        ((s.shift || '').toLowerCase().includes('ext') || (s.shift || '').toLowerCase().includes('jor'))
     );
 
     const isExtendedCourse =
-      isExtendedSchedule(course, courseStartT, courseEndT, courseOfficial) ||
-      isExtendedSchedule(courseShiftName) ||
-      hasExtendedEntries;
+      !isVespertinoCourse && (
+        isExtendedSchedule(course, courseStartT, courseEndT, courseOfficial) ||
+        isExtendedSchedule(courseShiftName) ||
+        hasExtendedEntries
+      );
     if (isExtendedCourse) {
       return getStandardExtendedDaySlots();
     }
@@ -1350,8 +1354,12 @@ export const ScheduleViewer = () => {
     if ((state.cycleTimeBlocks || []).length > 0) {
       const activeCycleConfig = (state.cycleTimeBlocks || []).find((cfg: any) => {
         const s = (cfg.shift || '').toLowerCase();
-        if (s.includes('ext') || s.includes('jor')) return true;
-        return isMorning ? !s.includes('ves') && !s.includes('tar') : s.includes('ves') || s.includes('tar');
+        if (isMorning) {
+          if (s.includes('ext') || s.includes('jor')) return true;
+          return !s.includes('ves') && !s.includes('tar');
+        } else {
+          return s.includes('ves') || s.includes('tar');
+        }
       });
       if (activeCycleConfig) {
         const cSlots = getSlotsFromCycleConfig(activeCycleConfig);

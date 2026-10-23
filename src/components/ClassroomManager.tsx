@@ -3090,7 +3090,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
           {/* TABLA MULTI-COMPETENCIAS */}
           <div className="bg-surface rounded-3xl border border-border-main shadow-xl overflow-hidden">
-            <div id="partials-scroll-container" className="overflow-x-auto w-full pb-2 touch-pan-x">
+            <div id="partials-scroll-container" className="overflow-x-auto w-full pb-2">
               <table className="w-full min-w-[1000px] text-left border-collapse">
                 <thead>
                   {/* FILA SUPERIOR: TITULOS DE COMPETENCIA */}
@@ -3098,18 +3098,22 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                     <th
                       rowSpan={2}
                       className={`py-2 sticky left-0 bg-slate-900 z-20 transition-all ${
-                        hideStudentNames ? 'px-2 w-16 text-center' : 'px-4 min-w-[200px]'
+                        hideStudentNames ? 'px-2 w-14 text-center' : 'px-2.5 w-[140px] max-w-[155px] sm:w-[165px] sm:max-w-[185px]'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span>{hideStudentNames ? 'No.' : 'Estudiante'}</span>
+                      <div className="flex items-center justify-start">
                         <button
                           type="button"
                           onClick={() => setHideStudentNames((prev) => !prev)}
-                          className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                          title={hideStudentNames ? 'Desplegar nombres completos' : 'Ocultar nombres para maximizar columnas'}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-xs select-none"
+                          title={hideStudentNames ? 'Desplegar nombres completos' : 'Ocultar nombres para maximizar columnas de notas'}
                         >
-                          {hideStudentNames ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+                          <span className="font-black text-[11px] tracking-normal">
+                            {hideStudentNames ? 'No.' : 'Estudiante'}
+                          </span>
+                          <span className="p-0.5 rounded bg-slate-700/80 group-hover:bg-indigo-600 text-slate-300 group-hover:text-white transition-colors">
+                            {hideStudentNames ? <ChevronRight size={13} className="stroke-[2.5]" /> : <ChevronLeft size={13} className="stroke-[2.5]" />}
+                          </span>
                         </button>
                       </div>
                     </th>
@@ -3222,7 +3226,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                         <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors divide-x divide-border-main">
                           <td
                             className={`py-1.5 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm transition-all ${
-                              hideStudentNames ? 'px-2 text-center w-16' : 'px-4 min-w-[200px]'
+                              hideStudentNames ? 'px-2 text-center w-14' : 'px-2.5 w-[140px] max-w-[155px] sm:w-[165px] sm:max-w-[185px]'
                             }`}
                             title={getStudentFullName(s)}
                           >
@@ -3243,11 +3247,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                 )}
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black text-text-muted font-mono w-5 shrink-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-[10px] font-black text-text-muted font-mono w-4 shrink-0">
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
-                                <span className="truncate text-xs">{getStudentFullName(s)}</span>
+                                <span className="truncate text-xs font-bold text-text-main flex-1" title={getStudentFullName(s)}>
+                                  {getStudentFullName(s)}
+                                </span>
                                 {specialNotesMap[s.id] && (
                                   <button
                                     type="button"
@@ -3284,12 +3290,20 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                         onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
                                         onPaste={(e) => handlePartialPaste(e, idx, act.id)}
                                         onFocus={(e) => e.target.select()}
-                                        className="w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs"
+                                        className={`w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs ${
+                                          typeof studentScores[act.id] === 'number' && studentScores[act.id] < 70 && isSecondary
+                                            ? 'text-rose-600 dark:text-rose-400 font-black'
+                                            : 'text-slate-900 dark:text-white'
+                                        }`}
                                       />
                                     </td>
                                   ))
                                 )}
-                                <td className="px-2 py-1 text-center font-black bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue text-xs">
+                                <td className={`px-2 py-1 text-center font-black text-xs ${
+                                  typeof compScore === 'number' && compScore < 70 && isSecondary
+                                    ? 'bg-rose-50/60 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-black'
+                                    : 'bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue'
+                                }`}>
                                   {compScore}
                                 </td>
                               </React.Fragment>
