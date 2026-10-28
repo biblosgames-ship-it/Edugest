@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext';
 import { exportStudentsToExcel } from '../utils/listPdfGenerator';
 import { toast } from 'react-hot-toast';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
+import { getReportTanda } from '../utils/courseSorter';
 
 export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
   const { state, center, selectedYear, refreshData } = useApp();
@@ -70,7 +71,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
 
     doc.setFontSize(10);
     doc.text(
-      `AÑO ESCOLAR: ${selectedYear || '2026-2027'}   |   CURSO: ${course.level} ${course.grade} ${course.section}   |   TANDA: ${(course.tanda || 'Matutina').toUpperCase()}`,
+      `AÑO ESCOLAR: ${selectedYear || '2026-2027'}   |   CURSO: ${course.level} ${course.grade} ${course.section}   |   TANDA: ${getReportTanda(course.tanda, 'full').toUpperCase()}`,
       pageWidth / 2,
       21,
       { align: 'center' }
@@ -100,7 +101,7 @@ export const StudentList = ({ gradeId, centerId, onEdit }: any) => {
       }
     });
 
-    doc.save(`Listado_${course.grade}_${course.section}_${course.tanda || 'Matutina'}.pdf`);
+    doc.save(`Listado_${course.grade}_${course.section}_${getReportTanda(course.tanda, 'full')}.pdf`);
   };
 
   const handleDeleteStudent = async (student: any) => {

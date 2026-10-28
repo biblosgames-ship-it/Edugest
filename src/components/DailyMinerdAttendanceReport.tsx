@@ -261,11 +261,9 @@ export const DailyMinerdAttendanceReport: React.FC = () => {
       if (tandaStr && tandaStr.toLowerCase() !== 'general') {
         const tLower = tandaStr.toLowerCase();
         const shiftCode =
-          tLower.includes('mat') || tLower.includes('mañ')
-            ? 'M'
-            : tLower.includes('ves') || tLower.includes('tar')
-              ? 'V'
-              : tandaStr.substring(0, 1).toUpperCase();
+          tLower.includes('ves') || tLower.includes('tar')
+            ? 'V'
+            : 'M';
         gradeLabel += ` (${shiftCode})`;
       }
 

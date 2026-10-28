@@ -26,6 +26,7 @@ import { supabase } from '../lib/supabase';
 import { dataService } from '../services/dataService';
 import { gradesReleaseService } from '../services/gradesReleaseService';
 import { resolveStudentForUser } from '../utils/studentResolver';
+import { getReportTanda } from '../utils/courseSorter';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -350,7 +351,7 @@ export const ParentGradesModule: React.FC<ParentGradesModuleProps> = ({
     doc.setFont('helvetica', 'bold');
     const studentFullName = `${currentStudent.first_surname || ''} ${currentStudent.second_surname || ''}, ${currentStudent.names || ''}`.toUpperCase().trim();
     doc.text(`ESTUDIANTE: ${studentFullName}`, 14, 36);
-    doc.text(`CURSO: ${studentCourse.level} ${studentCourse.grade} "${studentCourse.section}"`, 14, 41);
+    doc.text(`CURSO: ${studentCourse.level} ${studentCourse.grade} "${studentCourse.section}" (${getReportTanda(studentCourse.tanda, 'full')})`, 14, 41);
     doc.setFont('helvetica', 'normal');
     doc.text(`RNE: ${currentStudent.sigerd_code || currentStudent.student_code || currentStudent.rne || '---'}`, pageWidth - 60, 36);
     doc.text(`PROMEDIO GENERAL: ${overallAverage > 0 ? overallAverage : '---'}`, pageWidth - 60, 41);
@@ -441,7 +442,7 @@ export const ParentGradesModule: React.FC<ParentGradesModuleProps> = ({
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-2 mt-1">
               <span>{studentCourse ? `${studentCourse.level} ${studentCourse.grade} "${studentCourse.section}"` : 'Sin Curso'}</span>
               <span>•</span>
-              <span>Tanda {studentCourse?.tanda || 'Matutina'}</span>
+              <span>Tanda {getReportTanda(studentCourse?.tanda, 'full')}</span>
             </p>
           </div>
         </div>

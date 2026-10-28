@@ -6,6 +6,7 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import autoTable from 'jspdf-autotable';
 import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
+import { getReportTanda } from '../utils/courseSorter';
 
 interface ReportProps {
   onClose: () => void;
@@ -55,7 +56,7 @@ export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initia
           id: s.id,
           name: `${s.last_name || ''} ${s.first_name || ''}`.trim(),
           avg,
-          courseName: course ? `${course.grade} "${course.section}" (${course.tanda || 'Matutina'})` : 'N/A',
+          courseName: course ? `${course.grade} "${course.section}" (${getReportTanda(course.tanda, 'full')})` : 'N/A',
           level: course?.level || 'Otros'
         };
       })

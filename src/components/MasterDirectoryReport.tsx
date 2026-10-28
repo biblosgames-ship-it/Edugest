@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportMasterDirectoryToExcel } from '../utils/listPdfGenerator';
+import { getReportTanda } from '../utils/courseSorter';
 
 interface MasterDirectoryReportProps {
   onClose?: () => void;
@@ -59,7 +60,7 @@ export const MasterDirectoryReport: React.FC<MasterDirectoryReportProps> = ({ on
     return {
       id: student.id,
       name: `${student.first_surname || student.lastName || ''} ${student.second_surname || ''}, ${student.names || student.firstName || ''}`.trim(),
-      courseName: course ? `${course.level} - ${course.grade} "${course.section}" (${course.tanda || 'Matutina'})` : 'N/A',
+      courseName: course ? `${course.level} - ${course.grade} "${course.section}" (${getReportTanda(course.tanda, 'full')})` : 'N/A',
       courseLevel: course?.level || 'N/A',
       address:
         [student.address_street, student.address_number, student.address_sector]

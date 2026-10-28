@@ -38,6 +38,7 @@ import { CourseRecordReport } from './CourseRecordReport';
 import { Users, X, ScrollText as ScrollIcon, BookOpen } from 'lucide-react';
 import PrimaryCertificate from './PrimaryCertificate';
 import GradeRegisterReport from './GradeRegisterReport';
+import { getReportTanda } from '../utils/courseSorter';
 
 export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, selectedYear, center: contextCenter } = useApp();
@@ -660,7 +661,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
 
       doc.setFontSize(10);
       doc.text(
-        `AÑO ESCOLAR: ${forceYear}   |   CURSO: ${selectedCourse?.level} ${selectedCourse?.grade} ${selectedCourse?.section}`,
+        `AÑO ESCOLAR: ${forceYear}   |   CURSO: ${selectedCourse?.level} ${selectedCourse?.grade} ${selectedCourse?.section} (${getReportTanda(selectedCourse?.tanda, 'full')})`,
         pageWidth / 2,
         37,
         { align: 'center' }
@@ -954,7 +955,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         // 2. Subtítulo con Curso, Sección, Tanda y Año Escolar
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        const tandaStr = 'M';
+        const tandaStr = getReportTanda(selectedCourse?.tanda, 'full');
         doc.text(
           `Curso : ${selectedCourse?.grade || ''} ${selectedCourse?.level || ''}   Sección : ${selectedCourse?.section || ''}   Tanda : ${tandaStr}   Año Escolar : ${forceYear}`,
           pageWidth / 2,
@@ -2752,7 +2753,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
             student.id.substring(0, 7).toUpperCase(),
             selectedCourse?.grade,
             selectedCourse?.section,
-            'M',
+            getReportTanda(selectedCourse?.tanda, 'full'),
             forceYear
           ]
         ],
@@ -3472,7 +3473,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
               <option value="">-- SELECCIONE EL GRADO --</option>
               {courses.map((c: any) => (
                 <option key={c.id} value={c.id}>
-                  {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                  {c.level} {c.grade} "{c.section}" - {getReportTanda(c.tanda, 'full')}
                 </option>
               ))}
             </select>

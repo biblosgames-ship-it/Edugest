@@ -1,3 +1,22 @@
+/**
+ * Normaliza la tanda de un curso para los reportes oficiales:
+ * - Vespertina/Tarde -> 'Vespertina' (o 'V')
+ * - Nocturna -> 'Nocturna' (o 'N')
+ * - Extendida / Jornada Extendida -> 'Matutina' (o 'M') (según regla oficial/solicitada)
+ * - Matutina o vacía -> 'Matutina' (o 'M')
+ */
+export const getReportTanda = (tandaRaw?: string, format: 'full' | 'letter' = 'full'): string => {
+  const t = (tandaRaw || '').toLowerCase().trim();
+  if (t.includes('ves') || t.includes('tar')) {
+    return format === 'letter' ? 'V' : 'Vespertina';
+  }
+  if (t.includes('noc')) {
+    return format === 'letter' ? 'N' : 'Nocturna';
+  }
+  // Si es extendida / jornada extendida, matutina, o cualquier otra cosa: sale Matutina / M
+  return format === 'letter' ? 'M' : 'Matutina';
+};
+
 export const sortCourses = (courses: any[]) => {
   const getTandaWeight = (tanda: string, level: string) => {
     const t = (tanda || '').toLowerCase().trim();

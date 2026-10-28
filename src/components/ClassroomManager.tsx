@@ -43,13 +43,17 @@ import {
   MessageSquare,
   Send,
   Layers,
-  Lock
+  Lock,
+  FileSpreadsheet,
+  CalendarRange
 } from 'lucide-react';
+import { CourseAttendanceReportModal } from './CourseAttendanceReportModal';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
 import { enqueueSyncAction } from '../utils/offlineSync';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
+import { getReportTanda } from '../utils/courseSorter';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -143,6 +147,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   const [attendanceState, setAttendanceState] = useState<Record<string, { status: AttendanceStatus; note: string }>>({});
   const [isSavingAttendance, setIsSavingAttendance] = useState<boolean>(false);
   const [attendanceSuccess, setAttendanceSuccess] = useState<boolean>(false);
+  const [showCourseAttendanceReportModal, setShowCourseAttendanceReportModal] = useState<boolean>(false);
 
   // Estado de Apuntes / Anecdotario
   const [notesList, setNotesList] = useState<Array<{
@@ -184,6 +189,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   // Modo de Cálculo de Parciales por Competencias: 'average' (promediado base 100) o 'sum' (sumativo acumulación hasta 100)
   const [competencyCalcMode, setCompetencyCalcMode] = useState<'average' | 'sum'>('average');
+  const [activeGradeStudentId, setActiveGradeStudentId] = useState<string | null>(null);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
 
@@ -2436,7 +2442,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               >
                 {availableCourses.map((c: any) => (
                   <option key={c.id} value={c.id}>
-                    {c.level} {c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                    {c.level} {c.grade} "{c.section}" - {getReportTanda(c.tanda, 'full')}
                   </option>
                 ))}
               </select>
@@ -2479,12 +2485,22 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               <label className="block text-[8.5px] font-black uppercase tracking-widest text-indigo-300 mb-0.5">
                 Fecha:
               </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-slate-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
-              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-slate-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCourseAttendanceReportModal(true)}
+                  className="p-1.5 bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer border border-white/10"
+                  title="Ver reporte de asistencia por rango de fechas"
+                >
+                  <CalendarRange size={15} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2557,8 +2573,18 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               />
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
+                type="button"
+                onClick={() => setShowCourseAttendanceReportModal(true)}
+                className="px-4 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer border border-indigo-500/30 shadow-2xs"
+                title="Generar reporte de asistencia del curso por rango de fechas"
+              >
+                <FileSpreadsheet size={16} /> Reporte de Asistencia
+              </button>
+
+              <button
+                type="button"
                 onClick={handleMarkAllPresent}
                 className="px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer border border-emerald-500/30"
               >
@@ -2566,6 +2592,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={handleSaveAttendance}
                 disabled={isSavingAttendance}
                 className="px-6 py-2.5 bg-brand-blue hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-blue/30 transition-all cursor-pointer disabled:opacity-50"
@@ -3197,6 +3224,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       
                       // Calcular resultados por competencia según modo seleccionado (Promediado vs Sumativo)
                       const compCalculatedValues: number[] = [];
+                      let studentHasAnyScore = false;
 
                       activeCompetencies.forEach((comp) => {
                         const acts = competencyActivities[comp.id] || [];
@@ -3205,6 +3233,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           .filter((v) => typeof v === 'number' && !isNaN(v));
 
                         if (validScores.length > 0) {
+                          studentHasAnyScore = true;
                           if (competencyCalcMode === 'sum') {
                             const sumVal = Math.min(100, validScores.reduce((a, b) => a + b, 0));
                             compCalculatedValues.push(sumVal);
@@ -3222,17 +3251,35 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                         ? Math.round(compCalculatedValues.reduce((a, b) => a + b, 0) / compCalculatedValues.length)
                         : 0;
 
+                      const isSelected = activeGradeStudentId === s.id;
+
                       return (
-                        <tr key={s.id} className="hover:bg-brand-bg/60 transition-colors divide-x divide-border-main">
+                        <tr
+                          key={s.id}
+                          onClick={() => setActiveGradeStudentId(s.id)}
+                          className={`transition-colors divide-x divide-border-main cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-50/90 dark:bg-indigo-950/60 ring-2 ring-inset ring-indigo-500/50 dark:ring-indigo-400/50'
+                              : 'hover:bg-brand-bg/60'
+                          }`}
+                        >
                           <td
-                            className={`py-1.5 font-bold text-text-main sticky left-0 bg-surface z-10 shadow-sm transition-all ${
+                            className={`py-1.5 font-bold text-text-main sticky left-0 z-10 shadow-sm transition-all ${
+                              isSelected
+                                ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100 border-l-4 border-l-indigo-600'
+                                : 'bg-surface'
+                            } ${
                               hideStudentNames ? 'px-2 text-center w-14' : 'px-2.5 w-[140px] max-w-[155px] sm:w-[165px] sm:max-w-[185px]'
                             }`}
                             title={getStudentFullName(s)}
                           >
                             {hideStudentNames ? (
                               <div className="flex items-center justify-center gap-1">
-                                <span className="inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue font-black font-mono text-[11px] border border-indigo-100 dark:border-indigo-900">
+                                <span className={`inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-lg font-black font-mono text-[11px] border ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white border-indigo-700'
+                                    : 'bg-indigo-50 dark:bg-indigo-950/50 text-brand-blue border-indigo-100 dark:border-indigo-900'
+                                }`}>
                                   #{s.order_number || s.number || idx + 1}
                                 </span>
                                 {specialNotesMap[s.id] && (
@@ -3289,9 +3336,17 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                         onChange={(e) => handlePartialScoreChange(s.id, act.id, Number(e.target.value))}
                                         onKeyDown={(e) => handlePartialKeyDown(e, idx, act.id)}
                                         onPaste={(e) => handlePartialPaste(e, idx, act.id)}
-                                        onFocus={(e) => e.target.select()}
-                                        className={`w-12 text-center py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-50 dark:focus:bg-indigo-950 transition-colors shadow-xs ${
-                                          typeof studentScores[act.id] === 'number' && studentScores[act.id] < 70 && isSecondary
+                                        onFocus={(e) => {
+                                          e.target.select();
+                                          setActiveGradeStudentId(s.id);
+                                        }}
+                                        onClick={() => setActiveGradeStudentId(s.id)}
+                                        className={`w-12 text-center py-1 rounded-lg border font-mono font-black text-xs outline-none focus:ring-2 focus:ring-indigo-500 transition-colors shadow-xs ${
+                                          isSelected
+                                            ? 'border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 ring-1 ring-indigo-400/40'
+                                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800'
+                                        } ${
+                                          typeof studentScores[act.id] === 'number' && competencyCalcMode === 'average' && studentScores[act.id] < 70
                                             ? 'text-rose-600 dark:text-rose-400 font-black'
                                             : 'text-slate-900 dark:text-white'
                                         }`}
@@ -3299,9 +3354,11 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                     </td>
                                   ))
                                 )}
-                                <td className={`px-2 py-1 text-center font-black text-xs ${
-                                  typeof compScore === 'number' && compScore < 70 && isSecondary
+                                <td className={`px-2 py-1 text-center font-black text-xs transition-colors ${
+                                  typeof compScore === 'number' && competencyCalcMode === 'average' && compScore < 70
                                     ? 'bg-rose-50/60 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-black'
+                                    : isSelected
+                                    ? 'bg-indigo-100/70 dark:bg-indigo-900/40 text-brand-blue font-black'
                                     : 'bg-indigo-50/50 dark:bg-indigo-950/20 text-brand-blue'
                                 }`}>
                                   {compScore}
@@ -3310,17 +3367,37 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             );
                           })}
 
-                          <td className="px-3 py-1 text-center font-black text-xs bg-slate-50 dark:bg-slate-900/40">
-                            <span className={`px-2.5 py-0.5 rounded-lg shadow-sm font-mono font-bold ${finalAvg >= 70 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
-                              {finalAvg}
-                            </span>
+                          <td className={`px-3 py-1 text-center font-black text-xs transition-colors ${
+                            isSelected
+                              ? 'bg-indigo-100/60 dark:bg-indigo-900/40'
+                              : 'bg-slate-50 dark:bg-slate-900/40'
+                          }`}>
+                            {!studentHasAnyScore ? (
+                              <span className="px-2.5 py-0.5 rounded-lg font-mono text-slate-400 font-bold">
+                                --
+                              </span>
+                            ) : (
+                              <span className={`px-2.5 py-0.5 rounded-lg shadow-sm font-mono font-bold ${
+                                finalAvg >= 70
+                                  ? 'bg-emerald-500 text-white'
+                                  : competencyCalcMode === 'average'
+                                  ? 'bg-rose-500 text-white'
+                                  : 'bg-indigo-600 text-white'
+                              }`}>
+                                {finalAvg}
+                              </span>
+                            )}
                           </td>
 
-                          <td className="px-2 py-1 bg-white dark:bg-slate-900/40">
+                          <td className={`px-2 py-1 transition-colors ${
+                            isSelected ? 'bg-indigo-50/40 dark:bg-indigo-950/30' : 'bg-white dark:bg-slate-900/40'
+                          }`}>
                             <input
                               type="text"
                               placeholder="Constancia de nota..."
                               value={studentNotes[s.id] || ''}
+                              onFocus={() => setActiveGradeStudentId(s.id)}
+                              onClick={() => setActiveGradeStudentId(s.id)}
                               onChange={(e) => handlePartialNoteChange(s.id, e.target.value)}
                               className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 placeholder:italic outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium shadow-2xs"
                               title={studentNotes[s.id] || 'Escribe una constancia o justificación para este estudiante'}
@@ -4205,7 +4282,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                     }`}
                                   >
                                     <span className="truncate pr-2">
-                                      {c.level} — {c.grade} &quot;{c.section}&quot; ({c.tanda || 'Matutina'})
+                                      {c.level} — {c.grade} &quot;{c.section}&quot; ({getReportTanda(c.tanda, 'full')})
                                     </span>
                                     <input
                                       type="checkbox"
@@ -5284,6 +5361,26 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           </div>
         );
       })()}
+
+      {showCourseAttendanceReportModal && selectedCourseId && (
+        <CourseAttendanceReportModal
+          isOpen={showCourseAttendanceReportModal}
+          onClose={() => setShowCourseAttendanceReportModal(false)}
+          courseId={selectedCourseId}
+          courseName={
+            selectedCourseObj
+              ? `${selectedCourseObj.grade || ''} ${selectedCourseObj.section || ''} (${selectedCourseObj.level || ''})`.trim()
+              : 'Curso Seleccionado'
+          }
+          courseLevel={selectedCourseObj?.level}
+          courseGrade={selectedCourseObj?.grade}
+          courseSection={selectedCourseObj?.section}
+          students={courseStudents}
+          centerName={center?.name || 'Centro Educativo'}
+          selectedYear={selectedYear}
+          teacherName={profile?.full_name || profile?.name || ''}
+        />
+      )}
     </div>
   );
 };

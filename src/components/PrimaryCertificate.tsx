@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
+import { getReportTanda } from '../utils/courseSorter';
 import jsPDF from 'jspdf';
 
 interface PrimaryCertificateProps {
@@ -109,7 +110,7 @@ const PrimaryCertificate: React.FC<PrimaryCertificateProps> = ({ studentId, onCl
               .trim()
               .toUpperCase(),
           rne: student.sigerd_code || student.student_code || student.rne || '',
-          tanda: course?.tanda || '',
+          tanda: getReportTanda(course?.tanda, 'full'),
           section: course?.section || ''
         }));
       } catch (error) {

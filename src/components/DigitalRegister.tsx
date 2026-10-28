@@ -31,6 +31,7 @@ import { useSubjects } from '../hooks/useSubjects';
 import { useAssignments } from '../hooks/useAssignments';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
+import { getReportTanda } from '../utils/courseSorter';
 
 export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, profile, selectedYear, center } = useApp();
@@ -78,6 +79,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const [hideStudentNames, setHideStudentNames] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [focusedStudentId, setFocusedStudentId] = useState<string | null>(null);
 
   // Advertir al docente si intenta cerrar la ventana o recargar sin haber guardado
   useEffect(() => {
@@ -721,7 +723,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
     doc.setFontSize(9);
     doc.text(
-      `AÑO ESCOLAR: ${config.year}   |   CURSO: ${selectedCourse.level} ${selectedCourse.grade} ${selectedCourse.section} (${selectedCourse.tanda || 'Matutina'})   |   ASIGNATURA: ${selectedSubject.name}`,
+      `AÑO ESCOLAR: ${config.year}   |   CURSO: ${selectedCourse.level} ${selectedCourse.grade} ${selectedCourse.section} (${getReportTanda(selectedCourse.tanda, 'full')})   |   ASIGNATURA: ${selectedSubject.name}`,
       pageWidth / 2,
       18,
       { align: 'center' }
@@ -1008,7 +1010,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     const isStudentSecundario = studentCourse?.level?.toLowerCase().includes('secund');
 
     const courseDisplay = studentCourse
-      ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${studentCourse.tanda || 'Matutina'})`
+      ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${getReportTanda(studentCourse.tanda, 'full')})`
       : '---';
     const levelDisplay = studentCourse?.level || '---';
     const studentCode =
@@ -1873,7 +1875,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             <option value="">-- SELECCIONE EL GRADO --</option>
             {filteredCourses.map((c: any) => (
               <option key={c.id} value={c.id}>
-                {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {c.tanda || 'Matutina'}
+                {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {getReportTanda(c.tanda, 'full')}
               </option>
             ))}
           </select>
@@ -2169,287 +2171,360 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 )}
               </thead>
               <tbody className="divide-y divide-slate-100 text-[10px] font-black">
-                {students.map((s, idx) => (
-                  <tr key={s.id} className="hover:bg-brand-bg transition-all">
-                    <td
-                      className={`p-1 border-r border-border-main sticky left-0 bg-surface z-10 text-center transition-all ${
-                        hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'
+                {students.map((s, idx) => {
+                  const isSelected = focusedStudentId === s.id;
+
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => setFocusedStudentId(s.id)}
+                      className={`transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-50/90 dark:bg-indigo-950/60 ring-2 ring-inset ring-indigo-500/50 dark:ring-indigo-400/50'
+                          : 'hover:bg-brand-bg'
                       }`}
-                      title={(() => {
-                        const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
-                        const names = s.names || s.firstName || s.first_name || s.name || '';
-                        return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
-                      })()}
                     >
-                      {hideStudentNames ? (
-                        <div className="flex items-center justify-center">
-                          <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 font-mono text-[11px] font-black border border-indigo-100 dark:border-indigo-900">
-                            #{getStudentOrderNumber(s) ?? (idx + 1)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-text-muted font-mono font-bold">
-                          {(getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0')}
-                        </span>
-                      )}
-                    </td>
-                    {!hideStudentNames && (
-                      <td className="p-1 border-r border-border-main sticky left-10 bg-surface z-10 font-black uppercase text-text-main min-w-[220px] max-w-[220px] w-56">
-                        <div className="flex items-center justify-between gap-2 w-full">
-                          <span className="truncate">
-                            {(() => {
-                              const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
-                              const names = s.names || s.firstName || s.first_name || s.name || '';
-                              return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
-                            })()}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => fetchStudentConsolidatedGrades(s)}
-                            title="Ver Boletín de Calificaciones"
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700"
-                          >
-                            <FileText size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                    {activeTab === 'grades' ? (
-                      config.competencies.map((c) =>
-                        config.periods.map((p) => {
-                          const pL = p.toLowerCase();
-                          const kVal = `${c.id}_${pL}`;
-                          const kRec = `${c.id}_r${pL}`;
-                          return (
-                            <React.Fragment key={`${s.id}_${c.id}_${p}`}>
-                              <td className={`p-0 border-r border-border-main ${c.color} text-center align-middle w-12 min-w-[46px]`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_${kVal}`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_${kVal}`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, kVal, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
-                                  onPaste={(e) => handleGradePaste(e, idx, kVal)}
-                                  onFocus={(e) => e.target.select()}
-                                  className={`w-full h-8 bg-transparent text-center px-0 text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isSecundario && grades[`${s.id}_${kVal}`] !== undefined && grades[`${s.id}_${kVal}`] !== '' && parseInt(grades[`${s.id}_${kVal}`]) < 70
-                                      ? 'text-rose-600 dark:text-rose-400 font-black'
-                                      : 'font-black text-slate-900 dark:text-white'
-                                  }`}
-                                  placeholder=""
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                              <td className={`p-0 border-r border-border-main ${c.rColor} text-center align-middle w-10 min-w-[38px]`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_${kRec}`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_${kRec}`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, kRec, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
-                                  onPaste={(e) => handleGradePaste(e, idx, kRec)}
-                                  onFocus={(e) => e.target.select()}
-                                  className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isSecundario && grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < 70
-                                      ? 'text-rose-600 dark:text-rose-400 font-black'
-                                      : 'font-bold text-text-muted'
-                                  }`}
-                                  placeholder=""
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                            </React.Fragment>
-                          );
-                        })
-                      )
-                    ) : (
-                      <>
-                        {config.competencies.map((c) => {
-                          const compAvg = calculateCompAvg(s.id, c.id);
-                          const isFail = isSecundario && compAvg > 0 && compAvg < 70;
-                          return (
-                            <td
-                              key={`res_val_${c.id}`}
-                              className={`p-0 border-r border-border-main bg-surface text-center h-8 leading-8 font-black ${
-                                isFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-700 dark:text-indigo-400'
-                              }`}
-                            >
-                              {compAvg.toFixed(0)}
-                            </td>
-                          );
-                        })}
-                        {(() => {
-                          const finalVal = calculateAreaFinal(s.id);
-                          const isFinalFail = isSecundario && finalVal > 0 && finalVal < 70;
-                          return (
-                            <td className={`p-0 border-r border-border-main bg-indigo-50/10 text-center text-sm font-black h-8 leading-8 ${
-                              isFinalFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-500'
-                            }`}>
-                              {finalVal}
-                            </td>
-                          );
+                      <td
+                        className={`p-1 border-r border-border-main sticky left-0 z-10 text-center transition-all ${
+                          isSelected
+                            ? 'bg-indigo-100 dark:bg-indigo-900 border-l-4 border-l-indigo-600 text-indigo-950 dark:text-indigo-100'
+                            : 'bg-surface'
+                        } ${
+                          hideStudentNames ? 'w-14 min-w-[56px]' : 'w-10 min-w-[40px]'
+                        }`}
+                        title={(() => {
+                          const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+                          const names = s.names || s.firstName || s.first_name || s.name || '';
+                          return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
                         })()}
-
-                        {isSecundario ? (
-                          <>
-                            {/* COMPLETIVO: 50/50 */}
-                            <td className="p-0 border-r border-border-main bg-amber-50/10 text-center">
-                              <input
-                                ref={(el) => {
-                                  inputRefs.current[`${s.id}_comp`] = el;
-                                }}
-                                type="text"
-                                maxLength={3}
-                                value={grades[`${s.id}_comp`] || ''}
-                                onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
-                                onPaste={(e) => handleGradePaste(e, idx, 'comp')}
-                                onFocus={(e) => e.target.select()}
-                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  grades[`${s.id}_comp`] && parseInt(grades[`${s.id}_comp`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700'
-                                }`}
-                                placeholder="EX"
-                                disabled={!isEditable}
-                              />
-                            </td>
-                            {/* EXTRAORDINARIO: 30/70 */}
-                            <td className="p-0 border-r border-border-main bg-orange-50/10 text-center">
-                              <input
-                                ref={(el) => {
-                                  inputRefs.current[`${s.id}_extra`] = el;
-                                }}
-                                type="text"
-                                maxLength={3}
-                                value={grades[`${s.id}_extra`] || ''}
-                                onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
-                                onPaste={(e) => handleGradePaste(e, idx, 'extra')}
-                                onFocus={(e) => e.target.select()}
-                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  grades[`${s.id}_extra`] && parseInt(grades[`${s.id}_extra`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-orange-700'
-                                }`}
-                                placeholder="EX"
-                                disabled={!isEditable}
-                              />
-                            </td>
-                            {/* ESPECIAL 1 */}
-                            <td className="p-0 border-r border-border-main bg-rose-50/10 text-center">
-                              <input
-                                ref={(el) => {
-                                  inputRefs.current[`${s.id}_esp1`] = el;
-                                }}
-                                type="text"
-                                maxLength={3}
-                                value={grades[`${s.id}_esp1`] || ''}
-                                onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
-                                onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
-                                onFocus={(e) => e.target.select()}
-                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  grades[`${s.id}_esp1`] && parseInt(grades[`${s.id}_esp1`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-700'
-                                }`}
-                                disabled={!isEditable}
-                              />
-                            </td>
-                            {/* ESPECIAL 2 */}
-                            <td className="p-0 border-r border-border-main bg-rose-100/10 text-center">
-                              <input
-                                ref={(el) => {
-                                  inputRefs.current[`${s.id}_esp2`] = el;
-                                }}
-                                type="text"
-                                maxLength={3}
-                                value={grades[`${s.id}_esp2`] || ''}
-                                onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
-                                onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
-                                onFocus={(e) => e.target.select()}
-                                className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  grades[`${s.id}_esp2`] && parseInt(grades[`${s.id}_esp2`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-900'
-                                }`}
-                                disabled={!isEditable}
-                              />
-                            </td>
-                          </>
+                      >
+                        {hideStudentNames ? (
+                          <div className="flex items-center justify-center">
+                            <span className={`inline-flex items-center justify-center min-w-[28px] h-6 px-1 rounded-lg font-mono text-[11px] font-black border ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white border-indigo-700'
+                                : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 border-indigo-100 dark:border-indigo-900'
+                            }`}>
+                              #{getStudentOrderNumber(s) ?? (idx + 1)}
+                            </span>
+                          </div>
                         ) : (
-                          <td className="p-0 bg-rose-50/10 text-center border-r border-border-main">
-                            <input
-                              ref={(el) => {
-                                inputRefs.current[`${s.id}_final_rec`] = el;
-                              }}
-                              type="text"
-                              maxLength={3}
-                              value={grades[`${s.id}_final_rec`] || ''}
-                              onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
-                              onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
-                              onPaste={(e) => handleGradePaste(e, idx, 'final_rec')}
-                              onFocus={(e) => e.target.select()}
-                              className="w-full h-8 bg-transparent text-center text-rose-600 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={!isEditable}
-                            />
-                          </td>
+                          <span className={`${isSelected ? 'text-indigo-950 dark:text-indigo-100 font-black' : 'text-text-muted'} font-mono font-bold`}>
+                            {(getStudentOrderNumber(s) ?? (idx + 1)).toString().padStart(2, '0')}
+                          </span>
                         )}
+                      </td>
+                      {!hideStudentNames && (
+                        <td className={`p-1 border-r border-border-main sticky left-10 z-10 font-black uppercase min-w-[220px] max-w-[220px] w-56 transition-all ${
+                          isSelected
+                            ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100'
+                            : 'bg-surface text-text-main'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <span className="truncate">
+                              {(() => {
+                                const surname = `${s.first_surname || s.lastName || s.last_name || s.apellidos || ''} ${s.second_surname || ''}`.trim();
+                                const names = s.names || s.firstName || s.first_name || s.name || '';
+                                return surname && names ? `${surname}, ${names}` : surname || names || 'Estudiante';
+                              })()}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fetchStudentConsolidatedGrades(s);
+                              }}
+                              title="Ver Boletín de Calificaciones"
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                            >
+                              <FileText size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                      {activeTab === 'grades' ? (
+                        config.competencies.map((c) =>
+                          config.periods.map((p) => {
+                            const pL = p.toLowerCase();
+                            const kVal = `${c.id}_${pL}`;
+                            const kRec = `${c.id}_r${pL}`;
+                            return (
+                              <React.Fragment key={`${s.id}_${c.id}_${p}`}>
+                                <td className={`p-0 border-r border-border-main ${isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : c.color} text-center align-middle w-12 min-w-[46px] transition-colors`}>
+                                  <input
+                                    ref={(el) => {
+                                      inputRefs.current[`${s.id}_${kVal}`] = el;
+                                    }}
+                                    type="text"
+                                    maxLength={3}
+                                    value={grades[`${s.id}_${kVal}`] || ''}
+                                    onChange={(e) => handleGradeChange(s.id, kVal, e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, idx, kVal)}
+                                    onPaste={(e) => handleGradePaste(e, idx, kVal)}
+                                    onFocus={(e) => {
+                                      e.target.select();
+                                      setFocusedStudentId(s.id);
+                                    }}
+                                    onClick={() => setFocusedStudentId(s.id)}
+                                    className={`w-full h-8 bg-transparent text-center px-0 text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                      isSecundario && grades[`${s.id}_${kVal}`] !== undefined && grades[`${s.id}_${kVal}`] !== '' && parseInt(grades[`${s.id}_${kVal}`]) < 70
+                                        ? 'text-rose-600 dark:text-rose-400 font-black'
+                                        : 'font-black text-slate-900 dark:text-white'
+                                    }`}
+                                    placeholder=""
+                                    disabled={!isEditable}
+                                  />
+                                </td>
+                                <td className={`p-0 border-r border-border-main ${isSelected ? 'bg-indigo-100/30 dark:bg-indigo-950/30' : c.rColor} text-center align-middle w-10 min-w-[38px] transition-colors`}>
+                                  <input
+                                    ref={(el) => {
+                                      inputRefs.current[`${s.id}_${kRec}`] = el;
+                                    }}
+                                    type="text"
+                                    maxLength={3}
+                                    value={grades[`${s.id}_${kRec}`] || ''}
+                                    onChange={(e) => handleGradeChange(s.id, kRec, e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
+                                    onPaste={(e) => handleGradePaste(e, idx, kRec)}
+                                    onFocus={(e) => {
+                                      e.target.select();
+                                      setFocusedStudentId(s.id);
+                                    }}
+                                    onClick={() => setFocusedStudentId(s.id)}
+                                    className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                      isSecundario && grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < 70
+                                        ? 'text-rose-600 dark:text-rose-400 font-black'
+                                        : 'font-bold text-text-muted'
+                                    }`}
+                                    placeholder=""
+                                    disabled={!isEditable}
+                                  />
+                                </td>
+                              </React.Fragment>
+                            );
+                          })
+                        )
+                      ) : (
+                        <>
+                          {config.competencies.map((c) => {
+                            const compAvg = calculateCompAvg(s.id, c.id);
+                            const isFail = isSecundario && compAvg > 0 && compAvg < 70;
+                            return (
+                              <td
+                                key={`res_val_${c.id}`}
+                                className={`p-0 border-r border-border-main text-center h-8 leading-8 font-black transition-colors ${
+                                  isSelected ? 'bg-indigo-100/50 dark:bg-indigo-900/40' : 'bg-surface'
+                                } ${
+                                  isFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-700 dark:text-indigo-400'
+                                }`}
+                              >
+                                {compAvg.toFixed(0)}
+                              </td>
+                            );
+                          })}
+                          {(() => {
+                            const finalVal = calculateAreaFinal(s.id);
+                            const isFinalFail = isSecundario && finalVal > 0 && finalVal < 70;
+                            return (
+                              <td className={`p-0 border-r border-border-main text-center text-sm font-black h-8 leading-8 transition-colors ${
+                                isSelected ? 'bg-indigo-100/60 dark:bg-indigo-900/50' : 'bg-indigo-50/10'
+                              } ${
+                                isFinalFail ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-500'
+                              }`}>
+                                {finalVal}
+                              </td>
+                            );
+                          })()}
 
-                        {/* CALCULO NOTA FINAL DEFINITIVA */}
-                        {(() => {
-                          const areaFinal = parseInt(calculateAreaFinal(s.id).toString()) || 0;
-                          let defFinal: number | string = '-';
-                          let isDefFail = false;
+                          {isSecundario ? (
+                            <>
+                              {/* COMPLETIVO: 50/50 */}
+                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-amber-50/10'
+                              }`}>
+                                <input
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_comp`] = el;
+                                  }}
+                                  type="text"
+                                  maxLength={3}
+                                  value={grades[`${s.id}_comp`] || ''}
+                                  onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
+                                  onPaste={(e) => handleGradePaste(e, idx, 'comp')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setFocusedStudentId(s.id);
+                                  }}
+                                  onClick={() => setFocusedStudentId(s.id)}
+                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    grades[`${s.id}_comp`] && parseInt(grades[`${s.id}_comp`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700'
+                                  }`}
+                                  placeholder="EX"
+                                  disabled={!isEditable}
+                                />
+                              </td>
+                              {/* EXTRAORDINARIO: 30/70 */}
+                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-orange-50/10'
+                              }`}>
+                                <input
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_extra`] = el;
+                                  }}
+                                  type="text"
+                                  maxLength={3}
+                                  value={grades[`${s.id}_extra`] || ''}
+                                  onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
+                                  onPaste={(e) => handleGradePaste(e, idx, 'extra')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setFocusedStudentId(s.id);
+                                  }}
+                                  onClick={() => setFocusedStudentId(s.id)}
+                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    grades[`${s.id}_extra`] && parseInt(grades[`${s.id}_extra`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-orange-700'
+                                  }`}
+                                  placeholder="EX"
+                                  disabled={!isEditable}
+                                />
+                              </td>
+                              {/* ESPECIAL 1 */}
+                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-50/10'
+                              }`}>
+                                <input
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_esp1`] = el;
+                                  }}
+                                  type="text"
+                                  maxLength={3}
+                                  value={grades[`${s.id}_esp1`] || ''}
+                                  onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
+                                  onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setFocusedStudentId(s.id);
+                                  }}
+                                  onClick={() => setFocusedStudentId(s.id)}
+                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    grades[`${s.id}_esp1`] && parseInt(grades[`${s.id}_esp1`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-700'
+                                  }`}
+                                  disabled={!isEditable}
+                                />
+                              </td>
+                              {/* ESPECIAL 2 */}
+                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-100/10'
+                              }`}>
+                                <input
+                                  ref={(el) => {
+                                    inputRefs.current[`${s.id}_esp2`] = el;
+                                  }}
+                                  type="text"
+                                  maxLength={3}
+                                  value={grades[`${s.id}_esp2`] || ''}
+                                  onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
+                                  onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setFocusedStudentId(s.id);
+                                  }}
+                                  onClick={() => setFocusedStudentId(s.id)}
+                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    grades[`${s.id}_esp2`] && parseInt(grades[`${s.id}_esp2`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-900'
+                                  }`}
+                                  disabled={!isEditable}
+                                />
+                              </td>
+                            </>
+                          ) : (
+                            <td className={`p-0 text-center border-r border-border-main transition-colors ${
+                              isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-50/10'
+                            }`}>
+                              <input
+                                ref={(el) => {
+                                  inputRefs.current[`${s.id}_final_rec`] = el;
+                                }}
+                                type="text"
+                                maxLength={3}
+                                value={grades[`${s.id}_final_rec`] || ''}
+                                onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
+                                onPaste={(e) => handleGradePaste(e, idx, 'final_rec')}
+                                onFocus={(e) => {
+                                  e.target.select();
+                                  setFocusedStudentId(s.id);
+                                }}
+                                onClick={() => setFocusedStudentId(s.id)}
+                                className="w-full h-8 bg-transparent text-center text-rose-600 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={!isEditable}
+                              />
+                            </td>
+                          )}
 
-                          if (!isSecundario) {
-                            const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
-                            defFinal = Math.max(areaFinal, recFinal) || '-';
-                          } else {
-                            if (areaFinal >= 70) {
-                              defFinal = areaFinal;
+                          {/* CALCULO NOTA FINAL DEFINITIVA */}
+                          {(() => {
+                            const areaFinal = parseInt(calculateAreaFinal(s.id).toString()) || 0;
+                            let defFinal: number | string = '-';
+                            let isDefFail = false;
+
+                            if (!isSecundario) {
+                              const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
+                              defFinal = Math.max(areaFinal, recFinal) || '-';
                             } else {
-                              const cpExam = parseInt(grades[`${s.id}_comp`]) || 0;
-                              if (cpExam > 0) {
-                                const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
-                                if (cpFinal >= 70) defFinal = cpFinal;
-                              }
-                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
-                                const exExam = parseInt(grades[`${s.id}_extra`]) || 0;
-                                if (exExam > 0) {
-                                  const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
-                                  if (exFinal >= 70) defFinal = exFinal;
+                              if (areaFinal >= 70) {
+                                defFinal = areaFinal;
+                              } else {
+                                const cpExam = parseInt(grades[`${s.id}_comp`]) || 0;
+                                if (cpExam > 0) {
+                                  const cpFinal = Math.round(areaFinal * 0.5 + cpExam * 0.5);
+                                  if (cpFinal >= 70) defFinal = cpFinal;
+                                }
+                                if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                  const exExam = parseInt(grades[`${s.id}_extra`]) || 0;
+                                  if (exExam > 0) {
+                                    const exFinal = Math.round(areaFinal * 0.3 + exExam * 0.7);
+                                    if (exFinal >= 70) defFinal = exFinal;
+                                  }
+                                }
+                                if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                  const esp1 = parseInt(grades[`${s.id}_esp1`]) || 0;
+                                  if (esp1 >= 70) defFinal = esp1;
+                                }
+                                if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
+                                  const esp2 = parseInt(grades[`${s.id}_esp2`]) || 0;
+                                  if (esp2 >= 70) defFinal = esp2;
+                                }
+                                if (defFinal === '-' || typeof defFinal !== 'number') {
+                                  defFinal = areaFinal > 0 ? areaFinal : '-';
                                 }
                               }
-                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
-                                const esp1 = parseInt(grades[`${s.id}_esp1`]) || 0;
-                                if (esp1 >= 70) defFinal = esp1;
-                              }
-                              if (defFinal === '-' || typeof defFinal !== 'number' || defFinal < 70) {
-                                const esp2 = parseInt(grades[`${s.id}_esp2`]) || 0;
-                                if (esp2 >= 70) defFinal = esp2;
-                              }
-                              if (defFinal === '-' || typeof defFinal !== 'number') {
-                                defFinal = areaFinal > 0 ? areaFinal : '-';
+                              if (typeof defFinal === 'number' && defFinal > 0 && defFinal < 70) {
+                                isDefFail = true;
                               }
                             }
-                            if (typeof defFinal === 'number' && defFinal > 0 && defFinal < 70) {
-                              isDefFail = true;
-                            }
-                          }
 
-                          return (
-                            <td className={`p-0 text-center font-black text-xs h-8 leading-8 ${
-                              isDefFail ? 'bg-rose-950 text-rose-300 ring-1 ring-rose-500' : 'bg-slate-900 text-white'
-                            }`}>
-                              {defFinal}
-                            </td>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </tr>
-                ))}
+                            return (
+                              <td className={`p-0 text-center font-black text-xs h-8 leading-8 transition-colors ${
+                                isDefFail
+                                  ? 'bg-rose-950 text-rose-300 ring-1 ring-rose-500'
+                                  : isSelected
+                                  ? 'bg-indigo-900 text-white'
+                                  : 'bg-slate-900 text-white'
+                              }`}>
+                                {defFinal}
+                              </td>
+                            );
+                          })()}
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2532,7 +2607,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                   (c: any) => c.id === selectedSummaryStudent.course_id
                 );
                 const courseDisplay = studentCourse
-                  ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${studentCourse.tanda || 'Matutina'})`
+                  ? `${studentCourse.level ? `${studentCourse.level} ` : ''}${studentCourse.grade} - ${studentCourse.section} (${getReportTanda(studentCourse.tanda, 'full')})`
                   : '';
                 const levelDisplay = studentCourse?.level || '---';
                 const studentCode =

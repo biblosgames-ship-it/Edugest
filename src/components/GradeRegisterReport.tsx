@@ -17,6 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { toast } from 'react-hot-toast';
+import { getReportTanda } from '../utils/courseSorter';
 
 interface GradeRegisterReportProps {
   onClose?: () => void;
@@ -484,13 +485,13 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         id: s.id,
         course_id: s.course_id,
         courseName: course
-          ? `${course.level} - ${course.grade} "${course.section}" (${course.tanda || 'Matutina'})`
+          ? `${course.level} - ${course.grade} "${course.section}" (${getReportTanda(course.tanda, 'full')})`
           : 'Sin Grado Asignado',
         courseShort: course ? `${course.grade} "${course.section}"` : 'S/A',
         courseLevel: course?.level || '',
         courseGrade: course?.grade || '',
         courseSection: course?.section || '',
-        courseTanda: course?.tanda || 'Matutina',
+        courseTanda: getReportTanda(course?.tanda, 'full'),
 
         // 1. Número de orden
         orderNumber: s.order_number || s.orderNumber || idx + 1,
@@ -729,7 +730,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
         isFirstPage = false;
 
         const cInfo = group.course;
-        const courseTitle = `${cInfo.level || ''} - ${cInfo.grade || ''} "${cInfo.section || ''}" - TANDA ${(cInfo.tanda || 'Matutina').toUpperCase()}`;
+        const courseTitle = `${cInfo.level || ''} - ${cInfo.grade || ''} "${cInfo.section || ''}" - TANDA ${getReportTanda(cInfo.tanda, 'full').toUpperCase()}`;
 
         // Encabezado
         doc.setFont('helvetica', 'bold');
@@ -927,7 +928,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
               <option value="ALL">📋 Mostrar Todos los Grados del Centro</option>
               {courses.map((course: any) => (
                 <option key={course.id} value={course.id}>
-                  {course.level} — {course.grade} &quot;{course.section}&quot; ({course.tanda || 'Matutina'})
+                  {course.level} — {course.grade} &quot;{course.section}&quot; ({getReportTanda(course.tanda, 'full')})
                 </option>
               ))}
             </select>
@@ -1064,7 +1065,7 @@ export const GradeRegisterReport: React.FC<GradeRegisterReportProps> = ({
                         {c.level} — {c.grade} &quot;{c.section}&quot;
                       </span>
                       <span className="text-[10px] text-slate-500 uppercase block">
-                        TANDA: {c.tanda || 'Matutina'} | TOTAL: {group.students.length} ALUMNOS
+                        TANDA: {getReportTanda(c.tanda, 'full')} | TOTAL: {group.students.length} ALUMNOS
                       </span>
                     </div>
                   </div>
