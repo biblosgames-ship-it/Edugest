@@ -201,6 +201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const lastFetchedYearRef = useRef<string | null>(null);
   const userRef = useRef<any | null>(null);
   const refreshDataRef = useRef<any>(null);
+  const healedCentersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     stateRef.current = state;
@@ -1021,8 +1022,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
           }
 
-          // Auto-healing bidireccional en segundo plano: sincroniza permanentemente la base de datos
-          if (studentsToHeal2026.length > 0 || studentsToHeal2025.length > 0) {
+          // Auto-healing bidireccional en segundo plano: sincroniza una sola vez por sesión/año
+          const healKey = `${targetCid}_${currentFetchYear}`;
+          if (
+            !healedCentersRef.current.has(healKey) &&
+            (studentsToHeal2026.length > 0 || studentsToHeal2025.length > 0)
+          ) {
+            healedCentersRef.current.add(healKey);
             Promise.all([
               ...studentsToHeal2026.map((item) =>
                 supabase
