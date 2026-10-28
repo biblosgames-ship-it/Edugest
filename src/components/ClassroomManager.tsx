@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { useApp, useSupabase } from '../context/AppContext';
 import { useStudents } from '../hooks/useStudents';
@@ -51,7 +51,7 @@ import { CourseAttendanceReportModal } from './CourseAttendanceReportModal';
 import { dataService } from '../services/dataService';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
-import { enqueueSyncAction } from '../utils/offlineSync';
+import { enqueueSyncAction, syncAttendanceRecordsDifferential } from '../utils/offlineSync';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 import { getReportTanda } from '../utils/courseSorter';
 
@@ -425,6 +425,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     return sortStudents(list);
   }, [allStudents, selectedCourseId]);
 
+  const lastSavedAttendanceRef = useRef<Record<string, string>>({});
+
   // 1. CARGAR ASISTENCIA (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
     if (!selectedCourseId || !selectedDate) return;
@@ -465,6 +467,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               };
             }
           });
+
+          lastSavedAttendanceRef.current[localKey] = JSON.stringify(initialMap);
         }
       } catch (e) {}
 
@@ -475,7 +479,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
     loadAttendance();
     return () => { isMounted = false; };
-  }, [selectedCourseId, selectedDate, courseStudents]);
+  }, [selectedCourseId, selectedDate, courseStudents.length]);
 
   // 2. CARGAR APUNTES / ANECDOTARIO (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
@@ -574,7 +578,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
     loadSpecialNotes();
     return () => { isMounted = false; };
-  }, [selectedCourseId, courseStudents]);
+  }, [selectedCourseId, courseStudents.length]);
 
   // 3. CARGAR CALIFICACIONES PARCIALES (DESDE SUPABASE Y RESPALDO LOCAL)
   useEffect(() => {
@@ -788,7 +792,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       isMounted = false;
       window.removeEventListener('edugens_notifications_updated', handleUpdate);
     };
-  }, [selectedCourseId, courseStudents, profile?.id, profile?.role, profile?.center_id, center?.id]);
+  }, [selectedCourseId, courseStudents.length, profile?.id, profile?.role, profile?.center_id, center?.id]);
 
   const [newActivityName, setNewActivityName] = useState<string>('');
   const [selectedCompetencyForNewAct, setSelectedCompetencyForNewAct] = useState<string>('c1');
@@ -968,11 +972,12 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
       // 2. Guardar en localStorage (estado completo para respuesta instantánea)
       const key = `attendance_${selectedCourseId}_${selectedDate}`;
-      localStorage.setItem(key, JSON.stringify(fullStateMap));
+      const serializedState = JSON.stringify(fullStateMap);
+      localStorage.setItem(key, serializedState);
       setAttendanceState(fullStateMap);
 
-      // 3. Guardar en Supabase: 1 Checkpoint Maestro de Pase de Lista + Solo Excepciones
-      // Esto ahorra un 95% de almacenamiento en la base de datos (<1 MB por año por centro)
+      // 3. Guardar en Supabase: 1 Checkpoint Maestro de Pase de Lista + Solo Excepciones (Sincronización diferencial)
+      // Esto ahorra un 95% de almacenamiento y evita DELETE+INSERT innecesarios (0 filas muertas en PostgreSQL)
       const checkpointRecord = {
         center_id: centerId,
         student_id: null,
@@ -997,26 +1002,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           centerId,
           description: `Asistencia curso (${selectedDate})`
         });
-      } else {
+      } else if (lastSavedAttendanceRef.current[key] !== serializedState) {
         try {
-          await supabase
-            .from('attendance_records')
-            .delete()
-            .eq('course_id', selectedCourseId)
-            .eq('date', selectedDate);
-
-          const { error: insertErr } = await supabase
-            .from('attendance_records')
-            .insert(recordsToInsert);
-
-          if (insertErr) {
-            console.warn('Supabase sparse insert fallback:', insertErr);
-            for (const rec of recordsToInsert) {
-              try {
-                await supabase.from('attendance_records').insert([rec]);
-              } catch {}
-            }
-          }
+          await syncAttendanceRecordsDifferential(selectedCourseId, selectedDate, recordsToInsert);
+          lastSavedAttendanceRef.current[key] = serializedState;
         } catch (e) {
           console.warn('Supabase attendance save error, guardando en cola offline:', e);
           await enqueueSyncAction({

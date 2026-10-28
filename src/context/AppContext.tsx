@@ -1691,7 +1691,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await refreshData(undefined, true);
       throw error;
     }
-    await refreshData(undefined, true);
   };
 
   const addPriorityPreference = async (p: any) => {
@@ -1716,7 +1715,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (p.id && typeof p.id === 'string' && p.id.length > 20) {
           await supabase.from('priority_preferences').update(payload).eq('id', p.id);
         } else {
-          await supabase.from('priority_preferences').insert([payload]);
+          const { data: inserted } = await supabase
+            .from('priority_preferences')
+            .insert([payload])
+            .select('id')
+            .maybeSingle();
+          if (inserted?.id) {
+            newPref.id = inserted.id;
+            localStorage.setItem('edugens_priority_prefs', JSON.stringify(updated));
+          }
         }
       } catch (err) {
         console.warn('Priority preference persisted locally:', err);
@@ -1727,8 +1734,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       priorityPreferences: updated
     }));
-
-    if (cid) await refreshData(undefined, true);
   };
 
   const deletePriorityPreference = async (id: string) => {
@@ -1749,8 +1754,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       priorityPreferences: updated
     }));
-
-    if (cid) await refreshData(undefined, true);
   };
 
   const addAttendanceRecord = async (record: any) => {

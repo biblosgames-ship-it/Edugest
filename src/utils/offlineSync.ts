@@ -328,6 +328,130 @@ export const getPendingSyncCount = async (): Promise<number> => {
 // ==========================================
 let isSyncInProgress = false;
 
+export const syncAttendanceRecordsDifferential = async (
+  courseId: string,
+  date: string,
+  recordsToInsert: any[]
+): Promise<void> => {
+  if (!courseId || !date) return;
+
+  const { data: existingRows, error: fetchErr } = await supabase
+    .from('attendance_records')
+    .select('id, student_id, status, notes')
+    .eq('course_id', courseId)
+    .eq('date', date);
+
+  if (fetchErr || !existingRows) {
+    // Fallback clásico si no se pudo consultar el estado previo
+    await supabase
+      .from('attendance_records')
+      .delete()
+      .eq('course_id', courseId)
+      .eq('date', date);
+
+    if (recordsToInsert && recordsToInsert.length > 0) {
+      const { error: insertErr } = await supabase
+        .from('attendance_records')
+        .insert(recordsToInsert);
+
+      if (insertErr) {
+        for (const rec of recordsToInsert) {
+          try {
+            await supabase.from('attendance_records').insert([rec]);
+          } catch {}
+        }
+      }
+    }
+    return;
+  }
+
+  const idsToDelete: string[] = [];
+  const existingCheckpoints = existingRows.filter((r: any) => !r.student_id);
+  if (existingCheckpoints.length > 1) {
+    existingCheckpoints.slice(1).forEach((r: any) => {
+      if (r.id) idsToDelete.push(r.id);
+    });
+  }
+
+  const existingByStudent = new Map<string, any>();
+  existingRows.forEach((r: any) => {
+    if (!r.student_id) return;
+    const sid = String(r.student_id);
+    if (existingByStudent.has(sid)) {
+      if (r.id) idsToDelete.push(r.id);
+    } else {
+      existingByStudent.set(sid, r);
+    }
+  });
+
+  const safeRecords = Array.isArray(recordsToInsert) ? recordsToInsert : [];
+  const desiredCheckpoint = safeRecords.find((r: any) => !r.student_id);
+  const desiredExceptions = safeRecords.filter((r: any) => !!r.student_id);
+
+  const toInsert: any[] = [];
+  const toUpdate: Array<{ id: string; payload: any }> = [];
+
+  if (desiredCheckpoint && existingCheckpoints.length === 0) {
+    toInsert.push(desiredCheckpoint);
+  }
+
+  const seenStudentIds = new Set<string>();
+  desiredExceptions.forEach((rec: any) => {
+    const sid = String(rec.student_id);
+    if (seenStudentIds.has(sid)) return;
+    seenStudentIds.add(sid);
+
+    const existing = existingByStudent.get(sid);
+    if (!existing) {
+      toInsert.push(rec);
+    } else if (
+      existing.status !== rec.status ||
+      (existing.notes || '') !== (rec.notes || '')
+    ) {
+      toUpdate.push({
+        id: existing.id,
+        payload: {
+          status: rec.status,
+          notes: rec.notes || '',
+          recorded_by: rec.recorded_by || null
+        }
+      });
+    }
+  });
+
+  existingByStudent.forEach((existing, sid) => {
+    if (!seenStudentIds.has(sid) && existing.id) {
+      idsToDelete.push(existing.id);
+    }
+  });
+
+  if (idsToDelete.length > 0) {
+    await supabase.from('attendance_records').delete().in('id', idsToDelete);
+  }
+
+  if (toUpdate.length > 0) {
+    await Promise.all(
+      toUpdate.map((u) =>
+        supabase.from('attendance_records').update(u.payload).eq('id', u.id)
+      )
+    );
+  }
+
+  if (toInsert.length > 0) {
+    const { error: insertErr } = await supabase
+      .from('attendance_records')
+      .insert(toInsert);
+
+    if (insertErr) {
+      for (const rec of toInsert) {
+        try {
+          await supabase.from('attendance_records').insert([rec]);
+        } catch {}
+      }
+    }
+  }
+};
+
 export const processSyncQueue = async (): Promise<{ processed: number; failed: number }> => {
   if (isSyncInProgress) {
     return { processed: 0, failed: 0 };
@@ -363,26 +487,7 @@ export const processSyncQueue = async (): Promise<{ processed: number; failed: n
         } else if (item.type === 'attendance') {
           const { courseId, date, recordsToInsert } = item.payload;
           if (courseId && date) {
-            await supabase
-              .from('attendance_records')
-              .delete()
-              .eq('course_id', courseId)
-              .eq('date', date);
-
-            if (recordsToInsert && recordsToInsert.length > 0) {
-              const { error: insertErr } = await supabase
-                .from('attendance_records')
-                .insert(recordsToInsert);
-
-              if (insertErr) {
-                // Intento fila a fila en caso de fallo parcial
-                for (const rec of recordsToInsert) {
-                  try {
-                    await supabase.from('attendance_records').insert([rec]);
-                  } catch {}
-                }
-              }
-            }
+            await syncAttendanceRecordsDifferential(courseId, date, recordsToInsert || []);
           }
         } else if (item.type === 'partial_activities') {
           const { centerId, courseId, subjectId, period, schoolYear, scoresData, activityName } = item.payload;
