@@ -1730,18 +1730,21 @@ export const dataService = {
       }
 
       // Asegurar que el docente existe en tabla 'teachers' para la planificación de horarios
-      await supabase
-        .from('teachers')
-        .upsert(
-          {
-            id: teacherId,
-            center_id: centerId,
-            name: cleanDocente,
-            hours_available: 40
-          },
-          { onConflict: 'id' }
-        )
-        .catch(() => {});
+      try {
+        await supabase
+          .from('teachers')
+          .upsert(
+            {
+              id: teacherId,
+              center_id: centerId,
+              name: cleanDocente,
+              hours_available: 40
+            },
+            { onConflict: 'id' }
+          );
+      } catch (tErr) {
+        console.warn('Error al asegurar docente en tabla teachers:', tErr);
+      }
 
       const { error: aErr } = await supabase.from('assignments').insert({
         center_id: centerId,
