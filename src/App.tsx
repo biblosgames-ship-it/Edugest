@@ -181,6 +181,21 @@ function AppContent() {
   const [isFinancesUnlocked, setIsFinancesUnlocked] = useState(false);
   const [pinError, setPinError] = useState('');
   const [activationMode, setActivationMode] = useState<'invitation' | 'registration'>('invitation');
+  const [visitedViews, setVisitedViews] = useState<Set<string>>(() => new Set(['dashboard']));
+
+  useEffect(() => {
+    if (activeView) {
+      setVisitedViews((prev) => {
+        if (prev.has(activeView)) return prev;
+        const next = new Set(prev);
+        next.add(activeView);
+        return next;
+      });
+    }
+  }, [activeView]);
+
+  const isViewMounted = (viewId: string) => activeView === viewId || visitedViews.has(viewId);
+
   // Volver a bloquear finanzas si se cambia de vista
   useEffect(() => {
     if (activeView !== 'finances') {
@@ -580,8 +595,8 @@ function AppContent() {
           </button>
         </div>
 
-        {/* VISTAS PERSISTENTES (KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}
-        {allowed.includes('dashboard') && (
+        {/* VISTAS PERSISTENTES BAJO DEMANDA (LAZY KEEP-ALIVE) CON SCROLL INDEPENDIENTE */}
+        {allowed.includes('dashboard') && isViewMounted('dashboard') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'dashboard' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -597,7 +612,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('classroom') && (
+        {allowed.includes('classroom') && isViewMounted('classroom') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'classroom' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -612,7 +627,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('students') && (
+        {allowed.includes('students') && isViewMounted('students') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'students' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -622,7 +637,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('digital-register') && (
+        {allowed.includes('digital-register') && isViewMounted('digital-register') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'digital-register' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -632,7 +647,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('schedule') && (
+        {allowed.includes('schedule') && isViewMounted('schedule') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'schedule' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -642,7 +657,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('agenda') && (
+        {allowed.includes('agenda') && isViewMounted('agenda') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'agenda' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -652,7 +667,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('tasks') && (
+        {allowed.includes('tasks') && isViewMounted('tasks') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'tasks' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -666,7 +681,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('parent-grades') && isStudentOrParent && (
+        {allowed.includes('parent-grades') && isStudentOrParent && isViewMounted('parent-grades') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'parent-grades' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -676,7 +691,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('communications') && (
+        {allowed.includes('communications') && isViewMounted('communications') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'communications' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -686,7 +701,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('control') && (
+        {allowed.includes('control') && isViewMounted('control') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'control' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -696,7 +711,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('facility') && (
+        {allowed.includes('facility') && isViewMounted('facility') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'facility' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -706,7 +721,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('admin') && (
+        {allowed.includes('admin') && isViewMounted('admin') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'admin' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -716,7 +731,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('finances') && (
+        {allowed.includes('finances') && isViewMounted('finances') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'finances' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -779,7 +794,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('general-reports') && (
+        {allowed.includes('general-reports') && isViewMounted('general-reports') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'general-reports' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
@@ -799,7 +814,7 @@ function AppContent() {
           </div>
         )}
 
-        {allowed.includes('data') && (
+        {allowed.includes('data') && isViewMounted('data') && (
           <div
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'data' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
