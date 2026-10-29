@@ -1259,7 +1259,13 @@ export const dataService = {
       console.error('Error getting announcements:', error);
       return [];
     }
-    return (data || []).filter((ann: any) => !ann.content?.startsWith('__COM_DATA__:') && !ann.content?.startsWith('__PLATFORM_LINKS__:'));
+    return (data || []).filter((ann: any) =>
+      !ann.content?.startsWith('__COM_DATA__:') &&
+      !ann.content?.startsWith('__PLATFORM_LINKS__:') &&
+      !ann.content?.startsWith('__STAFF_RUBRICS__:') &&
+      !ann.content?.startsWith('__STAFF_EVAL__:') &&
+      !ann.content?.startsWith('__SURVEY_BROADCASTS__:')
+    );
   },
 
   async getAttendance() {

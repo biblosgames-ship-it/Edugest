@@ -40,6 +40,101 @@ import PrimaryCertificate from './PrimaryCertificate';
 import GradeRegisterReport from './GradeRegisterReport';
 import { getReportTanda } from '../utils/courseSorter';
 
+/**
+ * Deduplica estudiantes que hayan sido registrados por duplicado en el mismo curso/centro
+ * (mismo RNE o nombres/apellidos normalizados).
+ * Si hay calificaciones en student_grades registradas bajo cualquiera de sus IDs,
+ * asocia y mapea todas las calificaciones al estudiante principal, asegurando que
+ * ningún reporte/boletín salga en blanco ni con registros fantasma duplicados.
+ */
+export function deduplicateCourseStudents(rawStudents: any[], gradesData?: any[]) {
+  if (!rawStudents || rawStudents.length === 0) {
+    return { uniqueStudents: [], idAliasMap: new Map<string, string>() };
+  }
+
+  // Contar calificaciones reales por cada student_id
+  const gradeCountByStudentId: Record<string, number> = {};
+  if (gradesData && Array.isArray(gradesData)) {
+    gradesData.forEach((g: any) => {
+      if (g.student_id && g.grade !== null && g.grade !== undefined) {
+        gradeCountByStudentId[g.student_id] = (gradeCountByStudentId[g.student_id] || 0) + 1;
+      }
+    });
+  }
+
+  const groups = new Map<string, any[]>();
+  rawStudents.forEach((s) => {
+    const normName = `${(s.names || '').trim()} ${(s.first_surname || '').trim()} ${(s.second_surname || '').trim()}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+    const normRne = (s.rne || '').trim().toLowerCase();
+    // Clave única basada en RNE válido o nombres completos
+    const key = normRne.length > 3 ? `rne_${normRne}` : `name_${normName}`;
+
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
+  });
+
+  const uniqueStudents: any[] = [];
+  const idAliasMap = new Map<string, string>(); // aliasId -> primaryId
+
+  groups.forEach((groupStudents) => {
+    if (groupStudents.length === 1) {
+      const single = groupStudents[0];
+      uniqueStudents.push(single);
+      idAliasMap.set(single.id, single.id);
+      return;
+    }
+
+    // Ordenar para encontrar el registro más confiable / con calificaciones
+    groupStudents.sort((a, b) => {
+      const gradesA = gradeCountByStudentId[a.id] || 0;
+      const gradesB = gradeCountByStudentId[b.id] || 0;
+      if (gradesB !== gradesA) return gradesB - gradesA; // el que más calificaciones tenga primero
+
+      // Si tienen igual notas, preferir el que tenga order_number
+      if (a.order_number && !b.order_number) return -1;
+      if (!a.order_number && b.order_number) return 1;
+
+      // Preferir el que tenga RNE
+      if (a.rne && !b.rne) return -1;
+      if (!a.rne && b.rne) return 1;
+
+      // Por fecha de creación
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    });
+
+    const primary = { ...groupStudents[0] };
+    // Rellenar campos faltantes desde las copias
+    groupStudents.forEach((other) => {
+      if (!primary.order_number && other.order_number) primary.order_number = other.order_number;
+      if (!primary.rne && other.rne) primary.rne = other.rne;
+      if (!primary.birth_date && other.birth_date) primary.birth_date = other.birth_date;
+      if (!primary.gender && other.gender) primary.gender = other.gender;
+      if (!primary.enrollment_date && other.enrollment_date) primary.enrollment_date = other.enrollment_date;
+    });
+
+    uniqueStudents.push(primary);
+    groupStudents.forEach((s) => {
+      idAliasMap.set(s.id, primary.id);
+    });
+  });
+
+  // Ordenar estudiantes por orden numérico o por apellidos
+  uniqueStudents.sort((a: any, b: any) => {
+    const numA = parseInt(a.order_number, 10);
+    const numB = parseInt(b.order_number, 10);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    if (!isNaN(numA)) return -1;
+    if (!isNaN(numB)) return 1;
+    return (a.first_surname || '').localeCompare(b.first_surname || '');
+  });
+
+  return { uniqueStudents, idAliasMap };
+}
+
 export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
   const { state, selectedYear, center: contextCenter } = useApp();
   const { profile } = useSupabase();
@@ -129,7 +224,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           return;
         }
 
-        const [stdData, { data: gData }] = await Promise.all([
+        const [rawStdData, { data: gData }] = await Promise.all([
           dataService.getStudents(selectedCourseId, centerId, forceYear),
           fetchAllRows(() =>
             supabase
@@ -140,10 +235,12 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           )
         ]);
 
-        if (!stdData || stdData.length === 0) {
+        if (!rawStdData || rawStdData.length === 0) {
           setAnalyticsData(null);
           return;
         }
+
+        const { uniqueStudents: stdData, idAliasMap } = deduplicateCourseStudents(rawStdData, gData);
 
         const assignments =
           state.assignments?.filter((a) => a.course_id === selectedCourseId) || [];
@@ -165,21 +262,22 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         const loadedMap: any = {};
         if (gData) {
           gData.forEach((g: any) => {
-            if (!loadedMap[g.student_id]) loadedMap[g.student_id] = {};
-            if (!loadedMap[g.student_id][g.subject_id]) loadedMap[g.student_id][g.subject_id] = {};
+            const studentId = idAliasMap.get(g.student_id) || g.student_id;
+            if (!loadedMap[studentId]) loadedMap[studentId] = {};
+            if (!loadedMap[studentId][g.subject_id]) loadedMap[studentId][g.subject_id] = {};
             const pL = g.period.toLowerCase();
             if (g.grade !== null)
-              loadedMap[g.student_id][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
+              loadedMap[studentId][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
             if (g.rp1 !== null)
-              loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
+              loadedMap[studentId][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
             if (g.rp2 !== null)
-              loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
+              loadedMap[studentId][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
             if (g.rp3 !== null)
-              loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
+              loadedMap[studentId][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
             if (g.rp4 !== null)
-              loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
+              loadedMap[studentId][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
             if (g.recovery_grade !== null)
-              loadedMap[g.student_id][g.subject_id]['final_rec'] = g.recovery_grade;
+              loadedMap[studentId][g.subject_id]['final_rec'] = g.recovery_grade;
           });
         }
         setAnalyticsData({ students: stdData, subjects: courseSubjects, gradesMap: loadedMap });
@@ -527,17 +625,15 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         return;
       }
 
-      const [students, centerData] = await Promise.all([
+      const [rawStudents, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
         dataService.getCenter(centerId)
       ]);
-      if (!students || students.length === 0) {
+      if (!rawStudents || rawStudents.length === 0) {
         alert('No hay estudiantes inscritos en este curso.');
         setIsGenerating(false);
         return;
       }
-      // Ordenar estudiantes alfabéticamente o por order_number
-      students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
       // 2. Obtener TODAS las calificaciones de este curso y año
       const { data: gData } = await fetchAllRows(() =>
@@ -548,16 +644,19 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('school_year', forceYear)
       );
 
+      const { uniqueStudents: students, idAliasMap } = deduplicateCourseStudents(rawStudents, gData);
+
       // Mapear calificaciones: grades[studentId][subjectId] = { 'c1_p1': 90, 'final_rec': 85, etc }
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
 
       if (gData) {
         gData.forEach((g) => {
-          if (!gradesMap[g.student_id]) gradesMap[g.student_id] = {};
-          if (!gradesMap[g.student_id][g.subject_id]) gradesMap[g.student_id][g.subject_id] = {};
+          const targetStudentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!gradesMap[targetStudentId]) gradesMap[targetStudentId] = {};
+          if (!gradesMap[targetStudentId][g.subject_id]) gradesMap[targetStudentId][g.subject_id] = {};
 
-          const sGrades = gradesMap[g.student_id][g.subject_id];
+          const sGrades = gradesMap[targetStudentId][g.subject_id];
           const pL = g.period.toLowerCase();
 
           if (g.grade !== null) sGrades[`${g.competency_id}_${pL}`] = g.grade;
@@ -816,17 +915,16 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         return;
       }
 
-      const [students, centerData] = await Promise.all([
+      const [rawStudents, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
         dataService.getCenter(centerId)
       ]);
 
-      if (!students || students.length === 0) {
+      if (!rawStudents || rawStudents.length === 0) {
         alert('No hay estudiantes inscritos en este curso.');
         setIsGeneratingRegistro(false);
         return;
       }
-      students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
       const { data: gData } = await fetchAllRows(() =>
         supabase
@@ -836,15 +934,18 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('school_year', forceYear)
       );
 
+      const { uniqueStudents: students, idAliasMap } = deduplicateCourseStudents(rawStudents, gData);
+
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
 
       if (gData) {
         gData.forEach((g) => {
-          if (!gradesMap[g.student_id]) gradesMap[g.student_id] = {};
-          if (!gradesMap[g.student_id][g.subject_id]) gradesMap[g.student_id][g.subject_id] = {};
+          const targetStudentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!gradesMap[targetStudentId]) gradesMap[targetStudentId] = {};
+          if (!gradesMap[targetStudentId][g.subject_id]) gradesMap[targetStudentId][g.subject_id] = {};
 
-          const sGrades = gradesMap[g.student_id][g.subject_id];
+          const sGrades = gradesMap[targetStudentId][g.subject_id];
           const pL = g.period.toLowerCase();
 
           if (g.grade !== null) sGrades[`${g.competency_id}_${pL}`] = g.grade;
@@ -1224,17 +1325,16 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         return;
       }
 
-      const [students, centerData] = await Promise.all([
+      const [rawStudents, centerData] = await Promise.all([
         dataService.getStudents(selectedCourseId, centerId, forceYear),
         dataService.getCenter(centerId)
       ]);
 
-      if (!students || students.length === 0) {
+      if (!rawStudents || rawStudents.length === 0) {
         alert('No hay estudiantes inscritos en este curso.');
         setIsFetchingBoletinData(false);
         return;
       }
-      students.sort((a: any, b: any) => (a.order_number || 999) - (b.order_number || 999));
 
       const { data: gData } = await fetchAllRows(() =>
         supabase
@@ -1244,15 +1344,18 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('school_year', forceYear)
       );
 
+      const { uniqueStudents: students, idAliasMap } = deduplicateCourseStudents(rawStudents, gData);
+
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
 
       if (gData) {
         gData.forEach((g) => {
-          if (!gradesMap[g.student_id]) gradesMap[g.student_id] = {};
-          if (!gradesMap[g.student_id][g.subject_id]) gradesMap[g.student_id][g.subject_id] = {};
+          const targetStudentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!gradesMap[targetStudentId]) gradesMap[targetStudentId] = {};
+          if (!gradesMap[targetStudentId][g.subject_id]) gradesMap[targetStudentId][g.subject_id] = {};
 
-          const sGrades = gradesMap[g.student_id][g.subject_id];
+          const sGrades = gradesMap[targetStudentId][g.subject_id];
           const pL = g.period.toLowerCase();
 
           if (g.grade !== null) sGrades[`${g.competency_id}_${pL}`] = g.grade;
@@ -1289,7 +1392,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         setIsLoading(false);
         return;
       }
-      const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
+      const rawStdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
       const { data: gData } = await fetchAllRows(() =>
@@ -1299,24 +1402,28 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('course_id', selectedCourseId)
           .eq('school_year', forceYear)
       );
+
+      const { uniqueStudents: stdData, idAliasMap } = deduplicateCourseStudents(rawStdData, gData);
+
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
-          if (!loadedMap[g.student_id]) loadedMap[g.student_id] = {};
-          if (!loadedMap[g.student_id][g.subject_id]) loadedMap[g.student_id][g.subject_id] = {};
+          const studentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!loadedMap[studentId]) loadedMap[studentId] = {};
+          if (!loadedMap[studentId][g.subject_id]) loadedMap[studentId][g.subject_id] = {};
           const pL = g.period.toLowerCase();
           if (g.grade !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
           if (g.rp1 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
           if (g.rp2 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
           if (g.rp3 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
           if (g.rp4 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
           if (g.recovery_grade !== null)
-            loadedMap[g.student_id][g.subject_id]['final_rec'] = g.recovery_grade;
+            loadedMap[studentId][g.subject_id]['final_rec'] = g.recovery_grade;
         });
       }
       const center = await dataService.getCenter(centerId);
@@ -1786,7 +1893,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         setIsLoading(false);
         return;
       }
-      const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
+      const rawStdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
       const { data: gData } = await fetchAllRows(() =>
@@ -1796,24 +1903,28 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('course_id', selectedCourseId)
           .eq('school_year', forceYear)
       );
+
+      const { uniqueStudents: stdData, idAliasMap } = deduplicateCourseStudents(rawStdData, gData);
+
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
-          if (!loadedMap[g.student_id]) loadedMap[g.student_id] = {};
-          if (!loadedMap[g.student_id][g.subject_id]) loadedMap[g.student_id][g.subject_id] = {};
+          const studentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!loadedMap[studentId]) loadedMap[studentId] = {};
+          if (!loadedMap[studentId][g.subject_id]) loadedMap[studentId][g.subject_id] = {};
           const pL = g.period.toLowerCase();
           if (g.grade !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
           if (g.rp1 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
           if (g.rp2 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
           if (g.rp3 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
           if (g.rp4 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
           if (g.recovery_grade !== null)
-            loadedMap[g.student_id][g.subject_id]['final_rec'] = g.recovery_grade;
+            loadedMap[studentId][g.subject_id]['final_rec'] = g.recovery_grade;
         });
       }
       setEvolutionData({ students: stdData || [], subjects: courseSubjects, gradesMap: loadedMap });
@@ -1987,7 +2098,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         setIsLoading(false);
         return;
       }
-      const stdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
+      const rawStdData = await dataService.getStudents(selectedCourseId, centerId, forceYear);
       const courseSubjects = getCourseSubjects();
 
       const { data: gData } = await fetchAllRows(() =>
@@ -1997,24 +2108,28 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           .eq('course_id', selectedCourseId)
           .eq('school_year', forceYear)
       );
+
+      const { uniqueStudents: stdData, idAliasMap } = deduplicateCourseStudents(rawStdData, gData);
+
       const loadedMap: any = {};
       if (gData) {
         gData.forEach((g: any) => {
-          if (!loadedMap[g.student_id]) loadedMap[g.student_id] = {};
-          if (!loadedMap[g.student_id][g.subject_id]) loadedMap[g.student_id][g.subject_id] = {};
+          const studentId = idAliasMap.get(g.student_id) || g.student_id;
+          if (!loadedMap[studentId]) loadedMap[studentId] = {};
+          if (!loadedMap[studentId][g.subject_id]) loadedMap[studentId][g.subject_id] = {};
           const pL = g.period.toLowerCase();
           if (g.grade !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_${pL}`] = g.grade;
           if (g.rp1 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp1`] = g.rp1;
           if (g.rp2 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp2`] = g.rp2;
           if (g.rp3 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp3`] = g.rp3;
           if (g.rp4 !== null)
-            loadedMap[g.student_id][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
+            loadedMap[studentId][g.subject_id][`${g.competency_id}_rp4`] = g.rp4;
           if (g.recovery_grade !== null)
-            loadedMap[g.student_id][g.subject_id]['final_rec'] = g.recovery_grade;
+            loadedMap[studentId][g.subject_id]['final_rec'] = g.recovery_grade;
         });
       }
       const center = await dataService.getCenter(centerId);
@@ -2749,8 +2864,8 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
           [
             student.names || '',
             `${student.first_surname || ''} ${student.second_surname || ''}`.trim(),
-            (sIdx + 1).toString(),
-            student.id.substring(0, 7).toUpperCase(),
+            (student.order_number || sIdx + 1).toString(),
+            (student.rne || student.id.substring(0, 7)).toUpperCase(),
             selectedCourse?.grade,
             selectedCourse?.section,
             getReportTanda(selectedCourse?.tanda, 'full'),

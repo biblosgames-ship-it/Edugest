@@ -3,6 +3,7 @@ import { Logo } from '../Logo';
 import { LogOut, Sun, Moon, X, UserPlus, RotateCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SchoolYearSelector } from '../SchoolYearSelector';
+import { CenterSelector } from '../CenterSelector';
 import { SchoolBellControl } from '../SchoolBellControl';
 import { LinkChildModal } from '../LinkChildModal';
 import { clearOfflineSession } from '../../utils/offlineSync';
@@ -124,6 +125,7 @@ export const Sidebar = ({
           </div>
 
           <div className="relative z-10 mb-2 space-y-2">
+            {userData?.role === 'superAdmin' && <CenterSelector />}
             <SchoolYearSelector />
             <SchoolBellControl />
           </div>

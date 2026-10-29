@@ -29,6 +29,7 @@ import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
 import { ParentCampaignBanner } from './campaigns/ParentCampaignBanner';
+import { StudentTeacherSurveyBanner } from './StudentTeacherSurveyBanner';
 import { getSubjectTheme } from '../utils/subjectColors';
 import { resolveStudentForUser } from '../utils/studentResolver';
 import {
@@ -1334,6 +1335,19 @@ export const StudentDashboard = ({
         currentStudentId={profile?.student_id || profile?.id}
         currentCourseId={selectedCourseId}
         userProfile={profile}
+      />
+
+      {/* ENCUESTA ESTUDIANTIL Y FAMILIAR DE EVALUACIÓN DOCENTE */}
+      <StudentTeacherSurveyBanner
+        centerId={profile?.center_id || (state as any)?.center?.id}
+        schoolYear={selectedYear || '2026-2027'}
+        courseId={course?.id || selectedCourseId}
+        courseName={course ? `${course.grade} ${course.section}` : undefined}
+        userProfile={profile}
+        studentName={
+          familyStudents.find((s) => s.course_id === (course?.id || selectedCourseId))?.names ||
+          profile?.full_name
+        }
       />
 
       {/* MONITOR OPERATIVO EN VIVO */}

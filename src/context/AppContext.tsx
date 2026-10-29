@@ -106,6 +106,7 @@ interface AppContextType {
   loadAllGrades: () => Promise<any[]>;
   saveCycleTimeBlocks: (level: string, cycle: string, shift: string, slots: any[]) => Promise<void>;
   deleteCycleTimeBlocks: (configId: string) => Promise<void>;
+  switchCenter?: (centerOrId: any) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1301,6 +1302,152 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   }, []);
 
+  const switchCenter = useCallback(
+    async (centerOrId: any) => {
+      try {
+        let targetCenter = centerOrId;
+        if (typeof centerOrId === 'string') {
+          const { data } = await supabase.from('centers').select('*').eq('id', centerOrId).single();
+          targetCenter = data;
+        }
+        if (!targetCenter || !targetCenter.id) return false;
+
+        localStorage.setItem('edugens_active_center', JSON.stringify(targetCenter));
+        if (targetCenter.name) {
+          localStorage.setItem('edugens_center_name', targetCenter.name);
+        }
+        localStorage.setItem('edugens_last_local_center_id', targetCenter.id);
+
+        setCenter(targetCenter);
+        setProfile((prev: any) => {
+          const updated = { ...(prev || {}), center_id: targetCenter.id };
+          saveCachedProfile(updated);
+          return updated;
+        });
+
+        if (user) {
+          saveOfflineSession(user, { ...(profile || {}), center_id: targetCenter.id }, targetCenter);
+        }
+
+        await refreshData(targetCenter.id, true);
+        return true;
+      } catch (err) {
+        console.error('Error switching center:', err);
+        return false;
+      }
+    },
+    [user, profile, refreshData]
+  );
+
+  const loginLocalDev = useCallback(
+    async (emailInput?: string, centerIdInput?: string): Promise<boolean> => {
+      try {
+        // 1. Buscar centros disponibles en Supabase
+        const { data: centersList } = await supabase
+          .from('centers')
+          .select('*')
+          .order('name', { ascending: true });
+
+        // Si nos pasaron un centerIdInput explícito, usamos ese
+        let primaryCenter: any = null;
+        if (centerIdInput) {
+          primaryCenter = centersList?.find((c: any) => c.id === centerIdInput);
+        }
+
+        // 2. Buscar perfil de administrador en Supabase
+        let targetProfile: any = null;
+        if (primaryCenter) {
+          const { data: centerAdmins } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('center_id', primaryCenter.id)
+            .in('role', ['admin', 'superAdmin'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (centerAdmins && centerAdmins.length > 0) {
+            targetProfile = centerAdmins[0];
+          }
+        }
+
+        if (!targetProfile && emailInput && emailInput.trim()) {
+          const { data: byEmail } = await supabase
+            .from('profiles')
+            .select('*')
+            .ilike('email', emailInput.trim())
+            .maybeSingle();
+          if (byEmail) targetProfile = byEmail;
+        }
+
+        if (!targetProfile) {
+          const { data: adminProfiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('role', ['admin', 'superAdmin'])
+            .not('center_id', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (adminProfiles && adminProfiles.length > 0) {
+            targetProfile = adminProfiles[0];
+          }
+        }
+
+        if (!primaryCenter) {
+          primaryCenter =
+            (targetProfile?.center_id && centersList?.find((c: any) => c.id === targetProfile.center_id)) ||
+            (centersList && centersList[0]) ||
+            center || {
+              id: 'local-center-dev',
+              name: 'Centro Educativo Cristiano Génesis (Modo Local)'
+            };
+        }
+
+        const finalProfile = targetProfile
+          ? {
+              ...targetProfile,
+              center_id: primaryCenter.id
+            }
+          : {
+              id: 'local-dev-admin',
+              email: emailInput?.trim() || 'admin@edugest.local',
+              full_name: 'Administrador (Modo Local)',
+              role: 'admin',
+              is_active: true,
+              center_id: primaryCenter?.id || null
+            };
+
+        const devUser = {
+          id: finalProfile.id,
+          email: finalProfile.email || 'admin@edugest.local',
+          is_local_dev: true
+        };
+
+        saveCachedUser(devUser);
+        saveCachedProfile(finalProfile);
+        if (primaryCenter) {
+          try {
+            localStorage.setItem('edugens_active_center', JSON.stringify(primaryCenter));
+            if (primaryCenter.name) {
+              localStorage.setItem('edugens_center_name', primaryCenter.name);
+            }
+            localStorage.setItem('edugens_last_local_center_id', primaryCenter.id);
+          } catch {}
+        }
+        saveOfflineSession(devUser, finalProfile, primaryCenter);
+
+        setCenter(primaryCenter);
+        setProfile(finalProfile);
+        setUser(devUser);
+        setIsAuthReady(true);
+        await refreshData(primaryCenter.id, true);
+        return true;
+      } catch (err) {
+        console.error('Error en loginLocalDev:', err);
+        return false;
+      }
+    },
+    [center, refreshData]
+  );
+
   // Load initial session on mount with Offline-First support
   useEffect(() => {
     const hasAuthHash = typeof window !== 'undefined' && window.location.hash && (
@@ -1511,11 +1658,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        const finalProfile = activeProfile || {
+        const finalProfile = activeProfile || (user.is_local_dev && cached ? cached : {
           center_id: null,
           role: 'pending',
           email: user.email
-        };
+        });
         setProfile(finalProfile);
         if (finalProfile && finalProfile.center_id) {
           saveCachedProfile(finalProfile);
@@ -1913,6 +2060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedYear,
         setSelectedYear,
         refreshData,
+        switchCenter,
         saveCycleTimeBlocks,
         deleteCycleTimeBlocks,
         loadAllGrades: async () => {
@@ -2028,7 +2176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }}
     >
-      <AuthContext.Provider value={{ user, profile, isAuthReady, isOfflineMode, loginOffline }}>
+      <AuthContext.Provider value={{ user, profile, isAuthReady, isOfflineMode, loginOffline, loginLocalDev }}>
         {children}
       </AuthContext.Provider>
     </AppContext.Provider>
@@ -2041,6 +2189,7 @@ const AuthContext = createContext<{
   isAuthReady: boolean;
   isOfflineMode: boolean;
   loginOffline: () => boolean;
+  loginLocalDev?: (emailInput?: string, centerIdInput?: string) => Promise<boolean>;
 } | undefined>(undefined);
 export const useSupabase = () => {
   const context = useContext(AuthContext);
