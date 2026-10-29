@@ -334,6 +334,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   const [studentNotes, setStudentNotes] = useState<Record<string, string>>({});
   const [isSavingPartials, setIsSavingPartials] = useState<boolean>(false);
   const [savePartialsSuccess, setSavePartialsSuccess] = useState<boolean>(false);
+  const [hasUnsavedPartials, setHasUnsavedPartials] = useState<boolean>(false);
+  const autoSavePartialsTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cursos disponibles para el usuario
   const availableCourses = useMemo(() => {
@@ -679,15 +681,45 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           const cloudActivities = row.scores.activities || getDefaultActivities();
           const cloudMode = row.scores.calcMode || 'average';
 
-          setPartialScores(cloudScores);
-          setStudentNotes(cloudNotes);
+          // FUSIÓN INTELIGENTE: Si en local hay un borrador con notas digitadas que aún no estaban en la nube,
+          // PRESERVARLAS SIEMPRE para que una reconexión a internet jamás borre el trabajo del docente.
+          let localDraftScores: Record<string, Record<string, number>> = {};
+          let localDraftNotes: Record<string, string> = {};
+          const currentLocalRaw = localStorage.getItem(storageScopeKey);
+          if (currentLocalRaw) {
+            try {
+              const parsed = JSON.parse(currentLocalRaw);
+              if (parsed?.scores) localDraftScores = parsed.scores;
+              if (parsed?.studentNotes || parsed?.notes) localDraftNotes = parsed.studentNotes || parsed.notes;
+            } catch {}
+          }
+
+          // Iniciar con las notas de la nube
+          const mergedScores: Record<string, Record<string, number>> = {};
+          Object.entries(cloudScores).forEach(([sId, sMap]: [string, any]) => {
+            mergedScores[sId] = { ...(sMap || {}) };
+          });
+          // Superponer notas locales (el borrador local prevalece sobre la nube antigua)
+          Object.entries(localDraftScores).forEach(([sId, sMap]: [string, any]) => {
+            if (!mergedScores[sId]) mergedScores[sId] = {};
+            Object.entries(sMap || {}).forEach(([actId, scoreVal]) => {
+              if (typeof scoreVal === 'number' && !isNaN(scoreVal)) {
+                mergedScores[sId][actId] = scoreVal;
+              }
+            });
+          });
+
+          const mergedNotes = { ...cloudNotes, ...localDraftNotes };
+
+          setPartialScores(mergedScores);
+          setStudentNotes(mergedNotes);
           setCompetencyActivities(cloudActivities);
           setCompetencyCalcMode(cloudMode);
 
-          // Sincronizar respaldo local para este scope exacto
+          // Sincronizar respaldo local para este scope exacto con la versión protegida
           localStorage.setItem(storageScopeKey, JSON.stringify({
-            scores: cloudScores,
-            studentNotes: cloudNotes,
+            scores: mergedScores,
+            studentNotes: mergedNotes,
             activities: cloudActivities,
             calcMode: cloudMode,
             period: selectedPeriod,
@@ -695,7 +727,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             courseId: selectedCourseId,
             teacherId: profile?.teacher_id || profile?.id,
             centerId: centerId,
-            year: year
+            year: year,
+            updatedAt: new Date().toISOString()
           }));
         } else if (!error && (!data || data.length === 0) && !loadedFromLocal) {
           // Solo si Supabase respondió explícitamente sin registros Y no había nada local
@@ -1251,6 +1284,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       }));
       return updatedScores;
     });
+    setHasUnsavedPartials(true);
   };
 
   // Navegar verticalmente entre estudiantes al pulsar Enter, Flecha Abajo o Flecha Arriba
@@ -1364,6 +1398,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
       return updatedScores;
     });
+    setHasUnsavedPartials(true);
   };
 
   // Pegar calificaciones en el modal de evaluación de tareas desde Excel
@@ -1414,7 +1449,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   };
 
   // Guardar calificaciones del período y sincronizar con el Registro Digital Oficial
-  const handleSavePartials = async () => {
+  const handleSavePartials = async (isSilent = false) => {
     setIsSavingPartials(true);
     try {
       const targetCourse = availableCourses.find((c) => c.id === selectedCourseId);
@@ -1512,7 +1547,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           });
         }
 
-        toast.success('Guardado localmente (sin internet). Se sincronizará al reconectar.');
+        if (!isSilent) {
+          toast.success('Guardado localmente (sin internet). Se sincronizará al reconectar.');
+        }
       } else if (centerId && selectedCourseId && selectedSubjectId) {
         // 3. Persistir en student_partial_activities sin depender exclusivamente de índices ON CONFLICT
         try {
@@ -1605,14 +1642,39 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       }
 
       setSavePartialsSuccess(true);
+      setHasUnsavedPartials(false);
       setTimeout(() => setSavePartialsSuccess(false), 3000);
+      if (!isSilent) {
+        toast.success(`¡Calificaciones parciales de ${selectedPeriod} guardadas con éxito!`);
+      }
     } catch (e: any) {
       console.error('Error al guardar parciales:', e);
-      alert('Hubo un inconveniente al guardar parciales. Los datos se mantendrán seguros en este navegador.');
+      if (!isSilent) {
+        alert('Hubo un inconveniente al guardar parciales. Los datos se mantendrán seguros en este navegador.');
+      }
     } finally {
       setIsSavingPartials(false);
     }
   };
+
+  // Auto-guardado en bloque para Mi Aula (Debounce de 6 segundos tras dejar de escribir para no saturar la BD)
+  useEffect(() => {
+    if (!hasUnsavedPartials || isSavingPartials || !selectedCourseId || !selectedSubjectId) return;
+
+    if (autoSavePartialsTimerRef.current) {
+      clearTimeout(autoSavePartialsTimerRef.current);
+    }
+
+    autoSavePartialsTimerRef.current = setTimeout(() => {
+      handleSavePartials(true);
+    }, 6000);
+
+    return () => {
+      if (autoSavePartialsTimerRef.current) {
+        clearTimeout(autoSavePartialsTimerRef.current);
+      }
+    };
+  }, [hasUnsavedPartials, partialScores, isSavingPartials, selectedCourseId, selectedSubjectId]);
 
   // Métricas rápidas de asistencia de hoy
   const attendanceStats = useMemo(() => {

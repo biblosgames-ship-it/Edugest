@@ -529,8 +529,16 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     };
   }, [localGrades, hasUnsavedChanges, isSaving, selectedCourseId, selectedSubjectId]);
 
-  const triggerSave = async (isSilent = false) => {
-    if (!selectedCourseId || !selectedSubjectId || isSaving) return;
+  const triggerSave = async (
+    isSilent = false,
+    overrideCourseId?: string,
+    overrideSubjectId?: string,
+    overrideStudents?: any[]
+  ) => {
+    const targetCourseId = overrideCourseId || selectedCourseId;
+    const targetSubjectId = overrideSubjectId || selectedSubjectId;
+    const targetStudents = overrideStudents || students;
+    if (!targetCourseId || !targetSubjectId || isSaving) return;
     try {
       if (isSilent) setSyncState('saving');
       const updates = [];
@@ -539,7 +547,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         if (!isSilent) alert('Error: No se encontró el centro escolar asociado a su perfil.');
         return;
       }
-      for (const student of students) {
+      for (const student of targetStudents) {
         for (const p of config.periods) {
           const pL = p.toLowerCase();
           config.competencies.forEach((c) => {
@@ -552,8 +560,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
 
               updates.push({
                 student_id: student.id,
-                course_id: selectedCourseId,
-                subject_id: selectedSubjectId,
+                course_id: targetCourseId,
+                subject_id: targetSubjectId,
                 period: p,
                 competency_id: c.id,
                 grade: gradeVal,
@@ -574,8 +582,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             if (val !== undefined) {
               updates.push({
                 student_id: student.id,
-                course_id: selectedCourseId,
-                subject_id: selectedSubjectId,
+                course_id: targetCourseId,
+                subject_id: targetSubjectId,
                 period: stage.toUpperCase(),
                 competency_id: 'sec',
                 grade: val !== '' ? parseInt(val) : null,
@@ -590,8 +598,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         if (fRec !== undefined) {
           updates.push({
             student_id: student.id,
-            course_id: selectedCourseId,
-            subject_id: selectedSubjectId,
+            course_id: targetCourseId,
+            subject_id: targetSubjectId,
             period: 'FINAL',
             competency_id: 'rec',
             grade: null,
@@ -1865,7 +1873,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               const newCourseId = e.target.value;
               if (newCourseId === selectedCourseId) return;
               if (hasUnsavedChanges) {
-                triggerSave(true);
+                triggerSave(true, selectedCourseId, selectedSubjectId, students);
               }
               setSelectedCourseId(newCourseId);
               setSelectedSubjectId('');
@@ -1888,7 +1896,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 onClick={() => {
                   if (s.id === selectedSubjectId) return;
                   if (hasUnsavedChanges) {
-                    triggerSave(true);
+                    triggerSave(true, selectedCourseId, selectedSubjectId, students);
                   }
                   setSelectedSubjectId(s.id);
                 }}
