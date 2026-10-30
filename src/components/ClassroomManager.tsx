@@ -1165,6 +1165,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   // Determinar número de competencias según nivel del curso (3 para Primaria/Inicial, 4 para Secundaria)
   const selectedCourseObj = availableCourses.find((c) => c.id === selectedCourseId);
   const isSecondary = (selectedCourseObj?.level || '').toLowerCase().includes('secundar');
+  const minPassingGrade = isSecondary ? 70 : 65;
   const competencyCount = isSecondary ? 4 : 3;
 
   // Lista activa de competencias para el curso seleccionado
@@ -3397,7 +3398,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             ? 'border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 ring-1 ring-indigo-400/40'
                                             : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800'
                                         } ${
-                                          typeof studentScores[act.id] === 'number' && competencyCalcMode === 'average' && studentScores[act.id] < 70
+                                          typeof studentScores[act.id] === 'number' && competencyCalcMode === 'average' && studentScores[act.id] < minPassingGrade
                                             ? 'text-rose-600 dark:text-rose-400 font-black'
                                             : 'text-slate-900 dark:text-white'
                                         }`}
@@ -3406,7 +3407,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                   ))
                                 )}
                                 <td className={`px-2 py-1 text-center font-black text-xs transition-colors ${
-                                  typeof compScore === 'number' && competencyCalcMode === 'average' && compScore < 70
+                                  typeof compScore === 'number' && competencyCalcMode === 'average' && compScore < minPassingGrade
                                     ? 'bg-rose-50/60 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-black'
                                     : isSelected
                                     ? 'bg-indigo-100/70 dark:bg-indigo-900/40 text-brand-blue font-black'
@@ -3429,7 +3430,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                               </span>
                             ) : (
                               <span className={`px-2.5 py-0.5 rounded-lg shadow-sm font-mono font-bold ${
-                                finalAvg >= 70
+                                finalAvg >= minPassingGrade
                                   ? 'bg-emerald-500 text-white'
                                   : competencyCalcMode === 'average'
                                   ? 'bg-rose-500 text-white'

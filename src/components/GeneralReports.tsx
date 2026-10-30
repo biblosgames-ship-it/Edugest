@@ -352,9 +352,10 @@ export const GeneralReports = () => {
             })
             .filter((a) => a !== null) as number[];
 
+          const passingThreshold = level === 'Primaria' ? 65 : 70;
           const distribution = [
-            { name: 'Deficiente', value: studentAverages.filter((a) => a < 70).length, color: '#ef4444' },
-            { name: 'Regular', value: studentAverages.filter((a) => a >= 70 && a < 80).length, color: '#f59e0b' },
+            { name: 'Deficiente', value: studentAverages.filter((a) => a < passingThreshold).length, color: '#ef4444' },
+            { name: 'Regular', value: studentAverages.filter((a) => a >= passingThreshold && a < 80).length, color: '#f59e0b' },
             { name: 'Bueno', value: studentAverages.filter((a) => a >= 80 && a < 90).length, color: '#3b82f6' },
             { name: 'Muy Bueno', value: studentAverages.filter((a) => a >= 90 && a < 95).length, color: '#6366f1' },
             { name: 'Excelente', value: studentAverages.filter((a) => a >= 95).length, color: '#10b981' }
@@ -447,9 +448,10 @@ export const GeneralReports = () => {
             });
 
             let failedCount = 0;
+            const passingThreshold = level === 'Primaria' ? 65 : 70;
             Object.values(subjectGradesMap).forEach((gradesArr) => {
               const avg = gradesArr.reduce((a, b) => a + b, 0) / gradesArr.length;
-              if (avg < 70) failedCount++;
+              if (avg < passingThreshold) failedCount++;
             });
 
             if (failedCount === 0) riskDist['0 Pendientes']++;

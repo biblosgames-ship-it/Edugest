@@ -103,6 +103,9 @@ export const InstitutionalRecordReport: React.FC<ReportProps> = ({ onClose, peri
       };
 
       filteredStudents.forEach((s: any) => {
+        const sCourse = courses.find((c: any) => c.id === s.course_id);
+        const isStudentSecondary = (sCourse?.level || '').toLowerCase().includes('secundar');
+        const minPassing = isStudentSecondary ? 70 : 65;
         let studentTotalScore = 0;
         let studentSubjectCount = 0;
         let pendingCount = 0;
@@ -189,7 +192,7 @@ export const InstitutionalRecordReport: React.FC<ReportProps> = ({ onClose, peri
             studentTotalScore += subjectAvg;
             studentSubjectCount++;
 
-            if (subjectAvg < 70) pendingCount++;
+            if (subjectAvg < minPassing) pendingCount++;
 
             if (!subjectMetrics[sub.id]) subjectMetrics[sub.id] = { total: 0, count: 0 };
             subjectMetrics[sub.id].total += subjectAvg;

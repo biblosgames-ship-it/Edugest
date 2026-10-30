@@ -392,7 +392,7 @@ export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) =
         if (grade > 0) {
           totalGrade += grade;
           validSubs++;
-          if (grade < 70) failedSubs++;
+          if (grade < (isSecundario ? 70 : 65)) failedSubs++;
         }
       });
 

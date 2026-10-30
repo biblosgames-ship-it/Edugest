@@ -26,7 +26,10 @@ try {
   console.warn('Error checking app build version:', e);
 }
 
-// Registro y actualización optimizada de la PWA (protección de cuota CDN)
+// Registro y actualización optimizada de la PWA (protección estricta de cuota CDN)
+let lastSWCheck = Date.now();
+const SW_CHECK_INTERVAL = 2 * 60 * 60 * 1000; // Máximo 1 chequeo cada 2 horas por pestaña
+
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
@@ -34,20 +37,22 @@ const updateSW = registerSW({
   },
   onRegistered(r) {
     if (r) {
-      // 1. Verificación inicial al cargar
-      r.update();
-
-      // 2. Verificación inteligente cuando el usuario regresa o enfoca la pestaña
+      // 1. Verificación inteligente con throttle: solo si han pasado más de 2 horas desde el último chequeo
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          r.update();
+          const now = Date.now();
+          if (now - lastSWCheck > SW_CHECK_INTERVAL) {
+            lastSWCheck = now;
+            r.update().catch(() => {});
+          }
         }
       });
 
-      // 3. Verificación periódica suave cada 30 minutos (evita saturar peticiones CDN)
+      // 2. Verificación periódica suave cada 2 horas
       setInterval(() => {
-        r.update();
-      }, 30 * 60 * 1000);
+        lastSWCheck = Date.now();
+        r.update().catch(() => {});
+      }, SW_CHECK_INTERVAL);
     }
   }
 });

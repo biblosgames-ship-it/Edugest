@@ -120,6 +120,8 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return selectedCourse?.level?.toLowerCase().includes('secund');
   }, [selectedCourse]);
 
+  const minPassingGrade = isSecundario ? 70 : 65;
+
   const config = useMemo(
     () => ({
       year: selectedYear || '2026-2027',
@@ -2275,7 +2277,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                     }}
                                     onClick={() => setFocusedStudentId(s.id)}
                                     className={`w-full h-8 bg-transparent text-center px-0 text-xs leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                      isSecundario && grades[`${s.id}_${kVal}`] !== undefined && grades[`${s.id}_${kVal}`] !== '' && parseInt(grades[`${s.id}_${kVal}`]) < 70
+                                      grades[`${s.id}_${kVal}`] !== undefined && grades[`${s.id}_${kVal}`] !== '' && parseInt(grades[`${s.id}_${kVal}`]) < minPassingGrade
                                         ? 'text-rose-600 dark:text-rose-400 font-black'
                                         : 'font-black text-slate-900 dark:text-white'
                                     }`}
@@ -2300,7 +2302,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                     }}
                                     onClick={() => setFocusedStudentId(s.id)}
                                     className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                      isSecundario && grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < 70
+                                      grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < minPassingGrade
                                         ? 'text-rose-600 dark:text-rose-400 font-black'
                                         : 'font-bold text-text-muted'
                                     }`}
@@ -2316,7 +2318,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                         <>
                           {config.competencies.map((c) => {
                             const compAvg = calculateCompAvg(s.id, c.id);
-                            const isFail = isSecundario && compAvg > 0 && compAvg < 70;
+                            const isFail = compAvg > 0 && compAvg < minPassingGrade;
                             return (
                               <td
                                 key={`res_val_${c.id}`}
@@ -2332,7 +2334,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                           })}
                           {(() => {
                             const finalVal = calculateAreaFinal(s.id);
-                            const isFinalFail = isSecundario && finalVal > 0 && finalVal < 70;
+                            const isFinalFail = finalVal > 0 && finalVal < minPassingGrade;
                             return (
                               <td className={`p-0 border-r border-border-main text-center text-sm font-black h-8 leading-8 transition-colors ${
                                 isSelected ? 'bg-indigo-100/60 dark:bg-indigo-900/50' : 'bg-indigo-50/10'
@@ -2483,6 +2485,9 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             if (!isSecundario) {
                               const recFinal = parseInt(grades[`${s.id}_final_rec`]) || 0;
                               defFinal = Math.max(areaFinal, recFinal) || '-';
+                              if (typeof defFinal === 'number' && defFinal > 0 && defFinal < 65) {
+                                isDefFail = true;
+                              }
                             } else {
                               if (areaFinal >= 70) {
                                 defFinal = areaFinal;
@@ -2881,7 +2886,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                               <td
                                 key={idx}
                                 className={`p-3 border border-slate-100 text-center ${
-                                  isStudentSecundario && val > 0 && val < 70
+                                  val > 0 && val < (isStudentSecundario ? 70 : 65)
                                     ? 'text-rose-600 font-black'
                                     : ''
                                 }`}
@@ -2891,7 +2896,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                             ))}
                             <td
                               className={`p-3 border border-slate-100 text-center bg-indigo-50/40 font-black ${
-                                isStudentSecundario && finalArea > 0 && finalArea < 70
+                                finalArea > 0 && finalArea < (isStudentSecundario ? 70 : 65)
                                   ? 'text-rose-600'
                                   : 'text-indigo-700'
                               }`}
@@ -2930,13 +2935,15 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                                 </td>
                               </>
                             ) : (
-                              <td className="p-3 border border-slate-100 text-center text-rose-700">
+                              <td className={`p-3 border border-slate-100 text-center font-black ${
+                                rp > 0 && rp < 65 ? 'text-rose-600' : 'text-rose-700'
+                              }`}>
                                 {rp || '-'}
                               </td>
                             )}
                             <td
                               className={`p-3 border border-slate-100 text-center font-black ${
-                                isStudentSecundario && defFinal > 0 && defFinal < 70
+                                defFinal > 0 && defFinal < (isStudentSecundario ? 70 : 65)
                                   ? 'bg-rose-950 text-rose-300 ring-1 ring-rose-500'
                                   : 'bg-slate-900 text-white'
                               }`}

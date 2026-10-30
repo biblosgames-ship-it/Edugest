@@ -27,11 +27,11 @@ const rankingColors: Record<string, string> = {
   'En proceso': '#f87171'
 };
 
-const getRankingCategory = (avg: number) => {
+const getRankingCategory = (avg: number, isSecondary: boolean = true) => {
   if (avg >= 95) return 'Excelente';
   if (avg >= 90) return 'Muy Bueno';
   if (avg >= 80) return 'Bueno';
-  if (avg >= 70) return 'Regular';
+  if (avg >= (isSecondary ? 70 : 65)) return 'Regular';
   return 'En proceso';
 };
 
@@ -220,7 +220,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
           studentTotalScore += subjectAvg;
           studentSubjectCount++;
 
-          if (subjectAvg < 70) {
+          if (subjectAvg < (isSecondary ? 70 : 65)) {
             pendingCount++;
             pendingList.push(sub.name || 'Materia');
           }
@@ -261,7 +261,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
         pendingList: pendingList.join(', '),
         risk,
         riskColor,
-        ranking: getRankingCategory(avg)
+        ranking: getRankingCategory(avg, isSecondary)
       });
     });
 
@@ -282,7 +282,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
     let totalGlobalAvg = 0;
     studentAverages.forEach((avg) => {
       totalGlobalAvg += avg;
-      rankingDist[getRankingCategory(avg)]++;
+      rankingDist[getRankingCategory(avg, isSecondary)]++;
     });
     const globalAverage =
       studentAverages.length > 0 ? Math.round(totalGlobalAvg / studentAverages.length) : 0;
