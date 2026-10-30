@@ -499,10 +499,31 @@ export const TeacherDashboard = ({
 
       const levelNormCourse = (course?.level || '').toLowerCase();
       const isSecundaria = levelNormCourse.includes('secun');
-      const targetTotalLocal = isSecundaria ? 6 : (courseOfficial?.periods_per_day || 5);
+      const isPrimaria = levelNormCourse.includes('primar');
+
+      const courseScheduleEntries = (state.schedule || []).filter(
+        (s: any) => String(s.course_id || s.courseId) === String(course?.id)
+      );
+      const maxEntryMins = courseScheduleEntries.reduce((max: number, s: any) => {
+        const parts = (s.start_time || '').split(':');
+        const m = parseInt(parts[0] || '0') * 60 + parseInt(parts[1] || '0');
+        return Math.max(max, m);
+      }, 0);
+
+      const courseAssignments = (state.assignments || []).filter(
+        (a: any) => String(a.course_id || a.courseId) === String(course?.id)
+      );
+      const totalWeeklyHours = courseAssignments.reduce((sum: number, a: any) => sum + (Number(a.hours_per_week) || 0), 0);
+      const avgDailyHours = totalWeeklyHours > 0 ? Math.round(totalWeeklyHours / 5) : 0;
+      const has7thHourEntry = (courseIsMorning && maxEntryMins >= 760) || (!courseIsMorning && maxEntryMins >= 1060);
+      const is7HoursCourse = isSecundaria && (avgDailyHours >= 7 || has7thHourEntry || (courseOfficial?.end_time && toMins(courseOfficial.end_time) >= 810));
+
+      const targetTotalLocal = is7HoursCourse ? 7 : (isSecundaria ? 6 : (courseOfficial?.periods_per_day || 5));
 
       let courseStartT = courseIsMorning ? 480 : 840;
-      let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050);
+      let courseEndT = courseIsMorning
+        ? (is7HoursCourse ? 825 : (isSecundaria ? 750 : 720))
+        : (is7HoursCourse ? 1135 : (isSecundaria ? 1095 : 1050));
       if (courseOfficial?.start_time) {
         let s = toMins(courseOfficial.start_time);
         if (!courseIsMorning && s < 720 && s > 0) s += 720;
@@ -615,7 +636,9 @@ export const TeacherDashboard = ({
       const firstRelevantBreak = shiftBPs.find((bp: any) => matchesLevel(bp)) || shiftBPs[0] || null;
 
       const rawMasterStart =
-        firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '15:55:00');
+        firstRelevantBreak?.startTime ||
+        firstRelevantBreak?.start_time ||
+        (courseIsMorning ? (isPrimaria ? '09:45:00' : '10:15:00') : (isPrimaria ? '15:20:00' : '16:00:00'));
       let masterStartMins = normalizeBreakMins(rawMasterStart, courseIsMorning);
       if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 955;
       const masterBPref = {
@@ -732,11 +755,12 @@ export const TeacherDashboard = ({
 
       // CÁLCULO DINÁMICO DESPUÉS DEL RECREO
       const postWindow = Math.max(0, courseEndT - currTimePost);
-      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+      let postCountLocal = targetTotalLocal - preCountLocal;
+      if (postCountLocal <= 0) postCountLocal = is7HoursCourse ? 4 : (isSecundaria ? 3 : 3);
       if (postWindow / postCountLocal < 35) {
         postCountLocal = Math.max(1, Math.floor(postWindow / 35));
       }
-      const maxPostCount = isSecundaria ? 3 : 6;
+      const maxPostCount = is7HoursCourse ? 4 : (isSecundaria ? 3 : 6);
       const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPostCount);
       postCountLocal = postDurs.length;
       for (let i = 0; i < postCountLocal; i++) {

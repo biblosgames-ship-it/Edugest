@@ -679,6 +679,32 @@ export const StudentDashboard = ({
     let endT = official?.end_time ? toMinsLocal(official.end_time) : isMorning ? 720 : 1095;
     if (!isMorning && endT < 720 && endT > 0) endT += 720;
 
+    const courseLevelNorm = (course.level || '').toLowerCase();
+    const isSecundaria = courseLevelNorm.includes('secun');
+    const isPrimaria = courseLevelNorm.includes('primar');
+
+    // Detectar si el curso tiene requerimiento o entradas para 7 horas de clase diaria
+    const courseScheduleEntries = (state.schedule || []).filter(
+      (s: any) => String(s.course_id || s.courseId) === String(course?.id)
+    );
+    const maxEntryMins = courseScheduleEntries.reduce((max: number, s: any) => {
+      const parts = (s.start_time || '').split(':');
+      const m = parseInt(parts[0] || '0') * 60 + parseInt(parts[1] || '0');
+      return Math.max(max, m);
+    }, 0);
+
+    const courseAssignments = (state.assignments || []).filter(
+      (a: any) => String(a.course_id || a.courseId) === String(course?.id)
+    );
+    const totalWeeklyHours = courseAssignments.reduce((sum: number, a: any) => sum + (Number(a.hours_per_week) || 0), 0);
+    const avgDailyHours = totalWeeklyHours > 0 ? Math.round(totalWeeklyHours / 5) : 0;
+    const has7thHourEntry = (isMorning && maxEntryMins >= 760) || (!isMorning && maxEntryMins >= 1060);
+    const is7HoursCourse = isSecundaria && (avgDailyHours >= 7 || has7thHourEntry || (official?.end_time && toMinsLocal(official.end_time) >= 810));
+
+    if (is7HoursCourse && !official?.end_time) {
+      endT = isMorning ? 825 : 1135;
+    }
+
     const isBreakInShift = (timeStr: string, isMorn: boolean) => {
       const rawMins = toMinsLocal(timeStr);
       const isBpMorning = rawMins >= 420 && rawMins < 780;
@@ -697,7 +723,10 @@ export const StudentDashboard = ({
       return isBreakInShift(bp.startTime || bp.start_time, isMorning);
     });
 
-    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (isMorning ? '10:00:00' : '15:55:00');
+    const rawMasterStart =
+      firstRelevantBreak?.startTime ||
+      firstRelevantBreak?.start_time ||
+      (isMorning ? (isPrimaria ? '09:45:00' : '10:15:00') : (isPrimaria ? '15:20:00' : '16:00:00'));
     let masterStartMins = normalizeBreakMins(rawMasterStart, isMorning);
     if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 955;
     const masterBPref = {
@@ -848,8 +877,7 @@ export const StudentDashboard = ({
         });
       }
 
-      const isSecundaria = (course.level || '').toLowerCase().includes('secun');
-      const targetTotalLocal = isSecundaria ? 6 : (official?.periods_per_day || 6);
+      const targetTotalLocal = is7HoursCourse ? 7 : (isSecundaria ? 6 : (official?.periods_per_day || 5));
 
       const preWindow = Math.max(0, bStart - classStart);
       let preCountLocal = targetTotalLocal === 6 && isSecundaria ? 3 : (preWindow >= 115 ? 3 : 2);
@@ -914,11 +942,12 @@ export const StudentDashboard = ({
       });
 
       const postWindow = Math.max(0, endT - currTimePost);
-      let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+      let postCountLocal = targetTotalLocal - preCountLocal;
+      if (postCountLocal <= 0) postCountLocal = is7HoursCourse ? 4 : (isSecundaria ? 3 : 3);
       if (postWindow / postCountLocal < 35) {
         postCountLocal = Math.max(1, Math.floor(postWindow / 35));
       }
-      const maxPost = isSecundaria ? 3 : 6;
+      const maxPost = is7HoursCourse ? 4 : (isSecundaria ? 3 : 6);
       const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPost);
       postCountLocal = postDurs.length;
 

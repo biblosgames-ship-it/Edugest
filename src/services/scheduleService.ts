@@ -3466,11 +3466,30 @@ export const scheduleService = {
         return getStandardExtendedDaySlots().filter((s: any) => !s.isBreak);
       }
 
+      const lvl = (course?.level || '').toLowerCase();
+      const isSecundaria = lvl.includes('secun');
+      const isPrimaria = lvl.includes('primar');
+
       const bPref = getEffectiveCourseBreak(course, breakPreferences, isMorning ? 'Matutina' : 'Vespertina', toMins);
-      const rawMasterStart = bPref?.startTime || bPref?.start_time || (isMorning ? '10:00:00' : '15:55:00');
+      const rawMasterStart =
+        bPref?.startTime ||
+        bPref?.start_time ||
+        (isMorning ? (isPrimaria ? '09:45:00' : '10:15:00') : (isPrimaria ? '15:20:00' : '16:00:00'));
       let masterStartMins = toMins(rawMasterStart);
       if (!isMorning && masterStartMins > 0 && masterStartMins < 420) masterStartMins += 720;
       if (!isMorning && (masterStartMins <= startT || masterStartMins >= endT)) masterStartMins = 955;
+
+      const courseEntries = (rawSchedule || []).filter(
+        (s: any) => String(s.course_id || s.courseId) === String(course?.id)
+      );
+      const maxEntryMins = courseEntries.reduce((max: number, s: any) => {
+        const parts = (s.start_time || '').split(':');
+        const m = parseInt(parts[0] || '0') * 60 + parseInt(parts[1] || '0');
+        return Math.max(max, m);
+      }, 0);
+      const has7thHour = isSecundaria && (isMorning ? maxEntryMins >= 760 : maxEntryMins >= 1060);
+      if (has7thHour && isMorning && endT < 825) endT = 825;
+      if (has7thHour && !isMorning && endT < 1135) endT = 1135;
 
       const bStart = masterStartMins;
       const bDuration = Number(bPref?.durationMinutes || bPref?.duration_minutes) || (isMorning ? 30 : 20);
@@ -3495,8 +3514,8 @@ export const scheduleService = {
       }
 
       const postWindow = Math.max(0, endT - bEnd);
-      let postCount = postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2;
-      const postDurs = calculateCleanSlotDurations(postWindow, postCount);
+      let postCount = has7thHour ? 4 : (postWindow >= 85 ? 3 : postWindow < 50 ? 1 : 2);
+      const postDurs = calculateCleanSlotDurations(postWindow, postCount, has7thHour ? 4 : 6);
 
       let currPost = bEnd;
       for (let i = 0; i < postDurs.length; i++) {

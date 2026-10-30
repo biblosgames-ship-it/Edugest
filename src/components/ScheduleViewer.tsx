@@ -957,10 +957,32 @@ export const ScheduleViewer = () => {
 
     const levelNormCourse = (course?.level || '').toLowerCase();
     const isSecundaria = levelNormCourse.includes('secun');
-    const targetTotalLocal = isSecundaria ? 6 : 5;
+    const isPrimaria = levelNormCourse.includes('primar');
+
+    // Detectar si el curso tiene requerimiento o entradas para 7 horas de clase diaria
+    const courseScheduleEntries = (state.schedule || []).filter(
+      (s: any) => String(s.course_id || s.courseId) === String(course?.id)
+    );
+    const maxEntryMins = courseScheduleEntries.reduce((max: number, s: any) => {
+      const parts = (s.start_time || '').split(':');
+      const m = parseInt(parts[0] || '0') * 60 + parseInt(parts[1] || '0');
+      return Math.max(max, m);
+    }, 0);
+
+    const courseAssignments = (state.assignments || []).filter(
+      (a: any) => String(a.course_id || a.courseId) === String(course?.id)
+    );
+    const totalWeeklyHours = courseAssignments.reduce((sum: number, a: any) => sum + (Number(a.hours_per_week) || 0), 0);
+    const avgDailyHours = totalWeeklyHours > 0 ? Math.round(totalWeeklyHours / 5) : 0;
+    const has7thHourEntry = (courseIsMorning && maxEntryMins >= 760) || (!courseIsMorning && maxEntryMins >= 1060);
+    const is7HoursCourse = isSecundaria && (avgDailyHours >= 7 || has7thHourEntry || (courseOfficial?.end_time && toMins(courseOfficial.end_time) >= 810));
+
+    const targetTotalLocal = is7HoursCourse ? 7 : (isSecundaria ? 6 : 5);
 
     let courseStartT = courseIsMorning ? 480 : 840;
-    let courseEndT = courseIsMorning ? (isSecundaria ? 750 : 720) : (isSecundaria ? 1095 : 1050);
+    let courseEndT = courseIsMorning
+      ? (is7HoursCourse ? 825 : (isSecundaria ? 750 : 720))
+      : (is7HoursCourse ? 1135 : (isSecundaria ? 1095 : 1050));
     if (courseOfficial?.start_time) {
       let s = toMins(courseOfficial.start_time);
       if (!courseIsMorning && s < 720 && s > 0) s += 720;
@@ -1090,7 +1112,10 @@ export const ScheduleViewer = () => {
 
     const firstRelevantBreak = shiftBPs.find((bp: any) => matchesLevel(bp)) || shiftBPs[0] || null;
 
-    const rawMasterStart = firstRelevantBreak?.startTime || firstRelevantBreak?.start_time || (courseIsMorning ? '10:00:00' : '15:55:00');
+    const rawMasterStart =
+      firstRelevantBreak?.startTime ||
+      firstRelevantBreak?.start_time ||
+      (courseIsMorning ? (isPrimaria ? '09:45:00' : '10:15:00') : (isPrimaria ? '15:20:00' : '16:00:00'));
     let masterStartMins = normalizeBreakMins(rawMasterStart, courseIsMorning);
     if (!courseIsMorning && (masterStartMins <= courseStartT || masterStartMins >= courseEndT)) masterStartMins = 955;
     const masterBPref = {
@@ -1197,13 +1222,14 @@ export const ScheduleViewer = () => {
       }
     });
 
-    // CÁLCULO DINÁMICO DESPUÉS DEL RECREO (Secundaria siempre genera 3 horas completas e independientes)
+    // CÁLCULO DINÁMICO DESPUÉS DEL RECREO
     const postWindow = Math.max(0, courseEndT - currTimePost);
-    let postCountLocal = isSecundaria ? 3 : Math.max(1, targetTotalLocal - preCountLocal);
+    let postCountLocal = targetTotalLocal - preCountLocal;
+    if (postCountLocal <= 0) postCountLocal = is7HoursCourse ? 4 : (isSecundaria ? 3 : 3);
     if (postWindow / postCountLocal < 35) {
       postCountLocal = Math.max(1, Math.floor(postWindow / 35));
     }
-    const maxPostCount = isSecundaria ? 3 : 6;
+    const maxPostCount = is7HoursCourse ? 4 : (isSecundaria ? 3 : 6);
     const postDurs = calculateCleanSlotDurations(postWindow, postCountLocal, maxPostCount);
     postCountLocal = postDurs.length;
     for (let i = 0; i < postDurs.length; i++) {
@@ -2156,17 +2182,44 @@ export const ScheduleViewer = () => {
         });
 
         const cRawSlots = getSlotsForCourse(course);
-        const cTeachingSlots = (cRawSlots || []).filter((s: any) => !s.isBreak);
-        const courseSlotList = cTeachingSlots.length > 0 ? cTeachingSlots : standardSlotList;
+        const courseSlotList = (cRawSlots && cRawSlots.length > 0) ? cRawSlots : standardSlotList;
 
-        courseSlotList.forEach((slot, slotIdx) => {
+        let teachingSlotCount = 0;
+        courseSlotList.forEach((slot: any) => {
+          const isBreakOrAct = !!slot.isBreak;
+          const currentTeachingIdx = teachingSlotCount;
+          if (!isBreakOrAct) {
+            teachingSlotCount++;
+          }
+
+          const timeRange = `(${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`;
+          const blockLabel = slot.label
+            ? (slot.label.includes('(') ? slot.label : `${slot.label} ${timeRange}`)
+            : (isBreakOrAct ? `RECREO ${timeRange}` : `${teachingSlotCount}ra Hora ${timeRange}`);
+
           const rowData: any = {
             Curso: courseLabel,
             Nivel: course.level || 'Secundario',
-            Bloque: `${slotIdx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`
+            Bloque: blockLabel
           };
 
           tableDays.forEach((day) => {
+            if (isBreakOrAct) {
+              const lblLower = (slot.label || '').toLowerCase();
+              if (lblLower.includes('acto') || lblLower.includes('bandera') || lblLower.includes('cívic') || lblLower.includes('civic')) {
+                rowData[day] = '🇩🇴 ACTO A LA BANDERA';
+              } else if (lblLower.includes('almuerzo')) {
+                rowData[day] = '🍽️ ALMUERZO ESCOLAR';
+              } else if (lblLower.includes('devocional') || lblLower.includes('oracion') || lblLower.includes('oración')) {
+                rowData[day] = '🙏 DEVOCIONAL / ORACIÓN';
+              } else if (lblLower.includes('desayuno')) {
+                rowData[day] = '🥪 DESAYUNO ESCOLAR';
+              } else {
+                rowData[day] = '🔔 RECREO (Pausa)';
+              }
+              return;
+            }
+
             if (!withAssignedSchedule) {
               rowData[day] = '';
               return;
@@ -2183,8 +2236,8 @@ export const ScheduleViewer = () => {
               return Math.abs(eMins - sMins) <= 20;
             });
 
-            if (!entry && dayEntries[slotIdx]) {
-              entry = dayEntries[slotIdx];
+            if (!entry && dayEntries[currentTeachingIdx]) {
+              entry = dayEntries[currentTeachingIdx];
             }
 
             if (entry) {

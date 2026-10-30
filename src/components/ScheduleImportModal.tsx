@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { getStandardExtendedDaySlots } from '../services/scheduleService';
+import { getStandardExtendedDaySlots, findCycleTimeBlocks, getSlotsFromCycleConfig } from '../services/scheduleService';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
 import { sortCourses } from '../utils/courseSorter';
 
@@ -241,6 +241,99 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     return templateSlots.filter((s) => !s.isBreak);
   }, [templateSlots]);
 
+  // Generador dinámico de bloques por curso (respetando cycleTimeBlocks, nivel Primaria vs Secundaria y 7ma hora)
+  const getCourseSlotsForImport = useCallback((course: any) => {
+    const cTanda = (course?.tanda || '').toLowerCase();
+    const courseIsMorning = cTanda
+      ? !cTanda.includes('ves') && !cTanda.includes('tar')
+      : selectedShift !== 'Vespertina';
+    const shiftName = selectedShift === 'Extendida' ? 'Extendida' : (courseIsMorning ? 'Matutina' : 'Vespertina');
+
+    // 1. Prioridad Máxima: Bloques por ciclo configurados exactamente por el usuario en Preferencias
+    const customCycle = findCycleTimeBlocks(state.cycleTimeBlocks, course, shiftName);
+    if (customCycle) {
+      const cSlots = getSlotsFromCycleConfig(customCycle);
+      if (cSlots && cSlots.length > 0) return cSlots;
+    }
+
+    // 2. Si es Jornada Extendida
+    if (selectedShift === 'Extendida' || shiftName.toLowerCase().includes('ext')) {
+      return getStandardExtendedDaySlots();
+    }
+
+    const lvl = (course?.level || '').toLowerCase();
+    const isSecundaria = lvl.includes('secun');
+    const isPrimaria = lvl.includes('primar');
+
+    // Verificar si el curso tiene 7 materias/horas
+    const courseAssigns = (state.assignments || []).filter(
+      (a: any) => String(a.course_id || a.courseId) === String(course?.id)
+    );
+    const totalWeeklyHours = courseAssigns.reduce((sum: number, a: any) => sum + (Number(a.hours_per_week) || 0), 0);
+    const avgDailyHours = totalWeeklyHours > 0 ? Math.round(totalWeeklyHours / 5) : 0;
+
+    const courseEntries = (state.schedule || []).filter(
+      (s: any) => String(s.course_id || s.courseId) === String(course?.id)
+    );
+    const maxEntryMins = courseEntries.reduce((max: number, s: any) => {
+      const parts = (s.start_time || '').split(':');
+      const m = parseInt(parts[0] || '0') * 60 + parseInt(parts[1] || '0');
+      return Math.max(max, m);
+    }, 0);
+
+    const has7thHour = isSecundaria && (avgDailyHours >= 7 || (courseIsMorning ? maxEntryMins >= 760 : maxEntryMins >= 1060));
+
+    // Vespertina
+    if (!courseIsMorning) {
+      if (isPrimaria) {
+        return [
+          { start: '14:00:00', end: '14:40:00', label: '1ra Hora (14:00 - 14:40)', isBreak: false },
+          { start: '14:40:00', end: '15:20:00', label: '2da Hora (14:40 - 15:20)', isBreak: false },
+          { start: '15:20:00', end: '15:45:00', label: '🔔 RECREO (15:20 - 15:45)', isBreak: true },
+          { start: '15:45:00', end: '16:25:00', label: '3ra Hora (15:45 - 16:25)', isBreak: false },
+          { start: '16:25:00', end: '17:05:00', label: '4ta Hora (16:25 - 17:05)', isBreak: false },
+          { start: '17:05:00', end: '17:45:00', label: '5ta Hora (17:05 - 17:45)', isBreak: false }
+        ];
+      }
+      return [
+        { start: '14:00:00', end: '14:40:00', label: '1ra Hora (14:00 - 14:40)', isBreak: false },
+        { start: '14:40:00', end: '15:20:00', label: '2da Hora (14:40 - 15:20)', isBreak: false },
+        { start: '15:20:00', end: '16:00:00', label: '3ra Hora (15:20 - 16:00)', isBreak: false },
+        { start: '16:00:00', end: '16:20:00', label: '🔔 RECREO (16:00 - 16:20)', isBreak: true },
+        { start: '16:20:00', end: '17:00:00', label: '4ta Hora (16:20 - 17:00)', isBreak: false },
+        { start: '17:00:00', end: '17:40:00', label: '5ta Hora (17:00 - 17:40)', isBreak: false },
+        { start: '17:40:00', end: '18:15:00', label: '6ta Hora (17:40 - 18:15)', isBreak: false },
+        ...(has7thHour ? [{ start: '18:15:00', end: '18:55:00', label: '7ma Hora (18:15 - 18:55)', isBreak: false }] : [])
+      ];
+    }
+
+    // Matutina Primaria (con recreo a las 09:45 - 10:15)
+    if (isPrimaria) {
+      return [
+        { start: '07:45:00', end: '08:00:00', label: '🇩🇴 Acto a la Bandera (07:45 - 08:00)', isBreak: true },
+        { start: '08:00:00', end: '08:50:00', label: '1ra Hora (08:00 - 08:50)', isBreak: false },
+        { start: '08:50:00', end: '09:45:00', label: '2da Hora (08:50 - 09:45)', isBreak: false },
+        { start: '09:45:00', end: '10:15:00', label: '🔔 RECREO (09:45 - 10:15)', isBreak: true },
+        { start: '10:15:00', end: '11:00:00', label: '3ra Hora (10:15 - 11:00)', isBreak: false },
+        { start: '11:00:00', end: '11:45:00', label: '4ta Hora (11:00 - 11:45)', isBreak: false },
+        { start: '11:45:00', end: '12:30:00', label: '5ta Hora (11:45 - 12:30)', isBreak: false }
+      ];
+    }
+
+    // Matutina Secundaria (con recreo a las 10:15 - 10:45 y hasta 7 horas)
+    return [
+      { start: '07:45:00', end: '08:00:00', label: '🇩🇴 Acto a la Bandera (07:45 - 08:00)', isBreak: true },
+      { start: '08:00:00', end: '08:45:00', label: '1ra Hora (08:00 - 08:45)', isBreak: false },
+      { start: '08:45:00', end: '09:30:00', label: '2da Hora (08:45 - 09:30)', isBreak: false },
+      { start: '09:30:00', end: '10:15:00', label: '3ra Hora (09:30 - 10:15)', isBreak: false },
+      { start: '10:15:00', end: '10:45:00', label: '🔔 RECREO (10:15 - 10:45)', isBreak: true },
+      { start: '10:45:00', end: '11:30:00', label: '4ta Hora (10:45 - 11:30)', isBreak: false },
+      { start: '11:30:00', end: '12:15:00', label: '5ta Hora (11:30 - 12:15)', isBreak: false },
+      { start: '12:15:00', end: '13:00:00', label: '6ta Hora (12:15 - 13:00)', isBreak: false },
+      ...(has7thHour ? [{ start: '13:00:00', end: '13:45:00', label: '7ma Hora (13:00 - 13:45)', isBreak: false }] : [])
+    ];
+  }, [selectedShift, state.cycleTimeBlocks, state.assignments, state.schedule]);
+
   // Normalizador de texto para comparaciones
   const norm = (str: string) =>
     (str || '')
@@ -261,7 +354,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
       };
 
-      // HOJA 1: MATRIZ SEMANAL POR CURSO (Exclusivamente los bloques de clases lectivas)
+      // HOJA 1: MATRIZ SEMANAL POR CURSO
       const matrixRows: any[] = [];
       const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
@@ -275,14 +368,44 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           return true;
         });
 
-        standardSlots.forEach((slot, idx) => {
+        const courseSlots = getCourseSlotsForImport(c);
+        let teachingIdx = 0;
+
+        courseSlots.forEach((slot: any) => {
+          const isBreakOrAct = !!slot.isBreak;
+          const currentTeachingIdx = teachingIdx;
+          if (!isBreakOrAct) {
+            teachingIdx++;
+          }
+
+          const timeRange = `(${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`;
+          const blockLabel = slot.label
+            ? (slot.label.includes('(') ? slot.label : `${slot.label} ${timeRange}`)
+            : (isBreakOrAct ? `RECREO ${timeRange}` : `${teachingIdx}ra Hora ${timeRange}`);
+
           const rowData: any = {
             Curso: courseLabel,
             Nivel: c.level || 'Secundario',
-            Bloque: `${idx + 1}ra Hora (${slot.start.substring(0, 5)} - ${slot.end.substring(0, 5)})`
+            Bloque: blockLabel
           };
 
           days.forEach((day) => {
+            if (isBreakOrAct) {
+              const lblLower = (slot.label || '').toLowerCase();
+              if (lblLower.includes('acto') || lblLower.includes('bandera') || lblLower.includes('cívic') || lblLower.includes('civico')) {
+                rowData[day] = '🇩🇴 ACTO A LA BANDERA';
+              } else if (lblLower.includes('almuerzo')) {
+                rowData[day] = '🍽️ ALMUERZO ESCOLAR';
+              } else if (lblLower.includes('devocional') || lblLower.includes('oracion') || lblLower.includes('oración')) {
+                rowData[day] = '🙏 DEVOCIONAL / ORACIÓN';
+              } else if (lblLower.includes('desayuno')) {
+                rowData[day] = '🥪 DESAYUNO ESCOLAR';
+              } else {
+                rowData[day] = '🔔 RECREO (Pausa)';
+              }
+              return;
+            }
+
             if (!withAssignedSchedule) {
               rowData[day] = '';
               return;
@@ -301,8 +424,8 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
             });
 
             // 2. Fallback por posición secuencial de clase en el día
-            if (!entry && dayEntries[idx]) {
-              entry = dayEntries[idx];
+            if (!entry && dayEntries[currentTeachingIdx]) {
+              entry = dayEntries[currentTeachingIdx];
             }
 
             if (entry) {
@@ -418,11 +541,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       XLSX.utils.book_append_sheet(wb, wsRef, 'Referencia_Asignaciones');
 
       // HOJA 4: CATÁLOGO DE BLOQUES Y HORAS
-      const blocksRows = standardSlots.map((s, idx) => ({
+      const referenceCourse = relevantCourses[0];
+      const referenceSlots = referenceCourse ? getCourseSlotsForImport(referenceCourse) : standardSlots;
+      const blocksRows = referenceSlots.map((s: any, idx: number) => ({
         Numero_Hora: idx + 1,
-        Nombre_Bloque: `${idx + 1}ra Hora`,
+        Nombre_Bloque: s.label || `${idx + 1}ra Hora`,
         Hora_Inicio: s.start.substring(0, 5),
-        Hora_Fin: s.end.substring(0, 5)
+        Hora_Fin: s.end.substring(0, 5),
+        Tipo: s.isBreak ? 'Pausa / Receso / Acto' : 'Docencia Lectiva'
       }));
       const wsBlocks = XLSX.utils.json_to_sheet(blocksRows);
       XLSX.utils.book_append_sheet(wb, wsBlocks, 'Horas_y_Bloques');
