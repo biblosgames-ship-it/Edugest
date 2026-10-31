@@ -1,30 +1,49 @@
 import { supabase } from '../lib/supabase';
 import { areTeacherNamesMatching } from '../utils/teacherUtils';
 
+const normalizeLevel = (level: string) => {
+  if (!level) return 'Secundario';
+  const l = String(level).toLowerCase().trim();
+  if (l.includes('prim') || l.includes('basic')) return 'Primario';
+  if (l.includes('secun') || l.includes('media')) return 'Secundario';
+  if (l.includes('inic') || l.includes('parv') || l.includes('pre')) return 'Inicial';
+  return level.trim();
+};
+
 const normalizeGrade = (grade: string) => {
   if (!grade) return '';
-  let g = String(grade).toLowerCase()
+  let g = String(grade)
+    .toLowerCase()
     .replace(/pre-primario/g, 'preprimario')
     .replace(/pre-kinder/g, 'prekinder')
     .replace(/pre-kínder/g, 'prekinder')
     .replace(/kínder/g, 'kinder')
-    .replace(/\s+/g, ' ')
+    .replace(/[\s\-]+/g, ' ')
     .trim();
-    
-  g = g.replace(/\s+primaria/g, '')
-       .replace(/\s+primario/g, '')
-       .replace(/\s+secundaria/g, '')
-       .replace(/\s+secundario/g, '')
-       .replace(/\s+inicial/g, '');
 
-  if (g.startsWith('1ro') || g.startsWith('1ero')) return '1ero';
-  if (g.startsWith('2do') || g.startsWith('2ndo')) return '2do';
-  if (g.startsWith('3ro') || g.startsWith('3ero')) return '3ero';
-  if (g.startsWith('4to')) return '4to';
-  if (g.startsWith('5to')) return '5to';
-  if (g.startsWith('6to')) return '6to';
+  g = g
+    .replace(/\s+primaria/g, '')
+    .replace(/\s+primario/g, '')
+    .replace(/\s+secundaria/g, '')
+    .replace(/\s+secundario/g, '')
+    .replace(/\s+inicial/g, '');
 
-  return g;
+  // Convertir palabras ordinales completas a grados abreviados estándar
+  if (g === 'primero' || g === '1ero' || g === '1ro' || g === '1' || g === 'primer') return '1ero';
+  if (g === 'segundo' || g === '2do' || g === '2ndo' || g === '2' || g === 'segund') return '2do';
+  if (g === 'tercero' || g === '3ro' || g === '3ero' || g === '3' || g === 'tercer') return '3ero';
+  if (g === 'cuarto' || g === '4to' || g === '4' || g === 'cuart') return '4to';
+  if (g === 'quinto' || g === '5to' || g === '5' || g === 'quint') return '5to';
+  if (g === 'sexto' || g === '6to' || g === '6' || g === 'sext') return '6to';
+
+  if (g.startsWith('1ro') || g.startsWith('1ero') || g.startsWith('primer')) return '1ero';
+  if (g.startsWith('2do') || g.startsWith('2ndo') || g.startsWith('segund')) return '2do';
+  if (g.startsWith('3ro') || g.startsWith('3ero') || g.startsWith('tercer')) return '3ero';
+  if (g.startsWith('4to') || g.startsWith('cuart')) return '4to';
+  if (g.startsWith('5to') || g.startsWith('quint')) return '5to';
+  if (g.startsWith('6to') || g.startsWith('sext')) return '6to';
+
+  return g.replace(/\s+/g, '');
 };
 
 export const dataService = {
@@ -1329,25 +1348,31 @@ export const dataService = {
     const courseMapFallback = new Map<string, string>(); // 'nivel_grado_seccion' -> UUID
     // Pre-cargar todos los cursos existentes en la base de datos
     (existingCourses || []).forEach((ec: any) => {
+      const normLvl = normalizeLevel(ec.level || '');
       const normGrade = normalizeGrade(ec.grade);
-      const k = `${ec.level || ''}_${normGrade}_${ec.section || ''}_${ec.tanda || 'Matutina'}`.toLowerCase().trim();
-      const fbK = `${ec.level || ''}_${normGrade}_${ec.section || ''}`.toLowerCase().trim();
+      const cleanSec = (ec.section || '').trim().toLowerCase();
+      const cleanShift = (ec.tanda || 'Matutina').trim().toLowerCase();
+      const k = `${normLvl}_${normGrade}_${cleanSec}_${cleanShift}`;
+      const fbK = `${normLvl}_${normGrade}_${cleanSec}`;
       courseMap.set(k, ec.id);
       if (!courseMapFallback.has(fbK)) courseMapFallback.set(fbK, ec.id);
     });
 
     for (const c of data.courses) {
+      const normLvl = normalizeLevel(c.level || '');
       const normGrade = normalizeGrade(c.grade);
-      const key = `${c.level}_${normGrade}_${c.section}_${c.shift || 'Matutina'}`.toLowerCase().trim();
-      const fallbackKey = `${c.level}_${normGrade}_${c.section}`.toLowerCase().trim();
+      const cleanSec = (c.section || 'A').trim().toLowerCase();
+      const cleanShift = (c.shift || 'Matutina').trim().toLowerCase();
+      const key = `${normLvl}_${normGrade}_${cleanSec}_${cleanShift}`;
+      const fallbackKey = `${normLvl}_${normGrade}_${cleanSec}`;
       let match = (existingCourses || []).find(
-        (ec: any) => `${ec.level}_${normalizeGrade(ec.grade)}_${ec.section}_${ec.tanda || 'Matutina'}`.toLowerCase().trim() === key
+        (ec: any) => `${normalizeLevel(ec.level || '')}_${normalizeGrade(ec.grade)}_${(ec.section || '').trim().toLowerCase()}_${(ec.tanda || 'Matutina').trim().toLowerCase()}` === key
       );
 
       // Fallback: Si no hay coincidencia exacta con tanda, verificar si existe exactamente un curso en la BD con ese nivel, grado y sección
       if (!match) {
         const baseMatches = (existingCourses || []).filter(
-          (ec: any) => `${ec.level}_${normalizeGrade(ec.grade)}_${ec.section}`.toLowerCase().trim() === fallbackKey
+          (ec: any) => `${normalizeLevel(ec.level || '')}_${normalizeGrade(ec.grade)}_${(ec.section || '').trim().toLowerCase()}` === fallbackKey
         );
         if (baseMatches.length === 1) {
           match = baseMatches[0];
@@ -1504,20 +1529,21 @@ export const dataService = {
       .eq('center_id', centerId);
 
     for (const s of data.students) {
+      const normLvl = normalizeLevel(s.level_course || '');
       const normGrade = normalizeGrade(s.grade_course);
-      const courseKey = `${s.level_course || ''}_${normGrade}_${s.seccion_course || ''}_${s.tanda_course || 'Matutina'}`
-        .toLowerCase()
-        .trim();
-      const fallbackKey = `${s.level_course || ''}_${normGrade}_${s.seccion_course || ''}`
-        .toLowerCase()
-        .trim();
+      const cleanSec = (s.seccion_course || 'A').trim().toLowerCase();
+      const cleanShift = (s.tanda_course || 'Matutina').trim().toLowerCase();
+      const courseKey = `${normLvl}_${normGrade}_${cleanSec}_${cleanShift}`;
+      const fallbackKey = `${normLvl}_${normGrade}_${cleanSec}`;
       let courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey) || null;
       if (!courseId && existingCourses && existingCourses.length > 0) {
         const found = existingCourses.find((ec: any) => {
+          const ecLvl = normalizeLevel(ec.level || '');
           const ecGrade = normalizeGrade(ec.grade);
           return (
+            ecLvl === normLvl &&
             ecGrade === normGrade &&
-            String(ec.section || '').trim().toLowerCase() === String(s.seccion_course || '').trim().toLowerCase()
+            String(ec.section || '').trim().toLowerCase() === cleanSec
           );
         });
         if (found) courseId = found.id;
@@ -1712,8 +1738,9 @@ export const dataService = {
       }
 
       // 3. Resolver Curso
-      const courseKey = `${cleanNivel}_${normGrade}_${cleanSection}_${cleanTanda}`;
-      const fallbackKey = `${cleanNivel}_${normGrade}_${cleanSection}`;
+      const normCourseLvl = normalizeLevel(a.nivel || '');
+      const courseKey = `${normCourseLvl}_${normGrade}_${cleanSection}_${cleanTanda}`;
+      const fallbackKey = `${normCourseLvl}_${normGrade}_${cleanSection}`;
       let courseId = courseMap.get(courseKey) || courseMapFallback.get(fallbackKey);
       
       // Fallback adicional por solo Grado y Sección (sin depender de si el nivel es Secundario o Primario)

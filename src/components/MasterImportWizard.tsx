@@ -534,10 +534,24 @@ export const MasterImportWizard = ({ onClose }: MasterImportWizardProps) => {
               }
             }
 
-            let rawLevel = findVal(['nivelcurso', 'nivel', 'level']) || 'Secundario';
+            let rawLevel = findVal(['nivelcurso', 'nivel', 'level']) || '';
             let rawGrade = findVal(['gradocurso', 'grado', 'grade']) || '';
             let rawSection = findVal(['seccioncurso', 'seccion', 'section']) || '';
             let rawShift = findVal(['tandacurso', 'tanda', 'shift', 'jornada']) || 'Matutina';
+
+            // Detección automática del nivel si vino vacío o si se infiere del grado
+            if (!rawLevel) {
+              const lowerGrade = rawGrade.toLowerCase();
+              if (lowerGrade.includes('primar') || lowerGrade.includes('basic')) {
+                rawLevel = 'Primario';
+              } else if (lowerGrade.includes('secun') || lowerGrade.includes('media')) {
+                rawLevel = 'Secundario';
+              } else if (lowerGrade.includes('kinder') || lowerGrade.includes('parv') || lowerGrade.includes('inic') || lowerGrade.includes('pre')) {
+                rawLevel = 'Inicial';
+              } else {
+                rawLevel = 'Secundario';
+              }
+            }
 
             // Si vino una columna combinada "Curso" (ej: "1ero A", "Primero B", "4to C", "Kinder A")
             if (!rawGrade || !rawSection) {

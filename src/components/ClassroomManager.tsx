@@ -711,16 +711,160 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
           const mergedNotes = { ...cloudNotes, ...localDraftNotes };
 
-          setPartialScores(mergedScores);
+          let finalActivities = cloudActivities;
+          let finalScores = mergedScores;
+
+          // AUTO-SANEAMIENTO DE DUPLICADOS CRUZADOS (P1 -> P2/P3/P4):
+          // Si estamos en un período posterior (ej. P2) y detectamos que se arrastraron
+          // accidentalmente actividades y notas desde P1 al vincular una tarea,
+          // filtramos las actividades de P1, conservando intactas las tareas propias de este período.
+          if (selectedPeriod !== 'P1') {
+            try {
+              let p1Query = supabase
+                .from('student_partial_activities')
+                .select('*')
+                .eq('course_id', selectedCourseId)
+                .eq('subject_id', selectedSubjectId)
+                .eq('period', 'P1')
+                .eq('school_year', year);
+              if (centerId) p1Query = p1Query.eq('center_id', centerId);
+              const { data: p1Rows } = await p1Query.order('updated_at', { ascending: false }).limit(1);
+
+              if (p1Rows && p1Rows.length > 0 && p1Rows[0].scores) {
+                const p1Payload = p1Rows[0].scores;
+                const p1ActsMap = p1Payload.activities || {};
+                const p1ScoresMap = p1Payload.scores || {};
+
+                // Verificar si en este período hay tareas (task_act_) y a la vez actividades idénticas a P1
+                let hasTaskActInCurrent = false;
+                let hasClonedP1Activities = false;
+                const p1ActIds = new Set<string>();
+                Object.values(p1ActsMap).forEach((actsList: any) => {
+                  if (Array.isArray(actsList)) {
+                    actsList.forEach((a: any) => a?.id && p1ActIds.add(a.id));
+                  }
+                });
+
+                Object.values(finalActivities).forEach((actsList: any) => {
+                  if (Array.isArray(actsList)) {
+                    actsList.forEach((a: any) => {
+                      if (a?.id?.startsWith('task_act_')) hasTaskActInCurrent = true;
+                      else if (p1ActIds.has(a?.id)) {
+                        // Verificar si las notas de esta actividad coinciden de forma idéntica con P1
+                        const studentsWithScores = Object.keys(finalScores);
+                        const matchCount = studentsWithScores.filter(
+                          (sId) => finalScores[sId]?.[a.id] !== undefined && finalScores[sId]?.[a.id] === p1ScoresMap[sId]?.[a.id]
+                        ).length;
+                        if (matchCount > 0 && matchCount >= Math.min(3, studentsWithScores.length)) {
+                          hasClonedP1Activities = true;
+                        }
+                      }
+                    });
+                  }
+                });
+
+                if (hasTaskActInCurrent && hasClonedP1Activities) {
+                  // Limpiar de P2 las actividades y notas que pertenecían al P1
+                  const cleanedActs: Record<string, any[]> = {};
+                  const cleanedScores: Record<string, Record<string, number>> = {};
+                  const defActs = getDefaultActivities();
+
+                  Object.keys(defActs).forEach((compId) => {
+                    const currentCompActs = finalActivities[compId] || [];
+                    // Mantener las tareas de este período
+                    const keptActs = currentCompActs.filter((a: any) => a?.id?.startsWith('task_act_'));
+                    // Si no tiene tareas en esta competencia, dejar la actividad base limpia por defecto
+                    cleanedActs[compId] = keptActs.length > 0 ? keptActs : defActs[compId];
+                  });
+
+                  // Limpiar notas de las actividades removidas
+                  Object.entries(finalScores).forEach(([sId, sMap]) => {
+                    cleanedScores[sId] = {};
+                    Object.entries(sMap).forEach(([actId, val]) => {
+                      if (actId.startsWith('task_act_')) {
+                        cleanedScores[sId][actId] = val;
+                      }
+                    });
+                  });
+
+                  finalActivities = cleanedActs;
+                  finalScores = cleanedScores;
+
+                  // Actualizar en Supabase de forma segura para corregir permanentemente el registro de este período
+                  if (row?.id) {
+                    supabase
+                      .from('student_partial_activities')
+                      .update({
+                        scores: {
+                          scores: cleanedScores,
+                          studentNotes: cloudNotes,
+                          notes: cloudNotes,
+                          activities: cleanedActs,
+                          calcMode: cloudMode
+                        },
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('id', row.id)
+                      .then(() => {
+                        console.log(`[ClassroomManager] Registro de ${selectedPeriod} saneado automáticamente de actividades duplicadas de P1.`);
+                      })
+                      .catch((err) => console.warn('Error al actualizar registro saneado:', err));
+                  }
+
+                  // Recalcular calificaciones de competencia en student_grades para este período
+                  const updatedGradesToSync: any[] = [];
+                  courseStudents.forEach((s: any) => {
+                    Object.keys(finalActivities).forEach((compId) => {
+                      const compActs = finalActivities[compId] || [];
+                      const validScores = compActs
+                        .map((a: any) => finalScores[s.id]?.[a.id])
+                        .filter((v: any) => typeof v === 'number' && !isNaN(v));
+
+                      if (validScores.length > 0) {
+                        const finalCompGrade =
+                          cloudMode === 'sum'
+                            ? Math.min(100, Math.round(validScores.reduce((a: number, b: number) => a + b, 0)))
+                            : Math.round(validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length);
+
+                        updatedGradesToSync.push({
+                          center_id: centerId !== 'default_center' ? centerId : null,
+                          student_id: s.id,
+                          course_id: selectedCourseId,
+                          subject_id: selectedSubjectId,
+                          period: selectedPeriod,
+                          competency_id: compId,
+                          grade: finalCompGrade,
+                          school_year: year,
+                          updated_at: new Date().toISOString()
+                        });
+                      }
+                    });
+                  });
+
+                  if (updatedGradesToSync.length > 0) {
+                    supabase.from('student_grades').upsert(updatedGradesToSync, {
+                      onConflict: 'student_id,course_id,subject_id,period,competency_id'
+                    }).catch(() => {});
+                  }
+
+                  toast.success(`Se corrigieron las actividades del ${selectedPeriod}, manteniendo únicamente las tareas evaluadas de este período.`, { duration: 4500 });
+                }
+              }
+            } catch (healErr) {
+              console.warn('[ClassroomManager] Error durante auto-saneamiento de parciales:', healErr);
+            }
+          }
+
+          setPartialScores(finalScores);
           setStudentNotes(mergedNotes);
-          setCompetencyActivities(cloudActivities);
+          setCompetencyActivities(finalActivities);
           setCompetencyCalcMode(cloudMode);
 
           // Sincronizar respaldo local para este scope exacto con la versión protegida
           localStorage.setItem(storageScopeKey, JSON.stringify({
-            scores: mergedScores,
+            scores: finalScores,
             studentNotes: mergedNotes,
-            activities: cloudActivities,
+            activities: finalActivities,
             calcMode: cloudMode,
             period: selectedPeriod,
             subjectId: selectedSubjectId,
@@ -2164,10 +2308,22 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         const targetSubjectId = selectedTaskForGrading.subject_id || selectedSubjectId;
 
         // A. Consultar actividades y notas existentes de esa materia/periodo en Supabase para NO borrar nada
-        let existingActivities: Record<string, any[]> = { ...competencyActivities };
-        let existingScores: Record<string, Record<string, number>> = { ...partialScores };
-        let existingStudentNotes: Record<string, string> = { ...studentNotes };
-        let currentCalcMode = competencyCalcMode || 'average';
+        // CRÍTICO: Si partialPeriod es diferente del selectedPeriod en pantalla, NO debemos heredar las actividades
+        // ni las notas del período actualmente activo en memoria (evita arrastrar P1 al P2).
+        const isSamePeriodInMemory = partialPeriod === selectedPeriod && targetSubjectId === selectedSubjectId;
+
+        let existingActivities: Record<string, any[]> = isSamePeriodInMemory
+          ? JSON.parse(JSON.stringify(competencyActivities))
+          : getDefaultActivities();
+        let existingScores: Record<string, Record<string, number>> = isSamePeriodInMemory
+          ? JSON.parse(JSON.stringify(partialScores))
+          : {};
+        let existingStudentNotes: Record<string, string> = isSamePeriodInMemory
+          ? JSON.parse(JSON.stringify(studentNotes))
+          : {};
+        let currentCalcMode = isSamePeriodInMemory
+          ? (competencyCalcMode || 'average')
+          : 'average';
 
         try {
           let selQuery = supabase
@@ -2192,6 +2348,21 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               existingStudentNotes = rawPayload.studentNotes || rawPayload.notes;
             }
             if (rawPayload.calcMode) currentCalcMode = rawPayload.calcMode;
+          } else if (!isSamePeriodInMemory) {
+            // Si no estaba en memoria ni en la nube, revisar si hay borrador local específico para ese período
+            const altKey = `edugens_partials_${centerId || 'default'}_${year}_${profile?.teacher_id || profile?.id || 'default'}_${selectedCourseId}_${targetSubjectId}_${partialPeriod}`;
+            const localRaw = localStorage.getItem(altKey);
+            if (localRaw) {
+              try {
+                const parsed = JSON.parse(localRaw);
+                if (parsed.activities) existingActivities = parsed.activities;
+                if (parsed.scores) existingScores = parsed.scores;
+                if (parsed.studentNotes || parsed.notes) {
+                  existingStudentNotes = parsed.studentNotes || parsed.notes;
+                }
+                if (parsed.calcMode) currentCalcMode = parsed.calcMode;
+              } catch {}
+            }
           }
         } catch (fetchErr) {
           console.warn('[ClassroomManager] Error al consultar datos previos de parciales en nube:', fetchErr);
@@ -2322,6 +2493,22 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             console.warn('[ClassroomManager] Error al actualizar student_grades:', gradeSyncErr);
           }
         }
+
+        // Actualizar también el respaldo en localStorage para el período específico de la tarea
+        const targetScopeKey = `edugens_partials_${centerId || 'default'}_${year}_${profile?.teacher_id || profile?.id || 'default'}_${selectedCourseId}_${targetSubjectId}_${partialPeriod}`;
+        localStorage.setItem(targetScopeKey, JSON.stringify({
+          scores: existingScores,
+          studentNotes: existingStudentNotes,
+          activities: existingActivities,
+          calcMode: currentCalcMode,
+          period: partialPeriod,
+          subjectId: targetSubjectId,
+          courseId: selectedCourseId,
+          teacherId: profile?.teacher_id || profile?.id,
+          centerId: centerId,
+          year: year,
+          updatedAt: new Date().toISOString()
+        }));
 
         // G. Si el docente está viendo actualmente esta misma asignatura y periodo, actualizar el estado React inmediato
         if (targetSubjectId === selectedSubjectId && partialPeriod === selectedPeriod) {
