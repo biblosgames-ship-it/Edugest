@@ -664,9 +664,19 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                           <span className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 font-black text-xs flex items-center justify-center shrink-0">
                             {w.weekNumber}
                           </span>
-                          <span className="text-xs font-black uppercase text-text-main">
-                            Semana {w.weekNumber}
-                          </span>
+                          <input
+                            type="text"
+                            placeholder={`Nombre (ej: Matemática y Sociales)`}
+                            value={w.title || `Semana ${w.weekNumber}`}
+                            onChange={(e) =>
+                              setWeeks((prev) =>
+                                prev.map((item) =>
+                                  item.weekNumber === w.weekNumber ? { ...item, title: e.target.value } : item
+                                )
+                              )
+                            }
+                            className="px-2.5 py-1.5 bg-brand-bg border border-border-main rounded-lg text-xs font-bold text-text-main outline-none w-48 sm:w-56"
+                          />
                         </div>
 
                         <div className="flex items-center gap-2 flex-1 sm:max-w-md">
@@ -740,9 +750,44 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     <span>¡Excelente! No se detectaron estudiantes por debajo del umbral mínimo en los cursos seleccionados para este período.</span>
                   </div>
                 ) : (
-                  <div className="border border-border-main rounded-2xl overflow-hidden">
-                    <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-border-main">
-                      {candidateEntries.map((c, idx) => (
+                  <div className="space-y-2">
+                    {/* Botones de asignación masiva de materias a semanas */}
+                    {planMode === 'weekly' && weeks.length > 1 && (
+                      <div className="p-3 bg-brand-bg rounded-xl border border-border-main flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase text-text-muted">
+                          ⚡ Asignación rápida por materia:
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {Array.from(new Set(candidateEntries.map((c) => c.subjectName))).map((sName) => (
+                            <div key={sName} className="flex items-center gap-1 bg-surface px-2 py-1 rounded-lg border border-border-main text-[10px]">
+                              <span className="font-bold text-text-main">{sName}</span>
+                              <span className="text-text-muted">➜</span>
+                              <select
+                                onChange={(e) => {
+                                  const targetW = Number(e.target.value);
+                                  setCandidateEntries((prev) =>
+                                    prev.map((item) =>
+                                      item.subjectName === sName ? { ...item, weekNumber: targetW } : item
+                                    )
+                                  );
+                                }}
+                                className="bg-transparent font-black text-indigo-600 outline-none cursor-pointer"
+                              >
+                                {weeks.map((w) => (
+                                  <option key={w.weekNumber} value={w.weekNumber}>
+                                    Semana {w.weekNumber}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border border-border-main rounded-2xl overflow-hidden">
+                      <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-border-main">
+                        {candidateEntries.map((c, idx) => (
                         <div
                           key={`${c.courseId}_${c.studentId}_${c.subjectId}`}
                           className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface hover:bg-brand-bg/50 transition-colors"
@@ -788,11 +833,11 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                                     )
                                   )
                                 }
-                                className="px-2 py-1 bg-brand-bg border border-border-main rounded-lg text-xs font-bold text-text-main outline-none cursor-pointer"
+                                className="px-2 py-1 bg-brand-bg border border-border-main rounded-lg text-xs font-bold text-text-main outline-none cursor-pointer max-w-[200px]"
                               >
                                 {weeks.map((w) => (
                                   <option key={w.weekNumber} value={w.weekNumber}>
-                                    Semana {w.weekNumber}
+                                    {w.title || `Semana ${w.weekNumber}`}
                                   </option>
                                 ))}
                               </select>
@@ -802,10 +847,11 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              {/* BOTONES DE ACCIÓN */}
+            {/* BOTONES DE ACCIÓN */}
               <div className="pt-4 border-t border-border-main flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
