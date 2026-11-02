@@ -18,9 +18,14 @@ import {
   Check,
   Building2,
   CheckSquare,
-  Square
+  Square,
+  RefreshCw,
+  Loader2,
+  UserPlus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useApp } from '../context/AppContext';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import { recoveryPlanService, RecoveryPlan, RecoveryPlanStudent, RecoveryScheduleWeek } from '../services/recoveryPlanService';
 
 interface RecoveryPlanModalProps {
@@ -28,9 +33,11 @@ interface RecoveryPlanModalProps {
   onClose: () => void;
   course: any;
   allCourses?: any[];
-  subjects: any[];
-  students: any[];
-  grades: any;
+  subjects?: any[];
+  students?: any[];
+  assignments?: any[];
+  grades?: any;
+  currentSubjectId?: string;
   centerId: string;
   schoolYear: string;
   activePeriod?: string;
@@ -44,21 +51,26 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   allCourses = [],
   subjects = [],
   students = [],
+  assignments = [],
   grades = [],
+  currentSubjectId,
   centerId,
   schoolYear = '2026-2027',
   activePeriod = 'P1',
   userId
 }) => {
+  const { state } = useApp();
   const [plans, setPlans] = useState<RecoveryPlan[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isCalculatingCandidates, setIsCalculatingCandidates] = useState(false);
 
   // Lista de cursos disponibles
   const availableCourses = useMemo(() => {
     if (allCourses && allCourses.length > 0) return allCourses;
+    if (state?.courses && state.courses.length > 0) return state.courses;
     return course ? [course] : [];
-  }, [allCourses, course]);
+  }, [allCourses, course, state?.courses]);
 
   // Modo de alcance: 'current' (solo este curso) o 'multi' (selección múltiple / todo el centro)
   const [targetScope, setTargetScope] = useState<'current' | 'multi'>('current');
@@ -95,6 +107,12 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
     selected: boolean;
   }>>([]);
 
+  // Formulario para agregar estudiante manualmente si hiciera falta
+  const [showManualAdd, setShowManualAdd] = useState(false);
+  const [manualStudentId, setManualStudentId] = useState('');
+  const [manualSubjectId, setManualSubjectId] = useState('');
+  const [manualScore, setManualScore] = useState(60);
+
   // Cargar planes existentes al abrir
   useEffect(() => {
     if (!isOpen || !course?.id) return;
@@ -113,107 +131,300 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
     }
   };
 
-  // Calcular automáticamente qué alumnos están por debajo del umbral en los cursos seleccionados
-  const computeCandidates = () => {
-    const results: Array<{
-      courseId: string;
-      courseName: string;
-      studentId: string;
-      studentName: string;
-      subjectId: string;
-      subjectName: string;
-      originalScore: number;
-      weekNumber: number;
-      selected: boolean;
-    }> = [];
-
+  // Calcular de forma exhaustiva y precisa qué alumnos están reprobados (<65 Primaria, <70 Secundaria)
+  const loadAndComputeCandidates = async () => {
     const targetIds = targetScope === 'current' ? (course?.id ? [course.id] : []) : selectedCourseIds;
+    if (!targetIds || targetIds.length === 0) {
+      setCandidateEntries([]);
+      return;
+    }
 
-    targetIds.forEach((cId) => {
-      const cObj = availableCourses.find((c) => c.id === cId) || course;
-      const cName = `${cObj?.grade || ''} ${cObj?.section || ''}`.trim() || 'Curso';
+    setIsCalculatingCandidates(true);
+    try {
+      // 1. Obtener cursos objetivo
+      const targetCourses = availableCourses.filter((c) => targetIds.includes(c.id));
+      if (targetCourses.length === 0 && course) targetCourses.push(course);
 
-      // Umbral específico de este curso: Primaria 65, Secundaria 70
-      const lvl = (cObj?.level || '').toLowerCase();
-      const grd = (cObj?.grade || '').toLowerCase();
-      const isCoursePrimary = lvl.includes('prim') || grd.includes('prim');
-      const passingThreshold = isCoursePrimary ? 65 : 70;
+      // 2. Obtener estudiantes para estos cursos
+      let poolStudents = (state?.students || []).filter((s: any) => targetIds.includes(s.course_id || s.courseId));
+      if (poolStudents.length === 0 && students && students.length > 0) {
+        poolStudents = students.filter((s: any) => targetIds.includes(s.course_id || s.courseId));
+      }
+      if (poolStudents.length === 0) {
+        try {
+          const { data: dbSt } = await fetchAllRows(() =>
+            supabase
+              .from('students')
+              .select('*')
+              .in('course_id', targetIds)
+              .eq('school_year', schoolYear)
+          );
+          if (dbSt && dbSt.length > 0) {
+            poolStudents = dbSt;
+          }
+        } catch (err) {
+          console.warn('Error fetching students:', err);
+        }
+      }
 
-      // Estudiantes de este curso
-      const cStudents = students.filter((s) => s.course_id === cId || s.courseId === cId);
-      // Asignaturas de este curso
-      const cSubjects = subjects.filter((s) => !s.course_id || s.course_id === cId);
+      // 3. Consultar student_grades de la base de datos para todos los cursos seleccionados
+      let dbGrades: any[] = [];
+      try {
+        const { data, error } = await fetchAllRows(() =>
+          supabase
+            .from('student_grades')
+            .select('*')
+            .in('course_id', targetIds)
+            .eq('school_year', schoolYear)
+        );
+        if (!error && data) {
+          dbGrades = data;
+        }
+      } catch (err) {
+        console.warn('Error fetching student_grades for recovery plan:', err);
+      }
 
-      cStudents.forEach((st) => {
-        const stName = `${st.first_surname || st.last_name || ''} ${st.names || st.first_name || ''}`.trim() || 'Estudiante';
+      // 4. Construir mapa unificado de calificaciones [studentId][subjectId]
+      const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
 
-        cSubjects.forEach((sub) => {
-          let score = 0;
+      // 4a. Cargar desde la base de datos
+      dbGrades.forEach((g: any) => {
+        const stId = g.student_id;
+        const subId = g.subject_id;
+        if (!stId || !subId) return;
 
-          // Si grades es un Array de la BD
-          if (Array.isArray(grades)) {
-            const gRecord = grades.find((g) => {
-              const matchStudent = g.student_id === st.id;
-              const matchSub = g.subject_id === sub.id;
-              return matchStudent && matchSub;
-            });
+        if (!gradesMap[stId]) gradesMap[stId] = {};
+        if (!gradesMap[stId][subId]) gradesMap[stId][subId] = {};
 
-            if (gRecord) {
-              if (period === 'P1') score = Number(gRecord.p1_final || gRecord.p1) || 0;
-              else if (period === 'P2') score = Number(gRecord.p2_final || gRecord.p2) || 0;
-              else if (period === 'P3') score = Number(gRecord.p3_final || gRecord.p3) || 0;
-              else if (period === 'P4') score = Number(gRecord.p4_final || gRecord.p4) || 0;
-              else if (period === 'FINAL') score = Number(gRecord.final_score || gRecord.cf) || 0;
+        const sGrades = gradesMap[stId][subId];
+        const pL = (g.period || '').toLowerCase();
+        const cId = (g.competency_id || '').toLowerCase();
+
+        if (g.grade !== null && g.grade !== undefined && g.grade !== '') {
+          sGrades[`${cId}_${pL}`] = Number(g.grade);
+        }
+        if (g.rp1 !== null && g.rp1 !== undefined && g.rp1 !== '') sGrades[`${cId}_rp1`] = Number(g.rp1);
+        if (g.rp2 !== null && g.rp2 !== undefined && g.rp2 !== '') sGrades[`${cId}_rp2`] = Number(g.rp2);
+        if (g.rp3 !== null && g.rp3 !== undefined && g.rp3 !== '') sGrades[`${cId}_rp3`] = Number(g.rp3);
+        if (g.rp4 !== null && g.rp4 !== undefined && g.rp4 !== '') sGrades[`${cId}_rp4`] = Number(g.rp4);
+        if (g.recovery_grade !== null && g.recovery_grade !== undefined && g.recovery_grade !== '') {
+          sGrades['final_rec'] = Number(g.recovery_grade);
+        }
+      });
+
+      // 4b. Fusionar calificaciones locales no guardadas del Registro Digital (para la materia activa `currentSubjectId`)
+      if (currentSubjectId && grades && typeof grades === 'object' && !Array.isArray(grades)) {
+        Object.keys(grades).forEach((k) => {
+          const val = grades[k];
+          if (val === undefined || val === null || val === '') return;
+
+          const stMatch = poolStudents.find((st: any) => k.startsWith(`${st.id}_`));
+          if (!stMatch) return;
+
+          const restKey = k.substring(stMatch.id.length + 1).toLowerCase();
+          if (!gradesMap[stMatch.id]) gradesMap[stMatch.id] = {};
+          if (!gradesMap[stMatch.id][currentSubjectId]) gradesMap[stMatch.id][currentSubjectId] = {};
+
+          gradesMap[stMatch.id][currentSubjectId][restKey] = Number(val);
+        });
+      }
+
+      // 4c. Si grades vino como Array
+      if (Array.isArray(grades) && grades.length > 0) {
+        grades.forEach((g: any) => {
+          const stId = g.student_id;
+          const subId = g.subject_id;
+          if (!stId || !subId) return;
+          if (!gradesMap[stId]) gradesMap[stId] = {};
+          if (!gradesMap[stId][subId]) gradesMap[stId][subId] = {};
+          const sGrades = gradesMap[stId][subId];
+          if (g.p1_final !== undefined) sGrades['p1'] = Number(g.p1_final);
+          if (g.p2_final !== undefined) sGrades['p2'] = Number(g.p2_final);
+          if (g.p3_final !== undefined) sGrades['p3'] = Number(g.p3_final);
+          if (g.p4_final !== undefined) sGrades['p4'] = Number(g.p4_final);
+          if (g.final_score !== undefined) sGrades['final'] = Number(g.final_score);
+        });
+      }
+
+      // 5. Analizar cada curso y sus estudiantes
+      const results: Array<{
+        courseId: string;
+        courseName: string;
+        studentId: string;
+        studentName: string;
+        subjectId: string;
+        subjectName: string;
+        originalScore: number;
+        weekNumber: number;
+        selected: boolean;
+      }> = [];
+
+      targetCourses.forEach((cObj) => {
+        const cId = cObj.id;
+        const cName = `${cObj.grade || ''} ${cObj.section || ''}`.trim() || 'Curso';
+
+        // Umbral específico: Primaria < 65, Secundaria < 70
+        const lvl = (cObj.level || '').toLowerCase();
+        const grd = (cObj.grade || '').toLowerCase();
+        const isCoursePrimary = lvl.includes('prim') || grd.includes('prim');
+        const passingThreshold = isCoursePrimary ? 65 : 70;
+
+        // Estudiantes de este curso
+        const cStudents = poolStudents.filter((s: any) => (s.course_id || s.courseId) === cId);
+
+        // Asignaturas asociadas a este curso
+        const courseAssignments = (assignments.length > 0 ? assignments : (state?.assignments || [])).filter(
+          (a: any) => (a.course_id || a.courseId) === cId
+        );
+        let cSubjects = courseAssignments
+          .map((a: any) => (subjects.length > 0 ? subjects : (state?.subjects || [])).find((s: any) => s.id === (a.subject_id || a.subjectId)))
+          .filter(Boolean);
+
+        if (cSubjects.length === 0) {
+          cSubjects = (subjects.length > 0 ? subjects : (state?.subjects || [])).filter((s: any) =>
+            (s.level || '').toLowerCase().includes(lvl.substring(0, 5))
+          );
+        }
+        if (cSubjects.length === 0) {
+          cSubjects = subjects.length > 0 ? subjects : (state?.subjects || []);
+        }
+
+        // Además, incluir materias que tengan notas registradas para alumnos de este curso en gradesMap
+        cStudents.forEach((st: any) => {
+          const stSubs = gradesMap[st.id] ? Object.keys(gradesMap[st.id]) : [];
+          stSubs.forEach((subId) => {
+            if (!cSubjects.some((s: any) => s.id === subId)) {
+              const fSub = (subjects.length > 0 ? subjects : (state?.subjects || [])).find((s: any) => s.id === subId);
+              if (fSub) cSubjects.push(fSub);
             }
-          } else if (grades && typeof grades === 'object') {
-            // Si grades viene como Mapa local de Calificaciones: { `${studentId}_${key}`: value }
-            const pL = (period === 'FINAL' ? 'final' : period).toLowerCase();
-            // Buscar si hay calificación final o promedio de período
-            const directVal = grades[`${st.id}_${pL}`] || grades[`${st.id}_final`] || grades[`${st.id}_cf`];
-            if (directVal !== undefined && directVal !== '') {
-              score = Number(directVal) || 0;
+          });
+        });
+
+        // Filtrar materias duplicadas o no académicas
+        cSubjects = Array.from(new Map(cSubjects.map((s: any) => [s.id, s])).values()).filter(
+          (s: any) => !s.name?.toLowerCase().includes('lecto') && !s.name?.toLowerCase().includes('escritura')
+        );
+
+        // 6. Evaluar cada estudiante en cada materia
+        cStudents.forEach((st: any) => {
+          const stName = `${st.first_surname || st.last_name || ''} ${st.names || st.first_name || ''}`.trim() || 'Estudiante';
+
+          cSubjects.forEach((sub: any) => {
+            const sGrades = gradesMap[st.id]?.[sub.id] || {};
+            if (Object.keys(sGrades).length === 0) return; // No tiene calificaciones en esta materia
+
+            const getBestGrade = (compKey: string, p: string) => {
+              const pL = p.toLowerCase();
+              const rawG = sGrades[`${compKey}_${pL}`];
+              const rawR = sGrades[`${compKey}_r${pL}`];
+              const g = (rawG !== undefined && rawG !== null && rawG !== '') ? Number(rawG) : -1;
+              const r = (rawR !== undefined && rawR !== null && rawR !== '') ? Number(rawR) : -1;
+              if (g === -1 && r === -1) return null;
+              return Math.max(g === -1 ? 0 : g, r === -1 ? 0 : r);
+            };
+
+            let score = 0;
+            let hasEvaluatedGrades = false;
+
+            if (period === 'FINAL') {
+              if (sGrades['final'] !== undefined) {
+                score = Number(sGrades['final']);
+                hasEvaluatedGrades = true;
+              } else {
+                const comps = isCoursePrimary ? ['c1', 'c2', 'c3'] : ['c1', 'c2', 'c3', 'c4'];
+                let compFinals: number[] = [];
+                comps.forEach((cId) => {
+                  let pSum = 0;
+                  let pCount = 0;
+                  ['P1', 'P2', 'P3', 'P4'].forEach((p) => {
+                    const best = getBestGrade(cId, p);
+                    if (best !== null) {
+                      pSum += best;
+                      pCount++;
+                    }
+                  });
+                  if (pCount > 0) compFinals.push(Math.round(pSum / pCount));
+                });
+
+                if (compFinals.length > 0) {
+                  const finalArea = Math.round(compFinals.reduce((a, b) => a + b, 0) / compFinals.length);
+                  const recGrade = sGrades['final_rec'] !== undefined ? Number(sGrades['final_rec']) : 0;
+                  score = Math.max(finalArea, recGrade);
+                  hasEvaluatedGrades = true;
+                }
+              }
             } else {
-              // Buscar por clave con prefijos de competencias: `${st.id}_c1_${pL}`, etc.
-              const compKeys = Object.keys(grades).filter(
-                (k) => k.startsWith(`${st.id}_`) && k.endsWith(`_${pL}`)
-              );
-              if (compKeys.length > 0) {
-                const sum = compKeys.reduce((acc, k) => acc + (Number(grades[k]) || 0), 0);
-                score = Math.round(sum / compKeys.length);
+              // Período regular (P1, P2, P3, P4)
+              const pL = period.toLowerCase();
+              if (sGrades[pL] !== undefined) {
+                score = Number(sGrades[pL]);
+                hasEvaluatedGrades = true;
+              } else {
+                const comps = isCoursePrimary ? ['c1', 'c2', 'c3'] : ['c1', 'c2', 'c3', 'c4'];
+                let compScores: number[] = [];
+
+                comps.forEach((cId) => {
+                  const best = getBestGrade(cId, period);
+                  if (best !== null) compScores.push(best);
+                });
+
+                // Si no se encontraron por c1..c4 estándar, buscar claves con sufijo _pL
+                if (compScores.length === 0) {
+                  Object.keys(sGrades).forEach((k) => {
+                    if (k.endsWith(`_${pL}`) && !k.includes('_r')) {
+                      const compId = k.replace(`_${pL}`, '');
+                      const best = getBestGrade(compId, period);
+                      if (best !== null) compScores.push(best);
+                    }
+                  });
+                }
+
+                if (compScores.length > 0) {
+                  score = Math.round(compScores.reduce((a, b) => a + b, 0) / compScores.length);
+                  hasEvaluatedGrades = true;
+                }
               }
             }
-          }
 
-          if (score > 0 && score < passingThreshold) {
-            results.push({
-              courseId: cId,
-              courseName: cName,
-              studentId: st.id,
-              studentName: stName,
-              subjectId: sub.id,
-              subjectName: sub.name,
-              originalScore: score,
-              weekNumber: 1,
-              selected: true
-            });
-          }
+            // Comprobar umbral reprobatorio (< 65 en Primaria o < 70 en Secundaria)
+            if (hasEvaluatedGrades && score < passingThreshold) {
+              results.push({
+                courseId: cObj.id,
+                courseName: cName,
+                studentId: st.id,
+                studentName: stName,
+                subjectId: sub.id,
+                subjectName: sub.name,
+                originalScore: score,
+                weekNumber: 1,
+                selected: true
+              });
+            }
+          });
         });
       });
-    });
 
-    setCandidateEntries(results);
+      // Ordenar por curso, estudiante y materia
+      results.sort((a, b) => a.studentName.localeCompare(b.studentName));
+      setCandidateEntries(results);
+    } catch (err) {
+      console.error('Error calculando candidatos de recuperación:', err);
+      toast.error('Error al detectar candidatos de recuperación.');
+    } finally {
+      setIsCalculatingCandidates(false);
+    }
   };
 
-  // Recalcular candidatos al cambiar período, alcance o cursos seleccionados
+  // Recalcular candidatos al abrir creación, cambiar período, alcance o cursos seleccionados
   useEffect(() => {
-    if (isCreating) {
+    if (isOpen && isCreating) {
       const scopeLabel = targetScope === 'current' 
         ? `${course?.grade || ''} ${course?.section || ''}` 
         : `${selectedCourseIds.length} Cursos`;
       setTitle(`Plan de Recuperación ${period === 'FINAL' ? 'Final' : `Período ${period}`} - ${scopeLabel}`);
-      computeCandidates();
+      loadAndComputeCandidates();
     }
-  }, [isCreating, period, targetScope, selectedCourseIds]);
+  }, [isOpen, isCreating, period, targetScope, selectedCourseIds]);
 
   // Atajos para selección de cursos
   const handleSelectAllCourses = () => {
@@ -259,6 +470,58 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
     setCandidateEntries((prev) =>
       prev.map((c) => (c.weekNumber === weekNum ? { ...c, weekNumber: 1 } : c))
     );
+  };
+
+  const handleWeekChange = (weekNumber: number, field: keyof RecoveryScheduleWeek, value: any) => {
+    setWeeks((prev) =>
+      prev.map((w) => (w.weekNumber === weekNumber ? { ...w, [field]: value } : w))
+    );
+  };
+
+  // Agregar manualmente un alumno
+  const handleManualAddStudent = () => {
+    if (!manualStudentId || !manualSubjectId) {
+      toast.error('Selecciona un estudiante y una materia.');
+      return;
+    }
+    const poolStudents = (state?.students || []).concat(students || []);
+    const stObj = poolStudents.find((s: any) => s.id === manualStudentId);
+    const subObj = (subjects.length > 0 ? subjects : (state?.subjects || [])).find((s: any) => s.id === manualSubjectId);
+    const cObj = availableCourses.find((c) => c.id === (stObj?.course_id || course?.id)) || course;
+
+    if (!stObj || !subObj) {
+      toast.error('Datos incompletos.');
+      return;
+    }
+
+    const stName = `${stObj.first_surname || stObj.last_name || ''} ${stObj.names || stObj.first_name || ''}`.trim() || 'Estudiante';
+    const cName = `${cObj?.grade || ''} ${cObj?.section || ''}`.trim() || 'Curso';
+
+    setCandidateEntries((prev) => {
+      const exists = prev.some((c) => c.studentId === manualStudentId && c.subjectId === manualSubjectId);
+      if (exists) {
+        toast.error('Este estudiante ya está en la lista para esta materia.');
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          courseId: cObj?.id || '',
+          courseName: cName,
+          studentId: manualStudentId,
+          studentName: stName,
+          subjectId: manualSubjectId,
+          subjectName: subObj.name,
+          originalScore: Number(manualScore) || 60,
+          weekNumber: 1,
+          selected: true
+        }
+      ];
+    });
+
+    toast.success(`${stName} agregado a la lista.`);
+    setManualStudentId('');
+    setShowManualAdd(false);
   };
 
   const handleSavePlan = async (status: 'draft' | 'active') => {
@@ -732,7 +995,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
 
               {/* PASO 3: ESTUDIANTES Y ASIGNATURAS DETECTADAS */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-wider text-text-main flex items-center gap-2">
                       <Users size={14} className="text-indigo-500" />
@@ -742,12 +1005,135 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                       Alumnos de Primaria (&lt;65) y Secundaria (&lt;70) en {period}. Asigna a qué semana le corresponde evaluarse.
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => loadAndComputeCandidates()}
+                      disabled={isCalculatingCandidates}
+                      className="px-3 py-1.5 rounded-xl border border-border-main bg-surface hover:bg-brand-bg text-[10px] font-black uppercase tracking-wider text-text-muted hover:text-text-main transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Volver a escanear calificaciones desde el registro"
+                    >
+                      <RefreshCw size={12} className={isCalculatingCandidates ? 'animate-spin text-amber-500' : ''} />
+                      Re-escanear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowManualAdd(!showManualAdd)}
+                      className="px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus size={12} />
+                      {showManualAdd ? 'Cancelar' : 'Agregar Manual'}
+                    </button>
+                  </div>
                 </div>
 
-                {candidateEntries.length === 0 ? (
-                  <div className="p-6 text-center rounded-2xl bg-brand-bg border border-border-main text-xs font-bold text-emerald-600 space-y-1">
+                {/* FORMULARIO AGREGAR MANUALMENTE */}
+                {showManualAdd && (
+                  <div className="p-4 bg-indigo-50/50 dark:bg-slate-900/50 rounded-2xl border border-indigo-200 dark:border-indigo-900/40 space-y-3 animate-in fade-in duration-150">
+                    <h5 className="text-[11px] font-black uppercase text-indigo-700 dark:text-indigo-300">
+                      ➕ Agregar estudiante manualmente al plan de recuperación
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-text-muted block mb-1">Estudiante</label>
+                        <select
+                          value={manualStudentId}
+                          onChange={(e) => setManualStudentId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border-main rounded-lg text-xs font-bold text-text-main outline-none"
+                        >
+                          <option value="">Seleccione estudiante...</option>
+                          {(state?.students || students || [])
+                            .filter((s: any) => targetScope === 'current' ? (s.course_id === course?.id || s.courseId === course?.id) : selectedCourseIds.includes(s.course_id || s.courseId))
+                            .map((s: any) => (
+                              <option key={s.id} value={s.id}>
+                                {s.first_surname || s.last_name || ''} {s.names || s.first_name || ''}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-text-muted block mb-1">Asignatura</label>
+                        <select
+                          value={manualSubjectId}
+                          onChange={(e) => setManualSubjectId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border-main rounded-lg text-xs font-bold text-text-main outline-none"
+                        >
+                          <option value="">Seleccione asignatura...</option>
+                          {(subjects.length > 0 ? subjects : (state?.subjects || [])).map((sub: any) => (
+                            <option key={sub.id} value={sub.id}>
+                              {sub.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-text-muted block mb-1">Calificación Inicial</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={manualScore}
+                            onChange={(e) => setManualScore(Number(e.target.value))}
+                            className="w-20 px-2.5 py-1.5 bg-surface border border-border-main rounded-lg text-xs font-bold text-text-main outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleManualAddStudent}
+                            className="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black uppercase cursor-pointer"
+                          >
+                            Agregar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ACCIONES DE SELECCIÓN MASIVA */}
+                {candidateEntries.length > 0 && !isCalculatingCandidates && (
+                  <div className="flex items-center justify-between text-[11px] font-bold text-text-muted px-1">
+                    <span>
+                      {candidateEntries.filter((c) => c.selected).length} de {candidateEntries.length} alumnos seleccionados
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCandidateEntries((prev) => prev.map((c) => ({ ...c, selected: true })))}
+                        className="text-indigo-600 hover:underline cursor-pointer"
+                      >
+                        Seleccionar todos
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setCandidateEntries((prev) => prev.map((c) => ({ ...c, selected: false })))}
+                        className="text-text-muted hover:underline cursor-pointer"
+                      >
+                        Deseleccionar todos
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isCalculatingCandidates ? (
+                  <div className="p-8 text-center rounded-2xl bg-brand-bg border border-border-main text-xs font-bold text-amber-600 space-y-2">
+                    <Loader2 size={24} className="mx-auto text-amber-500 animate-spin" />
+                    <p>Consultando calificaciones y analizando estudiantes reprobados para {period}...</p>
+                    <p className="text-[10px] text-text-muted font-normal">
+                      Verificando asignaturas y promedios por debajo de 65 (Primaria) y 70 (Secundaria)...
+                    </p>
+                  </div>
+                ) : candidateEntries.length === 0 ? (
+                  <div className="p-6 text-center rounded-2xl bg-brand-bg border border-border-main text-xs font-bold text-emerald-600 space-y-2">
                     <CheckCircle2 size={24} className="mx-auto text-emerald-500" />
-                    <span>¡Excelente! No se detectaron estudiantes por debajo del umbral mínimo en los cursos seleccionados para este período.</span>
+                    <p>¡Excelente! No se detectaron estudiantes por debajo del umbral mínimo en los cursos seleccionados para {period}.</p>
+                    <p className="text-[10px] text-text-muted font-normal">
+                      Si necesitas agregar a un estudiante puntualmente, usa el botón "Agregar Manual" arriba.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
