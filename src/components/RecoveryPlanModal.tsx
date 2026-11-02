@@ -30,7 +30,7 @@ interface RecoveryPlanModalProps {
   allCourses?: any[];
   subjects: any[];
   students: any[];
-  grades: any[];
+  grades: any;
   centerId: string;
   schoolYear: string;
   activePeriod?: string;
@@ -148,19 +148,40 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
         const stName = `${st.first_surname || st.last_name || ''} ${st.names || st.first_name || ''}`.trim() || 'Estudiante';
 
         cSubjects.forEach((sub) => {
-          const gRecord = grades.find((g) => {
-            const matchStudent = g.student_id === st.id;
-            const matchSub = g.subject_id === sub.id;
-            return matchStudent && matchSub;
-          });
-
           let score = 0;
-          if (gRecord) {
-            if (period === 'P1') score = Number(gRecord.p1_final || gRecord.p1) || 0;
-            else if (period === 'P2') score = Number(gRecord.p2_final || gRecord.p2) || 0;
-            else if (period === 'P3') score = Number(gRecord.p3_final || gRecord.p3) || 0;
-            else if (period === 'P4') score = Number(gRecord.p4_final || gRecord.p4) || 0;
-            else if (period === 'FINAL') score = Number(gRecord.final_score || gRecord.cf) || 0;
+
+          // Si grades es un Array de la BD
+          if (Array.isArray(grades)) {
+            const gRecord = grades.find((g) => {
+              const matchStudent = g.student_id === st.id;
+              const matchSub = g.subject_id === sub.id;
+              return matchStudent && matchSub;
+            });
+
+            if (gRecord) {
+              if (period === 'P1') score = Number(gRecord.p1_final || gRecord.p1) || 0;
+              else if (period === 'P2') score = Number(gRecord.p2_final || gRecord.p2) || 0;
+              else if (period === 'P3') score = Number(gRecord.p3_final || gRecord.p3) || 0;
+              else if (period === 'P4') score = Number(gRecord.p4_final || gRecord.p4) || 0;
+              else if (period === 'FINAL') score = Number(gRecord.final_score || gRecord.cf) || 0;
+            }
+          } else if (grades && typeof grades === 'object') {
+            // Si grades viene como Mapa local de Calificaciones: { `${studentId}_${key}`: value }
+            const pL = (period === 'FINAL' ? 'final' : period).toLowerCase();
+            // Buscar si hay calificación final o promedio de período
+            const directVal = grades[`${st.id}_${pL}`] || grades[`${st.id}_final`] || grades[`${st.id}_cf`];
+            if (directVal !== undefined && directVal !== '') {
+              score = Number(directVal) || 0;
+            } else {
+              // Buscar por clave con prefijos de competencias: `${st.id}_c1_${pL}`, etc.
+              const compKeys = Object.keys(grades).filter(
+                (k) => k.startsWith(`${st.id}_`) && k.endsWith(`_${pL}`)
+              );
+              if (compKeys.length > 0) {
+                const sum = compKeys.reduce((acc, k) => acc + (Number(grades[k]) || 0), 0);
+                score = Math.round(sum / compKeys.length);
+              }
+            }
           }
 
           if (score > 0 && score < passingThreshold) {
