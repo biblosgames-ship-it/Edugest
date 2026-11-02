@@ -3085,7 +3085,7 @@ export const DigitalRegister = ({
           grades={grades || []}
           centerId={profile?.center_id || center?.id || ''}
           schoolYear={selectedYear || '2026-2027'}
-          activePeriod={activePeriod || 'P1'}
+          activePeriod="P1"
           userId={profile?.id}
         />
       )}
