@@ -19,8 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  CloudOff
+  CloudOff,
+  FileBarChart,
+  Award
 } from 'lucide-react';
+import { RecoveryPlanModal } from './RecoveryPlanModal';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -33,7 +36,11 @@ import { useTeacherIdentity } from '../utils/teacherUtils';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 import { getReportTanda } from '../utils/courseSorter';
 
-export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
+export const DigitalRegister = ({
+  onViewChange
+}: {
+  onViewChange?: (view: string, options?: any) => void;
+}) => {
   const { state, profile, selectedYear, center } = useApp();
   const { isSameTeacher } = useTeacherIdentity();
 
@@ -93,6 +100,21 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  const handleGoToReports = () => {
+    if (hasUnsavedChanges) {
+      alert(
+        '⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de salir a los reportes para no perder los datos digitados.'
+      );
+      return;
+    }
+    if (onViewChange) {
+      onViewChange('general-reports', {
+        reportCategory: 'academic-course',
+        courseId: selectedCourseId || undefined
+      });
+    }
+  };
+
   const handleHorizontalScroll = (direction: 'left' | 'right') => {
     if (!tableScrollRef.current) return;
     const scrollAmount = 360;
@@ -110,6 +132,7 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
   const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState<boolean>(false);
   const [summaryPeriodDivisor, setSummaryPeriodDivisor] = useState<number>(4);
+  const [showRecoveryPlanModal, setShowRecoveryPlanModal] = useState<boolean>(false);
 
   const levels = ['Todos', 'Inicial', 'Primario', 'Secundario'];
 
@@ -1820,16 +1843,11 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
         </div>
         {onViewChange && (
           <button
-            onClick={() => {
-              if (hasUnsavedChanges) {
-                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de salir a los reportes para no perder los datos digitados.');
-                return;
-              }
-              onViewChange('general-reports');
-            }}
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-[10px] shadow-md flex items-center gap-2 transition-all border border-white/20"
+            onClick={handleGoToReports}
+            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-[10px] shadow-md flex items-center gap-2 transition-all border border-white/20 cursor-pointer"
+            title="Ir al reporte por grado, boletines y estadísticas de este curso"
           >
-            <Printer size={14} /> Imprimir Boletines / Reportes
+            <FileBarChart size={14} /> Reportes y estadísticas
           </button>
         )}
       </div>
@@ -1869,26 +1887,38 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
               <Calendar size={14} /> {config.year}
             </div>
           </div>
-          <select
-            value={selectedCourseId}
-            onChange={(e) => {
-              const newCourseId = e.target.value;
-              if (newCourseId === selectedCourseId) return;
-              if (hasUnsavedChanges) {
-                triggerSave(true, selectedCourseId, selectedSubjectId, students);
-              }
-              setSelectedCourseId(newCourseId);
-              setSelectedSubjectId('');
-            }}
-            className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-2 text-[10px] font-black uppercase focus:border-indigo-500 outline-none"
-          >
-            <option value="">-- SELECCIONE EL GRADO --</option>
-            {filteredCourses.map((c: any) => (
-              <option key={c.id} value={c.id}>
-                {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {getReportTanda(c.tanda, 'full')}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1 flex items-center gap-2">
+            <select
+              value={selectedCourseId}
+              onChange={(e) => {
+                const newCourseId = e.target.value;
+                if (newCourseId === selectedCourseId) return;
+                if (hasUnsavedChanges) {
+                  triggerSave(true, selectedCourseId, selectedSubjectId, students);
+                }
+                setSelectedCourseId(newCourseId);
+                setSelectedSubjectId('');
+              }}
+              className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-2 text-[10px] font-black uppercase focus:border-indigo-500 outline-none"
+            >
+              <option value="">-- SELECCIONE EL GRADO --</option>
+              {filteredCourses.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.level ? `${c.level} ` : ''}{c.grade} "{c.section}" - {getReportTanda(c.tanda, 'full')}
+                </option>
+              ))}
+            </select>
+            {selectedCourseId && onViewChange && (
+              <button
+                type="button"
+                onClick={handleGoToReports}
+                className="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-md flex items-center gap-2 transition-all cursor-pointer"
+                title="Abrir reportes, boletines y estadísticas de este curso"
+              >
+                <FileBarChart size={14} /> Reportes y estadísticas
+              </button>
+            )}
+          </div>
         </div>
         {selectedCourseId && (
           <div className="flex flex-wrap gap-1 border-t border-slate-50 pt-3">
@@ -1912,25 +1942,37 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
       </div>
 
       {selectedSubjectId && (
-        <div className="flex gap-2 bg-brand-bg p-1 rounded-2xl w-fit ml-auto shadow-sm">
-          <button
-            onClick={() => setActiveTab('grades')}
-            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all ${activeTab === 'grades' ? 'bg-surface text-indigo-600 shadow-sm' : 'text-text-muted'}`}
-          >
-            <Edit3 size={14} /> Calificaciones
-          </button>
-          <button
-            onClick={() => {
-              if (hasUnsavedChanges && activeTab === 'grades') {
-                alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar a la pestaña de Actas y Resultados.');
-                return;
-              }
-              setActiveTab('results');
-            }}
-            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all ${activeTab === 'results' ? 'bg-surface text-emerald-600 shadow-sm' : 'text-text-muted'}`}
-          >
-            <BarChart3 size={14} /> Ver Promedios
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2 bg-brand-bg p-1 rounded-2xl w-fit shadow-sm">
+            <button
+              onClick={() => setActiveTab('grades')}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all ${activeTab === 'grades' ? 'bg-surface text-indigo-600 shadow-sm' : 'text-text-muted'}`}
+            >
+              <Edit3 size={14} /> Calificaciones
+            </button>
+            <button
+              onClick={() => {
+                if (hasUnsavedChanges && activeTab === 'grades') {
+                  alert('⚠️ TIENES CALIFICACIONES PENDIENTES DE GUARDAR.\n\nPor favor, pulsa el botón "GUARDAR" antes de cambiar a la pestaña de Actas y Resultados.');
+                  return;
+                }
+                setActiveTab('results');
+              }}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all ${activeTab === 'results' ? 'bg-surface text-emerald-600 shadow-sm' : 'text-text-muted'}`}
+            >
+              <BarChart3 size={14} /> Ver Promedios
+            </button>
+          </div>
+          {onViewChange && (
+            <button
+              type="button"
+              onClick={handleGoToReports}
+              className="px-5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 rounded-2xl font-black uppercase text-[10px] shadow-sm flex items-center gap-2 transition-all border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+              title="Ir a reportes, boletines y estadísticas de este grado"
+            >
+              <FileBarChart size={14} /> Reportes y estadísticas
+            </button>
+          )}
         </div>
       )}
 
@@ -2047,11 +2089,29 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
                 <ScrollText size={16} /> JALAR NOTAS DE MI AULA
               </button>
               <button
+                type="button"
+                onClick={() => setShowRecoveryPlanModal(true)}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer border border-amber-400"
+                title="Crear y activar Plan de Recuperación Pedagógica para estudiantes por debajo del umbral"
+              >
+                <Award size={16} /> Plan de Recuperación
+              </button>
+              <button
                 onClick={printGradesPDF}
                 className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all hover:bg-indigo-700"
               >
                 <Printer size={16} /> IMPRIMIR PDF
               </button>
+              {onViewChange && (
+                <button
+                  type="button"
+                  onClick={handleGoToReports}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all cursor-pointer border border-indigo-400/30"
+                  title="Ir a reportes, boletines y estadísticas de este grado"
+                >
+                  <FileBarChart size={16} /> Reportes y estadísticas
+                </button>
+              )}
               <button
                 onClick={save}
                 disabled={isSaving || !isEditable}
@@ -3012,6 +3072,22 @@ export const DigitalRegister = ({ onViewChange }: { onViewChange?: (view: string
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL PLAN DE RECUPERACIÓN PEDAGÓGICA */}
+      {selectedCourse && (
+        <RecoveryPlanModal
+          isOpen={showRecoveryPlanModal}
+          onClose={() => setShowRecoveryPlanModal(false)}
+          course={selectedCourse}
+          subjects={allSubjects || []}
+          students={students || []}
+          grades={grades || []}
+          centerId={profile?.center_id || center?.id || ''}
+          schoolYear={selectedYear || '2026-2027'}
+          activePeriod={activePeriod || 'P1'}
+          userId={profile?.id}
+        />
       )}
     </div>
   );

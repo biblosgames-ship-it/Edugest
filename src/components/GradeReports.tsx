@@ -135,10 +135,22 @@ export function deduplicateCourseStudents(rawStudents: any[], gradesData?: any[]
   return { uniqueStudents, idAliasMap };
 }
 
-export const GradeReports = ({ onViewChange }: { onViewChange?: (view: string) => void }) => {
+export const GradeReports = ({
+  onViewChange,
+  initialCourseId
+}: {
+  onViewChange?: (view: string, options?: any) => void;
+  initialCourseId?: string;
+}) => {
   const { state, selectedYear, center: contextCenter } = useApp();
   const { profile } = useSupabase();
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
+
+  useEffect(() => {
+    if (initialCourseId) {
+      setSelectedCourseId(initialCourseId);
+    }
+  }, [initialCourseId]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingRegistro, setIsGeneratingRegistro] = useState(false);
   const [registroSoloNumeros, setRegistroSoloNumeros] = useState(false);

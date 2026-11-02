@@ -41,7 +41,13 @@ export const AppRoutes = () => {
           path="register"
           element={
             <DigitalRegister
-              onViewChange={(v: string) => navigate(v === 'dashboard' ? '/' : `/${v}`)}
+              onViewChange={(v: string, options?: any) => {
+                if (v === 'general-reports') {
+                  navigate('/reports', { state: options });
+                } else {
+                  navigate(v === 'dashboard' ? '/' : `/${v}`);
+                }
+              }}
             />
           }
         />

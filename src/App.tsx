@@ -174,6 +174,8 @@ function AppContent() {
   const [classroomTab, setClassroomTab] = useState<'attendance' | 'notes' | 'partials' | 'tasks' | 'folder'>('attendance');
   const [classroomCourseId, setClassroomCourseId] = useState<string>('');
   const [classroomSubjectId, setClassroomSubjectId] = useState<string>('');
+  const [reportCategory, setReportCategory] = useState<string>('academic-general');
+  const [reportCourseId, setReportCourseId] = useState<string>('');
   const [dataView, setDataView] = useState('course');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: stats } = useStats();
@@ -212,23 +214,28 @@ function AppContent() {
   const isParentRole = ['parent', 'padre', 'tutor', 'madre', 'familiar'].includes(profile?.role || '');
   const isStudentOrParent = profile?.role === 'student' || isParentRole;
 
-  // Manejo de cambio de vista con acceso directo inteligente a tareas o asistencia de Mi Aula
+  // Manejo de cambio de vista con acceso directo inteligente a tareas, asistencia o reportes por curso
   const handleViewChange = (
     view: string,
     options?: {
       tab?: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder';
       courseId?: string;
       subjectId?: string;
+      reportCategory?: string;
     }
   ) => {
     if (options?.courseId) {
       setClassroomCourseId(options.courseId);
+      setReportCourseId(options.courseId);
     }
     if (options?.subjectId) {
       setClassroomSubjectId(options.subjectId);
     }
     if (options?.tab) {
       setClassroomTab(options.tab);
+    }
+    if (options?.reportCategory) {
+      setReportCategory(options.reportCategory);
     }
 
     if (view === 'tasks' && !isStudentOrParent) {
@@ -622,6 +629,7 @@ function AppContent() {
                 initialCourseId={classroomCourseId}
                 initialSubjectId={classroomSubjectId}
                 onTabChange={(tab) => setClassroomTab(tab)}
+                onViewChange={handleViewChange}
               />
             </div>
           </div>
@@ -642,7 +650,7 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'digital-register' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <DigitalRegister onViewChange={setActiveView} />
+              <DigitalRegister onViewChange={handleViewChange} />
             </div>
           </div>
         )}
@@ -799,7 +807,11 @@ function AppContent() {
             className={`absolute inset-0 overflow-y-auto pt-20 pb-6 px-4 md:p-10 transition-opacity duration-300 ${activeView === 'general-reports' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
           >
             <div className="max-w-7xl mx-auto">
-              <GeneralReports />
+              <GeneralReports
+                initialCategory={reportCategory}
+                initialCourseId={reportCourseId}
+                onViewChange={handleViewChange}
+              />
             </div>
           </div>
         )}

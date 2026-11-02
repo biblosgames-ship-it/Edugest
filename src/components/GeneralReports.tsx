@@ -102,9 +102,32 @@ const ReportCard = ({ title, description, icon: Icon, color, onClick }: any) => 
   </div>
 );
 
-export const GeneralReports = () => {
-  const [activeCategory, setActiveCategory] = useState('academic-general');
+interface GeneralReportsProps {
+  initialCategory?: string;
+  initialCourseId?: string;
+  onViewChange?: (view: string, options?: any) => void;
+}
+
+export const GeneralReports: React.FC<GeneralReportsProps> = ({
+  initialCategory,
+  initialCourseId,
+  onViewChange
+} = {}) => {
+  const [activeCategory, setActiveCategory] = useState(initialCategory || 'academic-general');
+  const [courseIdForReports, setCourseIdForReports] = useState(initialCourseId || '');
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [initialCategory]);
+
+  useEffect(() => {
+    if (initialCourseId) {
+      setCourseIdForReports(initialCourseId);
+    }
+  }, [initialCourseId]);
 
   const categories = [
     { id: 'academic-general', label: 'Académico General', icon: LayoutGrid },
@@ -1348,7 +1371,10 @@ export const GeneralReports = () => {
           {activeCategory === 'academic-course' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white p-2 rounded-[3rem] border border-slate-100 shadow-xl overflow-hidden">
-                <GradeReports onViewChange={() => {}} />
+                <GradeReports
+                  initialCourseId={courseIdForReports}
+                  onViewChange={onViewChange || (() => {})}
+                />
               </div>
             </div>
           )}

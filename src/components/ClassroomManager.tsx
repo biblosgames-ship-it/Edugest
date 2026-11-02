@@ -45,7 +45,8 @@ import {
   Layers,
   Lock,
   FileSpreadsheet,
-  CalendarRange
+  CalendarRange,
+  FileBarChart
 } from 'lucide-react';
 import { CourseAttendanceReportModal } from './CourseAttendanceReportModal';
 import { dataService } from '../services/dataService';
@@ -70,13 +71,15 @@ export interface ClassroomManagerProps {
   onTabChange?: (tab: 'attendance' | 'notes' | 'partials' | 'tasks' | 'folder') => void;
   initialCourseId?: string;
   initialSubjectId?: string;
+  onViewChange?: (view: string, options?: any) => void;
 }
 
 export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   initialTab = 'attendance',
   onTabChange,
   initialCourseId,
-  initialSubjectId
+  initialSubjectId,
+  onViewChange
 }) => {
   const { state, center, selectedYear } = useApp();
   const { profile } = useSupabase();
@@ -266,6 +269,16 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   const [gradingIsLinkedToPartial, setGradingIsLinkedToPartial] = useState<boolean>(false);
   const [gradingCompetencyId, setGradingCompetencyId] = useState<string>('c1');
   const [gradingMaxScore, setGradingMaxScore] = useState<number>(100);
+  const taskGradingTableRef = useRef<HTMLDivElement | null>(null);
+
+  const handleGradingScroll = (direction: 'left' | 'right') => {
+    if (!taskGradingTableRef.current) return;
+    const scrollAmount = 260;
+    taskGradingTableRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
+  };
 
   // Asignaturas del curso seleccionado (personalizadas por docente y curso)
   const availableSubjects = useMemo(() => {
@@ -3344,6 +3357,21 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                   <CheckCircle2 size={16} /> ¡Calificaciones del {selectedPeriod} Guardadas!
                 </span>
               )}
+              {onViewChange && selectedCourseId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onViewChange('general-reports', {
+                      reportCategory: 'academic-course',
+                      courseId: selectedCourseId
+                    })
+                  }
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                  title="Ir a reportes, boletines y estadísticas de este curso"
+                >
+                  <FileBarChart size={16} /> Reportes y estadísticas
+                </button>
+              )}
               <button
                 onClick={handleSavePartials}
                 disabled={isSavingPartials}
@@ -4397,6 +4425,29 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       )}
                     </div>
 
+                    {/* Cotejo: Tarea Exclusiva de Plan de Recuperación */}
+                    <div className="p-3 sm:p-3.5 bg-amber-500/10 dark:bg-amber-950/30 rounded-xl sm:rounded-2xl border border-amber-300/60 dark:border-amber-700/60 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Award size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                          <div className="min-w-0">
+                            <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-950 dark:text-amber-200 block truncate">
+                              Tarea Exclusiva para Plan de Recuperación
+                            </label>
+                            <p className="text-[9px] sm:text-[10px] text-amber-800/80 dark:text-amber-300/80 font-medium line-clamp-1">
+                              Solo será visible para los alumnos asignados a recuperación. No afecta las estadísticas de los demás.
+                            </p>
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={taskFormData.is_recovery || false}
+                          onChange={(e) => setTaskFormData({ ...taskFormData, is_recovery: e.target.checked })}
+                          className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 rounded-lg cursor-pointer accent-amber-500 shrink-0"
+                        />
+                      </div>
+                    </div>
+
                     {/* Recursos Multimedia y Enlaces */}
                     <div className="p-3 sm:p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
                       <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
@@ -4605,24 +4656,24 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             });
 
             return (
-              <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 animate-fade-in overflow-y-auto">
-                <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+              <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fade-in overflow-y-auto">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-auto max-h-[96vh] sm:max-h-[92vh] flex flex-col">
                   {/* Encabezado del modal */}
-                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-6 text-white flex items-center justify-between border-b border-white/10 shrink-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0">
-                        <Award size={24} />
+                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-4 sm:p-6 text-white flex items-center justify-between border-b border-white/10 shrink-0">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                        <Award size={22} />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                           <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 rounded-lg text-[9px] font-black uppercase tracking-wider font-mono">
                             {parseTaskPeriod(selectedTaskForGrading)}
                           </span>
-                          <span className="text-[10px] font-bold text-indigo-200 uppercase">
+                          <span className="text-[10px] font-bold text-indigo-200 uppercase truncate">
                             {selectedCourseObj ? `${selectedCourseObj.level} ${selectedCourseObj.grade} "${selectedCourseObj.section}"` : 'Curso'}
                           </span>
                         </div>
-                        <h3 className="font-black text-lg md:text-xl uppercase tracking-tight text-white line-clamp-1">
+                        <h3 className="font-black text-base sm:text-xl uppercase tracking-tight text-white line-clamp-1 truncate">
                           Corregir: {selectedTaskForGrading.title}
                         </h3>
                       </div>
@@ -4630,14 +4681,14 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedTaskForGrading(null)}
-                      className="text-white/70 hover:text-white p-2 rounded-xl hover:bg-white/10 cursor-pointer transition-colors"
+                      className="text-white/70 hover:text-white p-2 rounded-xl hover:bg-white/10 cursor-pointer transition-colors shrink-0"
                     >
                       <X size={22} />
                     </button>
                   </div>
 
                   {/* Cuerpo scrollable */}
-                  <div className="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+                  <div className="p-3 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1 custom-scrollbar">
                     {/* Tarjetas de Métricas de Cumplimiento */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="bg-indigo-500/10 dark:bg-indigo-950/40 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/50">
@@ -4790,7 +4841,30 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                         </select>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Controles de scroll lateral para móviles */}
+                        <div className="flex items-center gap-1 bg-brand-bg px-2 py-1.5 rounded-xl border border-border-main">
+                          <button
+                            type="button"
+                            onClick={() => handleGradingScroll('left')}
+                            className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-indigo-600 transition-colors cursor-pointer active:scale-95"
+                            title="Desplazar tabla a la izquierda"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="text-[9px] font-black uppercase text-text-muted px-1 select-none">
+                            Scroll
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleGradingScroll('right')}
+                            className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-indigo-600 transition-colors cursor-pointer active:scale-95"
+                            title="Desplazar tabla a la derecha"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+
                         <button
                           type="button"
                           onClick={handleMarkAllCompleted}
@@ -4823,16 +4897,27 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       </div>
                     </div>
 
+                    {/* Indicador de desplazamiento lateral en móvil */}
+                    <div className="md:hidden flex items-center justify-between text-[10px] font-bold text-text-muted px-3 py-1.5 bg-indigo-50/60 dark:bg-slate-800/60 rounded-xl border border-indigo-100 dark:border-slate-700">
+                      <span className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
+                        <span className="text-xs">↔</span> Desliza la tabla hacia los lados para calificar y anotar observaciones
+                      </span>
+                    </div>
+
                     {/* Tabla de Alumnos para Calificar */}
-                    <div className="border border-border-main rounded-2xl overflow-hidden shadow-xs">
-                      <table className="w-full text-left border-collapse">
+                    <div
+                      ref={taskGradingTableRef}
+                      className="border border-border-main rounded-2xl overflow-x-auto custom-scrollbar shadow-xs touch-pan-x overscroll-x-contain"
+                      style={{ WebkitOverflowScrolling: 'touch' }}
+                    >
+                      <table className="w-full min-w-[720px] text-left border-collapse">
                         <thead>
                           <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
-                            <th className="py-2.5 px-3 w-12 text-center">No.</th>
-                            <th className="py-2.5 px-3">Estudiante</th>
-                            <th className="py-2.5 px-3 w-48 text-center">Estado de Entrega</th>
-                            <th className="py-2.5 px-3 w-28 text-center">Calificación (/{gradingMaxScore})</th>
-                            <th className="py-2.5 px-3 min-w-[160px]">Observación / Feedback</th>
+                            <th className="py-2.5 px-3 w-12 min-w-[48px] text-center">No.</th>
+                            <th className="py-2.5 px-3 min-w-[170px]">Estudiante</th>
+                            <th className="py-2.5 px-3 w-52 min-w-[210px] text-center">Estado de Entrega</th>
+                            <th className="py-2.5 px-3 w-32 min-w-[120px] text-center">Calificación (/{gradingMaxScore})</th>
+                            <th className="py-2.5 px-3 min-w-[200px]">Observación / Feedback</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border-main text-xs bg-surface">
@@ -4851,10 +4936,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
                               return (
                                 <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                                  <td className="py-2 px-3 font-mono font-bold text-center text-text-muted">
+                                  <td className="py-2 px-3 font-mono font-bold text-center text-text-muted w-12 min-w-[48px]">
                                     {studentOrder}
                                   </td>
-                                  <td className="py-2 px-3">
+                                  <td className="py-2 px-3 min-w-[170px]">
                                     <div className="flex items-center gap-1.5">
                                       <span className="font-bold text-text-main line-clamp-1">{studentName}</span>
                                       {specialNotesMap[s.id] && (
@@ -4870,7 +4955,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                     </div>
                                     {s.rne && <div className="text-[10px] text-text-muted font-mono">{s.rne}</div>}
                                   </td>
-                                  <td className="py-2 px-3">
+                                  <td className="py-2 px-3 min-w-[210px]">
                                     <div className="flex items-center justify-center gap-1">
                                       <button
                                         type="button"
@@ -4884,7 +4969,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             }
                                           }));
                                         }}
-                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer whitespace-nowrap ${
                                           isCompleted
                                             ? 'bg-emerald-500 text-white shadow-xs'
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-emerald-50 hover:text-emerald-600'
@@ -4904,7 +4989,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             }
                                           }));
                                         }}
-                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer whitespace-nowrap ${
                                           currentRec.status === 'pending'
                                             ? 'bg-amber-500 text-white shadow-xs'
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-amber-50 hover:text-amber-600'
@@ -4924,7 +5009,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                             }
                                           }));
                                         }}
-                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer whitespace-nowrap ${
                                           currentRec.status === 'uncompleted'
                                             ? 'bg-rose-500 text-white shadow-xs'
                                             : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-rose-50 hover:text-rose-600'
@@ -4934,7 +5019,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                       </button>
                                     </div>
                                   </td>
-                                  <td className="py-2 px-3 text-center">
+                                  <td className="py-2 px-3 text-center min-w-[120px]">
                                     <input
                                       type="number"
                                       min="0"
@@ -4957,7 +5042,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                       className="w-16 p-1.5 text-center font-black rounded-xl border border-border-main bg-brand-bg text-text-main text-xs outline-none focus:ring-2 focus:ring-indigo-500 mx-auto"
                                     />
                                   </td>
-                                  <td className="py-2 px-3">
+                                  <td className="py-2 px-3 min-w-[200px]">
                                     <input
                                       type="text"
                                       placeholder="Observación opcional..."
@@ -4985,17 +5070,17 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                   </div>
 
                   {/* Pie del modal con botones de acción */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-border-main flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-2 text-xs font-bold text-text-muted">
+                  <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-border-main flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-muted justify-center sm:justify-start">
                       <CheckCircle2 size={16} className={currentPercentage > 0 ? "text-emerald-500" : "text-slate-400"} />
                       <span>{completedCount} de {totalStudents} alumnos evaluados ({currentPercentage}%)</span>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={() => setSelectedTaskForGrading(null)}
-                        className="px-4 py-2.5 rounded-2xl border border-border-main text-text-main hover:bg-surface font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
+                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl border border-border-main text-text-main hover:bg-surface font-black uppercase tracking-wider text-xs cursor-pointer transition-colors"
                       >
                         Cerrar
                       </button>

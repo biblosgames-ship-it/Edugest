@@ -30,6 +30,7 @@ import { LinkifiedText } from './LinkifiedText';
 import { TaskDetailModal } from './TaskDetailModal';
 import { supabase } from '../lib/supabase';
 import { resolveStudentForUser } from '../utils/studentResolver';
+import { recoveryPlanService, RecoveryPlanStudent } from '../services/recoveryPlanService';
 
 interface StudentTasksModuleProps {
   userData: any;
@@ -71,6 +72,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
   const [taskSubmissions, setTaskSubmissions] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recoveryPlans, setRecoveryPlans] = useState<Array<{ plan: any; records: RecoveryPlanStudent[] }>>([]);
 
   // Filtros de navegación
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
@@ -244,16 +246,18 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
             setFamilyStudents(resolved.familyStudents);
           }
 
-          const [tasksData, annData, subsData] = await Promise.all([
+          const [tasksData, annData, subsData, recPlans] = await Promise.all([
             dataService.getTasks(currentCourse.id),
             dataService.getAnnouncements(currentCourse.id),
-            targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([])
+            targetStudentId ? dataService.getStudentTaskSubmissions(targetStudentId, profile?.center_id) : Promise.resolve([]),
+            targetStudentId ? recoveryPlanService.getStudentRecoverySubjects(targetStudentId, currentCourse.id) : Promise.resolve([])
           ]);
 
           if (!isCancelled) {
             setTasks(tasksData || []);
             setAnnouncements(annData || []);
             setTaskSubmissions(subsData || []);
+            setRecoveryPlans(recPlans || []);
           }
         }
       } catch (err) {
@@ -357,6 +361,25 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     return map;
   }, [taskSubmissions]);
 
+  // Conjunto de materias en las que el alumno está en recuperación
+  const studentRecoverySubjectIds = useMemo(() => {
+    const set = new Set<string>();
+    recoveryPlans.forEach((rp) => {
+      rp.records.forEach((rec) => {
+        if (rec.subject_id) set.add(rec.subject_id);
+      });
+    });
+    return set;
+  }, [recoveryPlans]);
+
+  // Lista de tareas aplicables a este alumno (omite tareas de recuperación si el alumno no está en recuperación)
+  const applicableTasks = useMemo(() => {
+    return tasks.filter((t: any) => {
+      if (!t.is_recovery) return true;
+      return t.subject_id && studentRecoverySubjectIds.has(t.subject_id);
+    });
+  }, [tasks, studentRecoverySubjectIds]);
+
   // Contadores y estado de cumplimiento exacto por materia
   const subjectStats = useMemo(() => {
     const stats: Record<string, {
@@ -369,7 +392,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     }> = {};
 
     courseSubjects.forEach(({ subject }) => {
-      const subTasks = tasks.filter((t: any) => t.subject_id === subject.id);
+      const subTasks = applicableTasks.filter((t: any) => t.subject_id === subject.id);
       const total = subTasks.length;
       const completed = subTasks.filter((t: any) => submissionsMap[t.id]?.status === 'completed').length;
       const missing = subTasks.filter(
@@ -391,13 +414,13 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     });
 
     return stats;
-  }, [courseSubjects, tasks, submissionsMap, announcements]);
+  }, [courseSubjects, applicableTasks, submissionsMap, announcements]);
 
   // Total global y porcentaje de cumplimiento
   const globalStats = useMemo(() => {
-    const total = tasks.length;
-    const completed = tasks.filter((t) => submissionsMap[t.id]?.status === 'completed').length;
-    const missing = tasks.filter(
+    const total = applicableTasks.length;
+    const completed = applicableTasks.filter((t) => submissionsMap[t.id]?.status === 'completed').length;
+    const missing = applicableTasks.filter(
       (t) =>
         submissionsMap[t.id]?.status === 'uncompleted' ||
         (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
@@ -413,7 +436,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
       compliancePct: compliancePct,
       announcements: announcements.length
     };
-  }, [tasks, submissionsMap, announcements]);
+  }, [applicableTasks, submissionsMap, announcements]);
 
   // Materia activa
   const activeSubjectData = useMemo(() => {
@@ -423,7 +446,7 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
   // Tareas filtradas para la materia activa (o todas) y con filtros aplicados
   const displayedTasks = useMemo(() => {
-    let list = tasks;
+    let list = applicableTasks;
 
     if (selectedSubjectId !== 'ALL') {
       list = list.filter((t: any) => t.subject_id === selectedSubjectId);
@@ -701,6 +724,69 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
           </div>
         </div>
       </div>
+
+      {/* BANNER NOTIFICACIÓN DE PLAN DE RECUPERACIÓN (PARA ALUMNOS / PADRES AFECTADOS) */}
+      {recoveryPlans.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border-2 border-amber-400/60 rounded-[2.5rem] p-6 shadow-xl space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/30">
+                <Award size={24} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-mono">
+                  Atención Académica
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight mt-0.5">
+                  Plan de Recuperación Pedagógica Asignado
+                </h3>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-xl">
+              {recoveryPlans.reduce((sum, p) => sum + p.records.length, 0)} Asignatura(s) en Proceso
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {recoveryPlans.map((rp) =>
+              rp.records.map((rec) => {
+                const subName =
+                  rec.subject_name ||
+                  (state.subjects || []).find((s: any) => s.id === rec.subject_id)?.name ||
+                  'Materia';
+                return (
+                  <div
+                    key={`${rp.plan.id}_${rec.subject_id}`}
+                    className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900">{subName}</span>
+                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
+                        Nota original: {rec.original_score} pts
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <Calendar size={13} className="text-amber-600" />
+                      <span>
+                        {rec.start_date && rec.end_date
+                          ? `Fechas: ${rec.start_date} al ${rec.end_date}`
+                          : rp.plan.start_date
+                          ? `Período: ${rp.plan.start_date} al ${rp.plan.end_date}`
+                          : `Período ${rp.plan.period}`}
+                      </span>
+                    </div>
+                    {rec.week_number && (
+                      <span className="inline-block text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800">
+                        Evaluación: Semana {rec.week_number}
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* CLASIFICACIÓN POR MATERIAS (SELECTOR Y GRID) */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-4">
