@@ -49,6 +49,8 @@ export interface StaffEvaluationRecord {
   staffId: string;
   staffName: string;
   staffRole: StaffEvaluationGroup;
+  academicLevel?: 'Primaria' | 'Secundaria' | 'General' | 'Inicial';
+  shift?: 'Matutina' | 'Vespertina' | 'Nocturna' | 'Jornada Extendida';
   evaluatorId: string;
   evaluatorName: string;
   evaluatorRole: string;

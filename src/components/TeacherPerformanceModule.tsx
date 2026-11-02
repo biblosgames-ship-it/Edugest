@@ -114,6 +114,7 @@ export const TeacherPerformanceModule: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('P1');
+  const [levelFilter, setLevelFilter] = useState<'ALL' | 'Primaria' | 'Secundaria'>('ALL');
   const [comparePeriodA, setComparePeriodA] = useState<EvaluationPeriod>('P1');
   const [comparePeriodB, setComparePeriodB] = useState<EvaluationPeriod>('P2');
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,8 +132,10 @@ export const TeacherPerformanceModule: React.FC = () => {
     staff: any;
     group: StaffEvaluationGroup;
     period: EvaluationPeriod;
+    academicLevel?: 'Primaria' | 'Secundaria' | 'General';
     existingRecord?: StaffEvaluationRecord;
   } | null>(null);
+  const [formAcademicLevel, setFormAcademicLevel] = useState<'Primaria' | 'Secundaria' | 'General'>('Primaria');
   const [formScores, setFormScores] = useState<Record<string, number>>({});
   const [formCriteriaObservations, setFormCriteriaObservations] = useState<Record<string, string>>(
     {}
@@ -273,11 +276,21 @@ export const TeacherPerformanceModule: React.FC = () => {
     [evaluations]
   );
 
-  // Filtrar evaluaciones internas según el filtro de período activo
+  // Filtrar evaluaciones internas según el filtro de período activo y nivel
   const filteredInternalEvals = useMemo(() => {
-    if (periodFilter === 'ALL' || periodFilter === 'COMPARE') return internalEvaluations;
-    return internalEvaluations.filter((e) => e.period === periodFilter);
-  }, [internalEvaluations, periodFilter]);
+    let list = internalEvaluations;
+    if (periodFilter !== 'ALL' && periodFilter !== 'COMPARE') {
+      list = list.filter((e) => e.period === periodFilter);
+    }
+    if (levelFilter !== 'ALL') {
+      list = list.filter((e) => {
+        if (e.staffRole !== 'teacher') return true;
+        const eLvl = e.academicLevel || (e.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria');
+        return eLvl === levelFilter;
+      });
+    }
+    return list;
+  }, [internalEvaluations, periodFilter, levelFilter]);
 
   // Estadísticas Globales de Salud del Centro
   const centerHealthStats = useMemo(() => {
@@ -392,20 +405,25 @@ export const TeacherPerformanceModule: React.FC = () => {
     };
   }, [staffByGroup, filteredInternalEvals, rubrics]);
 
-  // Abrir modal de evaluación para un miembro del personal
-  const handleOpenEvaluationModal = (
+  // Función para cargar los datos de evaluación de un nivel y período específicos
+  const loadEvaluationForStaffLevel = (
     staff: any,
     group: StaffEvaluationGroup,
-    periodOverride?: EvaluationPeriod
+    activePeriod: EvaluationPeriod,
+    targetLevel: 'Primaria' | 'Secundaria' | 'General'
   ) => {
-    const activePeriod: EvaluationPeriod =
-      periodOverride ||
-      (periodFilter === 'ALL' || periodFilter === 'COMPARE' ? 'P1' : periodFilter);
     const rubric = rubrics[group];
     if (!rubric) return;
 
+    setFormAcademicLevel(targetLevel);
+
     const existing = internalEvaluations.find(
-      (e) => e.staffId === staff.id && e.staffRole === group && e.period === activePeriod
+      (e) =>
+        e.staffId === staff.id &&
+        e.staffRole === group &&
+        e.period === activePeriod &&
+        (group !== 'teacher' ||
+          (e.academicLevel || (e.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria')) === targetLevel)
     );
 
     const todayIso = new Date().toISOString().split('T')[0];
@@ -439,7 +457,7 @@ export const TeacherPerformanceModule: React.FC = () => {
       const defaults: Record<string, number> = {};
       rubric.criteria.forEach((c) => {
         c.indicators.forEach((ind) => {
-          defaults[ind.id] = 4; // Por defecto en 4 para agilizar llenado, editable indicador por indicador
+          defaults[ind.id] = 4;
         });
       });
       setFormScores(defaults);
@@ -449,26 +467,36 @@ export const TeacherPerformanceModule: React.FC = () => {
       setFormDidacticAnswers({});
       setFormDidacticObservations('');
 
-      // Pre-seleccionar el primer grado asignado al docente si existe
-      const teacherAssign = (state.assignments || []).find(
+      // Pre-seleccionar el primer grado asignado al docente para el nivel objetivo
+      const teacherAssigns = (state.assignments || []).filter(
         (a: any) => (a.teacherId || a.teacher_id) === staff.id
       );
-      const assignedCourse = teacherAssign
-        ? (state.courses || []).find(
-            (c: any) => c.id === (teacherAssign.courseId || teacherAssign.course_id)
-          )
-        : null;
-      const assignedSubject = teacherAssign
-        ? (state.subjects || []).find(
-            (s: any) => s.id === (teacherAssign.subjectId || teacherAssign.subject_id)
+      const teacherCourses = (state.courses || []).filter((c: any) =>
+        teacherAssigns.some((a: any) => (a.courseId || a.course_id) === c.id)
+      );
+      const levelMatches = teacherCourses.filter((c: any) => {
+        if (targetLevel === 'Secundaria') {
+          return (c.level || '').toLowerCase().includes('secun') || (c.level || '').toLowerCase().includes('med');
+        }
+        if (targetLevel === 'Primaria') {
+          return (c.level || '').toLowerCase().includes('prim');
+        }
+        return true;
+      });
+      const assignedCourse = levelMatches[0] || teacherCourses[0] || null;
+      const assignedSubject = assignedCourse
+        ? (state.subjects || []).find((s: any) =>
+            teacherAssigns.some(
+              (a: any) =>
+                (a.courseId || a.course_id) === assignedCourse.id &&
+                (a.subjectId || a.subject_id) === s.id
+            )
           )
         : null;
 
       setFormCourseId(assignedCourse ? assignedCourse.id : '');
       setFormCourseName(
-        assignedCourse
-          ? `${assignedCourse.grade} "${assignedCourse.section || ''}"`.trim()
-          : ''
+        assignedCourse ? `${assignedCourse.grade} "${assignedCourse.section || ''}"`.trim() : ''
       );
       setFormSubjectName(assignedSubject ? assignedSubject.name : staff.position || '');
       setFormAppliedDate(todayIso);
@@ -484,8 +512,48 @@ export const TeacherPerformanceModule: React.FC = () => {
       staff,
       group,
       period: activePeriod,
+      academicLevel: targetLevel,
       existingRecord: existing
     });
+  };
+
+  // Abrir modal de evaluación para un miembro del personal
+  const handleOpenEvaluationModal = (
+    staff: any,
+    group: StaffEvaluationGroup,
+    periodOverride?: EvaluationPeriod,
+    levelOverride?: 'Primaria' | 'Secundaria' | 'General'
+  ) => {
+    const activePeriod: EvaluationPeriod =
+      periodOverride ||
+      (periodFilter === 'ALL' || periodFilter === 'COMPARE' ? 'P1' : periodFilter);
+
+    // Detectar cursos asignados al docente
+    const teacherAssigns = (state.assignments || []).filter(
+      (a: any) => (a.teacherId || a.teacher_id) === staff.id
+    );
+    const teacherCourses = (state.courses || []).filter((c: any) =>
+      teacherAssigns.some((a: any) => (a.courseId || a.course_id) === c.id)
+    );
+    const hasPrimaria = teacherCourses.some((c: any) => (c.level || '').toLowerCase().includes('prim'));
+    const hasSecundaria = teacherCourses.some(
+      (c: any) => (c.level || '').toLowerCase().includes('secun') || (c.level || '').toLowerCase().includes('med')
+    );
+
+    let targetLevel: 'Primaria' | 'Secundaria' | 'General' = 'General';
+    if (group === 'teacher') {
+      if (levelOverride) {
+        targetLevel = levelOverride;
+      } else if (levelFilter !== 'ALL') {
+        targetLevel = levelFilter;
+      } else if (hasSecundaria && !hasPrimaria) {
+        targetLevel = 'Secundaria';
+      } else {
+        targetLevel = 'Primaria';
+      }
+    }
+    setFormAcademicLevel(targetLevel);
+    loadEvaluationForStaffLevel(staff, group, activePeriod, targetLevel);
   };
 
   // Guardar ficha de evaluación interna (con opción de imprimir inmediatamente al guardar)
@@ -529,9 +597,11 @@ export const TeacherPerformanceModule: React.FC = () => {
       const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
       const levelInfo = calculateLevelFromAverage(averageScore);
 
+      const levelTag =
+        evaluatingStaff.group === 'teacher' ? `_${(formAcademicLevel || 'primaria').toLowerCase()}` : '';
       const recordId =
         evaluatingStaff.existingRecord?.id ||
-        `eval_${evaluatingStaff.group}_${evaluatingStaff.period}_${evaluatingStaff.staff.id}`;
+        `eval_${evaluatingStaff.group}_${evaluatingStaff.period}_${evaluatingStaff.staff.id}${levelTag}`;
 
       const staffName =
         evaluatingStaff.staff.full_name || evaluatingStaff.staff.name || 'Colaborador';
@@ -575,6 +645,7 @@ export const TeacherPerformanceModule: React.FC = () => {
         staffId: evaluatingStaff.staff.id,
         staffName,
         staffRole: evaluatingStaff.group,
+        academicLevel: evaluatingStaff.group === 'teacher' ? formAcademicLevel : 'General',
         evaluatorId: user?.id || profile?.id || 'admin',
         evaluatorName:
           formCoordinatorName.trim() ||
@@ -615,7 +686,7 @@ export const TeacherPerformanceModule: React.FC = () => {
 
       await staffEvaluationService.saveEvaluation(newRecord, user?.id);
       toast.success(
-        `¡Evaluación de ${staffName} (${evaluatingStaff.period}) guardada a las ${recordedTime}! (${percentage}% - ${levelInfo.label})`
+        `¡Evaluación de ${staffName} (${evaluatingStaff.period}${evaluatingStaff.group === 'teacher' ? ` - ${formAcademicLevel}` : ''}) guardada a las ${recordedTime}! (${percentage}% - ${levelInfo.label})`
       );
       setEvaluatingStaff(null);
       await loadAllModuleData();
@@ -724,8 +795,8 @@ export const TeacherPerformanceModule: React.FC = () => {
           [
             `Evaluado(a): ${staffName.toUpperCase()}`,
             `Estamento: ${GROUP_LABELS[ev.staffRole]?.title || ev.staffRole}`,
-            `Fecha: ${formattedDate}`,
-            `Hora: ${formattedTime}`
+            `Nivel Académico: ${ev.academicLevel || (ev.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria')}${ev.shift ? ` (${ev.shift})` : ''}`,
+            `Fecha: ${formattedDate}`
           ],
           [
             `Grado / Curso: ${ev.courseName || 'General / No especificado'}`,
@@ -735,7 +806,7 @@ export const TeacherPerformanceModule: React.FC = () => {
           ],
           [
             {
-              content: `Coordinador(a) / Acompañante Evaluador(a): ${coordSigner}`,
+              content: `Coordinador(a) / Acompañante Evaluador(a): ${coordSigner}  •  Hora registrada: ${formattedTime}`,
               colSpan: 4,
               styles: { fillColor: [248, 250, 252], textColor: [30, 41, 59] }
             }
@@ -986,26 +1057,31 @@ export const TeacherPerformanceModule: React.FC = () => {
     staff: any,
     group: StaffEvaluationGroup,
     periodTarget?: EvaluationPeriod,
-    openPrintDialog = false
+    openPrintDialog = false,
+    levelTarget?: 'Primaria' | 'Secundaria' | 'General'
   ) => {
     const staffName = staff.full_name || staff.name || 'Colaborador';
     const evalsForStaff = internalEvaluations.filter(
       (e) =>
         e.staffId === staff.id &&
         e.staffRole === group &&
-        (!periodTarget || e.period === periodTarget)
+        (!periodTarget || e.period === periodTarget) &&
+        (!levelTarget ||
+          levelTarget === 'General' ||
+          (e.academicLevel || (e.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria')) === levelTarget)
     );
 
     if (evalsForStaff.length === 0) {
-      toast.error('Este colaborador aún no tiene evaluaciones registradas en el período seleccionado.');
+      toast.error('Este colaborador aún no tiene evaluaciones registradas en el nivel o período seleccionado.');
       return;
     }
 
     const cleanName = staffName.replace(/\s+/g, '_');
+    const levelSuffix = levelTarget && levelTarget !== 'General' ? `_${levelTarget}` : '';
     printEvaluationRecords(
       evalsForStaff,
       openPrintDialog,
-      `Evaluacion_${cleanName}_${periodTarget || 'Consolidado'}_${schoolYear}.pdf`
+      `Evaluacion_${cleanName}_${periodTarget || 'Consolidado'}${levelSuffix}_${schoolYear}.pdf`
     );
   };
 
@@ -1758,7 +1834,7 @@ export const TeacherPerformanceModule: React.FC = () => {
 
         {/* Listado Individual de Miembros con Resultados por Período o Comparativa */}
         <div className="bg-white rounded-[2.5rem] border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-6 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h4 className="text-base font-black text-slate-900 uppercase tracking-tight">
                 Evaluación Individual • {groupInfo.title}
@@ -1768,18 +1844,58 @@ export const TeacherPerformanceModule: React.FC = () => {
               </p>
             </div>
 
-            <div className="relative">
-              <Search
-                size={14}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar colaborador..."
-                className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 w-64"
-              />
+            <div className="flex flex-wrap items-center gap-3">
+              {group === 'teacher' && (
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setLevelFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      levelFilter === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Todos (Combinado)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLevelFilter('Primaria')}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      levelFilter === 'Primaria'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-blue-700'
+                    }`}
+                  >
+                    📘 Primaria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLevelFilter('Secundaria')}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      levelFilter === 'Secundaria'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-purple-700'
+                    }`}
+                  >
+                    📙 Secundaria
+                  </button>
+                </div>
+              )}
+
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar colaborador..."
+                  className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 w-56"
+                />
+              </div>
             </div>
           </div>
 
@@ -1818,13 +1934,32 @@ export const TeacherPerformanceModule: React.FC = () => {
                       (e) => e.staffId === person.id && e.staffRole === group
                     );
 
-                    const getPeriodEval = (p: EvaluationPeriod) =>
-                      personInternalEvals.find((e) => e.period === p);
+                    const getPeriodEvalByLevel = (p: EvaluationPeriod, lvl?: 'Primaria' | 'Secundaria') => {
+                      if (!lvl) return personInternalEvals.find((e) => e.period === p);
+                      return personInternalEvals.find(
+                        (e) =>
+                          e.period === p &&
+                          (e.academicLevel === lvl ||
+                            (!e.academicLevel &&
+                              (lvl === 'Secundaria'
+                                ? e.courseName?.toLowerCase().includes('sec')
+                                : !e.courseName?.toLowerCase().includes('sec'))))
+                      );
+                    };
+
+                    const evalsPri = personInternalEvals.filter(
+                      (e) => e.academicLevel === 'Primaria' || (!e.academicLevel && !e.courseName?.toLowerCase().includes('sec'))
+                    );
+                    const evalsSec = personInternalEvals.filter(
+                      (e) => e.academicLevel === 'Secundaria' || (!e.academicLevel && e.courseName?.toLowerCase().includes('sec'))
+                    );
 
                     const activeEvals =
-                      periodFilter === 'ALL' || periodFilter === 'COMPARE'
-                        ? personInternalEvals
-                        : personInternalEvals.filter((e) => e.period === periodFilter);
+                      levelFilter === 'Primaria'
+                        ? (periodFilter === 'ALL' || periodFilter === 'COMPARE' ? evalsPri : evalsPri.filter((e) => e.period === periodFilter))
+                        : levelFilter === 'Secundaria'
+                        ? (periodFilter === 'ALL' || periodFilter === 'COMPARE' ? evalsSec : evalsSec.filter((e) => e.period === periodFilter))
+                        : (periodFilter === 'ALL' || periodFilter === 'COMPARE' ? personInternalEvals : personInternalEvals.filter((e) => e.period === periodFilter));
 
                     const overallAvg =
                       activeEvals.length > 0
@@ -1843,6 +1978,9 @@ export const TeacherPerformanceModule: React.FC = () => {
                           )
                         : 0;
                     const overallLevel = calculateLevelFromAverage(overallAvg);
+
+                    const priAvgScore = evalsPri.length > 0 ? Math.round(evalsPri.reduce((a, b) => a + b.percentage, 0) / evalsPri.length) : null;
+                    const secAvgScore = evalsSec.length > 0 ? Math.round(evalsSec.reduce((a, b) => a + b.percentage, 0) / evalsSec.length) : null;
 
                     // Encuestas estudiantiles/familiares para este docente
                     const teacherSurveys = surveyEvaluations.filter(
@@ -1869,8 +2007,8 @@ export const TeacherPerformanceModule: React.FC = () => {
                           )
                         : 0;
 
-                    const evalA = getPeriodEval(comparePeriodA);
-                    const evalB = getPeriodEval(comparePeriodB);
+                    const evalA = getPeriodEvalByLevel(comparePeriodA, levelFilter === 'ALL' ? undefined : levelFilter);
+                    const evalB = getPeriodEvalByLevel(comparePeriodB, levelFilter === 'ALL' ? undefined : levelFilter);
                     const diffPct =
                       evalA && evalB ? evalB.percentage - evalA.percentage : null;
 
@@ -1891,7 +2029,114 @@ export const TeacherPerformanceModule: React.FC = () => {
                         </td>
 
                         {(['P1', 'P2', 'P3', 'P4'] as EvaluationPeriod[]).map((p) => {
-                          const pEv = getPeriodEval(p);
+                          if (group === 'teacher') {
+                            const pPri = getPeriodEvalByLevel(p, 'Primaria');
+                            const pSec = getPeriodEvalByLevel(p, 'Secundaria');
+
+                            if (levelFilter === 'Primaria') {
+                              return (
+                                <td key={p} className="py-4 px-2 text-center">
+                                  {pPri ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Primaria')}
+                                      className="inline-flex flex-col items-center px-2 py-1 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                                      title={`Primaria (${pPri.coordinatorName || 'Coord. Primaria'}): ${pPri.percentage}%`}
+                                    >
+                                      <span className="text-xs font-black text-blue-700">{pPri.percentage}%</span>
+                                      <span className="text-[9px] font-bold text-blue-600">{pPri.averageScore.toFixed(1)}/4</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Primaria')}
+                                      className="px-2 py-1 rounded-xl border border-dashed border-blue-200 text-[10px] font-bold text-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
+                                    >
+                                      + Primaria
+                                    </button>
+                                  )}
+                                </td>
+                              );
+                            }
+
+                            if (levelFilter === 'Secundaria') {
+                              return (
+                                <td key={p} className="py-4 px-2 text-center">
+                                  {pSec ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Secundaria')}
+                                      className="inline-flex flex-col items-center px-2 py-1 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-colors cursor-pointer"
+                                      title={`Secundaria (${pSec.coordinatorName || 'Coord. Secundaria'}): ${pSec.percentage}%`}
+                                    >
+                                      <span className="text-xs font-black text-purple-700">{pSec.percentage}%</span>
+                                      <span className="text-[9px] font-bold text-purple-600">{pSec.averageScore.toFixed(1)}/4</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Secundaria')}
+                                      className="px-2 py-1 rounded-xl border border-dashed border-purple-200 text-[10px] font-bold text-purple-500 hover:bg-purple-50 transition-colors cursor-pointer"
+                                    >
+                                      + Secundaria
+                                    </button>
+                                  )}
+                                </td>
+                              );
+                            }
+
+                            // Modo Combinado (levelFilter === 'ALL')
+                            return (
+                              <td key={p} className="py-4 px-2 text-center">
+                                <div className="flex flex-col items-center gap-1 min-w-[70px]">
+                                  {pPri ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Primaria')}
+                                      className="w-full px-1.5 py-0.5 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-[10px] font-black text-blue-700 flex items-center justify-between cursor-pointer"
+                                      title={`Primaria: ${pPri.percentage}% (${pPri.coordinatorName || 'Coord. Primaria'})`}
+                                    >
+                                      <span className="text-[9px] font-bold text-blue-600">PRI</span>
+                                      <span>{pPri.percentage}%</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Primaria')}
+                                      className="text-[9px] font-bold text-slate-400 hover:text-blue-600 transition-colors"
+                                      title="Evaluar en Primaria"
+                                    >
+                                      + Prim
+                                    </button>
+                                  )}
+
+                                  {pSec ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Secundaria')}
+                                      className="w-full px-1.5 py-0.5 rounded-lg bg-purple-50 border border-purple-200 hover:bg-purple-100 text-[10px] font-black text-purple-700 flex items-center justify-between cursor-pointer"
+                                      title={`Secundaria: ${pSec.percentage}% (${pSec.coordinatorName || 'Coord. Secundaria'})`}
+                                    >
+                                      <span className="text-[9px] font-bold text-purple-600">SEC</span>
+                                      <span>{pSec.percentage}%</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEvaluationModal(person, group, p, 'Secundaria')}
+                                      className="text-[9px] font-bold text-slate-400 hover:text-purple-600 transition-colors"
+                                      title="Evaluar en Secundaria"
+                                    >
+                                      + Sec
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          }
+
+                          // Non-teacher groups
+                          const pEv = getPeriodEvalByLevel(p);
                           return (
                             <td key={p} className="py-4 px-3 text-center">
                               {pEv ? (
@@ -1973,20 +2218,35 @@ export const TeacherPerformanceModule: React.FC = () => {
                         )}
 
                         <td className="py-4 px-4 text-center">
-                          {overallAvg > 0 ? (
+                          {group === 'teacher' && priAvgScore !== null && secAvgScore !== null ? (
+                            <div className="inline-flex flex-col items-center gap-1">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-lg text-xs font-black border ${overallLevel.bgClass} ${overallLevel.textClass} ${overallLevel.borderClass}`}
+                              >
+                                {overallPct}% • {overallLevel.label}
+                              </span>
+                              <div className="flex items-center gap-1 text-[9px] font-bold">
+                                <span className="text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">Pri: {priAvgScore}%</span>
+                                <span>•</span>
+                                <span className="text-purple-700 bg-purple-50 px-1 py-0.2 rounded border border-purple-200">Sec: {secAvgScore}%</span>
+                              </div>
+                            </div>
+                          ) : overallAvg > 0 ? (
                             <div className="inline-flex flex-col items-center">
                               <span
                                 className={`px-3 py-1 rounded-xl text-xs font-black border ${overallLevel.bgClass} ${overallLevel.textClass} ${overallLevel.borderClass}`}
                               >
                                 {overallPct}% • {overallLevel.label}
                               </span>
-                              <span className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                {overallAvg.toFixed(2)} / 4.00 pts
+                              <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                                Promedio: {overallAvg.toFixed(2)} / 4.0
+                                {group === 'teacher' && priAvgScore !== null && !secAvgScore && ' (Primaria)'}
+                                {group === 'teacher' && secAvgScore !== null && !priAvgScore && ' (Secundaria)'}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              Pendiente
+                            <span className="text-[10px] font-bold text-slate-400 italic">
+                              Sin evaluar
                             </span>
                           )}
                         </td>
@@ -3213,7 +3473,7 @@ export const TeacherPerformanceModule: React.FC = () => {
             {/* Cabecera del Modal */}
             <div className="p-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
                     {GROUP_LABELS[evaluatingStaff.group].title}
                   </span>
@@ -3223,7 +3483,8 @@ export const TeacherPerformanceModule: React.FC = () => {
                       handleOpenEvaluationModal(
                         evaluatingStaff.staff,
                         evaluatingStaff.group,
-                        e.target.value as EvaluationPeriod
+                        e.target.value as EvaluationPeriod,
+                        formAcademicLevel
                       )
                     }
                     className="bg-white/10 text-white text-xs font-black px-3 py-1 rounded-xl border border-white/20 outline-none cursor-pointer"
@@ -3241,6 +3502,47 @@ export const TeacherPerformanceModule: React.FC = () => {
                       Período 4 (P4)
                     </option>
                   </select>
+
+                  {evaluatingStaff.group === 'teacher' && (
+                    <div className="flex items-center bg-white/10 rounded-xl p-0.5 border border-white/20">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadEvaluationForStaffLevel(
+                            evaluatingStaff.staff,
+                            evaluatingStaff.group,
+                            evaluatingStaff.period,
+                            'Primaria'
+                          )
+                        }
+                        className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          formAcademicLevel === 'Primaria'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-white/70 hover:text-white'
+                        }`}
+                      >
+                        📘 Nivel Primario
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadEvaluationForStaffLevel(
+                            evaluatingStaff.staff,
+                            evaluatingStaff.group,
+                            evaluatingStaff.period,
+                            'Secundaria'
+                          )
+                        }
+                        className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          formAcademicLevel === 'Secundaria'
+                            ? 'bg-amber-600 text-white shadow-sm'
+                            : 'text-white/70 hover:text-white'
+                        }`}
+                      >
+                        📙 Nivel Secundario
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <h3 className="text-xl font-black uppercase tracking-tight mt-2">
                   Evaluando a:{' '}
@@ -3306,7 +3608,7 @@ export const TeacherPerformanceModule: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-600 mb-1">
-                      Seleccionar Grado / Curso
+                      Seleccionar Grado / Curso {formAcademicLevel !== 'General' ? `(${formAcademicLevel})` : ''}
                     </label>
                     <select
                       value={formCourseId}
@@ -3325,11 +3627,23 @@ export const TeacherPerformanceModule: React.FC = () => {
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
                     >
                       <option value="">-- General / No aplica grado específico --</option>
-                      {(state.courses || []).map((c: any) => (
-                        <option key={c.id} value={c.id}>
-                          {c.grade} "{c.section}" ({c.level || 'General'})
-                        </option>
-                      ))}
+                      {(state.courses || [])
+                        .filter((c: any) => {
+                          if (evaluatingStaff.group !== 'teacher') return true;
+                          if (!formAcademicLevel || formAcademicLevel === 'General') return true;
+                          const cLevel = (c.level || '').toLowerCase();
+                          const cGrade = (c.grade || '').toLowerCase();
+                          const isSec = cLevel.includes('sec') || cLevel.includes('med') || cGrade.includes('sec');
+                          const isPri = cLevel.includes('prim') || cGrade.includes('prim');
+                          if (formAcademicLevel === 'Secundaria') return isSec;
+                          if (formAcademicLevel === 'Primaria') return isPri || (!isSec && !cLevel);
+                          return true;
+                        })
+                        .map((c: any) => (
+                          <option key={c.id} value={c.id}>
+                            {c.grade} "{c.section}" ({c.level || 'General'})
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -3776,15 +4090,57 @@ export const TeacherPerformanceModule: React.FC = () => {
               );
               const teacherSurveys = surveyEvaluations.filter((s) => s.staffId === staff.id);
 
+              const priEvals = personEvals.filter(
+                (e) =>
+                  (e.academicLevel ||
+                    (e.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria')) ===
+                  'Primaria'
+              );
+              const secEvals = personEvals.filter(
+                (e) =>
+                  (e.academicLevel ||
+                    (e.courseName?.toLowerCase().includes('sec') ? 'Secundaria' : 'Primaria')) ===
+                  'Secundaria'
+              );
+
+              const priAvgPct =
+                priEvals.length > 0
+                  ? Math.round(priEvals.reduce((s, e) => s + e.percentage, 0) / priEvals.length)
+                  : null;
+              const secAvgPct =
+                secEvals.length > 0
+                  ? Math.round(secEvals.reduce((s, e) => s + e.percentage, 0) / secEvals.length)
+                  : null;
+              const surveyAvgPct =
+                teacherSurveys.length > 0
+                  ? Math.round(teacherSurveys.reduce((s, e) => s + e.percentage, 0) / teacherSurveys.length)
+                  : null;
+
+              const validParts = [priAvgPct, secAvgPct, surveyAvgPct].filter(
+                (x): x is number => x !== null
+              );
+              const consolidatedIntegralPct =
+                validParts.length > 0
+                  ? Math.round(validParts.reduce((a, b) => a + b, 0) / validParts.length)
+                  : null;
+
               const criteriaComparisonData = (rubric?.criteria || []).map((c) => {
                 const row: any = {
                   name: `${c.number}. ${c.title.substring(0, 22)}`,
                   fullTitle: `${c.number}. ${c.title}`
                 };
                 (['P1', 'P2', 'P3', 'P4'] as EvaluationPeriod[]).forEach((p) => {
-                  const ev = personEvals.find((x) => x.period === p);
-                  const avg = ev?.criteriaAverages?.[c.id] || 0;
-                  row[p] = avg > 0 ? Math.round((avg / 4) * 100) : 0;
+                  const evsForP = personEvals.filter((x) => x.period === p);
+                  if (evsForP.length > 0) {
+                    const sumAvg = evsForP.reduce(
+                      (s, x) => s + (x.criteriaAverages?.[c.id] || 0),
+                      0
+                    );
+                    const avg = sumAvg / evsForP.length;
+                    row[p] = avg > 0 ? Math.round((avg / 4) * 100) : 0;
+                  } else {
+                    row[p] = 0;
+                  }
                 });
                 return row;
               });
@@ -3826,9 +4182,221 @@ export const TeacherPerformanceModule: React.FC = () => {
                   </div>
 
                   <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                    {/* Consolidado Integral Génesis para Docentes (Primaria + Secundaria + Encuestas) */}
+                    {group === 'teacher' && (
+                      <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white p-5 rounded-3xl shadow-lg border border-indigo-500/30 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-800/60 pb-3">
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                              Consolidado Integral Génesis • Evaluación 360°
+                            </span>
+                            <h4 className="text-base font-black">
+                              Desempeño Combinado: Primaria, Secundaria y Familias
+                            </h4>
+                          </div>
+                          {consolidatedIntegralPct !== null && (
+                            <span className="px-4 py-1.5 rounded-2xl bg-emerald-500 text-slate-950 text-sm font-black tracking-tight inline-flex items-center gap-1.5 shadow-md">
+                              ⭐ {consolidatedIntegralPct}% Rendimiento Global
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Primaria */}
+                          <div className="bg-white/10 p-3.5 rounded-2xl border border-white/10 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-blue-300 uppercase">📘 Nivel Primario</span>
+                              <span className="text-xs font-black text-white">
+                                {priAvgPct !== null ? `${priAvgPct}%` : 'Pendiente'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300">
+                              {priEvals.length > 0
+                                ? `${priEvals.length} eval. (${priEvals.map((e) => e.period).join(', ')}) • Coord: ${priEvals[priEvals.length - 1].coordinatorName || 'Primaria'}`
+                                : 'Sin evaluación registrada en Primaria'}
+                            </p>
+                          </div>
+
+                          {/* Secundaria */}
+                          <div className="bg-white/10 p-3.5 rounded-2xl border border-white/10 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-amber-300 uppercase">📙 Nivel Secundario</span>
+                              <span className="text-xs font-black text-white">
+                                {secAvgPct !== null ? `${secAvgPct}%` : 'Pendiente'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300">
+                              {secEvals.length > 0
+                                ? `${secEvals.length} eval. (${secEvals.map((e) => e.period).join(', ')}) • Coord: ${secEvals[secEvals.length - 1].coordinatorName || 'Secundaria'}`
+                                : 'Sin evaluación registrada en Secundaria'}
+                            </p>
+                          </div>
+
+                          {/* Encuestas */}
+                          <div className="bg-white/10 p-3.5 rounded-2xl border border-white/10 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-teal-300 uppercase">👥 Encuestas Alumnos/Padres</span>
+                              <span className="text-xs font-black text-white">
+                                {surveyAvgPct !== null ? `${surveyAvgPct}%` : 'Sin datos'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300">
+                              {teacherSurveys.length > 0
+                                ? `${teacherSurveys.length} respuestas de estudiantes y familias`
+                                : 'Sin respuestas registradas'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Tarjetas por Período (P1, P2, P3, P4) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {(['P1', 'P2', 'P3', 'P4'] as EvaluationPeriod[]).map((p) => {
+                        if (group === 'teacher') {
+                          const evPri = priEvals.find((x) => x.period === p);
+                          const evSec = secEvals.find((x) => x.period === p);
+
+                          if (evPri && evSec) {
+                            const avgPct = Math.round((evPri.percentage + evSec.percentage) / 2);
+                            return (
+                              <div
+                                key={p}
+                                className="p-4 rounded-2xl border border-indigo-200 bg-indigo-50/40 flex flex-col justify-between space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-slate-700 uppercase">
+                                    Período {p}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-600 text-white">
+                                    {avgPct}% Consolidado
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 pt-1">
+                                  <div className="flex items-center justify-between p-2 rounded-xl bg-blue-50 border border-blue-200 text-xs">
+                                    <span className="font-bold text-blue-900">📘 Primaria:</span>
+                                    <span className="font-black text-blue-700">
+                                      {evPri.percentage}% ({evPri.averageScore.toFixed(2)}/4)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+                                    <span className="font-bold text-amber-900">📙 Secundaria:</span>
+                                    <span className="font-black text-amber-700">
+                                      {evSec.percentage}% ({evSec.averageScore.toFixed(2)}/4)
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (evPri && !evSec) {
+                            return (
+                              <div
+                                key={p}
+                                className="p-4 rounded-2xl border border-blue-200 bg-blue-50/30 flex flex-col justify-between space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-slate-700 uppercase">
+                                    Período {p}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-blue-100 text-blue-800">
+                                    {evPri.percentage}% Prim
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 pt-1">
+                                  <div className="flex items-center justify-between p-2 rounded-xl bg-blue-50 border border-blue-200 text-xs">
+                                    <span className="font-bold text-blue-900">📘 Primaria:</span>
+                                    <span className="font-black text-blue-700">
+                                      {evPri.percentage}% ({evPri.averageScore.toFixed(2)}/4)
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewingStaffDetail(null);
+                                      handleOpenEvaluationModal(staff, group, p, 'Secundaria');
+                                    }}
+                                    className="w-full text-center py-1.5 rounded-xl border border-dashed border-amber-300 text-amber-700 hover:bg-amber-50 text-[11px] font-black uppercase cursor-pointer transition-colors"
+                                  >
+                                    + Evaluar Secundaria
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (!evPri && evSec) {
+                            return (
+                              <div
+                                key={p}
+                                className="p-4 rounded-2xl border border-amber-200 bg-amber-50/30 flex flex-col justify-between space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-slate-700 uppercase">
+                                    Período {p}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-100 text-amber-800">
+                                    {evSec.percentage}% Sec
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 pt-1">
+                                  <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+                                    <span className="font-bold text-amber-900">📙 Secundaria:</span>
+                                    <span className="font-black text-amber-700">
+                                      {evSec.percentage}% ({evSec.averageScore.toFixed(2)}/4)
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewingStaffDetail(null);
+                                      handleOpenEvaluationModal(staff, group, p, 'Primaria');
+                                    }}
+                                    className="w-full text-center py-1.5 rounded-xl border border-dashed border-blue-300 text-blue-700 hover:bg-blue-50 text-[11px] font-black uppercase cursor-pointer transition-colors"
+                                  >
+                                    + Evaluar Primaria
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={p}
+                              className="p-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 flex flex-col justify-between space-y-2"
+                            >
+                              <span className="text-xs font-black text-slate-400 uppercase">
+                                Período {p}
+                              </span>
+                              <div className="space-y-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setViewingStaffDetail(null);
+                                    handleOpenEvaluationModal(staff, group, p, 'Primaria');
+                                  }}
+                                  className="w-full text-center py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-black uppercase cursor-pointer transition-colors"
+                                >
+                                  + Evaluar Primaria
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setViewingStaffDetail(null);
+                                    handleOpenEvaluationModal(staff, group, p, 'Secundaria');
+                                  }}
+                                  className="w-full text-center py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 text-[11px] font-black uppercase cursor-pointer transition-colors"
+                                >
+                                  + Evaluar Secundaria
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Roles no docentes
                         const ev = personEvals.find((x) => x.period === p);
                         const lvl = ev ? calculateLevelFromAverage(ev.averageScore) : null;
                         return (
