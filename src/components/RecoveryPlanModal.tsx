@@ -15,7 +15,10 @@ import {
   Award,
   ChevronRight,
   Filter,
-  Check
+  Check,
+  Building2,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { recoveryPlanService, RecoveryPlan, RecoveryPlanStudent, RecoveryScheduleWeek } from '../services/recoveryPlanService';
@@ -24,6 +27,7 @@ interface RecoveryPlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   course: any;
+  allCourses?: any[];
   subjects: any[];
   students: any[];
   grades: any[];
@@ -37,6 +41,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   isOpen,
   onClose,
   course,
+  allCourses = [],
   subjects = [],
   students = [],
   grades = [],
@@ -46,18 +51,18 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   userId
 }) => {
   const [plans, setPlans] = useState<RecoveryPlan[]>([]);
-  const [selectedPlan, setSelectedPlan] = useState<RecoveryPlan | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Umbral según nivel dominicano: Primaria 65, Secundaria 70
-  const isPrimary = useMemo(() => {
-    const lvl = (course?.level || '').toLowerCase();
-    const grd = (course?.grade || '').toLowerCase();
-    return lvl.includes('prim') || grd.includes('prim');
-  }, [course?.level, course?.grade]);
+  // Lista de cursos disponibles
+  const availableCourses = useMemo(() => {
+    if (allCourses && allCourses.length > 0) return allCourses;
+    return course ? [course] : [];
+  }, [allCourses, course]);
 
-  const passingThreshold = isPrimary ? 65 : 70;
+  // Modo de alcance: 'current' (solo este curso) o 'multi' (selección múltiple / todo el centro)
+  const [targetScope, setTargetScope] = useState<'current' | 'multi'>('current');
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>(() => course?.id ? [course.id] : []);
 
   // Estado del formulario del nuevo plan
   const [period, setPeriod] = useState<string>(activePeriod || 'P1');
@@ -78,8 +83,9 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   ]);
 
   // Selección manual / automática de alumnos por materia
-  // Map: `${studentId}_${subjectId}` -> { student, subject, originalScore, selected, weekNumber }
   const [candidateEntries, setCandidateEntries] = useState<Array<{
+    courseId: string;
+    courseName: string;
     studentId: string;
     studentName: string;
     subjectId: string;
@@ -107,9 +113,11 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
     }
   };
 
-  // Calcular automáticamente qué alumnos están por debajo del umbral en el período seleccionado
+  // Calcular automáticamente qué alumnos están por debajo del umbral en los cursos seleccionados
   const computeCandidates = () => {
     const results: Array<{
+      courseId: string;
+      courseName: string;
       studentId: string;
       studentName: string;
       subjectId: string;
@@ -119,54 +127,95 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
       selected: boolean;
     }> = [];
 
-    // Filtrar asignaturas válidas del curso
-    const courseSubjects = subjects.filter((s) => !s.course_id || s.course_id === course?.id);
+    const targetIds = targetScope === 'current' ? (course?.id ? [course.id] : []) : selectedCourseIds;
 
-    students.forEach((st) => {
-      const stName = `${st.first_surname || st.last_name || ''} ${st.names || st.first_name || ''}`.trim() || 'Estudiante';
+    targetIds.forEach((cId) => {
+      const cObj = availableCourses.find((c) => c.id === cId) || course;
+      const cName = `${cObj?.grade || ''} ${cObj?.section || ''}`.trim() || 'Curso';
 
-      courseSubjects.forEach((sub) => {
-        // Buscar la calificación del estudiante para esta materia y período
-        const gRecord = grades.find((g) => {
-          const matchStudent = g.student_id === st.id;
-          const matchSub = g.subject_id === sub.id;
-          return matchStudent && matchSub;
-        });
+      // Umbral específico de este curso: Primaria 65, Secundaria 70
+      const lvl = (cObj?.level || '').toLowerCase();
+      const grd = (cObj?.grade || '').toLowerCase();
+      const isCoursePrimary = lvl.includes('prim') || grd.includes('prim');
+      const passingThreshold = isCoursePrimary ? 65 : 70;
 
-        let score = 0;
-        if (gRecord) {
-          if (period === 'P1') score = Number(gRecord.p1_final || gRecord.p1) || 0;
-          else if (period === 'P2') score = Number(gRecord.p2_final || gRecord.p2) || 0;
-          else if (period === 'P3') score = Number(gRecord.p3_final || gRecord.p3) || 0;
-          else if (period === 'P4') score = Number(gRecord.p4_final || gRecord.p4) || 0;
-          else if (period === 'FINAL') score = Number(gRecord.final_score || gRecord.cf) || 0;
-        }
+      // Estudiantes de este curso
+      const cStudents = students.filter((s) => s.course_id === cId || s.courseId === cId);
+      // Asignaturas de este curso
+      const cSubjects = subjects.filter((s) => !s.course_id || s.course_id === cId);
 
-        // Si la nota es mayor que 0 y menor que el umbral (o si no tiene nota pero está reprobado)
-        if (score > 0 && score < passingThreshold) {
-          results.push({
-            studentId: st.id,
-            studentName: stName,
-            subjectId: sub.id,
-            subjectName: sub.name,
-            originalScore: score,
-            weekNumber: 1,
-            selected: true
+      cStudents.forEach((st) => {
+        const stName = `${st.first_surname || st.last_name || ''} ${st.names || st.first_name || ''}`.trim() || 'Estudiante';
+
+        cSubjects.forEach((sub) => {
+          const gRecord = grades.find((g) => {
+            const matchStudent = g.student_id === st.id;
+            const matchSub = g.subject_id === sub.id;
+            return matchStudent && matchSub;
           });
-        }
+
+          let score = 0;
+          if (gRecord) {
+            if (period === 'P1') score = Number(gRecord.p1_final || gRecord.p1) || 0;
+            else if (period === 'P2') score = Number(gRecord.p2_final || gRecord.p2) || 0;
+            else if (period === 'P3') score = Number(gRecord.p3_final || gRecord.p3) || 0;
+            else if (period === 'P4') score = Number(gRecord.p4_final || gRecord.p4) || 0;
+            else if (period === 'FINAL') score = Number(gRecord.final_score || gRecord.cf) || 0;
+          }
+
+          if (score > 0 && score < passingThreshold) {
+            results.push({
+              courseId: cId,
+              courseName: cName,
+              studentId: st.id,
+              studentName: stName,
+              subjectId: sub.id,
+              subjectName: sub.name,
+              originalScore: score,
+              weekNumber: 1,
+              selected: true
+            });
+          }
+        });
       });
     });
 
     setCandidateEntries(results);
   };
 
-  // Cada vez que cambia el período o al iniciar creación, recalcular candidatos
+  // Recalcular candidatos al cambiar período, alcance o cursos seleccionados
   useEffect(() => {
     if (isCreating) {
-      setTitle(`Plan de Recuperación ${period === 'FINAL' ? 'Final' : `Período ${period}`} - ${course?.grade || ''} ${course?.section || ''}`);
+      const scopeLabel = targetScope === 'current' 
+        ? `${course?.grade || ''} ${course?.section || ''}` 
+        : `${selectedCourseIds.length} Cursos`;
+      setTitle(`Plan de Recuperación ${period === 'FINAL' ? 'Final' : `Período ${period}`} - ${scopeLabel}`);
       computeCandidates();
     }
-  }, [isCreating, period]);
+  }, [isCreating, period, targetScope, selectedCourseIds]);
+
+  // Atajos para selección de cursos
+  const handleSelectAllCourses = () => {
+    setSelectedCourseIds(availableCourses.map((c) => c.id));
+  };
+
+  const handleSelectPrimaryCourses = () => {
+    const primary = availableCourses.filter((c) => {
+      const lvl = (c.level || '').toLowerCase();
+      const grd = (c.grade || '').toLowerCase();
+      return lvl.includes('prim') || grd.includes('prim');
+    }).map((c) => c.id);
+    setSelectedCourseIds(primary);
+  };
+
+  const handleSelectSecondaryCourses = () => {
+    const secondary = availableCourses.filter((c) => {
+      const lvl = (c.level || '').toLowerCase();
+      const grd = (c.grade || '').toLowerCase();
+      return lvl.includes('secun') || grd.includes('secun') || lvl.includes('media');
+    }).map((c) => c.id);
+    setSelectedCourseIds(secondary);
+  };
 
   // Manejo de semanas
   const handleAddWeek = () => {
@@ -186,7 +235,6 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   const handleRemoveWeek = (weekNum: number) => {
     if (weeks.length <= 1) return;
     setWeeks((prev) => prev.filter((w) => w.weekNumber !== weekNum));
-    // Reasignar alumnos a semana 1 si su semana fue eliminada
     setCandidateEntries((prev) =>
       prev.map((c) => (c.weekNumber === weekNum ? { ...c, weekNumber: 1 } : c))
     );
@@ -221,7 +269,6 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
         }
       ];
     } else {
-      // Validar fechas de cada semana
       for (const w of weeks) {
         if (!w.startDate || !w.endDate) {
           toast.error(`Ingresa la fecha de inicio y fin para la Semana ${w.weekNumber}.`);
@@ -238,43 +285,58 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
 
     setLoading(true);
     try {
-      const planPayload: Partial<RecoveryPlan> = {
-        center_id: centerId,
-        course_id: course.id,
-        school_year: schoolYear,
-        period,
-        title,
-        description: `Plan de recuperación para ${selectedCandidates.length} registros reprobados (Umbral < ${passingThreshold} pts).`,
-        start_date: finalWeeks[0]?.startDate,
-        end_date: finalWeeks[finalWeeks.length - 1]?.endDate,
-        schedule_weeks: finalWeeks,
-        status,
-        created_by: userId
-      };
+      // Cursos a los que se aplica el plan
+      const targetCourseIds = targetScope === 'current' ? [course.id] : selectedCourseIds;
 
-      const studentsPayload: Partial<RecoveryPlanStudent>[] = selectedCandidates.map((c) => {
-        const assignedWeek = finalWeeks.find((w) => w.weekNumber === c.weekNumber) || finalWeeks[0];
-        return {
-          student_id: c.studentId,
-          subject_id: c.subjectId,
-          original_score: c.originalScore,
-          status: 'pending',
-          week_number: c.weekNumber,
-          start_date: assignedWeek?.startDate,
-          end_date: assignedWeek?.endDate
+      // Crear o actualizar un plan por cada curso seleccionado
+      for (const cId of targetCourseIds) {
+        const cCandidates = selectedCandidates.filter((c) => c.courseId === cId);
+        if (cCandidates.length === 0) continue;
+
+        const cObj = availableCourses.find((c) => c.id === cId) || course;
+        const cTitle = targetCourseIds.length > 1 
+          ? `${title} (${cObj?.grade || ''} ${cObj?.section || ''})`
+          : title;
+
+        const planPayload: Partial<RecoveryPlan> = {
+          center_id: centerId,
+          course_id: cId,
+          school_year: schoolYear,
+          period,
+          title: cTitle,
+          description: `Plan de recuperación con ${cCandidates.length} registros reprobados.`,
+          start_date: finalWeeks[0]?.startDate,
+          end_date: finalWeeks[finalWeeks.length - 1]?.endDate,
+          schedule_weeks: finalWeeks,
+          status,
+          created_by: userId
         };
-      });
 
-      await recoveryPlanService.savePlan(planPayload, studentsPayload);
+        const studentsPayload: Partial<RecoveryPlanStudent>[] = cCandidates.map((c) => {
+          const assignedWeek = finalWeeks.find((w) => w.weekNumber === c.weekNumber) || finalWeeks[0];
+          return {
+            student_id: c.studentId,
+            subject_id: c.subjectId,
+            original_score: c.originalScore,
+            status: 'pending',
+            week_number: c.weekNumber,
+            start_date: assignedWeek?.startDate,
+            end_date: assignedWeek?.endDate
+          };
+        });
+
+        await recoveryPlanService.savePlan(planPayload, studentsPayload);
+      }
+
       toast.success(
         status === 'active'
-          ? '¡Plan activado con éxito! Se sincronizó con la Agenda y las alertas para padres.'
-          : 'Plan guardado como borrador.'
+          ? `¡Plan de recuperación activado para ${targetCourseIds.length} curso(s)! Se sincronizó con la Agenda y las alertas para padres.`
+          : `Plan guardado como borrador para ${targetCourseIds.length} curso(s).`
       );
       setIsCreating(false);
       await loadCoursePlans();
     } catch (e: any) {
-      console.error('Error guardando plan:', e);
+      console.error('Error guardando plan masivo:', e);
       toast.error('No se pudo guardar el plan de recuperación.');
     } finally {
       setLoading(false);
@@ -289,18 +351,18 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
         {/* ENCABEZADO */}
         <div className="p-6 sm:p-8 bg-gradient-to-r from-amber-500/10 via-brand-bg to-brand-blue/10 border-b border-border-main flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-md">
               <Award size={24} />
             </div>
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-text-main flex items-center gap-2">
                 Plan de Recuperación Pedagógica
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
-                  {isPrimary ? 'Primaria • Mínimo 65' : 'Secundaria • Mínimo 70'}
+                  Primaria (&lt;65) • Secundaria (&lt;70)
                 </span>
               </h2>
               <p className="text-xs font-bold text-text-muted">
-                {course?.grade} {course?.section} • Año Lectivo {schoolYear}
+                {course ? `${course.grade} ${course.section}` : 'Gestión Institucional'} • Año Lectivo {schoolYear}
               </p>
             </div>
           </div>
@@ -323,7 +385,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     Planes de Recuperación del Curso
                   </h3>
                   <p className="text-xs text-text-muted font-medium">
-                    Consulta los planes activos, edítalos o crea uno nuevo para este período.
+                    Consulta los planes activos, edítalos o crea uno nuevo para este período o para todo el centro.
                   </p>
                 </div>
                 <button
@@ -341,7 +403,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                   <Award size={40} className="mx-auto text-amber-500/60 animate-bounce" />
                   <p className="text-sm font-bold text-text-main">No hay planes de recuperación activos</p>
                   <p className="text-xs text-text-muted max-w-md mx-auto">
-                    Los planes permiten organizar a los estudiantes que no alcanzaron el puntaje mínimo ({passingThreshold} pts) en semanas de evaluación y tareas específicas.
+                    Los planes permiten organizar a los estudiantes que no alcanzaron el puntaje mínimo (Primaria &lt;65, Secundaria &lt;70) en semanas de evaluación y tareas específicas.
                   </p>
                 </div>
               ) : (
@@ -371,7 +433,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                       <div className="pt-2 border-t border-border-main flex items-center justify-between text-[11px] font-bold text-text-muted">
                         <span>{p.schedule_weeks?.length || 1} Semana(s) programada(s)</span>
                         {p.start_date && (
-                          <span className="text-indigo-600">
+                          <span className="text-indigo-600 font-mono">
                             {p.start_date} al {p.end_date}
                           </span>
                         )}
@@ -384,6 +446,104 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
           ) : (
             /* FORMULARIO DE CREACIÓN DE PLAN */
             <div className="space-y-6">
+              {/* SELECTOR DE ALCANCE: SOLO ESTE CURSO O MÚLTIPLES CURSOS */}
+              <div className="p-4 bg-gradient-to-r from-indigo-50/80 via-surface to-blue-50/80 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 rounded-2xl border border-indigo-200/60 dark:border-indigo-900/40 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 flex items-center gap-1.5">
+                      <Building2 size={14} />
+                      Alcance del Plan de Recuperación
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-bold text-text-main">
+                      ¿Deseas aplicar este plan solo a este curso o masivamente a varios cursos?
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-main">
+                    <button
+                      type="button"
+                      onClick={() => setTargetScope('current')}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        targetScope === 'current' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
+                      }`}
+                    >
+                      Solo {course?.grade || 'Este Curso'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTargetScope('multi');
+                        if (selectedCourseIds.length === 0 && course?.id) {
+                          setSelectedCourseIds([course.id]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        targetScope === 'multi' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
+                      }`}
+                    >
+                      Múltiples Cursos
+                    </button>
+                  </div>
+                </div>
+
+                {targetScope === 'multi' && (
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/60 space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-text-muted">
+                        Selecciona los cursos que incluirán este plan ({selectedCourseIds.length} seleccionados):
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllCourses}
+                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                        >
+                          Todo el Centro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSelectPrimaryCourses}
+                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                        >
+                          Toda Primaria
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSelectSecondaryCourses}
+                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                        >
+                          Toda Secundaria
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-36 overflow-y-auto p-2 bg-surface rounded-xl border border-border-main flex flex-wrap gap-1.5 custom-scrollbar">
+                      {availableCourses.map((c) => {
+                        const isChecked = selectedCourseIds.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCourseIds((prev) =>
+                                isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                              );
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                              isChecked
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-brand-bg text-text-muted border-border-main hover:text-text-main'
+                            }`}
+                          >
+                            {isChecked ? <CheckSquare size={13} /> : <Square size={13} />}
+                            <span>{c.grade} "{c.section}"</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* PASO 1: METADATOS BÁSICOS */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
@@ -433,7 +593,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setPlanMode('single')}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                         planMode === 'single' ? 'bg-brand-blue text-white shadow-sm' : 'text-text-muted'
                       }`}
                     >
@@ -442,7 +602,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setPlanMode('weekly')}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                         planMode === 'weekly' ? 'bg-brand-blue text-white shadow-sm' : 'text-text-muted'
                       }`}
                     >
@@ -520,7 +680,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRemoveWeek(w.weekNumber)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -548,7 +708,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                       Alumnos Detectados por Debajo del Umbral ({candidateEntries.length})
                     </h4>
                     <p className="text-[11px] text-text-muted font-medium">
-                      Alumnos con calificación menor a {passingThreshold} en {period}. Asigna a qué semana le corresponde evaluarse.
+                      Alumnos de Primaria (&lt;65) y Secundaria (&lt;70) en {period}. Asigna a qué semana le corresponde evaluarse.
                     </p>
                   </div>
                 </div>
@@ -556,14 +716,14 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                 {candidateEntries.length === 0 ? (
                   <div className="p-6 text-center rounded-2xl bg-brand-bg border border-border-main text-xs font-bold text-emerald-600 space-y-1">
                     <CheckCircle2 size={24} className="mx-auto text-emerald-500" />
-                    <span>¡Excelente! No se detectaron estudiantes con promedio menor a {passingThreshold} en este período.</span>
+                    <span>¡Excelente! No se detectaron estudiantes por debajo del umbral mínimo en los cursos seleccionados para este período.</span>
                   </div>
                 ) : (
                   <div className="border border-border-main rounded-2xl overflow-hidden">
                     <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-border-main">
                       {candidateEntries.map((c, idx) => (
                         <div
-                          key={`${c.studentId}_${c.subjectId}`}
+                          key={`${c.courseId}_${c.studentId}_${c.subjectId}`}
                           className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface hover:bg-brand-bg/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
@@ -580,7 +740,14 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                               className="w-4 h-4 rounded text-brand-blue cursor-pointer"
                             />
                             <div>
-                              <p className="text-xs font-bold text-text-main">{c.studentName}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-bold text-text-main">{c.studentName}</p>
+                                {targetScope === 'multi' && (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.2 rounded bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                                    {c.courseName}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11px] text-text-muted font-medium">
                                 {c.subjectName} • Calificación:{' '}
                                 <span className="text-rose-500 font-bold">{c.originalScore} pts</span>
@@ -600,7 +767,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                                     )
                                   )
                                 }
-                                className="px-2 py-1 bg-brand-bg border border-border-main rounded-lg text-xs font-bold text-text-main outline-none"
+                                className="px-2 py-1 bg-brand-bg border border-border-main rounded-lg text-xs font-bold text-text-main outline-none cursor-pointer"
                               >
                                 {weeks.map((w) => (
                                   <option key={w.weekNumber} value={w.weekNumber}>
@@ -622,7 +789,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-bold text-text-muted hover:text-text-main transition-colors"
+                  className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-bold text-text-muted hover:text-text-main transition-colors cursor-pointer"
                 >
                   Volver a Lista de Planes
                 </button>
@@ -632,7 +799,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     type="button"
                     disabled={loading}
                     onClick={() => handleSavePlan('draft')}
-                    className="px-4 py-2.5 rounded-xl border border-border-main bg-surface hover:bg-brand-bg text-xs font-black uppercase text-text-main transition-colors disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl border border-border-main bg-surface hover:bg-brand-bg text-xs font-black uppercase text-text-main transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     Guardar Borrador
                   </button>

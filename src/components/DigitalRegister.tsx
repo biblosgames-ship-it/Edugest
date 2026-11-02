@@ -3080,6 +3080,7 @@ export const DigitalRegister = ({
           isOpen={showRecoveryPlanModal}
           onClose={() => setShowRecoveryPlanModal(false)}
           course={selectedCourse}
+          allCourses={allCourses || []}
           subjects={allSubjects || []}
           students={students || []}
           grades={grades || []}
