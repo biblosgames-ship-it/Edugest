@@ -146,23 +146,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
     }
   ];
 
-  // Planes sincronizados con la arquitectura de SaaS Admin Panel
+  // Planes sincronizados con la arquitectura y configuración exacta de SaaS Admin Panel
   const defaultPlans = [
     {
       id: 'basico',
       name: 'Básico',
       subtitle: 'Para colegios pequeños o centros en etapa inicial',
-      price_monthly: 50,
-      price_yearly: 500,
-      max_students: 100,
-      max_teachers: 10,
-      max_managers: 3,
-      max_support: 3,
-      max_users: 350,
+      price_monthly: 1500,
+      price_yearly: 18000,
+      max_students: 250,
+      max_teachers: 15,
+      max_managers: 10,
+      max_support: 10,
+      max_users: 750,
       features: [
-        'Hasta 100 Estudiantes matriculados',
-        'Hasta 10 Docentes con aulas activas',
-        'Hasta 3 Gestores y 3 de Apoyo',
+        'Hasta 250 Estudiantes matriculados',
+        'Hasta 15 Docentes con aulas activas',
+        'Hasta 10 Gestores y 10 de Apoyo (750 usuarios)',
         'Registro Digital de Calificaciones MINERD',
         'Toma de Asistencia diaria y boletines PDF',
         'Importación de estudiantes desde Excel',
@@ -171,20 +171,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
       popular: false
     },
     {
-      id: 'pro',
-      name: 'Pro',
+      id: 'profecional',
+      name: 'Profesional',
       subtitle: 'El plan más elegido por liceos y colegios consolidados',
-      price_monthly: 100,
-      price_yearly: 1000,
-      max_students: 500,
+      price_monthly: 2500,
+      price_yearly: 30000,
+      max_students: 600,
       max_teachers: 30,
-      max_managers: 10,
-      max_support: 10,
-      max_users: 1500,
+      max_managers: 15,
+      max_support: 15,
+      max_users: 1850,
       features: [
-        'Hasta 500 Estudiantes matriculados',
+        'Hasta 600 Estudiantes matriculados',
         'Hasta 30 Docentes con aulas activas',
-        'Hasta 10 Gestores y 10 de Apoyo (1,500 usuarios)',
+        'Hasta 15 Gestores y 15 de Apoyo (1,850 usuarios)',
         'Generador Inteligente de Horarios Anti-Choques',
         'Panel de Control en Vivo en Tiempo Real',
         'Modo Offline Seguro con Sincronización PWA',
@@ -198,17 +198,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
       id: 'premium',
       name: 'Premium',
       subtitle: 'Para instituciones grandes de alta demanda y múltiples tandas',
-      price_monthly: 200,
-      price_yearly: 2000,
+      price_monthly: 3200,
+      price_yearly: 40000,
       max_students: 1500,
-      max_teachers: 100,
-      max_managers: 30,
-      max_support: 30,
-      max_users: 5000,
+      max_teachers: 50,
+      max_managers: 20,
+      max_support: 20,
+      max_users: 5100,
       features: [
         'Hasta 1,500 Estudiantes matriculados',
-        'Hasta 100 Docentes con aulas activas',
-        'Hasta 30 Gestores y 30 de Apoyo (5,000 usuarios)',
+        'Hasta 50 Docentes con aulas activas',
+        'Hasta 20 Gestores y 20 de Apoyo (5,100 usuarios)',
         'Módulo Completo de Finanzas y Cobranzas',
         'Carnets de Estudiantes y Códigos QR',
         'Tandas combinadas (Matutina, Vespertina y JEE)',
@@ -222,12 +222,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
       id: 'ilimitado',
       name: 'Ilimitado',
       subtitle: 'Redes de centros, politécnicos o distritos educativos',
-      price_monthly: 500,
-      price_yearly: 5000,
+      price_monthly: 99999,
+      price_yearly: 0,
       max_students: 99999,
-      max_teachers: 9999,
+      max_teachers: 99999,
       max_managers: 9999,
-      max_support: 9999,
+      max_support: 99999,
       max_users: 999999,
       features: [
         'Estudiantes y Docentes Ilimitados',
@@ -244,7 +244,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
 
   const [saasPlans, setSaasPlans] = useState(defaultPlans);
 
-  // Cargar planes dinámicos de saas_plans si están disponibles en base de datos
+  // Cargar planes dinámicos de saas_plans directamente de la base de datos
   useEffect(() => {
     supabase
       .from('saas_plans')
@@ -252,23 +252,61 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
       .order('price_monthly', { ascending: true })
       .then(({ data, error }) => {
         if (!error && data && data.length > 0) {
-          const merged = defaultPlans.map((dp) => {
-            const dbMatch = data.find((p: any) => p.name.toLowerCase() === dp.name.toLowerCase());
-            if (dbMatch) {
-              return {
-                ...dp,
-                price_monthly: dbMatch.price_monthly,
-                price_yearly: dbMatch.price_yearly || dbMatch.price_monthly * 10,
-                max_students: dbMatch.max_students,
-                max_teachers: dbMatch.max_teachers,
-                max_managers: dbMatch.max_managers,
-                max_support: dbMatch.max_support,
-                max_users: dbMatch.max_users
-              };
-            }
-            return dp;
+          const mapped = data.map((dbPlan: any) => {
+            const rawName = dbPlan.name || '';
+            const lowerName = rawName.toLowerCase();
+
+            const matchedTemplate = defaultPlans.find((dp) => {
+              const dpLower = dp.name.toLowerCase();
+              return (
+                lowerName === dpLower ||
+                (lowerName.includes('prof') && dpLower.includes('prof')) ||
+                (lowerName.includes('bás') && dpLower.includes('bás')) ||
+                (lowerName.includes('prem') && dpLower.includes('prem')) ||
+                (lowerName.includes('ilim') && dpLower.includes('ilim'))
+              );
+            });
+
+            const isPro = lowerName.includes('prof') || lowerName.includes('pro');
+            const isUnlimited = lowerName.includes('ilim') || Number(dbPlan.price_monthly) >= 99999;
+            const displayName = lowerName.includes('prof') ? 'Profesional' : rawName;
+
+            const defaultFeatures = [
+              dbPlan.max_students > 10000
+                ? 'Estudiantes Ilimitados'
+                : `Hasta ${Number(dbPlan.max_students || 250).toLocaleString()} Estudiantes matriculados`,
+              dbPlan.max_teachers > 1000
+                ? 'Docentes Ilimitados'
+                : `Hasta ${Number(dbPlan.max_teachers || 15).toLocaleString()} Docentes con aulas activas`,
+              `Hasta ${dbPlan.max_managers || 10} Gestores y ${dbPlan.max_support || 10} de Apoyo (${(dbPlan.max_users > 10000 ? 'Ilimitados' : Number(dbPlan.max_users || 750).toLocaleString())} usuarios)`,
+              'Registro Digital de Calificaciones MINERD',
+              'Toma de Asistencia y Boletines Oficiales PDF',
+              'Modo Offline Seguro con Sincronización PWA',
+              'Soporte Técnico Especializado'
+            ];
+
+            return {
+              id: dbPlan.id,
+              name: displayName,
+              subtitle:
+                matchedTemplate?.subtitle ||
+                (isUnlimited
+                  ? 'Redes de centros, politécnicos o distritos educativos'
+                  : 'Diseñado a la medida para la gestión de tu centro'),
+              price_monthly: Number(dbPlan.price_monthly) || 0,
+              price_yearly:
+                Number(dbPlan.price_yearly) || (isUnlimited ? 0 : Number(dbPlan.price_monthly) * 12),
+              max_students: Number(dbPlan.max_students) || 0,
+              max_teachers: Number(dbPlan.max_teachers) || 0,
+              max_managers: Number(dbPlan.max_managers) || 0,
+              max_support: Number(dbPlan.max_support) || 0,
+              max_users: Number(dbPlan.max_users) || 0,
+              features: matchedTemplate?.features || defaultFeatures,
+              popular: isPro
+            };
           });
-          setSaasPlans(merged);
+
+          setSaasPlans(mapped);
         }
       })
       .catch(() => {});
@@ -1419,7 +1457,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {saasPlans.map((p) => {
-              const price = billingCycle === 'yearly' ? Math.round(p.price_yearly / 12) : p.price_monthly;
+              const isCustom = p.price_monthly >= 99999 || p.name.toLowerCase().includes('ilimitad');
+              const price =
+                billingCycle === 'yearly'
+                  ? p.price_yearly > 0
+                    ? Math.round(p.price_yearly / 12)
+                    : p.price_monthly
+                  : p.price_monthly;
+
               return (
                 <div
                   key={p.name}
@@ -1441,35 +1486,60 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
                       <p className="text-[11px] text-slate-400 mt-1 min-h-[32px]">{p.subtitle}</p>
                     </div>
 
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-black text-white">${price}</span>
-                      <span className="text-xs font-bold text-slate-400">USD / mes</span>
-                    </div>
-                    {billingCycle === 'yearly' && (
-                      <p className="text-[10px] text-emerald-400 font-bold -mt-3">Facturado ${p.price_yearly} al año</p>
+                    {isCustom ? (
+                      <div className="space-y-1">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-white">A Medida</span>
+                        </div>
+                        <p className="text-xs font-bold text-brand-orange">Cotización personalizada</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-3xl sm:text-4xl font-black text-white">
+                            RD$ {price.toLocaleString('es-DO')}
+                          </span>
+                          <span className="text-xs font-bold text-slate-400">/ mes</span>
+                        </div>
+                        {billingCycle === 'yearly' && p.price_yearly > 0 && (
+                          <p className="text-[10px] text-emerald-400 font-bold mt-1">
+                            Facturado RD$ {p.price_yearly.toLocaleString('es-DO')} al año
+                          </p>
+                        )}
+                      </div>
                     )}
 
                     {/* Especificaciones de SaaS Admin */}
                     <div className="p-3.5 bg-white/5 rounded-2xl space-y-1.5 text-xs border border-white/5">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Estudiantes:</span>
-                        <span className="font-bold text-white">{p.max_students > 10000 ? 'Ilimitados' : p.max_students}</span>
+                        <span className="font-bold text-white">
+                          {p.max_students > 10000 ? 'Ilimitados' : p.max_students.toLocaleString('es-DO')}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Docentes:</span>
-                        <span className="font-bold text-white">{p.max_teachers > 1000 ? 'Ilimitados' : p.max_teachers}</span>
+                        <span className="font-bold text-white">
+                          {p.max_teachers > 1000 ? 'Ilimitados' : p.max_teachers.toLocaleString('es-DO')}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Gestores:</span>
-                        <span className="font-bold text-white">{p.max_managers > 1000 ? 'Ilimitados' : p.max_managers}</span>
+                        <span className="font-bold text-white">
+                          {p.max_managers > 1000 ? 'Ilimitados' : p.max_managers.toLocaleString('es-DO')}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Equipo Apoyo:</span>
-                        <span className="font-bold text-white">{p.max_support > 1000 ? 'Ilimitados' : p.max_support}</span>
+                        <span className="font-bold text-white">
+                          {p.max_support > 1000 ? 'Ilimitados' : p.max_support.toLocaleString('es-DO')}
+                        </span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-white/5 text-brand-blue-light font-bold">
                         <span>Usuarios Totales:</span>
-                        <span>{p.max_users > 10000 ? 'Ilimitados' : p.max_users}</span>
+                        <span>
+                          {p.max_users > 10000 ? 'Ilimitados' : p.max_users.toLocaleString('es-DO')}
+                        </span>
                       </div>
                     </div>
 
