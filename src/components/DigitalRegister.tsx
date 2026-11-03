@@ -21,7 +21,10 @@ import {
   ShieldCheck,
   CloudOff,
   FileBarChart,
-  Award
+  Award,
+  Layers,
+  Sparkles,
+  FolderDown
 } from 'lucide-react';
 import { RecoveryPlanModal } from './RecoveryPlanModal';
 import { supabase } from '../lib/supabase';
@@ -42,7 +45,7 @@ export const DigitalRegister = ({
 }: {
   onViewChange?: (view: string, options?: any) => void;
 }) => {
-  const { state, profile, selectedYear, center } = useApp();
+  const { state, profile, selectedYear, center, loadAllGrades } = useApp();
   const { isSameTeacher } = useTeacherIdentity();
 
   const currentTeacherRecord = useMemo(() => {
@@ -79,6 +82,7 @@ export const DigitalRegister = ({
     saveStatus
   } = useGrades(selectedCourseId, selectedSubjectId);
   const [localGrades, setLocalGrades] = useState<Record<string, any>>({});
+  const [isImportingCourse, setIsImportingCourse] = useState<boolean>(false);
   const [showSaveStatus, setShowSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [syncState, setSyncState] = useState<'synced' | 'local_saved' | 'saving' | 'offline_queued'>('synced');
@@ -567,6 +571,205 @@ export const DigitalRegister = ({
       alert(`¡Se han importado exitosamente ${importedCount} notas desde Mi Aula (nube y local)! Recuerda pulsar "GUARDAR".`);
     } else {
       alert('No se encontraron parciales registrados en Mi Aula para este curso, asignatura y docente.');
+    }
+  };
+
+  // Importar promedios de Mi Aula para el CURSO COMPLETO (todas las asignaturas del curso)
+  const handleImportCourseFromMiAula = async () => {
+    if (!selectedCourseId) {
+      alert('Por favor, seleccione un curso primero.');
+      return;
+    }
+
+    const targetCourse = selectedCourse;
+    const targetSubjects = allCourseSubjects && allCourseSubjects.length > 0 ? allCourseSubjects : courseSubjects;
+    if (!targetSubjects || targetSubjects.length === 0) {
+      alert('No se encontraron asignaturas registradas para este curso.');
+      return;
+    }
+
+    const courseLabel = targetCourse ? `${targetCourse.grade} ${targetCourse.section}` : 'el curso';
+    const confirmed = window.confirm(
+      `¿Desea jalar e importar las notas de Mi Aula para TODO el curso (${courseLabel})?\n\n` +
+      `Se procesarán las ${targetSubjects.length} asignaturas del curso, calculando los promedios de actividades de Mi Aula para todos los alumnos y períodos, y guardándolos directamente en el Registro Oficial de Calificaciones.\n\n` +
+      `¿Desea continuar?`
+    );
+    if (!confirmed) return;
+
+    setIsImportingCourse(true);
+    try {
+      const centerId = profile?.center_id || center?.id || 'default_center';
+      const year = selectedYear || '2026-2027';
+
+      // 1. Obtener en una sola consulta todas las actividades de parciales en la nube para este curso
+      let cloudQuery = supabase
+        .from('student_partial_activities')
+        .select('*')
+        .eq('course_id', selectedCourseId)
+        .eq('school_year', year);
+
+      if (centerId && centerId !== 'default_center') {
+        cloudQuery = cloudQuery.eq('center_id', centerId);
+      }
+
+      const { data: cloudActivities, error: cloudErr } = await cloudQuery;
+      if (cloudErr) {
+        console.warn('Error consultando actividades en nube:', cloudErr);
+      }
+
+      // 2. Escanear localStorage para consolidar datos locales recientes
+      const localDataMap: Record<string, any> = {};
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('edugens_partials_') && k.includes(`_${selectedCourseId}_`)) {
+            const val = localStorage.getItem(k);
+            if (val) {
+              try {
+                const parsed = JSON.parse(val);
+                if (parsed && parsed.scores && parsed.activities && parsed.subjectId && parsed.period) {
+                  localDataMap[`${parsed.subjectId}_${parsed.period}`] = parsed;
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+
+      const allGradesToUpsert: any[] = [];
+      const subjectsWithGrades = new Set<string>();
+      const newLocalGrades = { ...localGrades };
+      let currentSubjectImportedCount = 0;
+
+      // 3. Procesar cada materia del curso
+      for (const sub of targetSubjects) {
+        for (const p of config.periods) {
+          const pL = p.toLowerCase();
+          let scores: any = null;
+          let activities: any = null;
+          let calcMode: string = 'average';
+
+          // A. Buscar en mapa local indexado
+          if (localDataMap[`${sub.id}_${p}`]) {
+            const loc = localDataMap[`${sub.id}_${p}`];
+            scores = loc.scores;
+            activities = loc.activities;
+            calcMode = loc.calcMode || 'average';
+          }
+
+          // B. Buscar en localStorage por coincidencia de sufijo
+          if (!scores) {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('edugens_partials_') && k.endsWith(`_${selectedCourseId}_${sub.id}_${p}`)) {
+                try {
+                  const parsed = JSON.parse(localStorage.getItem(k) || '');
+                  if (parsed && parsed.scores && parsed.activities) {
+                    scores = parsed.scores;
+                    activities = parsed.activities;
+                    calcMode = parsed.calcMode || 'average';
+                    break;
+                  }
+                } catch {}
+              }
+            }
+          }
+
+          // C. Si no está en local, buscar en los registros de la nube
+          if (!scores && cloudActivities && cloudActivities.length > 0) {
+            const cloudMatch = cloudActivities.find(
+              (ca: any) => ca.subject_id === sub.id && ca.period === p && ca.scores
+            );
+            if (cloudMatch) {
+              scores = cloudMatch.scores.scores;
+              activities = cloudMatch.scores.activities;
+              calcMode = cloudMatch.scores.calcMode || 'average';
+            }
+          }
+
+          // D. Si se encontraron actividades de parciales, calcular promedios por estudiante
+          if (scores && activities) {
+            students.forEach((student: any) => {
+              const studentScores = scores[student.id] || {};
+
+              config.competencies.forEach((comp) => {
+                const compActs = activities[comp.id] || [];
+                const validVals = compActs
+                  .map((act: any) => studentScores[act.id])
+                  .filter((v: any) => typeof v === 'number' && !isNaN(v));
+
+                if (validVals.length > 0) {
+                  let compScore = 0;
+                  if (calcMode === 'sum') {
+                    compScore = Math.min(100, Math.round(validVals.reduce((a: number, b: number) => a + b, 0)));
+                  } else {
+                    compScore = Math.round(validVals.reduce((a: number, b: number) => a + b, 0) / validVals.length);
+                  }
+
+                  allGradesToUpsert.push({
+                    center_id: centerId !== 'default_center' ? centerId : null,
+                    student_id: student.id,
+                    course_id: selectedCourseId,
+                    subject_id: sub.id,
+                    period: p,
+                    competency_id: comp.id,
+                    grade: compScore,
+                    school_year: year,
+                    updated_at: new Date().toISOString()
+                  });
+
+                  subjectsWithGrades.add(sub.name || sub.id);
+
+                  if (sub.id === selectedSubjectId) {
+                    newLocalGrades[`${student.id}_${comp.id}_${pL}`] = String(compScore);
+                    currentSubjectImportedCount++;
+                  }
+                }
+              });
+            });
+          }
+        }
+      }
+
+      // 4. Guardar todas las calificaciones en student_grades en lotes
+      if (allGradesToUpsert.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < allGradesToUpsert.length; i += batchSize) {
+          const batch = allGradesToUpsert.slice(i, i + batchSize);
+          const { error: upsertErr } = await supabase
+            .from('student_grades')
+            .upsert(batch, {
+              onConflict: 'student_id,course_id,subject_id,period,competency_id'
+            });
+          if (upsertErr) throw upsertErr;
+        }
+
+        if (currentSubjectImportedCount > 0) {
+          setLocalGrades(newLocalGrades);
+        }
+
+        // Refrescar calificaciones globales en memoria si está disponible
+        if (loadAllGrades) {
+          await loadAllGrades().catch(() => {});
+        }
+
+        setShowSaveStatus('success');
+        setTimeout(() => setShowSaveStatus('idle'), 4000);
+
+        alert(
+          `¡Éxito! Se han jalado y guardado ${allGradesToUpsert.length} calificaciones de ${subjectsWithGrades.size} asignaturas para el curso completo (${courseLabel}).\n\n` +
+          `Materias actualizadas: ${Array.from(subjectsWithGrades).join(', ')}`
+        );
+      } else {
+        alert(
+          `No se encontraron parciales registrados en Mi Aula para las asignaturas de este curso (${courseLabel}).`
+        );
+      }
+    } catch (err: any) {
+      console.error('Error al importar notas del curso completo desde Mi Aula:', err);
+      alert(`Error al importar las notas del curso completo: ${err?.message || 'Error desconocido'}`);
+    } finally {
+      setIsImportingCourse(false);
     }
   };
 
@@ -2114,13 +2317,34 @@ export const DigitalRegister = ({
                 <span className="hidden sm:inline">{hideStudentNames ? 'Mostrar Nombres' : 'Ocultar Nombres'}</span>
                 <span className="sm:hidden">{hideStudentNames ? 'Nombres' : 'Ocultar'}</span>
               </button>
-              <button
-                onClick={handleImportFromMiAula}
-                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center gap-2 transition-all cursor-pointer border border-purple-400/30"
-                title="Importar promedios de parciales registrados en Mi Aula para este curso y asignatura"
-              >
-                <ScrollText size={16} /> JALAR NOTAS DE MI AULA
-              </button>
+              <div className="flex items-center shadow-lg rounded-xl overflow-hidden border border-purple-400/40">
+                <button
+                  type="button"
+                  onClick={handleImportCourseFromMiAula}
+                  disabled={isImportingCourse || !selectedCourseId}
+                  className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black uppercase text-[10px] flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Jalar y guardar promedios de parciales registrados en Mi Aula para TODAS las asignaturas del curso completo"
+                >
+                  {isImportingCourse ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" /> JALANDO CURSO COMPLETO...
+                    </>
+                  ) : (
+                    <>
+                      <Layers size={15} /> JALAR NOTAS DEL CURSO COMPLETO
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportFromMiAula}
+                  disabled={isImportingCourse || !selectedSubjectId}
+                  className="px-2.5 py-2.5 bg-purple-700 hover:bg-purple-800 text-purple-100 font-bold uppercase text-[9px] flex items-center gap-1 transition-all cursor-pointer border-l border-purple-500/50 disabled:opacity-50"
+                  title="Jalar notas únicamente de la asignatura actual seleccionada"
+                >
+                  <ScrollText size={12} /> (Solo esta materia)
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowRecoveryPlanModal(true)}

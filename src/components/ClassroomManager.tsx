@@ -825,42 +825,6 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       .catch((err) => console.warn('Error al actualizar registro saneado:', err));
                   }
 
-                  // Recalcular calificaciones de competencia en student_grades para este período
-                  const updatedGradesToSync: any[] = [];
-                  courseStudents.forEach((s: any) => {
-                    Object.keys(finalActivities).forEach((compId) => {
-                      const compActs = finalActivities[compId] || [];
-                      const validScores = compActs
-                        .map((a: any) => finalScores[s.id]?.[a.id])
-                        .filter((v: any) => typeof v === 'number' && !isNaN(v));
-
-                      if (validScores.length > 0) {
-                        const finalCompGrade =
-                          cloudMode === 'sum'
-                            ? Math.min(100, Math.round(validScores.reduce((a: number, b: number) => a + b, 0)))
-                            : Math.round(validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length);
-
-                        updatedGradesToSync.push({
-                          center_id: centerId !== 'default_center' ? centerId : null,
-                          student_id: s.id,
-                          course_id: selectedCourseId,
-                          subject_id: selectedSubjectId,
-                          period: selectedPeriod,
-                          competency_id: compId,
-                          grade: finalCompGrade,
-                          school_year: year,
-                          updated_at: new Date().toISOString()
-                        });
-                      }
-                    });
-                  });
-
-                  if (updatedGradesToSync.length > 0) {
-                    supabase.from('student_grades').upsert(updatedGradesToSync, {
-                      onConflict: 'student_id,course_id,subject_id,period,competency_id'
-                    }).catch(() => {});
-                  }
-
                   toast.success(`Se corrigieron las actividades del ${selectedPeriod}, manteniendo únicamente las tareas evaluadas de este período.`, { duration: 4500 });
                 }
               }
@@ -1637,40 +1601,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         localStorage.setItem(altKey, JSON.stringify(payloadData));
       }
 
-      // 2. Preparar notas por competencia para student_grades
-      const competencyGrades: any[] = [];
-      courseStudents.forEach((s: any) => {
-        const sScores = partialScores[s.id] || {};
-
-        activeCompetencies.forEach((comp) => {
-          const acts = competencyActivities[comp.id] || [];
-          const validScores = acts
-            .map((a) => sScores[a.id])
-            .filter((v) => typeof v === 'number' && !isNaN(v));
-
-          if (validScores.length > 0) {
-            let compGrade: number;
-            if (competencyCalcMode === 'sum') {
-              compGrade = Math.min(100, Math.round(validScores.reduce((a, b) => a + b, 0)));
-            } else {
-              compGrade = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
-            }
-
-            competencyGrades.push({
-              center_id: centerId,
-              student_id: s.id,
-              course_id: selectedCourseId,
-              subject_id: selectedSubjectId,
-              period: selectedPeriod,
-              competency_id: comp.id,
-              grade: compGrade,
-              school_year: year,
-              updated_at: new Date().toISOString()
-            });
-          }
-        });
-      });
-
+      // 2. Preparar payload de actividades y notas para student_partial_activities
       const scoresPayload = {
         scores: partialScores,
         studentNotes: studentNotes,
@@ -1681,7 +1612,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
       if (isOffline) {
-        // Encolar acciones offline
+        // Encolar acciones offline de parciales en Mi Aula
         await enqueueSyncAction({
           type: 'partial_activities',
           payload: {
@@ -1697,20 +1628,11 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           description: `Desglose de parciales (${selectedPeriod})`
         });
 
-        if (competencyGrades.length > 0) {
-          await enqueueSyncAction({
-            type: 'grades',
-            payload: competencyGrades,
-            centerId,
-            description: `Calificaciones sincronizadas de parciales (${competencyGrades.length} registros)`
-          });
-        }
-
         if (!isSilent) {
-          toast.success('Guardado localmente (sin internet). Se sincronizará al reconectar.');
+          toast.success('Guardado localmente en Mi Aula (sin internet). Se sincronizará al reconectar.');
         }
       } else if (centerId && selectedCourseId && selectedSubjectId) {
-        // 3. Persistir en student_partial_activities sin depender exclusivamente de índices ON CONFLICT
+        // 3. Persistir en student_partial_activities en la nube (sin transferir automáticamente a Calificaciones)
         try {
           let checkQuery = supabase
             .from('student_partial_activities')
@@ -1776,27 +1698,6 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             centerId,
             description: `Desglose de parciales (${selectedPeriod})`
           });
-        }
-
-        // 4. Sincronizar calificaciones por competencia con student_grades (Registro Digital)
-        if (competencyGrades.length > 0) {
-          try {
-            const { error: gradeErr } = await supabase
-              .from('student_grades')
-              .upsert(competencyGrades, {
-                onConflict: 'student_id,course_id,subject_id,period,competency_id'
-              });
-
-            if (gradeErr) throw gradeErr;
-          } catch (gradeSyncErr: any) {
-            console.warn('[ClassroomManager] Error al sincronizar student_grades en nube, encolando offline:', gradeSyncErr);
-            await enqueueSyncAction({
-              type: 'grades',
-              payload: competencyGrades,
-              centerId,
-              description: `Calificaciones sincronizadas de parciales (${competencyGrades.length} registros)`
-            });
-          }
         }
       }
 
@@ -2441,38 +2342,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           }
         });
 
-        // D. Recalcular calificaciones por competencia y actualizar student_grades (Registro Digital)
-        const competencyGrades: any[] = [];
-        courseStudents.forEach((s: any) => {
-          const sScores = existingScores[s.id] || {};
-          const compActs = existingActivities[compId] || [];
-          const validScores = compActs
-            .map((a) => sScores[a.id])
-            .filter((v) => typeof v === 'number' && !isNaN(v));
-
-          if (validScores.length > 0) {
-            let compGrade: number;
-            if (currentCalcMode === 'sum') {
-              compGrade = Math.min(100, Math.round(validScores.reduce((a, b) => a + b, 0)));
-            } else {
-              compGrade = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
-            }
-
-            competencyGrades.push({
-              center_id: centerId !== 'default_center' ? centerId : null,
-              student_id: s.id,
-              course_id: selectedCourseId,
-              subject_id: targetSubjectId,
-              period: partialPeriod,
-              competency_id: compId,
-              grade: compGrade,
-              school_year: year,
-              updated_at: new Date().toISOString()
-            });
-          }
-        });
-
-        // E. Guardar en student_partial_activities en Supabase de forma segura
+        // D. Guardar en student_partial_activities en Supabase de forma segura (sin transferir directamente a Calificaciones)
         const fullScoresPayload = {
           scores: existingScores,
           studentNotes: existingStudentNotes,
@@ -2523,19 +2393,6 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           }
         } catch (savePartialErr) {
           console.warn('[ClassroomManager] Error al sincronizar student_partial_activities:', savePartialErr);
-        }
-
-        // F. Sincronizar calificaciones con student_grades (Boletín / Registro Digital)
-        if (competencyGrades.length > 0) {
-          try {
-            await supabase
-              .from('student_grades')
-              .upsert(competencyGrades, {
-                onConflict: 'student_id,course_id,subject_id,period,competency_id'
-              });
-          } catch (gradeSyncErr) {
-            console.warn('[ClassroomManager] Error al actualizar student_grades:', gradeSyncErr);
-          }
         }
 
         // Actualizar también el respaldo en localStorage para el período específico de la tarea
@@ -4850,10 +4707,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           <Award size={18} className="text-indigo-600 dark:text-indigo-400" />
                           <div>
                             <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 block">
-                              Vincular calificaciones con Registro de Parciales
+                              Vincular calificaciones con Registro de Parciales de Mi Aula
                             </span>
                             <p className="text-[10px] text-text-muted font-medium">
-                              Al guardar, las notas de cada estudiante se transferirán directamente a la pestaña de Calificaciones Parciales.
+                              Al guardar, las notas se registrarán en los Parciales de Mi Aula (listas para ser jaladas al Registro Oficial de Calificaciones).
                             </p>
                           </div>
                         </div>
