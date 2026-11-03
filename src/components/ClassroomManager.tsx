@@ -2149,7 +2149,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   // Estadísticas de evaluación de una tarea (porcentaje de cumplimiento)
   const getTaskStats = useCallback((task: any) => {
-    if (!task) return { total: 0, completed: 0, percentage: 0, average: 0, isLinked: false, competencyLabel: '', compId: 'c1', maxScore: 100 };
+    if (!task) return { total: 0, completed: 0, pending: 0, uncompleted: 0, percentage: 0, pendingPercentage: 0, uncompletedPercentage: 0, average: 0, isLinked: false, competencyLabel: '', compId: 'c1', maxScore: 100 };
     const centerId = profile?.center_id || center?.id || 'default_center';
     const storageKey = `edugens_task_grades_${centerId}_${task.id}`;
     let saved: Record<string, { status: string; score?: any }> = {};
@@ -2168,6 +2168,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
     const targetActId = `task_act_${task.id}`;
     let completed = 0;
+    let uncompleted = 0;
+    let pending = 0;
     let totalScore = 0;
     let scoredCount = 0;
 
@@ -2175,23 +2177,49 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       const localRecord = saved[s.id];
       const partialScore = isLinked ? (partialScores[s.id]?.[targetActId] ?? partialScores[s.id]?.[task.id]) : undefined;
       const hasValidPartial = typeof partialScore === 'number' && !isNaN(partialScore);
-      const isCompletedLocally = localRecord?.status === 'completed' || (localRecord?.score !== undefined && localRecord?.score !== '');
 
-      if (hasValidPartial || isCompletedLocally) {
+      if (hasValidPartial) {
         completed++;
-        const sVal = hasValidPartial ? partialScore : Number(localRecord?.score);
-        if (!isNaN(sVal)) {
-          totalScore += sVal;
-          scoredCount++;
+        totalScore += partialScore;
+        scoredCount++;
+      } else if (localRecord) {
+        if (localRecord.status === 'completed' || (localRecord.score !== undefined && localRecord.score !== '' && Number(localRecord.score) > 0)) {
+          completed++;
+          const sVal = Number(localRecord.score);
+          if (!isNaN(sVal)) {
+            totalScore += sVal;
+            scoredCount++;
+          }
+        } else if (localRecord.status === 'uncompleted') {
+          uncompleted++;
+        } else {
+          pending++;
         }
+      } else {
+        pending++;
       }
     });
 
     const total = courseStudents.length;
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const pendingPercentage = total > 0 ? Math.round((pending / total) * 100) : 0;
+    const uncompletedPercentage = total > 0 ? Math.round((uncompleted / total) * 100) : 0;
     const average = scoredCount > 0 ? Math.round(totalScore / scoredCount) : 0;
 
-    return { total, completed, percentage, average, isLinked, competencyLabel, compId, maxScore: partialLink.maxScore || 100 };
+    return {
+      total,
+      completed,
+      pending,
+      uncompleted,
+      percentage,
+      pendingPercentage,
+      uncompletedPercentage,
+      average,
+      isLinked,
+      competencyLabel,
+      compId,
+      maxScore: partialLink.maxScore || 100
+    };
   }, [courseStudents, partialScores, activeCompetencies, profile?.center_id, center?.id]);
 
   // Abrir modal de corrección y calificaciones de tarea
@@ -2228,17 +2256,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           feedback: local?.feedback || ''
         };
       } else if (local && (local.status || (local.score !== undefined && local.score !== ''))) {
+        const isComp = local.status === 'completed' || (local.score !== undefined && local.score !== '' && Number(local.score) > 0);
+        const isUncomp = local.status === 'uncompleted';
         initialState[s.id] = {
-          status: local.status || (local.score !== undefined && local.score !== '' ? 'completed' : 'pending'),
+          status: isUncomp ? 'uncompleted' : isComp ? 'completed' : 'pending',
           score: local.score !== undefined ? local.score : '',
           feedback: local.feedback || ''
         };
       } else {
-        // Por defecto: todos arrancan en 'completed' (Hecha) con nota máxima
-        // Al igual que pasar lista, el docente solo marca las pendientes o no hechas
+        // Por defecto: los alumnos aún no evaluados quedan en 'pending' (Pendiente)
+        // para que las métricas reflejen con exactitud lo que está pendiente vs corregido
         initialState[s.id] = {
-          status: 'completed',
-          score: defaultMax,
+          status: 'pending',
+          score: '',
           feedback: ''
         };
       }
@@ -4064,44 +4094,69 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       </div>
 
                       {/* Estadísticas de Cumplimiento / Alumnos que hicieron la tarea */}
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-border-main/60 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs font-bold">
-                          <div className="flex items-center gap-1.5 text-text-main">
-                            <CheckCircle2 size={14} className={getTaskStats(t).completed > 0 ? "text-emerald-500" : "text-slate-400"} />
-                            <span className="text-[11px] font-black uppercase tracking-tight">
-                              Cumplimiento: <span className="text-brand-blue">{getTaskStats(t).completed}</span> de {getTaskStats(t).total} alumnos
-                            </span>
-                          </div>
-                          <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${
-                            getTaskStats(t).percentage === 100 
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
-                              : getTaskStats(t).percentage > 0 
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' 
-                              : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                          }`}>
-                            {getTaskStats(t).percentage}%
-                          </span>
-                        </div>
+                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-border-main/60 space-y-2">
+                        {(() => {
+                          const stats = getTaskStats(t);
+                          return (
+                            <>
+                              <div className="flex items-center justify-between text-xs font-bold">
+                                <div className="flex items-center gap-1.5 text-text-main">
+                                  <CheckCircle2
+                                    size={14}
+                                    className={stats.completed > 0 ? 'text-emerald-500' : 'text-slate-400'}
+                                  />
+                                  <span className="text-[11px] font-black uppercase tracking-tight">
+                                    Cumplimiento: <span className="text-brand-blue">{stats.completed}</span> de {stats.total} alumnos
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                                    stats.percentage === 100
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                      : stats.percentage > 0
+                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                                  }`}
+                                >
+                                  {stats.percentage}%
+                                </span>
+                              </div>
 
-                        {/* Barra de progreso */}
-                        <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 rounded-full ${
-                              getTaskStats(t).percentage === 100
-                                ? 'bg-emerald-500'
-                                : getTaskStats(t).percentage >= 50
-                                ? 'bg-brand-blue'
-                                : 'bg-amber-500'
-                            }`}
-                            style={{ width: `${getTaskStats(t).percentage}%` }}
-                          />
-                        </div>
+                              {/* Barra de progreso combinada: Verde (Hechas), Rojo (No hechas) */}
+                              <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                                <div
+                                  className="h-full bg-emerald-500 transition-all duration-500"
+                                  style={{ width: `${stats.percentage}%` }}
+                                  title={`Hechas: ${stats.completed} (${stats.percentage}%)`}
+                                />
+                                <div
+                                  className="h-full bg-rose-500 transition-all duration-500"
+                                  style={{ width: `${stats.uncompletedPercentage}%` }}
+                                  title={`No hechas: ${stats.uncompleted} (${stats.uncompletedPercentage}%)`}
+                                />
+                              </div>
 
-                        {getTaskStats(t).isLinked && (
-                          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-indigo-500 pt-0.5">
-                            <Award size={11} /> Vinculada a Parciales ({getTaskStats(t).competencyLabel})
-                          </div>
-                        )}
+                              {/* Desglose rápido para el docente */}
+                              <div className="flex items-center justify-between text-[10px] font-bold pt-0.5 flex-wrap gap-1">
+                                <span className="text-emerald-600 dark:text-emerald-400">
+                                  ✓ {stats.completed} hechas ({stats.percentage}%)
+                                </span>
+                                <span className="text-amber-600 dark:text-amber-400">
+                                  ⏳ {stats.pending} pend. ({stats.pendingPercentage}%)
+                                </span>
+                                <span className="text-rose-600 dark:text-rose-400">
+                                  ✗ {stats.uncompleted} no ({stats.uncompletedPercentage}%)
+                                </span>
+                              </div>
+
+                              {stats.isLinked && (
+                                <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-indigo-500 pt-0.5">
+                                  <Award size={11} /> Vinculada a Parciales ({stats.competencyLabel})
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -4632,9 +4687,18 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
             const totalStudents = courseStudents.length;
             const completedCount = courseStudents.filter((s: any) => {
               const rec = taskGradingState[s.id];
-              return rec?.status === 'completed' || (rec?.score !== undefined && rec?.score !== '');
+              return rec?.status === 'completed' || (rec?.score !== undefined && rec?.score !== '' && Number(rec?.score) > 0);
             }).length;
-            const currentPercentage = totalStudents > 0 ? Math.round((completedCount / totalStudents) * 100) : 0;
+            const uncompletedCount = courseStudents.filter((s: any) => {
+              const rec = taskGradingState[s.id];
+              return rec?.status === 'uncompleted';
+            }).length;
+            const pendingCount = Math.max(0, totalStudents - completedCount - uncompletedCount);
+
+            const completedPct = totalStudents > 0 ? Math.round((completedCount / totalStudents) * 100) : 0;
+            const pendingPct = totalStudents > 0 ? Math.round((pendingCount / totalStudents) * 100) : 0;
+            const uncompletedPct = totalStudents > 0 ? Math.round((uncompletedCount / totalStudents) * 100) : 0;
+
             const scoresList = courseStudents
               .map((s: any) => Number(taskGradingState[s.id]?.score))
               .filter((v: number) => !isNaN(v) && v > 0);
@@ -4689,34 +4753,37 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
                   {/* Cuerpo scrollable */}
                   <div className="p-3 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1 custom-scrollbar">
-                    {/* Tarjetas de Métricas de Cumplimiento */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {/* Tarjetas de Métricas de Cumplimiento Exactas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                       <div className="bg-indigo-500/10 dark:bg-indigo-950/40 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/50">
                         <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block tracking-wider">
                           % Cumplimiento
                         </span>
                         <div className="flex items-baseline gap-1 mt-1">
                           <span className="text-2xl font-black text-indigo-600 dark:text-indigo-300">
-                            {currentPercentage}%
+                            {completedPct}%
                           </span>
                         </div>
                         <div className="w-full h-2 bg-indigo-200/50 dark:bg-indigo-900/60 rounded-full mt-2 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              currentPercentage === 100
+                              completedPct === 100
                                 ? 'bg-emerald-500'
-                                : currentPercentage >= 50
+                                : completedPct >= 50
                                 ? 'bg-indigo-600'
                                 : 'bg-amber-500'
                             }`}
-                            style={{ width: `${currentPercentage}%` }}
+                            style={{ width: `${completedPct}%` }}
                           />
                         </div>
+                        <span className="text-[9px] font-medium text-indigo-600 dark:text-indigo-400 block mt-1">
+                          {completedCount} de {totalStudents} alumnos
+                        </span>
                       </div>
 
                       <div className="bg-emerald-500/10 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/50">
                         <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block tracking-wider">
-                          Entregadas / Con Nota
+                          ✓ Entregadas / Hechas
                         </span>
                         <div className="flex items-baseline gap-1 mt-1">
                           <span className="text-2xl font-black text-emerald-600 dark:text-emerald-300">
@@ -4725,22 +4792,37 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           <span className="text-xs font-bold text-slate-500">/ {totalStudents}</span>
                         </div>
                         <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 block mt-1">
-                          Alumnos evaluados
+                          {completedPct}% del aula
                         </span>
                       </div>
 
                       <div className="bg-amber-500/10 dark:bg-amber-950/40 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50">
                         <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 block tracking-wider">
-                          Pendientes
+                          ⏳ Pendientes
                         </span>
                         <div className="flex items-baseline gap-1 mt-1">
                           <span className="text-2xl font-black text-amber-600 dark:text-amber-300">
-                            {Math.max(0, totalStudents - completedCount)}
+                            {pendingCount}
                           </span>
                           <span className="text-xs font-bold text-slate-500">alumnos</span>
                         </div>
                         <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400 block mt-1">
-                          Sin corregir o entregar
+                          {pendingPct}% sin calificar o entregar
+                        </span>
+                      </div>
+
+                      <div className="bg-rose-500/10 dark:bg-rose-950/40 p-4 rounded-2xl border border-rose-200 dark:border-rose-900/50">
+                        <span className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 block tracking-wider">
+                          ✗ No Hechas
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-rose-600 dark:text-rose-300">
+                            {uncompletedCount}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500">alumnos</span>
+                        </div>
+                        <span className="text-[9px] font-medium text-rose-600 dark:text-rose-400 block mt-1">
+                          {uncompletedPct}% incumplidas
                         </span>
                       </div>
 
@@ -4836,14 +4918,15 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                           className="px-3 py-2 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-muted outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                         >
                           <option value="all">Todos ({totalStudents})</option>
-                          <option value="completed">Entregados ({completedCount})</option>
-                          <option value="pending">Pendientes ({totalStudents - completedCount})</option>
+                          <option value="completed">Entregadas ({completedCount} - {completedPct}%)</option>
+                          <option value="pending">Pendientes ({pendingCount} - {pendingPct}%)</option>
+                          <option value="uncompleted">No hechas ({uncompletedCount} - {uncompletedPct}%)</option>
                         </select>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
-                        {/* Controles de scroll lateral para móviles */}
-                        <div className="flex items-center gap-1 bg-brand-bg px-2 py-1.5 rounded-xl border border-border-main">
+                        {/* Controles de scroll lateral para tablets/pantallas intermedias */}
+                        <div className="hidden sm:flex items-center gap-1 bg-brand-bg px-2 py-1.5 rounded-xl border border-border-main">
                           <button
                             type="button"
                             onClick={() => handleGradingScroll('left')}
@@ -4897,18 +4980,148 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                       </div>
                     </div>
 
-                    {/* Indicador de desplazamiento lateral en móvil */}
-                    <div className="md:hidden flex items-center justify-between text-[10px] font-bold text-text-muted px-3 py-1.5 bg-indigo-50/60 dark:bg-slate-800/60 rounded-xl border border-indigo-100 dark:border-slate-700">
-                      <span className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
-                        <span className="text-xs">↔</span> Desliza la tabla hacia los lados para calificar y anotar observaciones
-                      </span>
+                    {/* VISTA MÓVIL (PANTALLAS PEQUEÑAS): Tarjetas con scroll vertical natural en cualquier parte */}
+                    <div className="md:hidden space-y-3">
+                      {filteredStudents.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-text-muted bg-surface rounded-2xl border border-border-main">
+                          No se encontraron alumnos con los filtros seleccionados.
+                        </div>
+                      ) : (
+                        filteredStudents.map((s: any, idx: number) => {
+                          const studentOrder = s.order_number || idx + 1;
+                          const studentName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.name || 'Estudiante';
+                          const currentRec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
+
+                          return (
+                            <div
+                              key={s.id}
+                              className="p-3.5 bg-surface border border-border-main rounded-2xl space-y-3 shadow-xs"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="w-7 h-7 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-mono font-bold flex items-center justify-center shrink-0 text-text-muted">
+                                    {studentOrder}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-xs text-text-main truncate">{studentName}</p>
+                                    {s.rne && <p className="text-[10px] font-mono text-text-muted">{s.rne}</p>}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={gradingMaxScore}
+                                    placeholder="-"
+                                    value={currentRec.score !== undefined ? currentRec.score : ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? '' : Math.min(Number(gradingMaxScore) || 100, Math.max(0, Number(e.target.value)));
+                                      setTaskGradingState((prev) => ({
+                                        ...prev,
+                                        [s.id]: {
+                                          ...prev[s.id],
+                                          score: val,
+                                          status: val !== '' && Number(val) > 0 ? 'completed' : val === 0 ? 'uncompleted' : prev[s.id]?.status || 'pending'
+                                        }
+                                      }));
+                                    }}
+                                    className="w-16 p-1.5 text-center font-black rounded-xl border border-border-main bg-brand-bg text-text-main text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                  <span className="text-[10px] font-bold text-text-muted">{`/${gradingMaxScore}`}</span>
+                                </div>
+                              </div>
+
+                              {/* Botones de estado táctiles de acceso directo */}
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTaskGradingState((prev) => ({
+                                      ...prev,
+                                      [s.id]: {
+                                        ...prev[s.id],
+                                        status: 'completed',
+                                        score: prev[s.id]?.score !== undefined && prev[s.id]?.score !== '' && Number(prev[s.id]?.score) > 0 ? prev[s.id].score : Number(gradingMaxScore) || 100
+                                      }
+                                    }));
+                                  }}
+                                  className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    currentRec.status === 'completed'
+                                      ? 'bg-emerald-500 text-white shadow-xs'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  ✓ Hecha
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTaskGradingState((prev) => ({
+                                      ...prev,
+                                      [s.id]: {
+                                        ...prev[s.id],
+                                        status: 'pending',
+                                        score: ''
+                                      }
+                                    }));
+                                  }}
+                                  className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    currentRec.status === 'pending'
+                                      ? 'bg-amber-500 text-white shadow-xs'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-amber-50'
+                                  }`}
+                                >
+                                  ⏳ Pendiente
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTaskGradingState((prev) => ({
+                                      ...prev,
+                                      [s.id]: {
+                                        ...prev[s.id],
+                                        status: 'uncompleted',
+                                        score: 0
+                                      }
+                                    }));
+                                  }}
+                                  className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    currentRec.status === 'uncompleted'
+                                      ? 'bg-rose-500 text-white shadow-xs'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-text-muted hover:bg-rose-50'
+                                  }`}
+                                >
+                                  ✗ No hecha
+                                </button>
+                              </div>
+
+                              <input
+                                type="text"
+                                placeholder="Observación o retroalimentación (opcional)..."
+                                value={currentRec.feedback || ''}
+                                onChange={(e) => {
+                                  const txt = e.target.value;
+                                  setTaskGradingState((prev) => ({
+                                    ...prev,
+                                    [s.id]: {
+                                      ...prev[s.id],
+                                      feedback: txt
+                                    }
+                                  }));
+                                }}
+                                className="w-full px-3 py-1.5 rounded-xl border border-border-main bg-brand-bg text-text-main text-xs outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-text-muted/60"
+                              />
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
 
-                    {/* Tabla de Alumnos para Calificar */}
+                    {/* VISTA ESCRITORIO / TABLET: Tabla Completa con scroll libre sin bloqueo gestual */}
                     <div
                       ref={taskGradingTableRef}
-                      className="border border-border-main rounded-2xl overflow-x-auto custom-scrollbar shadow-xs touch-pan-x overscroll-x-contain"
-                      style={{ WebkitOverflowScrolling: 'touch' }}
+                      className="hidden md:block border border-border-main rounded-2xl overflow-x-auto custom-scrollbar shadow-xs"
                     >
                       <table className="w-full min-w-[720px] text-left border-collapse">
                         <thead>
@@ -4916,7 +5129,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             <th className="py-2.5 px-3 w-12 min-w-[48px] text-center">No.</th>
                             <th className="py-2.5 px-3 min-w-[170px]">Estudiante</th>
                             <th className="py-2.5 px-3 w-52 min-w-[210px] text-center">Estado de Entrega</th>
-                            <th className="py-2.5 px-3 w-32 min-w-[120px] text-center">Calificación (/{gradingMaxScore})</th>
+                            <th className="py-2.5 px-3 w-32 min-w-[120px] text-center">Calificación (máx {gradingMaxScore})</th>
                             <th className="py-2.5 px-3 min-w-[200px]">Observación / Feedback</th>
                           </tr>
                         </thead>
@@ -4931,7 +5144,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                             filteredStudents.map((s: any, idx: number) => {
                               const studentOrder = s.order_number || idx + 1;
                               const studentName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.name || 'Estudiante';
-                              const currentRec = taskGradingState[s.id] || { status: 'completed', score: Number(gradingMaxScore) || 100, feedback: '' };
+                              const currentRec = taskGradingState[s.id] || { status: 'pending', score: '', feedback: '' };
                               const isCompleted = currentRec.status === 'completed';
 
                               return (
@@ -5032,7 +5245,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
                                           [s.id]: {
                                             ...prev[s.id],
                                             score: val,
-                                            status: val !== '' ? 'completed' : prev[s.id]?.status || 'pending'
+                                            status: val !== '' && Number(val) > 0 ? 'completed' : val === 0 ? 'uncompleted' : prev[s.id]?.status || 'pending'
                                           }
                                         }));
                                       }}
@@ -5071,9 +5284,13 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
                   {/* Pie del modal con botones de acción */}
                   <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-border-main flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
-                    <div className="flex items-center gap-2 text-xs font-bold text-text-muted justify-center sm:justify-start">
-                      <CheckCircle2 size={16} className={currentPercentage > 0 ? "text-emerald-500" : "text-slate-400"} />
-                      <span>{completedCount} de {totalStudents} alumnos evaluados ({currentPercentage}%)</span>
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-muted justify-center sm:justify-start flex-wrap">
+                      <CheckCircle2 size={16} className={completedPct > 0 ? "text-emerald-500" : "text-slate-400"} />
+                      <span>{completedCount} de {totalStudents} alumnos hechos ({completedPct}%)</span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                      <span className="text-amber-600 dark:text-amber-400">{pendingCount} pendientes</span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                      <span className="text-rose-600 dark:text-rose-400">{uncompletedCount} no hechas</span>
                     </div>
 
                     <div className="flex items-center gap-2 sm:gap-3">
