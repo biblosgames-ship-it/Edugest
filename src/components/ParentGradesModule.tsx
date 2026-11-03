@@ -27,6 +27,7 @@ import { dataService } from '../services/dataService';
 import { gradesReleaseService } from '../services/gradesReleaseService';
 import { resolveStudentForUser } from '../utils/studentResolver';
 import { getReportTanda } from '../utils/courseSorter';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -50,7 +51,7 @@ export const ParentGradesModule: React.FC<ParentGradesModuleProps> = ({
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [isGradesReleased, setIsGradesReleased] = useState<boolean>(false);
   const [gradesMap, setGradesMap] = useState<Record<string, Record<string, any>>>({});
-  const [selectedPeriod, setSelectedPeriod] = useState<'P1' | 'P2' | 'P3' | 'P4' | 'FINAL'>('P1');
+  const [selectedPeriod, setSelectedPeriod] = useState<'P1' | 'P2' | 'P3' | 'P4' | 'FINAL'>(() => getCurrentPeriod() as any);
 
   // 1. Resolver el estudiante activo (o lista de hijos para padres)
   useEffect(() => {

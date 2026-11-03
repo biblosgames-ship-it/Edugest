@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 interface ReportProps {
   onClose: () => void;
@@ -34,7 +35,7 @@ type StatusFilterType = 'ALL' | 'PENDING' | 'COMPLETED' | 'EMPTY';
 
 export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: initialPeriod }) => {
   const { state, center, selectedYear } = useApp();
-  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || 'P1');
+  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || getCurrentPeriod());
   const [filterLevel, setFilterLevel] = useState('Todos');
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('ALL');
   const [searchTerm, setSearchTerm] = useState('');

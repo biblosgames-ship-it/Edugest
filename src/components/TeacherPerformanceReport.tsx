@@ -14,6 +14,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import autoTable from 'jspdf-autotable';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import {
   BarChart,
   Bar,
@@ -35,7 +36,7 @@ export const TeacherPerformanceReport: React.FC<ReportProps> = ({
   period: initialPeriod
 }) => {
   const { state, center, selectedYear } = useApp();
-  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || 'P1');
+  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || getCurrentPeriod());
 
   const performanceData = useMemo(() => {
     const teachers = state.teachers || [];

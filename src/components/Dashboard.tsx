@@ -22,6 +22,7 @@ import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { SEO } from './SEO';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import {
   BarChart,
   Bar,
@@ -56,7 +57,7 @@ export const Dashboard = React.memo(() => {
   const { state, center, selectedYear, profile, loadAllGrades } = useApp();
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  const [selectedPeriod, setSelectedPeriod] = useState('P1');
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentPeriod());
   const [selectedLevel, setSelectedLevel] = useState('Todos');
   const [comparisonMode, setComparisonMode] = useState<'indice' | 'competencias' | 'materias'>(
     'indice'

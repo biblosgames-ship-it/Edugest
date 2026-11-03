@@ -38,6 +38,7 @@ import { HonorRollReport } from './HonorRollReport';
 import { TeacherPerformanceReport } from './TeacherPerformanceReport';
 import { StaffConsolidatedReport } from './StaffConsolidatedReport';
 import { WorkloadReport } from './WorkloadReport';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import { IncidentsReport } from './IncidentsReport';
 import { MeetingsReport } from './MeetingsReport';
 import { PedagogicalReport } from './PedagogicalReport';
@@ -302,7 +303,7 @@ export const GeneralReports: React.FC<GeneralReportsProps> = ({
 
   const { state, selectedYear, center, loadAllGrades } = useApp();
   const { profile } = useSupabase();
-  const [selectedPeriod, setSelectedPeriod] = useState('P1');
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentPeriod());
   const [selectedLevelFilter, setSelectedLevelFilter] = useState('TODO');
   const [comparisonMode, setComparisonMode] = useState<'indice' | 'competencias' | 'materias'>(
     'indice'

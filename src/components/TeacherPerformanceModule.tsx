@@ -12,6 +12,7 @@ import {
   calculateLevelFromAverage,
   getDefaultRubricTemplates
 } from '../services/staffEvaluationService';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import {
   BarChart3,
   Users,
@@ -113,9 +114,9 @@ export const TeacherPerformanceModule: React.FC = () => {
   const schoolYear = selectedYear || '2026-2027';
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('P1');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(() => getCurrentPeriod() as PeriodFilter);
   const [levelFilter, setLevelFilter] = useState<'ALL' | 'Primaria' | 'Secundaria'>('ALL');
-  const [comparePeriodA, setComparePeriodA] = useState<EvaluationPeriod>('P1');
+  const [comparePeriodA, setComparePeriodA] = useState<EvaluationPeriod>(() => getCurrentPeriod() as EvaluationPeriod);
   const [comparePeriodB, setComparePeriodB] = useState<EvaluationPeriod>('P2');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -176,7 +177,7 @@ export const TeacherPerformanceModule: React.FC = () => {
   const [newBroadcastDesc, setNewBroadcastDesc] = useState(
     'Por favor valora de forma objetiva y respetuosa el desempeño de cada uno de tus profesores durante este período de clases.'
   );
-  const [newBroadcastPeriod, setNewBroadcastPeriod] = useState<EvaluationPeriod>('P1');
+  const [newBroadcastPeriod, setNewBroadcastPeriod] = useState<EvaluationPeriod>(() => getCurrentPeriod() as EvaluationPeriod);
   const [newBroadcastAudience, setNewBroadcastAudience] = useState<('student' | 'parent')[]>([
     'student',
     'parent'

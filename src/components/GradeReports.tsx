@@ -39,6 +39,7 @@ import { Users, X, ScrollText as ScrollIcon, BookOpen } from 'lucide-react';
 import PrimaryCertificate from './PrimaryCertificate';
 import GradeRegisterReport from './GradeRegisterReport';
 import { getReportTanda } from '../utils/courseSorter';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 /**
  * Deduplica estudiantes que hayan sido registrados por duplicado en el mismo curso/centro
@@ -206,7 +207,7 @@ export const GradeReports = ({
   // PENDING GRADES STATE
   const [showPendingGradesModal, setShowPendingGradesModal] = useState(false);
   const [pendingGradesData, setPendingGradesData] = useState<any>(null);
-  const [pendingGradesPeriod, setPendingGradesPeriod] = useState('P1');
+  const [pendingGradesPeriod, setPendingGradesPeriod] = useState(() => getCurrentPeriod());
 
   const [showCourseRecord, setShowCourseRecord] = useState(false);
   const [showGradeRegisterModal, setShowGradeRegisterModal] = useState(false);
@@ -603,7 +604,30 @@ export const GradeReports = ({
       );
     }
     if (subs.length === 0) subs = state.subjects || [];
-    return [...subs]
+
+    // Deduplicar materias estrictamente por ID y por nombre normalizado
+    // para evitar materias duplicadas cuando hay múltiples docentes asignados
+    // a una misma asignatura en el curso (ej. Ciencias Sociales).
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const uniqueSubs: any[] = [];
+
+    for (const s of subs) {
+      if (!s || !s.id) continue;
+      const normalizedName = (s.name || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (seenIds.has(s.id) || (normalizedName && seenNames.has(normalizedName))) {
+        continue;
+      }
+      seenIds.add(s.id);
+      if (normalizedName) seenNames.add(normalizedName);
+      uniqueSubs.push(s);
+    }
+
+    return uniqueSubs
       .filter(
         (s) =>
           !s.name.toLowerCase().includes('lecto') && !s.name.toLowerCase().includes('escritura')
@@ -617,7 +641,8 @@ export const GradeReports = ({
           if (name.includes('natura')) return 3;
           if (name.includes('física')) return 4;
           if (name.includes('fihr')) return 5;
-          if (name.includes('artística')) return 6;
+          if (name.includes('artística') || name.includes('arte')) return 6;
+          if (name.includes('ingles')) return 7;
           return 99;
         };
         return getIdx(a.name) - getIdx(b.name);
@@ -1358,16 +1383,35 @@ export const GradeReports = ({
 
       const { uniqueStudents: students, idAliasMap } = deduplicateCourseStudents(rawStudents, gData);
 
+      const courseSubs = getCourseSubjects();
+      // Mapa de resolución canónica de asignaturas por nombre normalizado
+      // para que las notas registradas bajo cualquier id de la misma materia
+      // se unifiquen automáticamente bajo la materia correspondiente en el boletín
+      const subIdToCanonicalId = new Map<string, string>();
+      const normNameToCanonicalId = new Map<string, string>();
+      courseSubs.forEach((s) => {
+        const norm = (s.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        subIdToCanonicalId.set(s.id, s.id);
+        if (norm) normNameToCanonicalId.set(norm, s.id);
+      });
+      (state.subjects || []).forEach((s: any) => {
+        const norm = (s.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (norm && normNameToCanonicalId.has(norm)) {
+          subIdToCanonicalId.set(s.id, normNameToCanonicalId.get(norm)!);
+        }
+      });
+
       const gradesMap: Record<string, Record<string, Record<string, any>>> = {};
       students.forEach((s) => (gradesMap[s.id] = {}));
 
       if (gData) {
         gData.forEach((g) => {
           const targetStudentId = idAliasMap.get(g.student_id) || g.student_id;
+          const targetSubId = subIdToCanonicalId.get(g.subject_id) || g.subject_id;
           if (!gradesMap[targetStudentId]) gradesMap[targetStudentId] = {};
-          if (!gradesMap[targetStudentId][g.subject_id]) gradesMap[targetStudentId][g.subject_id] = {};
+          if (!gradesMap[targetStudentId][targetSubId]) gradesMap[targetStudentId][targetSubId] = {};
 
-          const sGrades = gradesMap[targetStudentId][g.subject_id];
+          const sGrades = gradesMap[targetStudentId][targetSubId];
           const pL = g.period.toLowerCase();
 
           if (g.grade !== null) sGrades[`${g.competency_id}_${pL}`] = g.grade;
@@ -1383,7 +1427,7 @@ export const GradeReports = ({
         });
       }
 
-      setBoletinData({ students, gradesMap, centerData, subjects: getCourseSubjects() });
+      setBoletinData({ students, gradesMap, centerData, subjects: courseSubs });
       setSelectedStudentId('all');
       setShowBoletinModal(true);
     } catch (error) {

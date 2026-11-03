@@ -55,6 +55,7 @@ import { LinkifiedText, parseTextWithLinks } from './LinkifiedText';
 import { enqueueSyncAction, syncAttendanceRecordsDifferential } from '../utils/offlineSync';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 import { getReportTanda } from '../utils/courseSorter';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 type AttendanceStatus = 'presente' | 'tardanza' | 'excusa' | 'ausente';
 type NoteCategory = 'Conducta' | 'Académico' | 'Padres' | 'Salud';
@@ -194,7 +195,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   const [competencyCalcMode, setCompetencyCalcMode] = useState<'average' | 'sum'>('average');
   const [activeGradeStudentId, setActiveGradeStudentId] = useState<string | null>(null);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('P1');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => getCurrentPeriod());
 
   // Estados de Tareas y Enlaces Fijos
   const [courseTasks, setCourseTasks] = useState<any[]>([]);

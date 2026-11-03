@@ -7,6 +7,7 @@ import { toPng } from 'html-to-image';
 import autoTable from 'jspdf-autotable';
 import { exportGenericTableToExcel } from '../utils/listPdfGenerator';
 import { getReportTanda } from '../utils/courseSorter';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 interface ReportProps {
   onClose: () => void;
@@ -15,7 +16,7 @@ interface ReportProps {
 
 export const HonorRollReport: React.FC<ReportProps> = ({ onClose, period: initialPeriod }) => {
   const { state, center, selectedYear } = useApp();
-  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || 'P1');
+  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || getCurrentPeriod());
 
   const honorData = useMemo(() => {
     const students = state.students || [];

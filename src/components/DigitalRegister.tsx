@@ -35,6 +35,7 @@ import { useAssignments } from '../hooks/useAssignments';
 import { useTeacherIdentity } from '../utils/teacherUtils';
 import { sortStudents, getStudentOrderNumber } from '../utils/studentSorter';
 import { getReportTanda } from '../utils/courseSorter';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 export const DigitalRegister = ({
   onViewChange
@@ -263,8 +264,24 @@ export const DigitalRegister = ({
     }
     if (subs.length === 0) subs = allSubjects || [];
 
-    // Deduplicar materias por ID único
-    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
+    // Deduplicar materias por ID único y por nombre normalizado
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const uniqueSubs: any[] = [];
+    for (const s of subs) {
+      if (!s || !s.id) continue;
+      const normalizedName = (s.name || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (seenIds.has(s.id) || (normalizedName && seenNames.has(normalizedName))) {
+        continue;
+      }
+      seenIds.add(s.id);
+      if (normalizedName) seenNames.add(normalizedName);
+      uniqueSubs.push(s);
+    }
 
     return [...uniqueSubs]
       .filter(
@@ -301,8 +318,24 @@ export const DigitalRegister = ({
     }
     if (subs.length === 0) subs = allSubjects || [];
 
-    // Deduplicar materias por ID único
-    const uniqueSubs = Array.from(new Map(subs.map((s: any) => [s.id, s])).values());
+    // Deduplicar materias por ID único y por nombre normalizado
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const uniqueSubs: any[] = [];
+    for (const s of subs) {
+      if (!s || !s.id) continue;
+      const normalizedName = (s.name || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (seenIds.has(s.id) || (normalizedName && seenNames.has(normalizedName))) {
+        continue;
+      }
+      seenIds.add(s.id);
+      if (normalizedName) seenNames.add(normalizedName);
+      uniqueSubs.push(s);
+    }
 
     return [...uniqueSubs]
       .filter(
@@ -3088,7 +3121,7 @@ export const DigitalRegister = ({
           currentSubjectId={selectedSubjectId}
           centerId={profile?.center_id || center?.id || ''}
           schoolYear={selectedYear || '2026-2027'}
-          activePeriod="P1"
+          activePeriod={getCurrentPeriod()}
           userId={profile?.id}
         />
       )}

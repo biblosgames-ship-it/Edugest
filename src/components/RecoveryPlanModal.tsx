@@ -27,6 +27,7 @@ import { toast } from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
 import { supabase, fetchAllRows } from '../lib/supabase';
 import { recoveryPlanService, RecoveryPlan, RecoveryPlanStudent, RecoveryScheduleWeek } from '../services/recoveryPlanService';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 interface RecoveryPlanModalProps {
   isOpen: boolean;
@@ -56,7 +57,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   currentSubjectId,
   centerId,
   schoolYear = '2026-2027',
-  activePeriod = 'P1',
+  activePeriod = getCurrentPeriod(),
   userId
 }) => {
   const { state } = useApp();
@@ -77,8 +78,8 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>(() => course?.id ? [course.id] : []);
 
   // Estado del formulario del nuevo plan
-  const [period, setPeriod] = useState<string>(activePeriod || 'P1');
-  const [title, setTitle] = useState<string>(`Plan de Recuperación - ${activePeriod || 'P1'}`);
+  const [period, setPeriod] = useState<string>(activePeriod || getCurrentPeriod());
+  const [title, setTitle] = useState<string>(`Plan de Recuperación - ${activePeriod || getCurrentPeriod()}`);
   const [planMode, setPlanMode] = useState<'single' | 'weekly'>('weekly');
   const [singleStartDate, setSingleStartDate] = useState<string>('');
   const [singleEndDate, setSingleEndDate] = useState<string>('');

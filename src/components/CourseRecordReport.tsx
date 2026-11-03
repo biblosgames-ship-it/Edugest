@@ -18,6 +18,7 @@ import {
   LabelList
 } from 'recharts';
 import { ArrowLeft, Download, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { getCurrentPeriod } from '../utils/dateUtils';
 
 const rankingColors: Record<string, string> = {
   Excelente: '#16a34a',
@@ -48,7 +49,7 @@ export const CourseRecordReport: React.FC<ReportProps> = ({
 }) => {
   const { state, center, selectedYear } = useApp();
   const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(initialPeriod || 'P1');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(initialPeriod || getCurrentPeriod());
 
   const [courseGrades, setCourseGrades] = useState<any[]>([]);
   const [loadingGrades, setLoadingGrades] = useState(false);
