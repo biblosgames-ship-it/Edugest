@@ -1184,9 +1184,71 @@ soporte@edugest.net`;
                             className="border-b border-slate-100 hover:bg-slate-50"
                           >
                             <td className="py-4 px-4 font-bold text-slate-800">
-                              <div className="flex items-center gap-2">
-                                <School size={16} className="text-brand-blue shrink-0" />
-                                <span>{license.center_name || 'Desconocido'}</span>
+                              <div className="flex items-center gap-2.5">
+                                {license.center_logo_url ? (
+                                  <div className="relative group/logo shrink-0">
+                                    <img
+                                      src={license.center_logo_url}
+                                      alt="Logo"
+                                      className="w-8 h-8 rounded-lg object-contain bg-slate-50 border border-slate-200 p-0.5"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          const res = await fetch(license.center_logo_url!);
+                                          const blob = await res.blob();
+                                          const objUrl = URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = objUrl;
+                                          const cleanName = (license.center_name || 'centro').replace(/\s+/g, '_');
+                                          a.download = `Logo_${cleanName}.png`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                          URL.revokeObjectURL(objUrl);
+                                        } catch {
+                                          window.open(license.center_logo_url!, '_blank');
+                                        }
+                                      }}
+                                      className="absolute inset-0 bg-slate-900/80 rounded-lg text-white opacity-0 group-hover/logo:opacity-100 flex items-center justify-center transition-all cursor-pointer"
+                                      title="Descargar Logo"
+                                    >
+                                      <Download size={13} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <School size={16} className="text-brand-blue shrink-0" />
+                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <span>{license.center_name || 'Desconocido'}</span>
+                                  {license.center_logo_url && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          const res = await fetch(license.center_logo_url!);
+                                          const blob = await res.blob();
+                                          const objUrl = URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = objUrl;
+                                          const cleanName = (license.center_name || 'centro').replace(/\s+/g, '_');
+                                          a.download = `Logo_${cleanName}.png`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                          URL.revokeObjectURL(objUrl);
+                                        } catch {
+                                          window.open(license.center_logo_url!, '_blank');
+                                        }
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-brand-blue hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                      title="Descargar Logo de este Centro"
+                                    >
+                                      <Download size={13} />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-slate-500 font-normal mt-1">
                                 <Mail size={12} className="text-slate-400 shrink-0" />

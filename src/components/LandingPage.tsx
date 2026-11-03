@@ -70,7 +70,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onBackToLogin }) => {
   const officialCenterLogos = [
     {
       name: 'Centro Educativo Cristiano Génesis',
-      src: '/192x192 logo.jpeg'
+      src: '/center-logos/genesis-logo.jpg'
+    },
+    {
+      name: 'Centro Educativo Cristiano Morada de Sabiduría',
+      src: '/center-logos/morada-sabiduria-logo.png'
     },
     {
       name: 'Liceo Prof. Antonio Desí',

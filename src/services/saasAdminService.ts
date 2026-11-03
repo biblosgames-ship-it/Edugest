@@ -35,6 +35,7 @@ export interface SaaSProductKey {
   plan_id: string | null;
   created_at: string;
   center_name?: string;
+  center_logo_url?: string | null;
   plan_name?: string;
 }
 
@@ -115,7 +116,7 @@ export const getLicenses = async (): Promise<SaaSProductKey[]> => {
 
   // Fetch plans and centers manually to avoid PostgREST relationship errors
   const { data: plans } = await supabase.from('saas_plans').select('id, name');
-  const { data: centers } = await supabase.from('centers').select('id, name');
+  const { data: centers } = await supabase.from('centers').select('id, name, logo_url');
 
   return data.map((item: any) => {
     const plan = plans?.find((p) => p.id === item.plan_id);
@@ -123,6 +124,7 @@ export const getLicenses = async (): Promise<SaaSProductKey[]> => {
     return {
       ...item,
       center_name: center?.name || null,
+      center_logo_url: center?.logo_url || null,
       plan_name: plan?.name || 'Básico'
     };
   }) as SaaSProductKey[];

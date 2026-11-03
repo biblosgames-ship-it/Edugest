@@ -10,6 +10,7 @@ import {
   Save,
   Info,
   Upload,
+  Download,
   CheckCircle2,
   Users,
   FileSpreadsheet
@@ -155,6 +156,35 @@ export const CenterSettingsForm = () => {
                 className="hidden"
                 accept="image/*"
               />
+
+              {center?.logo_url && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(center.logo_url);
+                      const blob = await response.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = objectUrl;
+                      const cleanName = (center.name || 'centro').replace(/\s+/g, '_');
+                      link.download = `Logo_${cleanName}.png`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(objectUrl);
+                    } catch {
+                      window.open(center.logo_url, '_blank');
+                    }
+                  }}
+                  className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  title="Descargar archivo original del logo"
+                >
+                  <Download size={14} />
+                  <span>Descargar Logo Actual</span>
+                </button>
+              )}
+
               <p className="text-[10px] text-slate-400 font-bold text-center uppercase tracking-tighter">
                 JPG, PNG o SVG. Recomendado: 512x512px
               </p>
