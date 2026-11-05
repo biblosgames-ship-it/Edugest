@@ -33,7 +33,14 @@ const SW_CHECK_INTERVAL = 2 * 60 * 60 * 1000; // Máximo 1 chequeo cada 2 horas 
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    updateSW(true);
+    // Si el usuario está escribiendo o interactuando, diferir la actualización para no interrumpir
+    const isEditing = Boolean(
+      typeof document !== 'undefined' &&
+      document.querySelector('input:focus, textarea:focus, [contenteditable="true"]')
+    );
+    if (!isEditing) {
+      updateSW(true);
+    }
   },
   onRegistered(r) {
     if (r) {
@@ -57,14 +64,34 @@ const updateSW = registerSW({
   }
 });
 
-// Auto-recarga inmediata cuando el Service Worker se actualiza en segundo plano
+// Auto-recarga protegida cuando el Service Worker se actualiza en segundo plano
 if ('serviceWorker' in navigator) {
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true;
-      window.location.reload();
+    if (refreshing) return;
+    // Protección estricta: NO reiniciar la página si el usuario está redactando o tiene un modal abierto
+    const isUserEditing = Boolean(
+      typeof document !== 'undefined' &&
+      (document.querySelector('input:focus, textarea:focus, [contenteditable="true"]') ||
+       document.querySelector('.fixed, [role="dialog"]'))
+    );
+    if (isUserEditing) {
+      console.warn('[PWA] Actualización disponible retenida para no interrumpir la edición del usuario.');
+      // Se actualizará suavemente cuando el usuario cambie o minimice la pestaña
+      window.addEventListener(
+        'visibilitychange',
+        () => {
+          if (document.visibilityState === 'hidden' && !refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        },
+        { once: true }
+      );
+      return;
     }
+    refreshing = true;
+    window.location.reload();
   });
 }
 

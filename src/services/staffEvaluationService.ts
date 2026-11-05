@@ -1116,6 +1116,143 @@ export const staffEvaluationService = {
     }
 
     window.dispatchEvent(new CustomEvent('staffSurveyBroadcastsUpdated'));
+  },
+
+  /**
+   * Cambia el período de una evaluación interna (ej. de P2 a P1)
+   */
+  async moveEvaluationPeriod(
+    centerId: string,
+    evaluationId: string,
+    targetPeriod: EvaluationPeriod,
+    senderUserId?: string
+  ): Promise<StaffEvaluationRecord | null> {
+    const evals = await this.getEvaluations(centerId);
+    const existing = evals.find((e) => e.id === evaluationId);
+    if (!existing) return null;
+
+    // Eliminar el registro antiguo con su ID original
+    await this.deleteEvaluation(centerId, evaluationId);
+
+    // Generar nuevo ID coherente con el período de destino
+    const levelTag = existing.academicLevel ? `_${existing.academicLevel.toLowerCase()}` : '';
+    const newId = `eval_${existing.staffRole}_${targetPeriod}_${existing.staffId}${levelTag}`;
+
+    const updated: StaffEvaluationRecord = {
+      ...existing,
+      id: newId,
+      period: targetPeriod,
+      updatedAt: new Date().toISOString()
+    };
+
+    const saved = await this.saveEvaluation(updated, senderUserId);
+    window.dispatchEvent(new CustomEvent('staffEvaluationsUpdated'));
+    return saved;
+  },
+
+  /**
+   * Cambia el período de una convocatoria de encuesta (ej. de P2 a P1)
+   * y opcionalmente reasigna todas las respuestas recibidas de alumnos y familias al nuevo período
+   */
+  async moveSurveyBroadcastPeriod(
+    centerId: string,
+    broadcastId: string,
+    targetPeriod: EvaluationPeriod,
+    updateResponses: boolean = true,
+    senderUserId?: string
+  ): Promise<{ updatedBroadcasts: ActiveSurveyBroadcast[]; migratedSurveysCount: number }> {
+    const broadcasts = await this.getSurveyBroadcasts(centerId);
+    const targetBroadcast = broadcasts.find((b) => b.id === broadcastId);
+    if (!targetBroadcast) {
+      return { updatedBroadcasts: broadcasts, migratedSurveysCount: 0 };
+    }
+
+    const oldPeriod = targetBroadcast.period;
+    targetBroadcast.period = targetPeriod;
+    await this.saveSurveyBroadcasts(centerId, broadcasts, senderUserId);
+
+    let migratedSurveysCount = 0;
+    if (updateResponses) {
+      const evals = await this.getEvaluations(centerId);
+      const surveysToMigrate = evals.filter(
+        (e) =>
+          (e.source === 'student_survey' || e.source === 'parent_survey') &&
+          e.period === oldPeriod
+      );
+
+      for (const surv of surveysToMigrate) {
+        await this.deleteEvaluation(centerId, surv.id);
+        const newSurvId = surv.id.includes(`_${oldPeriod}_`)
+          ? surv.id.replace(`_${oldPeriod}_`, `_${targetPeriod}_`)
+          : `surv_${targetPeriod}_${surv.staffId}_${surv.subjectId || 'gen'}_${surv.evaluatorId}`;
+
+        const updatedSurv: StaffEvaluationRecord = {
+          ...surv,
+          id: newSurvId,
+          period: targetPeriod,
+          updatedAt: new Date().toISOString()
+        };
+        await this.saveEvaluation(updatedSurv, senderUserId);
+        migratedSurveysCount++;
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent('staffSurveyBroadcastsUpdated'));
+    window.dispatchEvent(new CustomEvent('staffEvaluationsUpdated'));
+    return { updatedBroadcasts: broadcasts, migratedSurveysCount };
+  },
+
+  /**
+   * Mueve de golpe todas las evaluaciones (internas o encuestas) de un período a otro
+   */
+  async moveAllEvaluationsPeriod(
+    centerId: string,
+    sourcePeriod: EvaluationPeriod,
+    targetPeriod: EvaluationPeriod,
+    senderUserId?: string
+  ): Promise<number> {
+    const evals = await this.getEvaluations(centerId);
+    const matches = evals.filter((e) => e.period === sourcePeriod);
+    let count = 0;
+
+    for (const item of matches) {
+      await this.deleteEvaluation(centerId, item.id);
+      let newId = item.id;
+      if (item.id.includes(`_${sourcePeriod}_`)) {
+        newId = item.id.replace(`_${sourcePeriod}_`, `_${targetPeriod}_`);
+      } else {
+        const levelTag = item.academicLevel ? `_${item.academicLevel.toLowerCase()}` : '';
+        newId = item.source === 'internal'
+          ? `eval_${item.staffRole}_${targetPeriod}_${item.staffId}${levelTag}`
+          : `surv_${targetPeriod}_${item.staffId}_${item.subjectId || 'gen'}_${item.evaluatorId}`;
+      }
+
+      const updated: StaffEvaluationRecord = {
+        ...item,
+        id: newId,
+        period: targetPeriod,
+        updatedAt: new Date().toISOString()
+      };
+      await this.saveEvaluation(updated, senderUserId);
+      count++;
+    }
+
+    // Actualizar también las convocatorias de encuestas activas de ese período
+    const broadcasts = await this.getSurveyBroadcasts(centerId);
+    let broadcastChanged = false;
+    broadcasts.forEach((b) => {
+      if (b.period === sourcePeriod) {
+        b.period = targetPeriod;
+        broadcastChanged = true;
+      }
+    });
+    if (broadcastChanged) {
+      await this.saveSurveyBroadcasts(centerId, broadcasts, senderUserId);
+    }
+
+    window.dispatchEvent(new CustomEvent('staffEvaluationsUpdated'));
+    window.dispatchEvent(new CustomEvent('staffSurveyBroadcastsUpdated'));
+    return count;
   }
 };
 

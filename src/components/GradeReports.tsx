@@ -169,7 +169,7 @@ export const GradeReports = ({
   // Boletines Config State
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
   const [periodDivisor, setPeriodDivisor] = useState<number>(4);
-  const [showAverages, setShowAverages] = useState<boolean>(true);
+  const [isFinalGrade, setIsFinalGrade] = useState<boolean>(false);
 
   // RANKING STATE
   const [showRankingModal, setShowRankingModal] = useState(false);
@@ -3120,15 +3120,8 @@ export const GradeReports = ({
           let fC3 = getCompFinalVal(p1c3, p2c3, p3c3, p4c3);
           let fC4 = getCompFinalVal(p1c4, p2c4, p3c4, p4c4);
 
-          // Agregar promedios PC1-PC4
-          row.push(fC1 || '');
-          row.push(fC2 || '');
-          row.push(fC3 || '');
-          row.push(fC4 || '');
-
           // Calificación final de Área (promedio de las 4 competencias)
           let areaFinal = Math.round((fC1 + fC2 + fC3 + fC4) / 4);
-          row.push(areaFinal || '');
 
           // Recuperación de Secundaria
           const cp = parseInt(sGrades['comp']) || 0;
@@ -3142,21 +3135,11 @@ export const GradeReports = ({
           let cpExam50 = cp > 0 ? Math.round(cp * 0.5) : '';
           let ccFinal = cp > 0 ? Math.round(areaFinal * 0.5 + cp * 0.5) : '';
 
-          row.push(cp50);
-          row.push(cpExam);
-          row.push(cpExam50);
-          row.push(ccFinal || '');
-
           // Extraordinario (30% CF, CEEX, 70% CEEX, CEXF)
           let ex30 = areaFinal < 70 ? Math.round(areaFinal * 0.3) : '';
           let exExam = ex || '';
           let exExam70 = ex > 0 ? Math.round(ex * 0.7) : '';
           let cexFinal = ex > 0 ? Math.round(areaFinal * 0.3 + ex * 0.7) : '';
-
-          row.push(ex30);
-          row.push(exExam);
-          row.push(exExam70);
-          row.push(cexFinal || '');
 
           // Especial (C.F, C.E)
           let espExam = e1 || e2 || '';
@@ -3179,30 +3162,62 @@ export const GradeReports = ({
           }
 
           let espFinal = (e1 > 0 || e2 > 0) ? defFinal : '';
-          row.push(espFinal);
-          row.push(espExam);
 
           // Situación Final (A / R)
           let sitA = defFinal >= 70 ? defFinal : '';
           let sitR = (defFinal > 0 && defFinal < 70) ? defFinal : '';
-          row.push(sitA);
-          row.push(sitR);
+
+          if (isFinalGrade) {
+            // Agregar promedios PC1-PC4
+            row.push(fC1 || '');
+            row.push(fC2 || '');
+            row.push(fC3 || '');
+            row.push(fC4 || '');
+
+            // Calificación final de Área (promedio de las 4 competencias)
+            row.push(areaFinal || '');
+
+            // Completivo
+            row.push(cp50);
+            row.push(cpExam);
+            row.push(cpExam50);
+            row.push(ccFinal || '');
+
+            // Extraordinario
+            row.push(ex30);
+            row.push(exExam);
+            row.push(exExam70);
+            row.push(cexFinal || '');
+
+            // Especial
+            row.push(espFinal);
+            row.push(espExam);
+
+            // Situación Final
+            row.push(sitA);
+            row.push(sitR);
+
+            if (defFinal > 0) {
+              sumC1 += fC1;
+              sumC2 += fC2;
+              sumC3 += fC3;
+              sumC4 += fC4;
+              sumFinal += defFinal;
+              count++;
+            }
+          } else {
+            // Ocultar promedios finales y de períodos hasta fin de año (17 columnas en blanco)
+            for (let i = 0; i < 17; i++) {
+              row.push('');
+            }
+          }
 
           bodySecondary.push(row);
-
-          if (defFinal > 0) {
-            sumC1 += fC1;
-            sumC2 += fC2;
-            sumC3 += fC3;
-            sumC4 += fC4;
-            sumFinal += defFinal;
-            count++;
-          }
         });
 
         // Fila de Indice
         const idxRow: any[] = [{ content: 'Indice', colSpan: 17, styles: { halign: 'right', fontStyle: 'bold' } }];
-        if (count > 0) {
+        if (isFinalGrade && count > 0) {
           idxRow.push((sumC1 / count / 25).toFixed(2));
           idxRow.push((sumC2 / count / 25).toFixed(2));
           idxRow.push((sumC3 / count / 25).toFixed(2));
@@ -3212,8 +3227,7 @@ export const GradeReports = ({
             idxRow.push('');
           }
         } else {
-          idxRow.push('0.00', '0.00', '0.00', '0.00', '0.00');
-          for (let i = 0; i < 12; i++) {
+          for (let i = 0; i < 17; i++) {
             idxRow.push('');
           }
         }
@@ -3393,39 +3407,47 @@ export const GradeReports = ({
           };
 
           let fC1 = getCompFinal(p1c1, p2c1, p3c1, p4c1);
-          row.push(fC1 || '');
           let fC2 = getCompFinal(p1c2, p2c2, p3c2, p4c2);
-          row.push(fC2 || '');
           let fC3 = getCompFinal(p1c3, p2c3, p3c3, p4c3);
-          row.push(fC3 || '');
-
           let finalArea = Math.round((fC1 + fC2 + fC3) / 3);
           let recFinal = parseInt(sGrades['final_rec']) || 0;
 
-          row.push(finalArea || '');
-          row.push(recFinal || '');
+          if (isFinalGrade) {
+            row.push(fC1 || '');
+            row.push(fC2 || '');
+            row.push(fC3 || '');
+            row.push(finalArea || '');
+            row.push(recFinal || '');
+
+            if (finalArea > 0) {
+              sumC1 += fC1;
+              sumC2 += fC2;
+              sumC3 += fC3;
+              let bestFinal = Math.max(finalArea, recFinal);
+              sumFinal += bestFinal;
+              count++;
+            }
+          } else {
+            // Ocultar promedios finales y de períodos hasta fin de año (5 columnas en blanco)
+            row.push('');
+            row.push('');
+            row.push('');
+            row.push('');
+            row.push('');
+          }
 
           bodyPrimary.push(row);
-
-          if (finalArea > 0) {
-            sumC1 += fC1;
-            sumC2 += fC2;
-            sumC3 += fC3;
-            let bestFinal = Math.max(finalArea, recFinal);
-            sumFinal += bestFinal;
-            count++;
-          }
         });
 
         const idxRow: any[] = [{ content: 'Indice', colSpan: 13, styles: { halign: 'right', fontStyle: 'bold' } }];
-        if (count > 0) {
+        if (isFinalGrade && count > 0) {
           idxRow.push((sumC1 / count / 25).toFixed(2));
           idxRow.push((sumC2 / count / 25).toFixed(2));
           idxRow.push((sumC3 / count / 25).toFixed(2));
           idxRow.push((sumFinal / count / 25).toFixed(2));
           idxRow.push('');
         } else {
-          idxRow.push('0.00', '0.00', '0.00', '0.00', '');
+          idxRow.push('', '', '', '', '');
         }
         bodyPrimary.push(idxRow);
 
@@ -3595,10 +3617,24 @@ export const GradeReports = ({
       doc.rect(195, finalY, 70, 5, 'FD');
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
-      doc.text('Situación del Estudiante | Promovido/a | Repitente', 197, finalY + 3.5);
+      doc.text(
+        isFinalGrade
+          ? 'Situación del Estudiante | Promovido/a | Repitente'
+          : 'Situación del Estudiante | Período Parcial en Curso',
+        197,
+        finalY + 3.5
+      );
 
       doc.line(195, finalY + 5, 265, finalY + 5);
       doc.line(195, finalY + 10, 265, finalY + 10);
+      if (!isFinalGrade) {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(80, 80, 80);
+        doc.text('Evaluación Parcial (Año Escolar en Curso)', 230, finalY + 8.5, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+      }
 
       // Observaciones
       doc.setFontSize(8);
@@ -4319,32 +4355,45 @@ export const GradeReports = ({
                   ))}
                 </select>
               </div>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className={`p-4 rounded-2xl border transition-all ${!isFinalGrade ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-slate-50 border-slate-200'}`}>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                   2. Periodo Actual (Divisor)
                 </label>
                 <select
                   value={periodDivisor}
+                  disabled={!isFinalGrade}
                   onChange={(e) => setPeriodDivisor(parseInt(e.target.value))}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-bold uppercase outline-none cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-bold uppercase outline-none cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
                 >
                   <option value={1}>1er Periodo (Promediar ÷ 1)</option>
                   <option value={2}>2do Periodo (Promediar ÷ 2)</option>
                   <option value={3}>3er Periodo (Promediar ÷ 3)</option>
                   <option value={4}>4to Periodo (Promediar ÷ 4)</option>
                 </select>
+                {!isFinalGrade && (
+                  <span className="text-[9px] text-slate-400 font-bold block mt-1.5">
+                    * Solo aplica cuando se coteja "Nota Final"
+                  </span>
+                )}
               </div>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-center">
-                <label className="flex items-center gap-3 cursor-pointer">
+              <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-center ${isFinalGrade ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-200/50' : 'bg-slate-50 border-slate-200'}`}>
+                <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={showAverages}
-                    onChange={(e) => setShowAverages(e.target.checked)}
-                    className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    checked={isFinalGrade}
+                    onChange={(e) => setIsFinalGrade(e.target.checked)}
+                    className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0 mt-0.5"
                   />
-                  <span className="text-xs font-black uppercase text-slate-700">
-                    Calcular y Mostrar Promedios
-                  </span>
+                  <div>
+                    <span className="text-xs font-black uppercase text-slate-800 block">
+                      ¿Es Calificación Final de Año?
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium leading-tight block mt-1">
+                      {isFinalGrade
+                        ? '✓ Habilitado: Se calcularán los promedios de períodos (PC1-PC4), calificación final de área, recuperaciones e índice.'
+                        : 'Ocultar promedios finales y de períodos (solo mostrar calificaciones parciales P1-P4 sin promediar hasta fin de año).'}
+                    </span>
+                  </div>
                 </label>
               </div>
             </div>

@@ -1114,41 +1114,69 @@ export const dataService = {
     } catch (e) {}
 
     return rawComms.filter((c: any) => {
+      // 1. Siempre puede ver los mensajes que el propio usuario envió
       if (c.sender_id === userId) return true;
+
+      // 2. Si el usuario está explícitamente listado como destinatario individual directo
       if ((c.target_user_ids || []).includes(userId)) return true;
 
-      // Mensajes personales directos
+      const targetTeachers = c.target_teachers || [];
       const cStudentIds = c.target_student_ids || [];
       const cParentIds = c.target_parent_ids || [];
 
+      // REGLA ESTRICTA DE PRIVACIDAD:
+      // Si el mensaje iba dirigido a docentes específicos (target_teachers),
+      // NUNCA debe ser visible para otros alumnos ni para otros padres.
+      if (targetTeachers.length > 0) {
+        return false;
+      }
+
+      // Mensajes personales directos dirigidos a alumnos o padres específicos
       if (cParentIds.includes(userId)) return true;
       if (isParent && cStudentIds.some((sid: string) => linkedStudentIds.has(sid))) return true;
       if (isStudent && userStudentId && cStudentIds.includes(userStudentId)) return true;
 
-      // Si fue enviado exclusivamente a alumnos específicos y no coincide con este usuario, descartar
-      if (cStudentIds.length > 0) {
-        const matchesThisFamily = (isParent && cStudentIds.some((sid: string) => linkedStudentIds.has(sid))) ||
-                                  (isStudent && userStudentId && cStudentIds.includes(userStudentId));
-        if (!matchesThisFamily) return false;
+      // Si fue enviado a alumnos o tutores específicos y este usuario NO pertenece a esa familia, descartar
+      if (cStudentIds.length > 0 || cParentIds.length > 0) {
+        return false;
       }
 
-      const targetRoles = c.target_roles || [];
+      // 3. Comunicados y avisos generales a nivel de curso
+      const targetRoles = (c.target_roles || []).map((r: string) => (r || '').toLowerCase());
       const targetCourses = c.target_courses || [];
-      const hasRoles = targetRoles.length > 0;
       const hasCourses = targetCourses.length > 0;
 
-      let roleMatches = false;
-      if (!hasRoles || targetRoles.includes('Toda la comunidad')) {
-        roleMatches = true;
-      } else if (isParent && targetRoles.includes('Padres')) {
-        roleMatches = true;
-      } else if (isStudent && targetRoles.includes('Alumnos')) {
-        roleMatches = true;
+      // Si el mensaje está asignado a cursos y no coincide con el curso de este usuario, descartar
+      if (hasCourses && !targetCourses.some((cid: string) => userCourseIds.includes(cid))) {
+        return false;
       }
 
-      const courseMatches = !hasCourses || targetCourses.some((cid: string) => userCourseIds.includes(cid));
+      // Para ser visible a un estudiante como circular/comunicado del salón:
+      // DEBE estar dirigido expresamente a los alumnos o a toda la comunidad (nunca si solo era para docentes)
+      if (isStudent) {
+        return targetRoles.some((r: string) =>
+          r.includes('alumno') ||
+          r.includes('estudiante') ||
+          r.includes('toda la comunidad') ||
+          r === 'all' ||
+          r === 'todos'
+        );
+      }
 
-      return roleMatches && courseMatches;
+      // Para ser visible a un padre como circular/comunicado del salón:
+      // DEBE estar dirigido expresamente a los padres/familias o a toda la comunidad
+      if (isParent) {
+        return targetRoles.some((r: string) =>
+          r.includes('padre') ||
+          r.includes('tutor') ||
+          r.includes('familia') ||
+          r.includes('toda la comunidad') ||
+          r === 'all' ||
+          r === 'todos'
+        );
+      }
+
+      return false;
     });
   },
 

@@ -525,10 +525,9 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
         targetTeachers.push(teacherObj.id);
         targetRoles.push('Docentes');
       } else if (comm.target_student_ids && comm.target_student_ids.length > 0) {
-        if (comm.sender_id) targetParentIds.push(comm.sender_id);
-        targetRoles.push('Padres');
+        if (comm.sender_id) targetUserIds.push(comm.sender_id);
       } else {
-        if (comm.sender_id) targetParentIds.push(comm.sender_id);
+        if (comm.sender_id) targetUserIds.push(comm.sender_id);
       }
 
       const roleSuffix =
@@ -700,10 +699,11 @@ export const CommunicationGenerator = ({ userData: profile }: { userData: any })
         targetRoles = selectedRoles;
       }
     } else if (isStudent) {
-      if (selectedTeacherIds.length === 0 && !parentTeacherTarget) {
-        targetRoles = ['Docentes'];
-      } else {
-        targetTeachers = selectedTeacherIds.length > 0 ? selectedTeacherIds : [parentTeacherTarget];
+      targetRoles = ['Docentes'];
+      if (selectedTeacherIds.length > 0) {
+        targetTeachers = selectedTeacherIds;
+      } else if (parentTeacherTarget) {
+        targetTeachers = [parentTeacherTarget];
       }
       if (profile?.course_id) {
         targetCourses = [profile.course_id];

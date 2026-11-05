@@ -355,11 +355,11 @@ export const ParentGradesModule: React.FC<ParentGradesModuleProps> = ({
     doc.text(`CURSO: ${studentCourse.level} ${studentCourse.grade} "${studentCourse.section}" (${getReportTanda(studentCourse.tanda, 'full')})`, 14, 41);
     doc.setFont('helvetica', 'normal');
     doc.text(`RNE: ${currentStudent.sigerd_code || currentStudent.student_code || currentStudent.rne || '---'}`, pageWidth - 60, 36);
-    doc.text(`PROMEDIO GENERAL: ${overallAverage > 0 ? overallAverage : '---'}`, pageWidth - 60, 41);
+    doc.text(`PROMEDIO GENERAL: ${selectedPeriod === 'FINAL' && overallAverage > 0 ? overallAverage : 'En curso'}`, pageWidth - 60, 41);
 
     // Tabla de Calificaciones
     const head = [
-      ['Nº', 'ASIGNATURA', ...competencies.map((c) => c.short), 'NOTA FINAL', 'ESTADO']
+      ['Nº', 'ASIGNATURA', ...competencies.map((c) => c.short), selectedPeriod === 'FINAL' ? 'NOTA FINAL' : 'FINAL AÑO', 'ESTADO']
     ];
 
     const body = calculatedSubjects.map((s, idx) => {
@@ -367,8 +367,8 @@ export const ParentGradesModule: React.FC<ParentGradesModuleProps> = ({
         (idx + 1).toString().padStart(2, '0'),
         s.name.toUpperCase(),
         ...competencies.map((c) => s.periodScores[c.id] > 0 ? s.periodScores[c.id].toString() : '-'),
-        s.subjectFinal > 0 ? s.subjectFinal.toString() : '-',
-        s.hasGrades ? (s.isApproved ? 'Aprobada' : 'En proceso') : 'Sin nota'
+        (selectedPeriod === 'FINAL' && s.subjectFinal > 0) ? s.subjectFinal.toString() : '-',
+        s.hasGrades ? (selectedPeriod === 'FINAL' ? (s.isApproved ? 'Aprobada' : 'Reprobada') : 'En curso') : 'Sin nota'
       ];
     });
 

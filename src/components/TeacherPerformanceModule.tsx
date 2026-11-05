@@ -42,7 +42,10 @@ import {
   Layers,
   MessageSquare,
   Printer,
-  Clock
+  Clock,
+  ArrowUpDown,
+  ArrowDown,
+  RefreshCw
 } from 'lucide-react';
 import {
   BarChart,
@@ -1646,6 +1649,109 @@ export const TeacherPerformanceModule: React.FC = () => {
     toast.success('Convocatoria eliminada.');
   };
 
+  // Reasignar / Mover convocatoria de encuesta y sus respuestas a otro período (ej. P2 -> P1)
+  const handleMoveBroadcastPeriod = async (broadcastId: string, targetPeriod: EvaluationPeriod) => {
+    if (
+      !window.confirm(
+        `¿Deseas cambiar esta convocatoria de encuesta al Período ${targetPeriod}? También se reasignarán automáticamente al Período ${targetPeriod} todas las respuestas que ya hayan completado los estudiantes y familias.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await staffEvaluationService.moveSurveyBroadcastPeriod(
+        centerId,
+        broadcastId,
+        targetPeriod,
+        true,
+        user?.id
+      );
+      await loadAllModuleData();
+      toast.success(
+        `¡Convocatoria de encuesta movida con éxito al Período ${targetPeriod}! (${res.migratedSurveysCount} encuestas reasignadas a ${targetPeriod})`
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al mover la convocatoria de encuesta.');
+    }
+  };
+
+  // Mover una evaluación individual a otro período (ej. P2 -> P1)
+  const handleMoveEvaluationPeriod = async (targetPeriod: EvaluationPeriod) => {
+    if (!evaluatingStaff) return;
+    const currentRec = evaluatingStaff.existingRecord;
+    if (!currentRec) {
+      setEvaluatingStaff({
+        ...evaluatingStaff,
+        period: targetPeriod
+      });
+      toast.success(`Período de la ficha cambiado a ${targetPeriod}.`);
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `¿Deseas mover esta evaluación registrada del Período ${evaluatingStaff.period} al Período ${targetPeriod}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const updated = await staffEvaluationService.moveEvaluationPeriod(
+        centerId,
+        currentRec.id,
+        targetPeriod,
+        user?.id
+      );
+      await loadAllModuleData();
+      if (updated) {
+        setEvaluatingStaff({
+          ...evaluatingStaff,
+          period: targetPeriod,
+          existingRecord: updated
+        });
+      }
+      toast.success(`¡Evaluación movida exitosamente al Período ${targetPeriod}!`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al mover la evaluación.');
+    }
+  };
+
+  // Mover todas las evaluaciones y encuestas de P2 a P1 en 1 solo clic
+  const handleMoveAllP2ToP1 = async () => {
+    const p2Count = evaluations.filter((e) => e.period === 'P2').length;
+    const p2BroadcastsCount = broadcasts.filter((b) => b.period === 'P2').length;
+    if (p2Count === 0 && p2BroadcastsCount === 0) {
+      toast.info('No hay registros en el Período P2 para mover.');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `¿Confirmas mover todas las evaluaciones y encuestas registradas en el Período P2 (${p2Count} evaluaciones y ${p2BroadcastsCount} convocatorias) al Período P1? Esta acción consolidará todos los resultados en P1 para que se visualicen correctamente.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const migrated = await staffEvaluationService.moveAllEvaluationsPeriod(
+        centerId,
+        'P2',
+        'P1',
+        user?.id
+      );
+      setPeriodFilter('P1');
+      await loadAllModuleData();
+      toast.success(`¡Listo! Se movieron ${migrated} evaluaciones/encuestas del Período P2 al Período P1.`);
+    } catch (e) {
+      console.error('Error moviendo registros:', e);
+      toast.error('Ocurrió un error al transferir los registros al P1.');
+    }
+  };
+
   // Guardar cambios en el editor de rúbrica / formulario
   const handleSaveEditedRubric = async () => {
     if (!editingRubric) return;
@@ -2332,21 +2438,58 @@ export const TeacherPerformanceModule: React.FC = () => {
                 { id: 'ALL', label: 'Consolidado' },
                 { id: 'COMPARE', label: 'Comparar 2 Períodos' }
               ] as { id: PeriodFilter; label: string }[]
-            ).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPeriodFilter(p.id)}
-                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                  periodFilter === p.id
-                    ? 'bg-white text-slate-900 shadow-md'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+            ).map((p) => {
+              const count =
+                p.id === 'ALL' || p.id === 'COMPARE'
+                  ? 0
+                  : evaluations.filter((e) => e.period === p.id).length;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPeriodFilter(p.id)}
+                  className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                    periodFilter === p.id
+                      ? 'bg-white text-slate-900 shadow-md'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span>{p.label}</span>
+                  {count > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                        periodFilter === p.id
+                          ? 'bg-indigo-100 text-indigo-700'
+                          : 'bg-white/20 text-white'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Banner de asistencia si hay evaluaciones en P2 */}
+          {periodFilter === 'P2' && evaluations.some((e) => e.period === 'P2') && (
+            <div className="w-full mt-2 p-3 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                <span className="text-xs">
+                  ¿Se llenaron evaluaciones en el P2 por error? Hay {evaluations.filter((e) => e.period === 'P2').length} evaluaciones en P2.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleMoveAllP2ToP1}
+                className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] uppercase tracking-wider shrink-0 shadow-sm flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                <span>Bajar Todo al P1</span>
+              </button>
+            </div>
+          )}
 
           <button
             type="button"
@@ -2852,6 +2995,33 @@ export const TeacherPerformanceModule: React.FC = () => {
 
             {/* Panel derecho: Convocatorias activas y Resultados consolidados de las encuestas */}
             <div className="lg:col-span-7 space-y-6">
+              {/* Alerta inteligente para transferir de P2 a P1 en 1 clic */}
+              {(evaluations.some((e) => e.period === 'P2') || broadcasts.some((b) => b.period === 'P2')) && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <AlertTriangle size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-tight">
+                        ¿Encuestas o evaluaciones llenadas en P2 por error?
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        Se detectaron {evaluations.filter((e) => e.period === 'P2').length} registros en el Período P2. Puedes bajarlos todos al Período P1 de una vez.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleMoveAllP2ToP1}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-wider shrink-0 shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Mover Todo a P1</span>
+                  </button>
+                </div>
+              )}
+
               <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200/80 shadow-sm space-y-4">
                 <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
                   Convocatorias de Encuesta Publicadas ({broadcasts.length})
@@ -2869,7 +3039,7 @@ export const TeacherPerformanceModule: React.FC = () => {
                         className="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60"
                       >
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
                                 b.isActive
@@ -2879,9 +3049,37 @@ export const TeacherPerformanceModule: React.FC = () => {
                             >
                               {b.isActive ? 'Activa en Portal' : 'Pausada / Cerrada'}
                             </span>
-                            <span className="text-[10px] font-black text-indigo-600 uppercase">
-                              Período {b.period}
-                            </span>
+
+                            {/* Selector / Cambiador de Período de la encuesta */}
+                            <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                              <span className="text-[10px] font-black text-indigo-700 uppercase">Período:</span>
+                              <select
+                                value={b.period}
+                                onChange={(e) =>
+                                  handleMoveBroadcastPeriod(b.id, e.target.value as EvaluationPeriod)
+                                }
+                                className="bg-transparent text-[10px] font-black text-indigo-900 outline-none cursor-pointer"
+                                title="Cambiar el período de esta convocatoria y reasignar las encuestas respondidas"
+                              >
+                                <option value="P1">P1</option>
+                                <option value="P2">P2</option>
+                                <option value="P3">P3</option>
+                                <option value="P4">P4</option>
+                              </select>
+                            </div>
+
+                            {b.period === 'P2' && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveBroadcastPeriod(b.id, 'P1')}
+                                className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1 cursor-pointer transition-all"
+                                title="Bajar esta encuesta y todas las respuestas al Período P1"
+                              >
+                                <ArrowDown size={11} />
+                                <span>Bajar al P1</span>
+                              </button>
+                            )}
+
                             <span className="text-[10px] font-bold text-slate-400">
                               • Destino:{' '}
                               {b.targetAudience
@@ -3478,31 +3676,46 @@ export const TeacherPerformanceModule: React.FC = () => {
                   <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
                     {GROUP_LABELS[evaluatingStaff.group].title}
                   </span>
-                  <select
-                    value={evaluatingStaff.period}
-                    onChange={(e) =>
-                      handleOpenEvaluationModal(
-                        evaluatingStaff.staff,
-                        evaluatingStaff.group,
-                        e.target.value as EvaluationPeriod,
-                        formAcademicLevel
-                      )
-                    }
-                    className="bg-white/10 text-white text-xs font-black px-3 py-1 rounded-xl border border-white/20 outline-none cursor-pointer"
-                  >
-                    <option value="P1" className="text-slate-900">
-                      Período 1 (P1)
-                    </option>
-                    <option value="P2" className="text-slate-900">
-                      Período 2 (P2)
-                    </option>
-                    <option value="P3" className="text-slate-900">
-                      Período 3 (P3)
-                    </option>
-                    <option value="P4" className="text-slate-900">
-                      Período 4 (P4)
-                    </option>
-                  </select>
+                  <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-xl border border-white/20">
+                    <span className="text-[10px] text-white/70 font-bold uppercase">Período:</span>
+                    <select
+                      value={evaluatingStaff.period}
+                      onChange={(e) =>
+                        handleOpenEvaluationModal(
+                          evaluatingStaff.staff,
+                          evaluatingStaff.group,
+                          e.target.value as EvaluationPeriod,
+                          formAcademicLevel
+                        )
+                      }
+                      className="bg-transparent text-white text-xs font-black outline-none cursor-pointer"
+                    >
+                      <option value="P1" className="text-slate-900">
+                        Período 1 (P1)
+                      </option>
+                      <option value="P2" className="text-slate-900">
+                        Período 2 (P2)
+                      </option>
+                      <option value="P3" className="text-slate-900">
+                        Período 3 (P3)
+                      </option>
+                      <option value="P4" className="text-slate-900">
+                        Período 4 (P4)
+                      </option>
+                    </select>
+                  </div>
+
+                  {evaluatingStaff.period === 'P2' && (
+                    <button
+                      type="button"
+                      onClick={() => handleMoveEvaluationPeriod('P1')}
+                      className="px-2.5 py-1 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                      title="Mover esta evaluación con todas sus respuestas al Período P1"
+                    >
+                      <ArrowDown size={13} />
+                      <span>Bajar al P1</span>
+                    </button>
+                  )}
 
                   {evaluatingStaff.group === 'teacher' && (
                     <div className="flex items-center bg-white/10 rounded-xl p-0.5 border border-white/20">

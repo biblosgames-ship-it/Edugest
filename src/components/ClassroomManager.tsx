@@ -1883,9 +1883,22 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     });
   }, [teacherTasks, taskFilterPeriod, taskFilterSubjectId, taskFilterStatus, taskSearchQuery]);
 
+  const TASK_DRAFT_KEY = 'edugest_task_draft';
+
+  // Guardado de borrador en tiempo real mientras el docente escribe
+  useEffect(() => {
+    if (showTaskModal && !editingTask) {
+      if (taskFormData.title.trim() || taskFormData.description.trim()) {
+        try {
+          localStorage.setItem(TASK_DRAFT_KEY, JSON.stringify(taskFormData));
+        } catch {}
+      }
+    }
+  }, [taskFormData, showTaskModal, editingTask]);
+
   const handleCloseTaskModal = () => {
     if (!editingTask && (taskFormData.title.trim() || taskFormData.description.trim())) {
-      if (window.confirm('¿Deseas cerrar la ventana? El texto escrito no guardado se perderá.')) {
+      if (window.confirm('¿Deseas cerrar la ventana? Tu borrador se mantendrá guardado para cuando vuelvas a abrir.')) {
         setShowTaskModal(false);
         setEditingTask(null);
         setAdditionalCourseIds([]);
@@ -1897,9 +1910,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     }
   };
 
-  const handleOpenCreateTask = () => {
-    setEditingTask(null);
-    setAdditionalCourseIds([]);
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem(TASK_DRAFT_KEY);
+    } catch {}
     setTaskFormData({
       title: '',
       description: '',
@@ -1913,7 +1927,42 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       linkedCompetencyId: 'c1',
       linkedMaxScore: 100
     });
+    toast.success('Borrador descartado.');
+  };
+
+  const handleOpenCreateTask = () => {
+    setEditingTask(null);
+    setAdditionalCourseIds([]);
+    let initialData = {
+      title: '',
+      description: '',
+      period: selectedPeriod || 'P1',
+      subject_id: selectedSubjectId || (availableSubjects[0]?.id || ''),
+      due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      media_url: '',
+      link_url: '',
+      classroom_url: platformLinks.classroom_url || '',
+      linkToPartial: false,
+      linkedCompetencyId: 'c1',
+      linkedMaxScore: 100
+    };
+    let hasDraft = false;
+    try {
+      const draftRaw = localStorage.getItem(TASK_DRAFT_KEY);
+      if (draftRaw) {
+        const parsed = JSON.parse(draftRaw);
+        if (parsed.title?.trim() || parsed.description?.trim()) {
+          initialData = { ...initialData, ...parsed };
+          hasDraft = true;
+        }
+      }
+    } catch {}
+
+    setTaskFormData(initialData);
     setShowTaskModal(true);
+    if (hasDraft) {
+      toast.success('Borrador previo recuperado automáticamente.', { icon: '📝' });
+    }
   };
 
   const handleOpenEditTask = (task: any) => {
@@ -2026,6 +2075,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       setShowTaskModal(false);
       setEditingTask(null);
       setAdditionalCourseIds([]);
+      try {
+        localStorage.removeItem(TASK_DRAFT_KEY);
+      } catch {}
       await loadTasksAndLinks();
     } catch (err: any) {
       console.error('Error al guardar tarea:', err);
@@ -4198,6 +4250,20 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
                 <form onSubmit={handleSaveTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
+                    {/* Alerta de borrador activo */}
+                    {!editingTask && (taskFormData.title || taskFormData.description) && (
+                      <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span>💾 Borrador autoguardado en este equipo</span>
+                        <button
+                          type="button"
+                          onClick={handleDiscardDraft}
+                          className="text-rose-600 hover:text-rose-700 hover:underline cursor-pointer text-[10px] uppercase font-black"
+                        >
+                          Descartar borrador
+                        </button>
+                      </div>
+                    )}
+
                     {/* Título */}
                     <div className="space-y-1 sm:space-y-1.5">
                       <label className="block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">

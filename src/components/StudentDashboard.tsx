@@ -36,6 +36,7 @@ import { ParentCampaignBanner } from './campaigns/ParentCampaignBanner';
 import { StudentTeacherSurveyBanner } from './StudentTeacherSurveyBanner';
 import { getSubjectTheme } from '../utils/subjectColors';
 import { resolveStudentForUser } from '../utils/studentResolver';
+import { getCurrentPeriod } from '../utils/dateUtils';
 import {
   findCycleTimeBlocks,
   getSlotsFromCycleConfig,
@@ -168,30 +169,22 @@ export const StudentDashboard = ({
 
   // Estado de estudiante activo y estadísticas de asistencia para padres
   const [activeStudentId, setActiveStudentId] = useState<string>('');
-  const [attendanceStats, setAttendanceStats] = useState<{
-    presentes: number;
-    tardanzas: number;
-    excusas: number;
-    ausencias: number;
-    totalDays: number;
-    rate: number;
-    isAtRisk: boolean;
-    loading: boolean;
-  }>({
-    presentes: 0,
-    tardanzas: 0,
-    excusas: 0,
-    ausencias: 0,
-    totalDays: 0,
-    rate: 100,
-    isAtRisk: false,
-    loading: false
-  });
+  const [rawAttendanceRows, setRawAttendanceRows] = useState<any[]>([]);
+  const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<'ALL' | 'P1' | 'P2' | 'P3' | 'P4'>('ALL');
 
-  const computeAttendance = (cloudRows: any[], courseId: string, studentId?: string | null) => {
+  const computeAttendance = (
+    cloudRows: any[],
+    courseId: string,
+    studentId?: string | null,
+    periodFilter: 'ALL' | 'P1' | 'P2' | 'P3' | 'P4' = 'ALL'
+  ) => {
     const dateSet = new Set<string>();
     (cloudRows || []).forEach((r: any) => {
-      if (r.date) dateSet.add(r.date);
+      if (r.date) {
+        if (periodFilter === 'ALL' || getCurrentPeriod('uppercase', r.date) === periodFilter) {
+          dateSet.add(r.date);
+        }
+      }
     });
 
     if (typeof localStorage !== 'undefined') {
@@ -199,7 +192,11 @@ export const StudentDashboard = ({
         const k = localStorage.key(i);
         if (k && k.startsWith(`attendance_${courseId}_`)) {
           const datePart = k.replace(`attendance_${courseId}_`, '');
-          if (datePart) dateSet.add(datePart);
+          if (datePart) {
+            if (periodFilter === 'ALL' || getCurrentPeriod('uppercase', datePart) === periodFilter) {
+              dateSet.add(datePart);
+            }
+          }
         }
       }
     }
@@ -482,7 +479,7 @@ export const StudentDashboard = ({
           setTaskSubmissions(subsData || []);
 
           const rawAtt = attRes?.data || [];
-          setAttendanceStats(computeAttendance(rawAtt, currentCourse.id, targetStudentId));
+          setRawAttendanceRows(rawAtt);
         }
       } catch (error) {
         console.error('Error loading active course data:', error);
@@ -497,6 +494,23 @@ export const StudentDashboard = ({
       setLoading(false);
     }
   }, [selectedCourseId, allCourses, selectedYear, profile, state.students]);
+
+  // Estadísticas de asistencia computadas reactivamente (aplica filtro de período si está activo)
+  const attendanceStats = useMemo(() => {
+    if (!course?.id) {
+      return {
+        presentes: 0,
+        tardanzas: 0,
+        excusas: 0,
+        ausencias: 0,
+        totalDays: 0,
+        rate: 100,
+        isAtRisk: false,
+        loading
+      };
+    }
+    return computeAttendance(rawAttendanceRows, course.id, activeStudentId, selectedMetricsPeriod);
+  }, [rawAttendanceRows, course?.id, activeStudentId, selectedMetricsPeriod, loading]);
 
   // Actualizar enlaces fijos de plataforma cuando el estudiante filtra por materia
   useEffect(() => {
@@ -591,11 +605,16 @@ export const StudentDashboard = ({
   // Cumpliendo con el requerimiento de que algunos docentes corrigen en el aula presencial
   // y no en Edugest, el cálculo del % de cumplimiento se realiza ÚNICAMENTE sobre las tareas
   // que sí fueron corregidas/evaluadas por el docente en la plataforma, evitando penalizaciones falsas.
+  // Permite filtrar por período académico seleccionado (P1, P2, P3, P4 o Todo el Año).
   const parentTaskStats = useMemo(() => {
-    const totalAssigned = tasks.length;
+    const periodTasks = selectedMetricsPeriod === 'ALL'
+      ? tasks
+      : tasks.filter((t: any) => parseTaskPeriod(t) === selectedMetricsPeriod);
+
+    const totalAssigned = periodTasks.length;
 
     // Tareas corregidas/aprobadas en plataforma
-    const correctedTasks = tasks.filter((t: any) => {
+    const correctedTasks = periodTasks.filter((t: any) => {
       const sub = submissionsMap[t.id];
       if (!sub) return false;
       return (
@@ -605,7 +624,7 @@ export const StudentDashboard = ({
     });
 
     // Tareas revisadas en plataforma y marcadas expresamente como no entregadas / con atraso
-    const lateTasks = tasks.filter((t: any) => {
+    const lateTasks = periodTasks.filter((t: any) => {
       const sub = submissionsMap[t.id];
       if (!sub) return false;
       return sub.status === 'uncompleted';
@@ -627,7 +646,7 @@ export const StudentDashboard = ({
       evaluated: evaluatedInPlatform,
       rate: complianceRate
     };
-  }, [tasks, submissionsMap]);
+  }, [tasks, submissionsMap, selectedMetricsPeriod]);
 
   const [isLinking, setIsLinking] = useState(false);
 
@@ -1578,185 +1597,234 @@ export const StudentDashboard = ({
 
       {/* GRÁFICOS DE ASISTENCIA Y CUMPLIMIENTO DE TAREAS PARA PADRES */}
       {isParent && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
-          {/* GRÁFICO 1: ASISTENCIA ESCOLAR */}
-          <div className="bg-white p-6 sm:p-7 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-150 flex items-center justify-center text-emerald-600">
-                    <CalendarCheck size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 tracking-tight leading-tight">
-                      Asistencia Escolar
-                    </h3>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Presencia en clases
-                    </p>
-                  </div>
-                </div>
-
-                {attendanceStats.isAtRisk ? (
-                  <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm animate-pulse">
-                    <AlertTriangle size={12} />
-                    Riesgo (&lt;80%)
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                    <CheckCircle2 size={12} />
-                    Asistencia Regular
-                  </span>
-                )}
+        <div className="space-y-4 animate-fade-in">
+          {/* BARRA SELECTORA DE PERÍODO */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-[2rem] border border-slate-150/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-black text-xs">
+                📅
               </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-6 py-2">
-                <CircularProgress
-                  percentage={attendanceStats.rate}
-                  strokeColor={
-                    attendanceStats.rate >= 90
-                      ? '#10b981'
-                      : attendanceStats.rate >= 80
-                      ? '#3b82f6'
-                      : '#ef4444'
-                  }
-                  label="Asistencia"
-                />
-
-                <div className="grid grid-cols-2 gap-2.5 w-full">
-                  <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
-                      <span className="text-[11px] font-black uppercase text-emerald-900">Presentes</span>
-                    </div>
-                    <span className="text-sm font-black text-emerald-950 font-mono">
-                      {attendanceStats.presentes}
-                    </span>
-                  </div>
-
-                  <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
-                      <span className="text-[11px] font-black uppercase text-amber-900">Tardanzas</span>
-                    </div>
-                    <span className="text-sm font-black text-amber-950 font-mono">
-                      {attendanceStats.tardanzas}
-                    </span>
-                  </div>
-
-                  <div className="bg-sky-50/70 border border-sky-150 rounded-2xl p-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0"></span>
-                      <span className="text-[11px] font-black uppercase text-sky-900">Excusas</span>
-                    </div>
-                    <span className="text-sm font-black text-sky-950 font-mono">
-                      {attendanceStats.excusas}
-                    </span>
-                  </div>
-
-                  <div className="bg-rose-50/70 border border-rose-150 rounded-2xl p-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
-                      <span className="text-[11px] font-black uppercase text-rose-900">Ausencias</span>
-                    </div>
-                    <span className="text-sm font-black text-rose-950 font-mono">
-                      {attendanceStats.ausencias}
-                    </span>
-                  </div>
-                </div>
+              <div>
+                <span className="text-xs font-black text-slate-800 tracking-tight block">
+                  Filtrar Métricas por Período
+                </span>
+                <span className="text-[10px] font-bold text-slate-400">
+                  {selectedMetricsPeriod === 'ALL'
+                    ? 'Visualizando acumulado de todo el año escolar'
+                    : `Visualizando métricas correspondientes a ${selectedMetricsPeriod}`}
+                </span>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-              <span>
-                {attendanceStats.totalDays > 0
-                  ? `Total de ${attendanceStats.totalDays} días lectivos registrados`
-                  : 'Sin registros de lista aún en este curso'}
-              </span>
-              <span className="text-slate-400 font-bold">Norma MINERD: Mín. 80%</span>
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl w-full sm:w-auto overflow-x-auto">
+              {[
+                { id: 'ALL', label: 'Todo el Año' },
+                { id: 'P1', label: 'P1' },
+                { id: 'P2', label: 'P2' },
+                { id: 'P3', label: 'P3' },
+                { id: 'P4', label: 'P4' },
+              ].map((p) => {
+                const isActive = selectedMetricsPeriod === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedMetricsPeriod(p.id as any)}
+                    className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? 'bg-white text-slate-900 shadow-sm font-black ring-1 ring-slate-200'
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* GRÁFICO 2: CUMPLIMIENTO EN TAREAS */}
-          <div className="bg-white p-6 sm:p-7 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-150 flex items-center justify-center text-indigo-600">
-                    <ClipboardCheck size={20} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* GRÁFICO 1: ASISTENCIA ESCOLAR */}
+            <div className="bg-white p-6 sm:p-7 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-150 flex items-center justify-center text-emerald-600">
+                      <CalendarCheck size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 tracking-tight leading-tight">
+                        Asistencia Escolar {selectedMetricsPeriod !== 'ALL' && <span className="text-emerald-600 font-extrabold text-sm ml-1.5">({selectedMetricsPeriod})</span>}
+                      </h3>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Presencia en clases {selectedMetricsPeriod !== 'ALL' ? `• Período ${selectedMetricsPeriod}` : '• Todo el Año'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 tracking-tight leading-tight">
-                      Cumplimiento de Tareas
-                    </h3>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Desempeño en asignaciones
-                    </p>
-                  </div>
+
+                  {attendanceStats.isAtRisk ? (
+                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm animate-pulse">
+                      <AlertTriangle size={12} />
+                      Riesgo (&lt;80%)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 size={12} />
+                      Asistencia Regular
+                    </span>
+                  )}
                 </div>
 
-                {parentTaskStats.late > 0 ? (
-                  <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                    <AlertTriangle size={12} />
-                    {parentTaskStats.late} con atraso
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                    <CheckCircle2 size={12} />
-                    Al día en plataforma
-                  </span>
-                )}
+                <div className="flex flex-col sm:flex-row items-center gap-6 py-2">
+                  <CircularProgress
+                    percentage={attendanceStats.rate}
+                    strokeColor={
+                      attendanceStats.rate >= 90
+                        ? '#10b981'
+                        : attendanceStats.rate >= 80
+                        ? '#3b82f6'
+                        : '#ef4444'
+                    }
+                    label="Asistencia"
+                  />
+
+                  <div className="grid grid-cols-2 gap-2.5 w-full">
+                    <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span className="text-[11px] font-black uppercase text-emerald-900">Presentes</span>
+                      </div>
+                      <span className="text-sm font-black text-emerald-950 font-mono">
+                        {attendanceStats.presentes}
+                      </span>
+                    </div>
+
+                    <div className="bg-amber-50/70 border border-amber-150 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                        <span className="text-[11px] font-black uppercase text-amber-900">Tardanzas</span>
+                      </div>
+                      <span className="text-sm font-black text-amber-950 font-mono">
+                        {attendanceStats.tardanzas}
+                      </span>
+                    </div>
+
+                    <div className="bg-sky-50/70 border border-sky-150 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0"></span>
+                        <span className="text-[11px] font-black uppercase text-sky-900">Excusas</span>
+                      </div>
+                      <span className="text-sm font-black text-sky-950 font-mono">
+                        {attendanceStats.excusas}
+                      </span>
+                    </div>
+
+                    <div className="bg-rose-50/70 border border-rose-150 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                        <span className="text-[11px] font-black uppercase text-rose-900">Ausencias</span>
+                      </div>
+                      <span className="text-sm font-black text-rose-950 font-mono">
+                        {attendanceStats.ausencias}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-6 py-2">
-                <CircularProgress
-                  percentage={parentTaskStats.rate}
-                  strokeColor={
-                    parentTaskStats.rate >= 85
-                      ? '#10b981'
-                      : parentTaskStats.rate >= 70
-                      ? '#f59e0b'
-                      : '#ef4444'
-                  }
-                  label="Cumplimiento"
-                />
-
-                <div className="grid grid-cols-3 gap-2.5 w-full">
-                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center flex flex-col justify-center">
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">
-                      Asignadas
-                    </span>
-                    <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5">
-                      {parentTaskStats.assigned}
-                    </span>
-                  </div>
-
-                  <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-3 text-center flex flex-col justify-center">
-                    <span className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">
-                      Corregidas
-                    </span>
-                    <span className="text-lg sm:text-xl font-black text-emerald-800 font-mono mt-0.5">
-                      {parentTaskStats.corrected}
-                    </span>
-                  </div>
-
-                  <div className="bg-rose-50/70 border border-rose-150 rounded-2xl p-3 text-center flex flex-col justify-center">
-                    <span className="text-[9px] font-black uppercase text-rose-600 tracking-wider">
-                      Atrasadas
-                    </span>
-                    <span className="text-lg sm:text-xl font-black text-rose-700 font-mono mt-0.5">
-                      {parentTaskStats.late}
-                    </span>
-                  </div>
-                </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                <span>
+                  {attendanceStats.totalDays > 0
+                    ? `Total de ${attendanceStats.totalDays} días lectivos registrados ${selectedMetricsPeriod !== 'ALL' ? `en ${selectedMetricsPeriod}` : ''}`
+                    : `Sin registros de lista aún ${selectedMetricsPeriod !== 'ALL' ? `en ${selectedMetricsPeriod}` : 'en este curso'}`}
+                </span>
+                <span className="text-slate-400 font-bold">Norma MINERD: Mín. 80%</span>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
-              <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
-              <span>
-                Calculado únicamente sobre las tareas que han sido corregidas en la plataforma por los docentes. Las tareas evaluadas presencialmente en el aula no penalizan este porcentaje.
-              </span>
+            {/* GRÁFICO 2: CUMPLIMIENTO EN TAREAS */}
+            <div className="bg-white p-6 sm:p-7 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-150 flex items-center justify-center text-indigo-600">
+                      <ClipboardCheck size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 tracking-tight leading-tight">
+                        Cumplimiento de Tareas {selectedMetricsPeriod !== 'ALL' && <span className="text-indigo-600 font-extrabold text-sm ml-1.5">({selectedMetricsPeriod})</span>}
+                      </h3>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Desempeño en asignaciones {selectedMetricsPeriod !== 'ALL' ? `• Período ${selectedMetricsPeriod}` : '• Todo el Año'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {parentTaskStats.late > 0 ? (
+                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                      <AlertTriangle size={12} />
+                      {parentTaskStats.late} con atraso
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 size={12} />
+                      Al día en plataforma
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6 py-2">
+                  <CircularProgress
+                    percentage={parentTaskStats.rate}
+                    strokeColor={
+                      parentTaskStats.rate >= 85
+                        ? '#10b981'
+                        : parentTaskStats.rate >= 70
+                        ? '#f59e0b'
+                        : '#ef4444'
+                    }
+                    label="Cumplimiento"
+                  />
+
+                  <div className="grid grid-cols-3 gap-2.5 w-full">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center flex flex-col justify-center">
+                      <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                        Asignadas
+                      </span>
+                      <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5">
+                        {parentTaskStats.assigned}
+                      </span>
+                    </div>
+
+                    <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-3 text-center flex flex-col justify-center">
+                      <span className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">
+                        Corregidas
+                      </span>
+                      <span className="text-lg sm:text-xl font-black text-emerald-800 font-mono mt-0.5">
+                        {parentTaskStats.corrected}
+                      </span>
+                    </div>
+
+                    <div className="bg-rose-50/70 border border-rose-150 rounded-2xl p-3 text-center flex flex-col justify-center">
+                      <span className="text-[9px] font-black uppercase text-rose-600 tracking-wider">
+                        Atrasadas
+                      </span>
+                      <span className="text-lg sm:text-xl font-black text-rose-700 font-mono mt-0.5">
+                        {parentTaskStats.late}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
+                <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                <span>
+                  {selectedMetricsPeriod !== 'ALL'
+                    ? `Mostrando ${parentTaskStats.assigned} tareas registradas para ${selectedMetricsPeriod}. Calculado únicamente sobre las tareas que han sido corregidas en la plataforma por los docentes.`
+                    : 'Calculado únicamente sobre las tareas que han sido corregidas en la plataforma por los docentes. Las tareas evaluadas presencialmente en el aula no penalizan este porcentaje.'}
+                </span>
+              </div>
             </div>
           </div>
         </div>

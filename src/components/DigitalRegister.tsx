@@ -65,6 +65,12 @@ export const DigitalRegister = ({
     }
     return true;
   }, [profile, currentTeacherRecord]);
+
+  // Permiso exclusivo para jalar notas: solo gestores, directores, coordinadores y administradores (nunca docentes solos)
+  const isManager = useMemo(() => {
+    const role = (profile?.role || '').toLowerCase();
+    return ['admin', 'director', 'management', 'coordinator', 'coordinador', 'gestor', 'management_teacher'].includes(role);
+  }, [profile?.role]);
   const { courses: allCourses } = useCourses();
   const { subjects: allSubjects } = useSubjects();
   const { assignments: allAssignments } = useAssignments();
@@ -137,6 +143,7 @@ export const DigitalRegister = ({
   const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState<boolean>(false);
   const [summaryPeriodDivisor, setSummaryPeriodDivisor] = useState<number>(4);
+  const [summaryIsFinalGrade, setSummaryIsFinalGrade] = useState<boolean>(false);
   const [showRecoveryPlanModal, setShowRecoveryPlanModal] = useState<boolean>(false);
 
   const levels = ['Todos', 'Inicial', 'Primario', 'Secundario'];
@@ -448,6 +455,10 @@ export const DigitalRegister = ({
 
   // Importar promedios de Mi Aula bajo demanda (desde LocalStorage y Supabase)
   const handleImportFromMiAula = async () => {
+    if (!isManager) {
+      alert('Acción restringida: Solo el Equipo de Gestión y Administradores pueden jalar notas.');
+      return;
+    }
     if (!selectedCourseId || !selectedSubjectId) {
       alert('Seleccione un curso y asignatura primero.');
       return;
@@ -576,6 +587,10 @@ export const DigitalRegister = ({
 
   // Importar promedios de Mi Aula para el CURSO COMPLETO (todas las asignaturas del curso)
   const handleImportCourseFromMiAula = async () => {
+    if (!isManager) {
+      alert('Acción restringida: Solo el Equipo de Gestión y Administradores pueden jalar notas de cursos completos.');
+      return;
+    }
     if (!selectedCourseId) {
       alert('Por favor, seleccione un curso primero.');
       return;
@@ -1548,15 +1563,8 @@ export const DigitalRegister = ({
         let fC3 = getCompFinalVal(p1c3, p2c3, p3c3, p4c3);
         let fC4 = getCompFinalVal(p1c4, p2c4, p3c4, p4c4);
 
-        // Agregar promedios PC1-PC4
-        row.push(fC1 || '');
-        row.push(fC2 || '');
-        row.push(fC3 || '');
-        row.push(fC4 || '');
-
         // Calificación final de Área (promedio de las 4 competencias)
         let areaFinal = Math.round((fC1 + fC2 + fC3 + fC4) / 4);
-        row.push(areaFinal || '');
 
         // Recuperación de Secundaria
         const cp = parseInt(sGrades['comp']) || 0;
@@ -1570,21 +1578,11 @@ export const DigitalRegister = ({
         let cpExam50 = cp > 0 ? Math.round(cp * 0.5) : '';
         let ccFinal = cp > 0 ? Math.round(areaFinal * 0.5 + cp * 0.5) : '';
 
-        row.push(cp50);
-        row.push(cpExam);
-        row.push(cpExam50);
-        row.push(ccFinal || '');
-
         // Extraordinario (30% CF, CEEX, 70% CEEX, CEXF)
         let ex30 = areaFinal < 70 ? Math.round(areaFinal * 0.3) : '';
         let exExam = ex || '';
         let exExam70 = ex > 0 ? Math.round(ex * 0.7) : '';
         let cexFinal = ex > 0 ? Math.round(areaFinal * 0.3 + ex * 0.7) : '';
-
-        row.push(ex30);
-        row.push(exExam);
-        row.push(exExam70);
-        row.push(cexFinal || '');
 
         // Especial (C.F, C.E)
         let espExam = e1 || e2 || '';
@@ -1607,30 +1605,62 @@ export const DigitalRegister = ({
         }
 
         let espFinal = (e1 > 0 || e2 > 0) ? defFinal : '';
-        row.push(espFinal);
-        row.push(espExam);
 
         // Situación Final (A / R)
         let sitA = defFinal >= 70 ? defFinal : '';
         let sitR = (defFinal > 0 && defFinal < 70) ? defFinal : '';
-        row.push(sitA);
-        row.push(sitR);
+
+        if (summaryIsFinalGrade) {
+          // Agregar promedios PC1-PC4
+          row.push(fC1 || '');
+          row.push(fC2 || '');
+          row.push(fC3 || '');
+          row.push(fC4 || '');
+
+          // Calificación final de Área
+          row.push(areaFinal || '');
+
+          // Completivo
+          row.push(cp50);
+          row.push(cpExam);
+          row.push(cpExam50);
+          row.push(ccFinal || '');
+
+          // Extraordinario
+          row.push(ex30);
+          row.push(exExam);
+          row.push(exExam70);
+          row.push(cexFinal || '');
+
+          // Especial
+          row.push(espFinal);
+          row.push(espExam);
+
+          // Situación Final
+          row.push(sitA);
+          row.push(sitR);
+
+          if (defFinal > 0) {
+            sumC1 += fC1;
+            sumC2 += fC2;
+            sumC3 += fC3;
+            sumC4 += fC4;
+            sumFinal += defFinal;
+            count++;
+          }
+        } else {
+          // Ocultar promedios finales y de períodos hasta fin de año (17 columnas en blanco)
+          for (let i = 0; i < 17; i++) {
+            row.push('');
+          }
+        }
 
         bodySecondary.push(row);
-
-        if (defFinal > 0) {
-          sumC1 += fC1;
-          sumC2 += fC2;
-          sumC3 += fC3;
-          sumC4 += fC4;
-          sumFinal += defFinal;
-          count++;
-        }
       });
 
       // Fila de Indice
       const idxRowSecondary: any[] = [{ content: 'Indice', colSpan: 17, styles: { halign: 'right', fontStyle: 'bold' } }];
-      if (count > 0) {
+      if (summaryIsFinalGrade && count > 0) {
         idxRowSecondary.push((sumC1 / count / 25).toFixed(2));
         idxRowSecondary.push((sumC2 / count / 25).toFixed(2));
         idxRowSecondary.push((sumC3 / count / 25).toFixed(2));
@@ -1640,8 +1670,7 @@ export const DigitalRegister = ({
           idxRowSecondary.push('');
         }
       } else {
-        idxRowSecondary.push('0.00', '0.00', '0.00', '0.00', '0.00');
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 17; i++) {
           idxRowSecondary.push('');
         }
       }
@@ -1803,40 +1832,45 @@ export const DigitalRegister = ({
         };
 
         const cfValues = compsPrimary.map((c) => getCompFinalVal(c.id));
-        cfValues.forEach((val) => {
-          row.push(val || '');
-        });
-
         const finalArea =
           cfValues.length > 0 ? Math.round(cfValues.reduce((a, b) => a + b, 0) / cfValues.length) : 0;
-        row.push(finalArea || '');
-
         const recFinal = parseInt(sGrades['final_rec']) || 0;
-        row.push(recFinal || '');
-
         const defFinal = Math.max(finalArea, recFinal);
-        row.push(defFinal || '');
+
+        if (summaryIsFinalGrade) {
+          cfValues.forEach((val) => {
+            row.push(val || '');
+          });
+          row.push(finalArea || '');
+          row.push(recFinal || '');
+          row.push(defFinal || '');
+
+          if (defFinal > 0) {
+            sumC1 += cfValues[0] || 0;
+            sumC2 += cfValues[1] || 0;
+            sumC3 += cfValues[2] || 0;
+            sumFinal += defFinal;
+            count++;
+          }
+        } else {
+          // Ocultar C1, C2, C3 finales, Final Área, Recup y Def Final (6 columnas en blanco)
+          for (let i = 0; i < compsPrimary.length + 3; i++) {
+            row.push('');
+          }
+        }
 
         bodyPrimary.push(row);
-
-        if (defFinal > 0) {
-          sumC1 += cfValues[0] || 0;
-          sumC2 += cfValues[1] || 0;
-          sumC3 += cfValues[2] || 0;
-          sumFinal += defFinal;
-          count++;
-        }
       });
 
       const idxRowPrimary: any[] = [{ content: 'Indice', colSpan: 13, styles: { halign: 'right', fontStyle: 'bold' } }];
-      if (count > 0) {
+      if (summaryIsFinalGrade && count > 0) {
         idxRowPrimary.push((sumC1 / count / 25).toFixed(2));
         idxRowPrimary.push((sumC2 / count / 25).toFixed(2));
         idxRowPrimary.push((sumC3 / count / 25).toFixed(2));
         idxRowPrimary.push((sumFinal / count / 25).toFixed(2));
         idxRowPrimary.push('');
       } else {
-        idxRowPrimary.push('0.00', '0.00', '0.00', '0.00', '');
+        idxRowPrimary.push('', '', '', '', '');
       }
       bodyPrimary.push(idxRowPrimary);
 
@@ -2001,9 +2035,24 @@ export const DigitalRegister = ({
     doc.rect(195, finalY, 70, 5, 'FD');
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text('Situación del Estudiante | Promovido/a | Repitente', 197, finalY + 3.5);
+    doc.text(
+      summaryIsFinalGrade
+        ? 'Situación del Estudiante | Promovido/a | Repitente'
+        : 'Situación del Estudiante | Período Parcial en Curso',
+      197,
+      finalY + 3.5
+    );
 
     doc.line(195, finalY + 5, 265, finalY + 5);
+    doc.line(195, finalY + 10, 265, finalY + 10);
+    if (!summaryIsFinalGrade) {
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(80, 80, 80);
+      doc.text('Evaluación Parcial (Año Escolar en Curso)', 230, finalY + 8.5, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
+    }
     doc.line(195, finalY + 10, 265, finalY + 10);
 
     doc.setFontSize(8);
@@ -2317,34 +2366,37 @@ export const DigitalRegister = ({
                 <span className="hidden sm:inline">{hideStudentNames ? 'Mostrar Nombres' : 'Ocultar Nombres'}</span>
                 <span className="sm:hidden">{hideStudentNames ? 'Nombres' : 'Ocultar'}</span>
               </button>
-              <div className="flex items-center shadow-lg rounded-xl overflow-hidden border border-purple-400/40">
-                <button
-                  type="button"
-                  onClick={handleImportCourseFromMiAula}
-                  disabled={isImportingCourse || !selectedCourseId}
-                  className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black uppercase text-[10px] flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                  title="Jalar y guardar promedios de parciales registrados en Mi Aula para TODAS las asignaturas del curso completo"
-                >
-                  {isImportingCourse ? (
-                    <>
-                      <Loader2 size={15} className="animate-spin" /> JALANDO CURSO COMPLETO...
-                    </>
-                  ) : (
-                    <>
-                      <Layers size={15} /> JALAR NOTAS DEL CURSO COMPLETO
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleImportFromMiAula}
-                  disabled={isImportingCourse || !selectedSubjectId}
-                  className="px-2.5 py-2.5 bg-purple-700 hover:bg-purple-800 text-purple-100 font-bold uppercase text-[9px] flex items-center gap-1 transition-all cursor-pointer border-l border-purple-500/50 disabled:opacity-50"
-                  title="Jalar notas únicamente de la asignatura actual seleccionada"
-                >
-                  <ScrollText size={12} /> (Solo esta materia)
-                </button>
-              </div>
+              {/* Botones de jalar notas exclusivos para el Equipo de Gestión y Administradores */}
+              {isManager && (
+                <div className="flex items-center shadow-lg rounded-xl overflow-hidden border border-purple-400/40">
+                  <button
+                    type="button"
+                    onClick={handleImportCourseFromMiAula}
+                    disabled={isImportingCourse || !selectedCourseId}
+                    className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black uppercase text-[10px] flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    title="Jalar y guardar promedios de parciales registrados en Mi Aula para TODAS las asignaturas del curso completo"
+                  >
+                    {isImportingCourse ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin" /> JALANDO CURSO COMPLETO...
+                      </>
+                    ) : (
+                      <>
+                        <Layers size={15} /> JALAR NOTAS DEL CURSO COMPLETO
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportFromMiAula}
+                    disabled={isImportingCourse || !selectedSubjectId}
+                    className="px-2.5 py-2.5 bg-purple-700 hover:bg-purple-800 text-purple-100 font-bold uppercase text-[9px] flex items-center gap-1 transition-all cursor-pointer border-l border-purple-500/50 disabled:opacity-50"
+                    title="Jalar notas únicamente de la asignatura actual seleccionada"
+                  >
+                    <ScrollText size={12} /> (Solo esta materia)
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setShowRecoveryPlanModal(true)}
@@ -2880,15 +2932,28 @@ export const DigitalRegister = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-xl border transition-all ${summaryIsFinalGrade ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                  <input
+                    type="checkbox"
+                    checked={summaryIsFinalGrade}
+                    onChange={(e) => setSummaryIsFinalGrade(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    ¿Nota Final?
+                  </span>
+                </label>
+
+                <div className={`flex items-center gap-2 transition-all ${!summaryIsFinalGrade ? 'opacity-40' : ''}`}>
                   <span className="text-[10px] font-black uppercase text-text-muted">
                     Periodos a promediar:
                   </span>
                   <select
                     value={summaryPeriodDivisor}
+                    disabled={!summaryIsFinalGrade}
                     onChange={(e) => setSummaryPeriodDivisor(Number(e.target.value))}
-                    className="bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase focus:border-indigo-500 outline-none"
+                    className="bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase focus:border-indigo-500 outline-none disabled:cursor-not-allowed"
                   >
                     <option value={1}>P1</option>
                     <option value={2}>P1 - P2</option>
