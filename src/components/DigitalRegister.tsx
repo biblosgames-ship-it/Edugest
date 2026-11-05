@@ -419,6 +419,31 @@ export const DigitalRegister = ({
     if (value !== '') {
       if (!/^\d+$/.test(value)) return;
       if (parseInt(value) > 100) return;
+
+      // Validación de Recuperación: Solo alumnos por debajo de 65 en primaria y 70 en secundaria
+      const matchPeriodRec = key.match(/^(.+)_r(p[1-4])$/);
+      if (matchPeriodRec) {
+        const [, cId, pL] = matchPeriodRec;
+        const regVal = grades[`${studentId}_${cId}_${pL}`];
+        const regNum = regVal !== undefined && regVal !== '' ? parseInt(regVal) : null;
+        if (regNum === null || regNum >= minPassingGrade) {
+          return; // No califica para recuperación pedagógica
+        }
+      }
+
+      if (key === 'final_rec') {
+        const finalVal = calculateAreaFinal(studentId);
+        if (finalVal <= 0 || finalVal >= 65) {
+          return; // En primaria solo con nota final menor a 65
+        }
+      }
+
+      if (['comp', 'extra', 'esp1', 'esp2'].includes(key)) {
+        const finalVal = calculateAreaFinal(studentId);
+        if (finalVal <= 0 || finalVal >= 70) {
+          return; // En secundaria solo con nota final menor a 70
+        }
+      }
     }
     setLocalGrades((prev) => {
       const updated = { ...prev, [`${studentId}_${key}`]: value };
@@ -978,6 +1003,27 @@ export const DigitalRegister = ({
         const numVal = parseInt(firstCol, 10);
 
         if (!isNaN(numVal) && numVal >= 0 && numVal <= 100) {
+          // Validar si el pegado es sobre una casilla de recuperación
+          const matchPeriodRec = baseKey.match(/^(.+)_r(p[1-4])$/);
+          if (matchPeriodRec) {
+            const [, cId, pL] = matchPeriodRec;
+            const regVal = updated[`${student.id}_${cId}_${pL}`] ?? grades[`${student.id}_${cId}_${pL}`];
+            const regNum = regVal !== undefined && regVal !== '' ? parseInt(regVal) : null;
+            if (regNum === null || regNum >= minPassingGrade) {
+              return; // Omitir: el alumno no califica para recuperación
+            }
+          } else if (baseKey === 'final_rec') {
+            const finalVal = calculateAreaFinal(student.id);
+            if (finalVal <= 0 || finalVal >= 65) {
+              return;
+            }
+          } else if (['comp', 'extra', 'esp1', 'esp2'].includes(baseKey)) {
+            const finalVal = calculateAreaFinal(student.id);
+            if (finalVal <= 0 || finalVal >= 70) {
+              return;
+            }
+          }
+
           updated[`${student.id}_${baseKey}`] = numVal.toString();
         }
       });
@@ -2627,6 +2673,11 @@ export const DigitalRegister = ({
                             const pL = p.toLowerCase();
                             const kVal = `${c.id}_${pL}`;
                             const kRec = `${c.id}_r${pL}`;
+                            const regularVal = grades[`${s.id}_${kVal}`];
+                            const regularNum = regularVal !== undefined && regularVal !== '' ? parseInt(regularVal) : null;
+                            const isPeriodFail = regularNum !== null && regularNum < minPassingGrade;
+                            const canEditPeriodRec = isEditable && isPeriodFail;
+
                             return (
                               <React.Fragment key={`${s.id}_${c.id}_${p}`}>
                                 <td className={`p-0 border-r border-border-main ${isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : c.color} text-center align-middle w-12 min-w-[46px] transition-colors`}>
@@ -2654,7 +2705,7 @@ export const DigitalRegister = ({
                                     disabled={!isEditable}
                                   />
                                 </td>
-                                <td className={`p-0 border-r border-border-main ${isSelected ? 'bg-indigo-100/30 dark:bg-indigo-950/30' : c.rColor} text-center align-middle w-10 min-w-[38px] transition-colors`}>
+                                <td className={`p-0 border-r border-border-main ${isSelected ? 'bg-indigo-100/30 dark:bg-indigo-950/30' : (canEditPeriodRec ? c.rColor : 'bg-slate-100/40 dark:bg-slate-900/40')} text-center align-middle w-10 min-w-[38px] transition-colors`}>
                                   <input
                                     ref={(el) => {
                                       inputRefs.current[`${s.id}_${kRec}`] = el;
@@ -2666,17 +2717,28 @@ export const DigitalRegister = ({
                                     onKeyDown={(e) => handleKeyDown(e, idx, kRec)}
                                     onPaste={(e) => handleGradePaste(e, idx, kRec)}
                                     onFocus={(e) => {
-                                      e.target.select();
-                                      setFocusedStudentId(s.id);
+                                      if (canEditPeriodRec) {
+                                        e.target.select();
+                                        setFocusedStudentId(s.id);
+                                      }
                                     }}
                                     onClick={() => setFocusedStudentId(s.id)}
-                                    className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none focus:bg-surface focus:ring-1 focus:ring-indigo-500 rounded-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                      grades[`${s.id}_${kRec}`] !== undefined && grades[`${s.id}_${kRec}`] !== '' && parseInt(grades[`${s.id}_${kRec}`]) < minPassingGrade
-                                        ? 'text-rose-600 dark:text-rose-400 font-black'
-                                        : 'font-bold text-text-muted'
+                                    disabled={!canEditPeriodRec}
+                                    title={
+                                      !isEditable
+                                        ? 'Edición bloqueada'
+                                        : !isPeriodFail
+                                        ? regularNum !== null
+                                          ? `Aprobado con ${regularNum} (mínimo ${minPassingGrade}). La recuperación solo aplica con nota menor a ${minPassingGrade}.`
+                                          : 'Ingrese primero la calificación ordinaria del período.'
+                                        : `Habilitado por calificación menor a ${minPassingGrade}`
+                                    }
+                                    className={`w-full h-8 bg-transparent text-center px-0 text-[10px] leading-none outline-none rounded-none transition-colors ${
+                                      canEditPeriodRec
+                                        ? 'focus:bg-surface focus:ring-1 focus:ring-indigo-500 font-black text-rose-600 dark:text-rose-400 cursor-text'
+                                        : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
                                     }`}
-                                    placeholder=""
-                                    disabled={!isEditable}
+                                    placeholder={!isPeriodFail ? '—' : ''}
                                   />
                                 </td>
                               </React.Fragment>
@@ -2716,133 +2778,189 @@ export const DigitalRegister = ({
                           })()}
 
                           {isSecundario ? (
-                            <>
-                              {/* COMPLETIVO: 50/50 */}
-                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
-                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-amber-50/10'
-                              }`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_comp`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_comp`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
-                                  onPaste={(e) => handleGradePaste(e, idx, 'comp')}
-                                  onFocus={(e) => {
-                                    e.target.select();
-                                    setFocusedStudentId(s.id);
-                                  }}
-                                  onClick={() => setFocusedStudentId(s.id)}
-                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    grades[`${s.id}_comp`] && parseInt(grades[`${s.id}_comp`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700'
-                                  }`}
-                                  placeholder="EX"
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                              {/* EXTRAORDINARIO: 30/70 */}
-                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
-                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-orange-50/10'
-                              }`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_extra`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_extra`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
-                                  onPaste={(e) => handleGradePaste(e, idx, 'extra')}
-                                  onFocus={(e) => {
-                                    e.target.select();
-                                    setFocusedStudentId(s.id);
-                                  }}
-                                  onClick={() => setFocusedStudentId(s.id)}
-                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    grades[`${s.id}_extra`] && parseInt(grades[`${s.id}_extra`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-orange-700'
-                                  }`}
-                                  placeholder="EX"
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                              {/* ESPECIAL 1 */}
-                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
-                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-50/10'
-                              }`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_esp1`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_esp1`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
-                                  onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
-                                  onFocus={(e) => {
-                                    e.target.select();
-                                    setFocusedStudentId(s.id);
-                                  }}
-                                  onClick={() => setFocusedStudentId(s.id)}
-                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    grades[`${s.id}_esp1`] && parseInt(grades[`${s.id}_esp1`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-700'
-                                  }`}
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                              {/* ESPECIAL 2 */}
-                              <td className={`p-0 border-r border-border-main text-center transition-colors ${
-                                isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-100/10'
-                              }`}>
-                                <input
-                                  ref={(el) => {
-                                    inputRefs.current[`${s.id}_esp2`] = el;
-                                  }}
-                                  type="text"
-                                  maxLength={3}
-                                  value={grades[`${s.id}_esp2`] || ''}
-                                  onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
-                                  onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
-                                  onFocus={(e) => {
-                                    e.target.select();
-                                    setFocusedStudentId(s.id);
-                                  }}
-                                  onClick={() => setFocusedStudentId(s.id)}
-                                  className={`w-full h-8 bg-transparent text-center outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    grades[`${s.id}_esp2`] && parseInt(grades[`${s.id}_esp2`]) < 70 ? 'text-rose-600 dark:text-rose-400' : 'text-rose-900'
-                                  }`}
-                                  disabled={!isEditable}
-                                />
-                              </td>
-                            </>
+                            (() => {
+                              const finalVal = calculateAreaFinal(s.id);
+                              const isFinalFailSec = finalVal > 0 && finalVal < 70;
+                              const canEditSecRec = isEditable && isFinalFailSec;
+                              const titleSec = !isEditable
+                                ? 'Edición bloqueada'
+                                : !isFinalFailSec
+                                ? `Aprobado con ${finalVal} (mínimo 70). La recuperación solo aplica para notas menores a 70.`
+                                : 'Habilitado por calificación menor a 70';
+
+                              return (
+                                <>
+                                  {/* COMPLETIVO: 50/50 */}
+                                  <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                    isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : (canEditSecRec ? 'bg-amber-50/10' : 'bg-slate-100/40 dark:bg-slate-900/40')
+                                  }`}>
+                                    <input
+                                      ref={(el) => {
+                                        inputRefs.current[`${s.id}_comp`] = el;
+                                      }}
+                                      type="text"
+                                      maxLength={3}
+                                      value={grades[`${s.id}_comp`] || ''}
+                                      onChange={(e) => handleGradeChange(s.id, 'comp', e.target.value)}
+                                      onKeyDown={(e) => handleKeyDown(e, idx, 'comp')}
+                                      onPaste={(e) => handleGradePaste(e, idx, 'comp')}
+                                      onFocus={(e) => {
+                                        if (canEditSecRec) {
+                                          e.target.select();
+                                          setFocusedStudentId(s.id);
+                                        }
+                                      }}
+                                      onClick={() => setFocusedStudentId(s.id)}
+                                      className={`w-full h-8 bg-transparent text-center outline-none font-black transition-colors ${
+                                        canEditSecRec
+                                          ? 'focus:bg-surface text-amber-700 cursor-text'
+                                          : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
+                                      }`}
+                                      placeholder={!isFinalFailSec ? '—' : 'EX'}
+                                      disabled={!canEditSecRec}
+                                      title={titleSec}
+                                    />
+                                  </td>
+                                  {/* EXTRAORDINARIO: 30/70 */}
+                                  <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                    isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : (canEditSecRec ? 'bg-orange-50/10' : 'bg-slate-100/40 dark:bg-slate-900/40')
+                                  }`}>
+                                    <input
+                                      ref={(el) => {
+                                        inputRefs.current[`${s.id}_extra`] = el;
+                                      }}
+                                      type="text"
+                                      maxLength={3}
+                                      value={grades[`${s.id}_extra`] || ''}
+                                      onChange={(e) => handleGradeChange(s.id, 'extra', e.target.value)}
+                                      onKeyDown={(e) => handleKeyDown(e, idx, 'extra')}
+                                      onPaste={(e) => handleGradePaste(e, idx, 'extra')}
+                                      onFocus={(e) => {
+                                        if (canEditSecRec) {
+                                          e.target.select();
+                                          setFocusedStudentId(s.id);
+                                        }
+                                      }}
+                                      onClick={() => setFocusedStudentId(s.id)}
+                                      className={`w-full h-8 bg-transparent text-center outline-none font-black transition-colors ${
+                                        canEditSecRec
+                                          ? 'focus:bg-surface text-orange-700 cursor-text'
+                                          : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
+                                      }`}
+                                      placeholder={!isFinalFailSec ? '—' : 'EX'}
+                                      disabled={!canEditSecRec}
+                                      title={titleSec}
+                                    />
+                                  </td>
+                                  {/* ESPECIAL 1 */}
+                                  <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                    isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : (canEditSecRec ? 'bg-rose-50/10' : 'bg-slate-100/40 dark:bg-slate-900/40')
+                                  }`}>
+                                    <input
+                                      ref={(el) => {
+                                        inputRefs.current[`${s.id}_esp1`] = el;
+                                      }}
+                                      type="text"
+                                      maxLength={3}
+                                      value={grades[`${s.id}_esp1`] || ''}
+                                      onChange={(e) => handleGradeChange(s.id, 'esp1', e.target.value)}
+                                      onKeyDown={(e) => handleKeyDown(e, idx, 'esp1')}
+                                      onPaste={(e) => handleGradePaste(e, idx, 'esp1')}
+                                      onFocus={(e) => {
+                                        if (canEditSecRec) {
+                                          e.target.select();
+                                          setFocusedStudentId(s.id);
+                                        }
+                                      }}
+                                      onClick={() => setFocusedStudentId(s.id)}
+                                      className={`w-full h-8 bg-transparent text-center outline-none font-black transition-colors ${
+                                        canEditSecRec
+                                          ? 'focus:bg-surface text-rose-700 cursor-text'
+                                          : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
+                                      }`}
+                                      placeholder={!isFinalFailSec ? '—' : ''}
+                                      disabled={!canEditSecRec}
+                                      title={titleSec}
+                                    />
+                                  </td>
+                                  {/* ESPECIAL 2 */}
+                                  <td className={`p-0 border-r border-border-main text-center transition-colors ${
+                                    isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : (canEditSecRec ? 'bg-rose-100/10' : 'bg-slate-100/40 dark:bg-slate-900/40')
+                                  }`}>
+                                    <input
+                                      ref={(el) => {
+                                        inputRefs.current[`${s.id}_esp2`] = el;
+                                      }}
+                                      type="text"
+                                      maxLength={3}
+                                      value={grades[`${s.id}_esp2`] || ''}
+                                      onChange={(e) => handleGradeChange(s.id, 'esp2', e.target.value)}
+                                      onKeyDown={(e) => handleKeyDown(e, idx, 'esp2')}
+                                      onPaste={(e) => handleGradePaste(e, idx, 'esp2')}
+                                      onFocus={(e) => {
+                                        if (canEditSecRec) {
+                                          e.target.select();
+                                          setFocusedStudentId(s.id);
+                                        }
+                                      }}
+                                      onClick={() => setFocusedStudentId(s.id)}
+                                      className={`w-full h-8 bg-transparent text-center outline-none font-black transition-colors ${
+                                        canEditSecRec
+                                          ? 'focus:bg-surface text-rose-900 cursor-text'
+                                          : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
+                                      }`}
+                                      placeholder={!isFinalFailSec ? '—' : ''}
+                                      disabled={!canEditSecRec}
+                                      title={titleSec}
+                                    />
+                                  </td>
+                                </>
+                              );
+                            })()
                           ) : (
-                            <td className={`p-0 text-center border-r border-border-main transition-colors ${
-                              isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : 'bg-rose-50/10'
-                            }`}>
-                              <input
-                                ref={(el) => {
-                                  inputRefs.current[`${s.id}_final_rec`] = el;
-                                }}
-                                type="text"
-                                maxLength={3}
-                                value={grades[`${s.id}_final_rec`] || ''}
-                                onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
-                                onPaste={(e) => handleGradePaste(e, idx, 'final_rec')}
-                                onFocus={(e) => {
-                                  e.target.select();
-                                  setFocusedStudentId(s.id);
-                                }}
-                                onClick={() => setFocusedStudentId(s.id)}
-                                className="w-full h-8 bg-transparent text-center text-rose-600 outline-none focus:bg-surface font-black disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={!isEditable}
-                              />
-                            </td>
+                            (() => {
+                              const finalVal = calculateAreaFinal(s.id);
+                              const isFinalFailPrim = finalVal > 0 && finalVal < 65;
+                              const canEditPrimRec = isEditable && isFinalFailPrim;
+                              return (
+                                <td className={`p-0 text-center border-r border-border-main transition-colors ${
+                                  isSelected ? 'bg-indigo-100/40 dark:bg-indigo-950/40' : (canEditPrimRec ? 'bg-rose-50/10' : 'bg-slate-100/40 dark:bg-slate-900/40')
+                                }`}>
+                                  <input
+                                    ref={(el) => {
+                                      inputRefs.current[`${s.id}_final_rec`] = el;
+                                    }}
+                                    type="text"
+                                    maxLength={3}
+                                    value={grades[`${s.id}_final_rec`] || ''}
+                                    onChange={(e) => handleGradeChange(s.id, 'final_rec', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, idx, 'final_rec')}
+                                    onPaste={(e) => handleGradePaste(e, idx, 'final_rec')}
+                                    onFocus={(e) => {
+                                      if (canEditPrimRec) {
+                                        e.target.select();
+                                        setFocusedStudentId(s.id);
+                                      }
+                                    }}
+                                    onClick={() => setFocusedStudentId(s.id)}
+                                    className={`w-full h-8 bg-transparent text-center outline-none font-black transition-colors ${
+                                      canEditPrimRec
+                                        ? 'focus:bg-surface text-rose-600 cursor-text'
+                                        : 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600 select-none'
+                                    }`}
+                                    placeholder={!isFinalFailPrim ? '—' : ''}
+                                    disabled={!canEditPrimRec}
+                                    title={
+                                      !isEditable
+                                        ? 'Edición bloqueada'
+                                        : !isFinalFailPrim
+                                        ? `Aprobado con ${finalVal} (mínimo 65). La recuperación solo aplica para notas menores a 65.`
+                                        : 'Habilitado por calificación menor a 65'
+                                    }
+                                  />
+                                </td>
+                              );
+                            })()
                           )}
 
                           {/* CALCULO NOTA FINAL DEFINITIVA */}
