@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { useApp, useSupabase } from '../context/AppContext';
+import { supabase, fetchAllRows } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
   ArrowLeft,
@@ -33,8 +33,21 @@ interface ReportProps {
 
 type StatusFilterType = 'ALL' | 'PENDING' | 'COMPLETED' | 'EMPTY';
 
+// Función robusta para normalizar la representación de períodos (ej: 'P1', 'p1', 'Periodo 1' -> 'p1')
+const normalizePeriod = (val: string | null | undefined): string => {
+  if (!val) return '';
+  const clean = String(val).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (clean === 'p1' || clean === 'periodo1' || clean === '1') return 'p1';
+  if (clean === 'p2' || clean === 'periodo2' || clean === '2') return 'p2';
+  if (clean === 'p3' || clean === 'periodo3' || clean === '3') return 'p3';
+  if (clean === 'p4' || clean === 'periodo4' || clean === '4') return 'p4';
+  if (clean === 'final' || clean === 'anual' || clean === 'cf' || clean === 'completo') return 'final';
+  return clean;
+};
+
 export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: initialPeriod }) => {
   const { state, center, selectedYear } = useApp();
+  const { profile } = useSupabase();
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod || getCurrentPeriod());
   const [filterLevel, setFilterLevel] = useState('Todos');
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('ALL');
@@ -42,25 +55,107 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
   const [liveGrades, setLiveGrades] = useState<any[]>(state.grades || []);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Consulta en vivo de calificaciones desde Supabase para garantizar exactitud en tiempo real
+  // Sincronizar si cambia el período recibido desde el componente padre
+  useEffect(() => {
+    if (initialPeriod && initialPeriod !== selectedPeriod) {
+      setSelectedPeriod(initialPeriod);
+    }
+  }, [initialPeriod]);
+
+  // Consulta en vivo de calificaciones desde Supabase paginadas con fetchAllRows para evitar el corte a 1,000 registros
+  // e integración de notas directas de 'student_partial_activities' (Mi Aula)
   const fetchLiveGrades = async () => {
     setIsLoading(true);
     try {
-      const centerId = center?.id || (state as any)?.center?.id;
+      const centerId = profile?.center_id || center?.id || (state as any)?.center?.id;
       const year = selectedYear || '2026-2027';
 
-      let query = supabase
-        .from('student_grades')
-        .select('id, course_id, subject_id, student_id, period, competency_id, grade, school_year')
-        .eq('school_year', year);
+      // 1. Obtener todas las calificaciones registradas en student_grades usando fetchAllRows (sin límite de 1000)
+      const { data: gradesData, error: gradesError } = await fetchAllRows(() => {
+        let query = supabase
+          .from('student_grades')
+          .select('id, course_id, subject_id, student_id, period, competency_id, grade, school_year')
+          .eq('school_year', year);
 
-      if (centerId && centerId !== 'default_center') {
-        query = query.eq('center_id', centerId);
+        if (centerId && centerId !== 'default_center') {
+          query = query.eq('center_id', centerId);
+        }
+
+        return query;
+      });
+
+      if (gradesError) {
+        console.warn('[MassDigitizingReport] Error cargando student_grades con fetchAllRows:', gradesError);
       }
 
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        setLiveGrades(data);
+      // 2. Obtener actividades de Mi Aula (student_partial_activities) para incluir avances que los docentes
+      // hayan digitado en sus aulas pero que aún no se hayan jalado al registro oficial
+      const { data: partialActivities, error: partialError } = await fetchAllRows(() => {
+        let pQuery = supabase
+          .from('student_partial_activities')
+          .select('course_id, subject_id, period, scores, school_year')
+          .eq('school_year', year);
+
+        if (centerId && centerId !== 'default_center') {
+          pQuery = pQuery.eq('center_id', centerId);
+        }
+
+        return pQuery;
+      });
+
+      if (partialError) {
+        console.warn('[MassDigitizingReport] Error cargando student_partial_activities:', partialError);
+      }
+
+      // 3. Consolidar calificaciones: prioridad a student_grades y complementar con parciales de Mi Aula
+      const consolidated: any[] = gradesData ? [...gradesData] : [];
+      const gradeKeySet = new Set(
+        consolidated.map((g: any) =>
+          `${g.course_id}_${g.subject_id}_${g.student_id}_${normalizePeriod(g.period)}_${g.competency_id}`
+        )
+      );
+
+      // Si hay actividades de parciales en Mi Aula, revisar si tienen calificaciones asignadas
+      if (partialActivities && partialActivities.length > 0) {
+        partialActivities.forEach((pa: any) => {
+          const rawScores = pa.scores?.scores || pa.scores;
+          const rawActivities = pa.scores?.activities;
+          const pNorm = normalizePeriod(pa.period);
+          if (!rawScores || !rawActivities || !pNorm) return;
+
+          Object.keys(rawScores).forEach((studentId) => {
+            const studentActs = rawScores[studentId];
+            if (!studentActs || typeof studentActs !== 'object') return;
+
+            Object.keys(rawActivities).forEach((compId) => {
+              const compActs = rawActivities[compId] || [];
+              const hasValidEvaluation = compActs.some((act: any) => {
+                const val = studentActs[act.id];
+                return typeof val === 'number' && !isNaN(val);
+              });
+
+              if (hasValidEvaluation) {
+                const key = `${pa.course_id}_${pa.subject_id}_${studentId}_${pNorm}_${compId}`;
+                if (!gradeKeySet.has(key)) {
+                  gradeKeySet.add(key);
+                  consolidated.push({
+                    course_id: pa.course_id,
+                    subject_id: pa.subject_id,
+                    student_id: studentId,
+                    period: pa.period,
+                    competency_id: compId,
+                    grade: 80, // Calificación válida para conteo de digitado
+                    school_year: pa.school_year
+                  });
+                }
+              }
+            });
+          });
+        });
+      }
+
+      if (consolidated.length > 0) {
+        setLiveGrades(consolidated);
       } else if (state.grades && state.grades.length > 0) {
         setLiveGrades(state.grades);
       }
@@ -72,9 +167,10 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
     }
   };
 
+  // Re-consultar cada vez que cambie el período seleccionado, el año o el centro
   useEffect(() => {
     fetchLiveGrades();
-  }, [selectedYear, center?.id]);
+  }, [selectedYear, center?.id, profile?.center_id, selectedPeriod]);
 
   // Si state.grades se actualiza en el contexto y liveGrades está vacío, sincronizarlo
   useEffect(() => {
@@ -92,7 +188,8 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
     const students = state.students || [];
 
     const levels: Record<string, any[]> = {};
-    const pLower = selectedPeriod.toLowerCase();
+    const normTargetPeriod = normalizePeriod(selectedPeriod);
+    const isFinalPeriod = normTargetPeriod === 'final';
 
     courses.forEach((course: any) => {
       const level = course.level || 'Otros';
@@ -113,8 +210,8 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
 
       // Materias vinculadas al curso (vía assignments oficiales o por nivel)
       let courseSubjects = assignments
-        .filter((a: any) => a.course_id === course.id)
-        .map((a: any) => subjects.find((s: any) => s.id === a.subject_id))
+        .filter((a: any) => (a.course_id || a.courseId) === course.id)
+        .map((a: any) => subjects.find((s: any) => s.id === (a.subject_id || a.subjectId)))
         .filter(Boolean);
 
       // Si no hay asignaciones formales registradas, buscar por nivel
@@ -141,20 +238,30 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
 
       // Analizar estado y avance de cada materia en este curso
       const subjectsStatus = uniqueSubjects.map((sub: any) => {
-        // Encontrar docente a cargo
+        // Encontrar docente a cargo (soportando camelCase y snake_case)
         const assignment = assignments.find(
-          (a: any) => a.course_id === course.id && a.subject_id === sub.id
+          (a: any) =>
+            (a.course_id || a.courseId) === course.id &&
+            (a.subject_id || a.subjectId) === sub.id
         );
         const teacher = teachers.find(
-          (t: any) => t.id === assignment?.teacher_id || t.id === assignment?.teacherId
+          (t: any) => t.id === (assignment?.teacher_id || assignment?.teacherId)
         );
         const teacherName = teacher?.name || 'Sin docente asignado';
 
         // Calificaciones del período seleccionado para esta materia y curso
         const gradesInSubject = liveGrades.filter((g: any) => {
           if (g.course_id !== course.id || g.subject_id !== sub.id) return false;
-          const gPeriod = (g.period || '').toLowerCase();
-          if (gPeriod !== pLower) return false;
+          const gPeriodNorm = normalizePeriod(g.period);
+
+          if (isFinalPeriod) {
+            // En final, contar si pertenece a cualquiera de los 4 periodos
+            if (!['p1', 'p2', 'p3', 'p4'].includes(gPeriodNorm)) return false;
+          } else {
+            // En período específico (ej. P1), comparar normalizado
+            if (gPeriodNorm !== normTargetPeriod) return false;
+          }
+
           return g.grade !== null && g.grade !== undefined && g.grade !== '';
         });
 
@@ -168,7 +275,7 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
         const gradedStudentsCount = gradedStudents.size;
 
         // Total de calificaciones esperadas (estudiantes * competencias requeridas)
-        const totalExpectedGrades = totalStudents * expectedCompetenciesCount;
+        const totalExpectedGrades = totalStudents * expectedCompetenciesCount * (isFinalPeriod ? 4 : 1);
         const actualGradesCount = gradesInSubject.length;
 
         // Porcentaje exacto de digitado
@@ -180,7 +287,11 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
         }
 
         // Si todos los estudiantes tienen calificaciones en todas las competencias esperadas
-        const isCompleted = percent === 100 || (totalStudents > 0 && gradedStudentsCount === totalStudents && actualGradesCount >= totalExpectedGrades * 0.95);
+        const isCompleted =
+          percent === 100 ||
+          (totalStudents > 0 &&
+            gradedStudentsCount === totalStudents &&
+            actualGradesCount >= totalExpectedGrades * 0.95);
         const finalPercent = isCompleted ? 100 : percent;
 
         // Clasificación de estado
@@ -219,7 +330,8 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
             )
           : 0;
 
-      const isCourseCompleted = courseTotalSubjects > 0 && courseCompletedSubjects === courseTotalSubjects;
+      const isCourseCompleted =
+        courseTotalSubjects > 0 && courseCompletedSubjects === courseTotalSubjects;
 
       levels[level].push({
         id: course.id,
@@ -238,7 +350,15 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
     });
 
     return levels;
-  }, [state.courses, state.subjects, state.assignments, state.teachers, state.students, liveGrades, selectedPeriod]);
+  }, [
+    state.courses,
+    state.subjects,
+    state.assignments,
+    state.teachers,
+    state.students,
+    liveGrades,
+    selectedPeriod
+  ]);
 
   // Métricas globales del centro para los contadores superiores
   const overallMetrics = useMemo(() => {
@@ -441,6 +561,11 @@ export const MassDigitizingReport: React.FC<ReportProps> = ({ onClose, period: i
                 Auditoría en Tiempo Real
               </span>
               <span className="text-[10px] font-bold text-slate-400">Año {selectedYear || '2026-2027'}</span>
+              {isLoading && (
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 animate-pulse">
+                  <RefreshCw size={10} className="animate-spin" /> Sincronizando {selectedPeriod === 'FINAL' ? 'Anual' : selectedPeriod}...
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">
               Control de Digitado Masivo

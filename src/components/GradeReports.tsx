@@ -546,7 +546,8 @@ export const GradeReports = ({
     const digitizingChart = analyticsData.subjects.map((sub: any) => {
       let completed = 0;
       const isFinal = analyticsPeriod.toLowerCase() === 'final';
-      const totalPerStudent = isFinal ? 12 : 3;
+      const compsPerStudent = isSecundario ? 4 : 3;
+      const totalPerStudent = isFinal ? compsPerStudent * 4 : compsPerStudent;
       const totalExpected = analyticsData.students.length * totalPerStudent;
 
       analyticsData.students.forEach((std: any) => {
@@ -557,13 +558,15 @@ export const GradeReports = ({
           if (sGrades[`c1_${pL}`] !== undefined) completed++;
           if (sGrades[`c2_${pL}`] !== undefined) completed++;
           if (sGrades[`c3_${pL}`] !== undefined) completed++;
+          if (isSecundario && sGrades[`c4_${pL}`] !== undefined) completed++;
         } else {
           // Simplified check for final
-          if (sGrades['final_rec'] !== undefined) completed += 3;
+          if (sGrades['final_rec'] !== undefined) completed += compsPerStudent;
           ['p1', 'p2', 'p3', 'p4'].forEach((p) => {
             if (sGrades[`c1_${p}`] !== undefined) completed++;
             if (sGrades[`c2_${p}`] !== undefined) completed++;
             if (sGrades[`c3_${p}`] !== undefined) completed++;
+            if (isSecundario && sGrades[`c4_${p}`] !== undefined) completed++;
           });
         }
       });
@@ -2442,9 +2445,13 @@ export const GradeReports = ({
   const generatePendingGradesReport = (format: 'pdf' | 'excel') => {
     if (!pendingGradesData) return;
 
+    const currentCourse = state.courses?.find((c) => c.id === selectedCourseId);
+    const isSecundarioCourse = (currentCourse?.level || '').toLowerCase().includes('sec');
+    const compsCount = isSecundarioCourse ? 4 : 3;
+
     const reportData = pendingGradesData.subjects.map((sub: any) => {
       let completedCount = 0;
-      let totalExpected = pendingGradesData.students.length * 3; // 3 competencias por alumno
+      let totalExpected = pendingGradesData.students.length * compsCount;
 
       pendingGradesData.students.forEach((std: any) => {
         const sGrades = pendingGradesData.gradesMap[std.id]?.[sub.id] || {};
@@ -2452,6 +2459,7 @@ export const GradeReports = ({
         if (sGrades[`c1_${pL}`] !== undefined) completedCount++;
         if (sGrades[`c2_${pL}`] !== undefined) completedCount++;
         if (sGrades[`c3_${pL}`] !== undefined) completedCount++;
+        if (isSecundarioCourse && sGrades[`c4_${pL}`] !== undefined) completedCount++;
       });
 
       const percent = totalExpected > 0 ? Math.round((completedCount / totalExpected) * 100) : 0;
