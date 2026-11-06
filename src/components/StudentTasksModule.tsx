@@ -430,14 +430,11 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
         if (isCompleted) {
           completed++;
+        } else if (sub?.status === 'uncompleted') {
+          // Solo cuenta como atrasada/falta si el docente corrigió y marcó como no realizada
+          missing++;
         } else {
-          const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
-          const isExplicitLate = sub?.status === 'uncompleted';
-          if (isExplicitLate || isPastDue) {
-            missing++;
-          } else {
-            pending++;
-          }
+          pending++;
         }
       });
 
@@ -477,14 +474,10 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
       if (isCompleted) {
         completed++;
+      } else if (sub?.status === 'uncompleted') {
+        missing++;
       } else {
-        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
-        const isExplicitLate = sub?.status === 'uncompleted';
-        if (isExplicitLate || isPastDue) {
-          missing++;
-        } else {
-          pending++;
-        }
+        pending++;
       }
     });
 
@@ -529,16 +522,10 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
       list = list.filter((t: any) => {
         const sub = submissionsMap[t.id];
         const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
-        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
-        return !isCompleted && !isPastDue && sub?.status !== 'uncompleted';
+        return !isCompleted && sub?.status !== 'uncompleted';
       });
     } else if (statusFilter === 'LATE') {
-      list = list.filter((t: any) => {
-        const sub = submissionsMap[t.id];
-        const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
-        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
-        return sub?.status === 'uncompleted' || (!isCompleted && isPastDue);
-      });
+      list = list.filter((t: any) => submissionsMap[t.id]?.status === 'uncompleted');
     }
 
     if (searchTerm.trim()) {
