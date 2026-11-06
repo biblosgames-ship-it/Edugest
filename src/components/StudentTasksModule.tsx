@@ -62,8 +62,21 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>(() => {
     const local = localStorage.getItem('selected_course_id');
-    return profile?.course_id || profile?.course_code || local || '';
+    return local || profile?.course_id || profile?.course_code || '';
   });
+
+  // Sincronizar reactivamente si cambia selected_course_id en localStorage o sesión
+  useEffect(() => {
+    const checkCourse = () => {
+      const activeCid = localStorage.getItem('selected_course_id');
+      if (activeCid && activeCid !== selectedCourseId) {
+        setSelectedCourseId(activeCid);
+      }
+    };
+    checkCourse();
+    window.addEventListener('storage', checkCourse);
+    return () => window.removeEventListener('storage', checkCourse);
+  }, [selectedCourseId]);
 
   const [course, setCourse] = useState<any>(null);
   const [familyStudents, setFamilyStudents] = useState<any[]>([]);
@@ -380,13 +393,24 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     });
   }, [tasks, studentRecoverySubjectIds]);
 
-  // Contadores y estado de cumplimiento exacto por materia
+  // Normalización y detección infalible de período de tarea (P1, P2, P3, P4)
+  const parseTaskPeriod = (t: any): string => {
+    if (t?.period && ['P1', 'P2', 'P3', 'P4'].includes(String(t.period).trim().toUpperCase())) {
+      return String(t.period).trim().toUpperCase();
+    }
+    const match = (t?.description || '').match(/<!--period:(P[1-4])-->/i);
+    if (match) return match[1].toUpperCase();
+    return 'P1';
+  };
+
+  // Contadores y estado de cumplimiento exacto por materia basado en tareas corregidas/exigibles
   const subjectStats = useMemo(() => {
     const stats: Record<string, {
       totalTasks: number;
       completedTasks: number;
       pendingTasks: number;
       missingTasks: number;
+      correctedTotal: number;
       compliancePct: number;
       announcements: number;
     }> = {};
@@ -394,20 +418,38 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     courseSubjects.forEach(({ subject }) => {
       const subTasks = applicableTasks.filter((t: any) => t.subject_id === subject.id);
       const total = subTasks.length;
-      const completed = subTasks.filter((t: any) => submissionsMap[t.id]?.status === 'completed').length;
-      const missing = subTasks.filter(
-        (t: any) =>
-          submissionsMap[t.id]?.status === 'uncompleted' ||
-          (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
-      ).length;
-      const pending = Math.max(0, total - completed - missing);
-      const compliancePct = total > 0 ? Math.round((completed / total) * 100) : 100;
+      let completed = 0;
+      let missing = 0;
+      let pending = 0;
+
+      subTasks.forEach((t: any) => {
+        const sub = submissionsMap[t.id];
+        const isCompleted =
+          sub?.status === 'completed' ||
+          (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+
+        if (isCompleted) {
+          completed++;
+        } else {
+          const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+          const isExplicitLate = sub?.status === 'uncompleted';
+          if (isExplicitLate || isPastDue) {
+            missing++;
+          } else {
+            pending++;
+          }
+        }
+      });
+
+      const correctedTotal = completed + missing;
+      const compliancePct = correctedTotal > 0 ? Math.round((completed / correctedTotal) * 100) : 100;
 
       stats[subject.id] = {
         totalTasks: total,
         completedTasks: completed,
         pendingTasks: pending,
         missingTasks: missing,
+        correctedTotal,
         compliancePct: compliancePct,
         announcements: (announcements || []).filter((a: any) => a.subject_id === subject.id).length
       };
@@ -416,27 +458,49 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     return stats;
   }, [courseSubjects, applicableTasks, submissionsMap, announcements]);
 
-  // Total global y porcentaje de cumplimiento
+  // Total global y porcentaje de cumplimiento basado en tareas corregidas/exigibles del período o general
   const globalStats = useMemo(() => {
-    const total = applicableTasks.length;
-    const completed = applicableTasks.filter((t) => submissionsMap[t.id]?.status === 'completed').length;
-    const missing = applicableTasks.filter(
-      (t) =>
-        submissionsMap[t.id]?.status === 'uncompleted' ||
-        (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
-    ).length;
-    const pending = Math.max(0, total - completed - missing);
-    const compliancePct = total > 0 ? Math.round((completed / total) * 100) : 100;
+    const targetTasks = periodFilter === 'ALL'
+      ? applicableTasks
+      : applicableTasks.filter((t: any) => parseTaskPeriod(t) === periodFilter);
+
+    const total = targetTasks.length;
+    let completed = 0;
+    let missing = 0;
+    let pending = 0;
+
+    targetTasks.forEach((t: any) => {
+      const sub = submissionsMap[t.id];
+      const isCompleted =
+        sub?.status === 'completed' ||
+        (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+
+      if (isCompleted) {
+        completed++;
+      } else {
+        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+        const isExplicitLate = sub?.status === 'uncompleted';
+        if (isExplicitLate || isPastDue) {
+          missing++;
+        } else {
+          pending++;
+        }
+      }
+    });
+
+    const correctedTotal = completed + missing;
+    const compliancePct = correctedTotal > 0 ? Math.round((completed / correctedTotal) * 100) : 100;
 
     return {
       totalTasks: total,
       completedTasks: completed,
       missingTasks: missing,
       pendingTasks: pending,
+      correctedTotal,
       compliancePct: compliancePct,
       announcements: announcements.length
     };
-  }, [applicableTasks, submissionsMap, announcements]);
+  }, [applicableTasks, submissionsMap, announcements, periodFilter]);
 
   // Materia activa
   const activeSubjectData = useMemo(() => {
@@ -453,20 +517,27 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
     }
 
     if (periodFilter !== 'ALL') {
-      list = list.filter((t: any) => (t.period || 'P1').toUpperCase() === periodFilter);
+      list = list.filter((t: any) => parseTaskPeriod(t) === periodFilter);
     }
 
     if (statusFilter === 'COMPLETED') {
-      list = list.filter((t: any) => submissionsMap[t.id]?.status === 'completed');
+      list = list.filter((t: any) => {
+        const sub = submissionsMap[t.id];
+        return sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+      });
     } else if (statusFilter === 'PENDING') {
       list = list.filter((t: any) => {
         const sub = submissionsMap[t.id];
-        return (!sub || sub.status === 'pending') && (!t.due_date || new Date(t.due_date) >= new Date());
+        const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+        return !isCompleted && !isPastDue && sub?.status !== 'uncompleted';
       });
     } else if (statusFilter === 'LATE') {
       list = list.filter((t: any) => {
         const sub = submissionsMap[t.id];
-        return sub?.status === 'uncompleted' || (!sub && t.due_date && new Date(t.due_date) < new Date());
+        const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+        return sub?.status === 'uncompleted' || (!isCompleted && isPastDue);
       });
     }
 
@@ -674,11 +745,15 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-emerald-400">{globalStats.completedTasks}</span>
-                <span className="text-xs font-bold text-slate-400">de {globalStats.totalTasks}</span>
+                <span className="text-xs font-bold text-slate-400">
+                  de {globalStats.correctedTotal > 0 ? globalStats.correctedTotal : globalStats.totalTasks}
+                </span>
               </div>
             </div>
             <p className="text-[10px] text-emerald-300 font-bold mt-1">
-              {globalStats.completedTasks === 1 ? '1 tarea corregida' : `${globalStats.completedTasks} tareas corregidas`}
+              {globalStats.correctedTotal > 0
+                ? `${globalStats.completedTasks} de ${globalStats.correctedTotal} corregidas`
+                : `${globalStats.completedTasks} tareas corregidas`}
             </p>
           </div>
 
@@ -690,21 +765,21 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
               <span className="text-2xl font-black text-amber-400">{globalStats.pendingTasks}</span>
             </div>
             <p className="text-[10px] text-amber-300 font-bold mt-1">
-              {globalStats.pendingTasks === 0 ? 'Sin tareas pendientes' : 'Pendientes a tiempo'}
+              {globalStats.pendingTasks === 0 ? 'Sin tareas pendientes' : 'Dentro de plazo'}
             </p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
             <div>
               <span className="text-[9px] font-black uppercase tracking-widest text-rose-300 block mb-1">
-                Sin Entregar
+                Atrasadas
               </span>
               <span className={`text-2xl font-black ${globalStats.missingTasks > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
                 {globalStats.missingTasks}
               </span>
             </div>
             <p className="text-[10px] text-rose-300 font-bold mt-1">
-              {globalStats.missingTasks === 0 ? '¡Al día, 0 vencidas!' : 'Vencidas / No hechas'}
+              {globalStats.missingTasks === 0 ? '¡Al día, 0 atrasadas!' : `${globalStats.missingTasks} atrasada${globalStats.missingTasks === 1 ? '' : 's'}`}
             </p>
           </div>
 
@@ -984,11 +1059,11 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                   ? 'bg-amber-50 text-amber-800 border-amber-200'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}>
-                {currentActiveStats.completedTasks} de {currentActiveStats.totalTasks} corregidas/hechas ({currentActiveStats.compliancePct}% cumplimiento)
+                {currentActiveStats.completedTasks} de {currentActiveStats.correctedTotal > 0 ? currentActiveStats.correctedTotal : currentActiveStats.totalTasks} corregidas ({currentActiveStats.compliancePct}% cumplimiento)
               </span>
               {currentActiveStats.missingTasks > 0 && (
                 <span className="px-2 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">
-                  {currentActiveStats.missingTasks} sin entregar
+                  {currentActiveStats.missingTasks} atrasada{currentActiveStats.missingTasks === 1 ? '' : 's'}
                 </span>
               )}
               {currentActiveStats.pendingTasks > 0 && (

@@ -602,10 +602,10 @@ export const StudentDashboard = ({
   }, [taskSubmissions]);
 
   // Estadísticas de tareas para la vista de padres:
-  // Cumpliendo con el requerimiento de que algunos docentes corrigen en el aula presencial
-  // y no en Edugest, el cálculo del % de cumplimiento se realiza ÚNICAMENTE sobre las tareas
-  // que sí fueron corregidas/evaluadas por el docente en la plataforma, evitando penalizaciones falsas.
-  // Permite filtrar por período académico seleccionado (P1, P2, P3, P4 o Todo el Año).
+  // Presenta las tareas asignadas por período, las corregidas y, en base a esas corregidas,
+  // calcula el porcentaje de cumplimiento reflejando con exactitud el número de atrasadas.
+  // Ejemplo: Si hay 10 tareas corregidas y el alumno hizo 8 -> 80% cumplimiento y 2 atrasadas.
+  // Cuando el alumno la entrega y el docente la corrige -> 90% cumplimiento y 1 atrasada.
   const parentTaskStats = useMemo(() => {
     const periodTasks = selectedMetricsPeriod === 'ALL'
       ? tasks
@@ -613,37 +613,42 @@ export const StudentDashboard = ({
 
     const totalAssigned = periodTasks.length;
 
-    // Tareas corregidas/aprobadas en plataforma
-    const correctedTasks = periodTasks.filter((t: any) => {
+    let completedCount = 0;
+    let lateCount = 0;
+    let pendingOnTimeCount = 0;
+
+    periodTasks.forEach((t: any) => {
       const sub = submissionsMap[t.id];
-      if (!sub) return false;
-      return (
-        sub.status === 'completed' ||
-        (sub.score !== null && sub.score !== undefined && sub.status !== 'uncompleted')
-      );
+      const isCompleted =
+        sub?.status === 'completed' ||
+        (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+
+      if (isCompleted) {
+        completedCount++;
+      } else {
+        const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+        const isExplicitLate = sub?.status === 'uncompleted';
+
+        if (isExplicitLate || isPastDue) {
+          lateCount++;
+        } else {
+          pendingOnTimeCount++;
+        }
+      }
     });
 
-    // Tareas revisadas en plataforma y marcadas expresamente como no entregadas / con atraso
-    const lateTasks = periodTasks.filter((t: any) => {
-      const sub = submissionsMap[t.id];
-      if (!sub) return false;
-      return sub.status === 'uncompleted';
-    });
-
-    const correctedCount = correctedTasks.length;
-    const lateCount = lateTasks.length;
-    const evaluatedInPlatform = correctedCount + lateCount;
-
+    const evaluatedTotal = completedCount + lateCount;
     const complianceRate =
-      evaluatedInPlatform > 0
-        ? Math.round((correctedCount / evaluatedInPlatform) * 100)
+      evaluatedTotal > 0
+        ? Math.round((completedCount / evaluatedTotal) * 100)
         : 100;
 
     return {
       assigned: totalAssigned,
-      corrected: correctedCount,
+      corrected: evaluatedTotal,
+      completed: completedCount,
       late: lateCount,
-      evaluated: evaluatedInPlatform,
+      pendingOnTime: pendingOnTimeCount,
       rate: complianceRate
     };
   }, [tasks, submissionsMap, selectedMetricsPeriod]);
@@ -1794,6 +1799,9 @@ export const StudentDashboard = ({
                       <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5">
                         {parentTaskStats.assigned}
                       </span>
+                      <span className="text-[9px] font-bold text-slate-400 mt-0.5 truncate">
+                        {selectedMetricsPeriod !== 'ALL' ? selectedMetricsPeriod : 'Total año'}
+                      </span>
                     </div>
 
                     <div className="bg-emerald-50/70 border border-emerald-150 rounded-2xl p-3 text-center flex flex-col justify-center">
@@ -1802,6 +1810,9 @@ export const StudentDashboard = ({
                       </span>
                       <span className="text-lg sm:text-xl font-black text-emerald-800 font-mono mt-0.5">
                         {parentTaskStats.corrected}
+                      </span>
+                      <span className="text-[9px] font-bold text-emerald-600 mt-0.5 truncate">
+                        {parentTaskStats.completed} hechas
                       </span>
                     </div>
 
@@ -1812,6 +1823,9 @@ export const StudentDashboard = ({
                       <span className="text-lg sm:text-xl font-black text-rose-700 font-mono mt-0.5">
                         {parentTaskStats.late}
                       </span>
+                      <span className="text-[9px] font-bold text-rose-600 mt-0.5 truncate">
+                        {parentTaskStats.late > 0 ? `${parentTaskStats.late} pendiente${parentTaskStats.late === 1 ? '' : 's'}` : 'Al día'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1820,9 +1834,11 @@ export const StudentDashboard = ({
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
                 <Info size={14} className="text-indigo-500 shrink-0 mt-0.5" />
                 <span>
-                  {selectedMetricsPeriod !== 'ALL'
-                    ? `Mostrando ${parentTaskStats.assigned} tareas registradas para ${selectedMetricsPeriod}. Calculado únicamente sobre las tareas que han sido corregidas en la plataforma por los docentes.`
-                    : 'Calculado únicamente sobre las tareas que han sido corregidas en la plataforma por los docentes. Las tareas evaluadas presencialmente en el aula no penalizan este porcentaje.'}
+                  {parentTaskStats.corrected > 0
+                    ? `De ${parentTaskStats.corrected} tareas corregidas/evaluadas ${selectedMetricsPeriod !== 'ALL' ? `en ${selectedMetricsPeriod}` : 'en el curso'}, el alumno ha cumplido ${parentTaskStats.completed} (${parentTaskStats.rate}% de cumplimiento) y tiene ${parentTaskStats.late} atrasada${parentTaskStats.late === 1 ? '' : 's'}.${parentTaskStats.pendingOnTime > 0 ? ` (${parentTaskStats.pendingOnTime} por entregar aún a tiempo).` : ''}`
+                    : parentTaskStats.assigned > 0
+                    ? `Hay ${parentTaskStats.assigned} tareas asignadas en curso dentro de plazo. El alumno está al día sin atrasos.`
+                    : `No hay tareas registradas ${selectedMetricsPeriod !== 'ALL' ? `para ${selectedMetricsPeriod}` : 'en este curso'}.`}
                 </span>
               </div>
             </div>
@@ -2513,23 +2529,33 @@ export const StudentDashboard = ({
                 const periodTasks = tasksByPeriod[periodKey] || [];
                 const isCollapsed = !!collapsedPeriods[periodKey];
 
-                const completedTasks = periodTasks.filter((t) => submissionsMap[t.id]?.status === 'completed');
+                const completedTasks = periodTasks.filter((t) => {
+                  const sub = submissionsMap[t.id];
+                  return sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+                });
                 const missingTasks = periodTasks.filter(
-                  (t) =>
-                    submissionsMap[t.id]?.status === 'uncompleted' ||
-                    (!submissionsMap[t.id] && t.due_date && new Date(t.due_date) < new Date())
+                  (t) => {
+                    const sub = submissionsMap[t.id];
+                    const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+                    const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+                    return sub?.status === 'uncompleted' || (!isCompleted && isPastDue);
+                  }
                 );
                 const pendingTasks = periodTasks.filter(
-                  (t) =>
-                    (!submissionsMap[t.id] || submissionsMap[t.id]?.status === 'pending') &&
-                    (!t.due_date || new Date(t.due_date) >= new Date())
+                  (t) => {
+                    const sub = submissionsMap[t.id];
+                    const isCompleted = sub?.status === 'completed' || (sub?.score !== null && sub?.score !== undefined && sub?.status !== 'uncompleted');
+                    const isPastDue = Boolean(t.due_date && new Date(t.due_date).getTime() < Date.now());
+                    return !isCompleted && !isPastDue && sub?.status !== 'uncompleted';
+                  }
                 );
 
                 const completedCount = completedTasks.length;
                 const missingCount = missingTasks.length;
                 const pendingCount = pendingTasks.length;
                 const totalCount = periodTasks.length;
-                const compliancePct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
+                const evaluatedCount = completedCount + missingCount;
+                const compliancePct = evaluatedCount > 0 ? Math.round((completedCount / evaluatedCount) * 100) : 100;
 
                 // Solo mostrar períodos que tengan tareas o si el filtro es general
                 if (periodTasks.length === 0 && selectedSubjectFilter !== 'ALL') return null;
