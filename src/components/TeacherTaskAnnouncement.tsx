@@ -31,8 +31,17 @@ export const TeacherTaskAnnouncement = ({
   onClose?: () => void;
 }) => {
   const { state } = useApp();
+  const cleanInitialContent = (text: string = ''): string => {
+    return (text || '')
+      .replace(/<!--period:P[1-4]-->\s*/gi, '')
+      .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+      .replace(/<!--.*?-->\s*/gi, '')
+      .trim();
+  };
   const [title, setTitle] = useState(taskToEdit?.title || announcementToEdit?.title || '');
-  const [content, setContent] = useState(taskToEdit?.description || announcementToEdit?.content || '');
+  const [content, setContent] = useState(
+    cleanInitialContent(taskToEdit?.description) || announcementToEdit?.content || ''
+  );
   const [courseId, setCourseId] = useState(initialCourseId || taskToEdit?.course_id || announcementToEdit?.course_id || '');
   const [type, setType] = useState<'task' | 'announcement'>(announcementToEdit ? 'announcement' : 'task');
   const [dueDate, setDueDate] = useState(

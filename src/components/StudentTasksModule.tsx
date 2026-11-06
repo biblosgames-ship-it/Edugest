@@ -1300,7 +1300,11 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
                 {displayedTasks.map((t: any) => {
                   const subject = (state.subjects || []).find((s: any) => s.id === t.subject_id);
                   const isLate = t.due_date && new Date(t.due_date) < new Date();
-                  const cleanDesc = (t.description || '').replace(/<!--period:P[1-4]-->\s*/gi, '').trim();
+                  const cleanDesc = (t.description || '')
+                    .replace(/<!--period:P[1-4]-->\s*/gi, '')
+                    .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+                    .replace(/<!--.*?-->\s*/gi, '')
+                    .trim();
 
                   return (
                     <div

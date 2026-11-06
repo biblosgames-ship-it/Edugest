@@ -30,6 +30,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const isLate = task.due_date && new Date(task.due_date) < new Date();
   const cleanDescription = (task.description || '')
     .replace(/<!--period:P[1-4]-->\s*/gi, '')
+    .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+    .replace(/<!--.*?-->\s*/gi, '')
     .trim();
 
   // Formato amigable de fecha de entrega

@@ -1947,7 +1947,11 @@ export const TeacherDashboard = ({
                               {t.title}
                             </h5>
                             <LinkifiedText
-                              text={t.description}
+                              text={(t.description || '')
+                                .replace(/<!--period:P[1-4]-->\s*/gi, '')
+                                .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+                                .replace(/<!--.*?-->\s*/gi, '')
+                                .trim()}
                               className="text-xs text-slate-600 mt-2"
                               clampLines={3}
                             />

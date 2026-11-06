@@ -542,7 +542,11 @@ export const StudentDashboard = ({
   };
 
   const getCleanDescription = (desc: string = ''): string => {
-    return desc.replace(/<!--period:P[1-4]-->\s*/gi, '').trim();
+    return (desc || '')
+      .replace(/<!--period:P[1-4]-->\s*/gi, '')
+      .replace(/<!--partial_link:\{.*?\}-->\s*/gi, '')
+      .replace(/<!--.*?-->\s*/gi, '')
+      .trim();
   };
 
   const togglePeriodCollapse = (period: string) => {
