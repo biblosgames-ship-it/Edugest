@@ -23,7 +23,8 @@ import {
   Sparkles,
   School,
   Globe,
-  Award
+  Award,
+  Info
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
@@ -809,6 +810,29 @@ export const StudentTasksModule: React.FC<StudentTasksModuleProps> = ({
               {recoveryPlans.reduce((sum, p) => sum + p.records.length, 0)} Asignatura(s) en Proceso
             </span>
           </div>
+
+          {/* Descripción / Pautas pedagógicas si están registradas */}
+          {recoveryPlans.some((rp) => rp.plan?.description) && (
+            <div className="space-y-2">
+              {recoveryPlans.map(
+                (rp) =>
+                  rp.plan?.description && (
+                    <div
+                      key={`tasks_desc_${rp.plan.id}`}
+                      className="bg-white/90 backdrop-blur-sm border border-amber-200 rounded-2xl p-4 text-xs text-slate-700 shadow-sm"
+                    >
+                      <span className="font-black text-amber-950 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                        <Info size={14} className="text-amber-600" />
+                        Pautas y Objetivos del Plan {rp.plan.title ? `(${rp.plan.title})` : ''}:
+                      </span>
+                      <p className="whitespace-pre-line leading-relaxed font-medium text-slate-700">
+                        {rp.plan.description}
+                      </p>
+                    </div>
+                  )
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {recoveryPlans.map((rp) =>

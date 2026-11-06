@@ -26,8 +26,10 @@ import {
   CalendarCheck,
   ClipboardCheck,
   AlertTriangle,
-  Info
+  Info,
+  Award
 } from 'lucide-react';
+import { recoveryPlanService } from '../services/recoveryPlanService';
 import { SEO } from './SEO';
 import { ExcuseAlert } from './ExcuseAlert';
 import { LinkifiedText } from './LinkifiedText';
@@ -151,6 +153,7 @@ export const StudentDashboard = ({
   const [tasks, setTasks] = useState<any[]>([]);
   const [taskSubmissions, setTaskSubmissions] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [recoveryPlans, setRecoveryPlans] = useState<Array<{ plan: any; records: any[] }>>([]);
   const [coursePlatformLinks, setCoursePlatformLinks] = useState<{
     classroom_url?: string;
     meet_url?: string;
@@ -421,6 +424,7 @@ export const StudentDashboard = ({
         setCourse(null);
         setTasks([]);
         setAnnouncements([]);
+        setRecoveryPlans([]);
         setLoading(false);
         return;
       }
@@ -463,7 +467,7 @@ export const StudentDashboard = ({
             setFamilyStudents(resolved.familyStudents);
           }
 
-          const [tasksData, annData, linksData, subsData, attRes] = await Promise.all([
+          const [tasksData, annData, linksData, subsData, attRes, recPlans] = await Promise.all([
             dataService.getTasks(currentCourse.id),
             dataService.getAnnouncements(currentCourse.id),
             dataService.getPlatformLinks(currentCourse.id),
@@ -471,12 +475,14 @@ export const StudentDashboard = ({
             supabase
               .from('attendance_records')
               .select('id, date, status, student_id, notes')
-              .eq('course_id', currentCourse.id)
+              .eq('course_id', currentCourse.id),
+            targetStudentId ? recoveryPlanService.getStudentRecoverySubjects(targetStudentId, currentCourse.id) : Promise.resolve([])
           ]);
           setTasks(tasksData || []);
           setAnnouncements(annData || []);
           setCoursePlatformLinks(linksData);
           setTaskSubmissions(subsData || []);
+          setRecoveryPlans(recPlans || []);
 
           const rawAtt = attRes?.data || [];
           setRawAttendanceRows(rawAtt);
@@ -494,6 +500,19 @@ export const StudentDashboard = ({
       setLoading(false);
     }
   }, [selectedCourseId, allCourses, selectedYear, profile, state.students]);
+
+  useEffect(() => {
+    if (activeStudentId && course?.id && recoveryPlans.length === 0) {
+      recoveryPlanService
+        .getStudentRecoverySubjects(activeStudentId, course.id)
+        .then((plans) => {
+          if (plans && plans.length > 0) {
+            setRecoveryPlans(plans);
+          }
+        })
+        .catch((err) => console.warn('[StudentDashboard] Error in recovery plans fallback fetch:', err));
+    }
+  }, [activeStudentId, course?.id, recoveryPlans.length]);
 
   // Estadísticas de asistencia computadas reactivamente (aplica filtro de período si está activo)
   const attendanceStats = useMemo(() => {
@@ -1601,6 +1620,147 @@ export const StudentDashboard = ({
           )}
         </div>
       </div>
+
+      {/* BANNER NOTIFICACIÓN DE PLAN DE RECUPERACIÓN (PANEL PRINCIPAL) */}
+      {recoveryPlans.length > 0 && (
+        <div className="bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-amber-500/5 border-2 border-amber-400/80 rounded-[2.5rem] p-6 sm:p-8 shadow-xl space-y-5 animate-in fade-in duration-300 relative overflow-hidden">
+          {/* Fondo decorativo sutil */}
+          <div className="absolute top-0 right-0 -mt-6 -mr-6 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Encabezado del Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/25 shrink-0">
+                <Award size={26} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-mono tracking-wider">
+                    Atención Académica
+                  </span>
+                  {recoveryPlans[0]?.plan?.period && (
+                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                      Período {recoveryPlans[0].plan.period}
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight mt-1">
+                  Plan de Recuperación Pedagógica Asignado
+                </h2>
+                <p className="text-xs text-slate-600 font-medium">
+                  {isParent
+                    ? 'Tu hijo/a tiene asignaturas que requieren reforzamiento en este período escolar.'
+                    : 'Tienes asignaturas programadas para recuperación y evaluación pedagógica.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-3.5 py-1.5 rounded-xl shadow-xs">
+                {recoveryPlans.reduce((sum, p) => sum + p.records.length, 0)} Asignatura(s) en Proceso
+              </span>
+            </div>
+          </div>
+
+          {/* Descripción / Pautas pedagógicas si están registradas */}
+          {recoveryPlans.some((rp) => rp.plan?.description) && (
+            <div className="space-y-2">
+              {recoveryPlans.map(
+                (rp) =>
+                  rp.plan?.description && (
+                    <div
+                      key={`dashboard_desc_${rp.plan.id}`}
+                      className="bg-white/90 backdrop-blur-sm border border-amber-200 rounded-2xl p-4 text-xs text-slate-700 shadow-xs"
+                    >
+                      <span className="font-black text-amber-950 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
+                        <Info size={14} className="text-amber-600" />
+                        Pautas y Objetivos del Plan {rp.plan.title ? `(${rp.plan.title})` : ''}:
+                      </span>
+                      <p className="whitespace-pre-line leading-relaxed font-medium text-slate-700">
+                        {rp.plan.description}
+                      </p>
+                    </div>
+                  )
+              )}
+            </div>
+          )}
+
+          {/* Cuadrícula de Asignaturas en Recuperación */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {recoveryPlans.map((rp) =>
+              rp.records.map((rec) => {
+                const subName =
+                  rec.subject_name ||
+                  (state.subjects || []).find((s: any) => s.id === rec.subject_id)?.name ||
+                  'Materia';
+                return (
+                  <div
+                    key={`dash_${rp.plan.id}_${rec.subject_id}`}
+                    className="p-4 rounded-2xl bg-white border border-amber-200 shadow-xs space-y-2 hover:border-amber-400 transition-all"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-slate-900 truncate" title={subName}>
+                        {subName}
+                      </span>
+                      {rec.original_score !== null && rec.original_score !== undefined && (
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md shrink-0">
+                          Nota inicial: {rec.original_score} pts
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <CalendarIcon size={13} className="text-amber-600 shrink-0" />
+                      <span className="truncate">
+                        {rec.start_date && rec.end_date
+                          ? `${rec.start_date} al ${rec.end_date}`
+                          : rp.plan.start_date
+                          ? `${rp.plan.start_date} al ${rp.plan.end_date}`
+                          : `Período ${rp.plan.period}`}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      {rec.week_number ? (
+                        <span className="inline-block text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                          Semana {rec.week_number}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-bold">Evaluación asignada</span>
+                      )}
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-orange-100 text-orange-800">
+                        {rec.status === 'completed' ? 'Completado' : 'En Refuerzo'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Accesos rápidos de acción */}
+          {onViewChange && (
+            <div className="flex items-center gap-2 pt-2 border-t border-amber-300/40 flex-wrap">
+              <button
+                type="button"
+                onClick={() => onViewChange('tasks')}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <BookOpen size={14} />
+                <span>Ver Tareas de Recuperación</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange('parent-grades')}
+                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <FileSpreadsheet size={14} className="text-indigo-600" />
+                <span>Ver Calificaciones</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* GRÁFICOS DE ASISTENCIA Y CUMPLIMIENTO DE TAREAS PARA PADRES */}
       {isParent && (
