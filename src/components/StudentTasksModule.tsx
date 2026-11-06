@@ -22,7 +22,8 @@ import {
   Users,
   Sparkles,
   School,
-  Globe
+  Globe,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dataService } from '../services/dataService';
