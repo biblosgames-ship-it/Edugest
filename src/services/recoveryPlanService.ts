@@ -213,7 +213,9 @@ export const recoveryPlanService = {
 
         const weekLabel = week.title ? `${week.title} (Sem. ${week.weekNumber})` : `Semana ${week.weekNumber}`;
         const title = `[Recuperación] ${plan.title || 'Plan de Recuperación'} - ${weekLabel}`;
-        const description = `Período: ${plan.period}. Fechas: del ${week.startDate} al ${week.endDate}. Materias programadas para evaluación.`;
+        const description = plan.description
+          ? `${plan.description}\n\nPeríodo: ${plan.period} • Del ${week.startDate} al ${week.endDate}. Materias programadas para evaluación.`
+          : `Período: ${plan.period}. Fechas: del ${week.startDate} al ${week.endDate}. Materias programadas para evaluación.`;
 
         // Verificar si ya existe actividad para este plan y semana
         const { data: existing } = await supabase

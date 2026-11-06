@@ -21,7 +21,9 @@ import {
   Square,
   RefreshCw,
   Loader2,
-  UserPlus
+  UserPlus,
+  Edit2,
+  Edit3
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
@@ -77,9 +79,11 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
   const [targetScope, setTargetScope] = useState<'current' | 'multi'>('current');
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>(() => course?.id ? [course.id] : []);
 
-  // Estado del formulario del nuevo plan
+  // Estado del formulario del plan (creación o edición)
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [period, setPeriod] = useState<string>(activePeriod || getCurrentPeriod());
   const [title, setTitle] = useState<string>(`Plan de Recuperación - ${activePeriod || getCurrentPeriod()}`);
+  const [description, setDescription] = useState<string>('');
   const [planMode, setPlanMode] = useState<'single' | 'weekly'>('weekly');
   const [singleStartDate, setSingleStartDate] = useState<string>('');
   const [singleEndDate, setSingleEndDate] = useState<string>('');
@@ -570,26 +574,16 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
 
     setLoading(true);
     try {
-      // Cursos a los que se aplica el plan
-      const targetCourseIds = targetScope === 'current' ? [course.id] : selectedCourseIds;
-
-      // Crear o actualizar un plan por cada curso seleccionado
-      for (const cId of targetCourseIds) {
-        const cCandidates = selectedCandidates.filter((c) => c.courseId === cId);
-        if (cCandidates.length === 0) continue;
-
-        const cObj = availableCourses.find((c) => c.id === cId) || course;
-        const cTitle = targetCourseIds.length > 1 
-          ? `${title} (${cObj?.grade || ''} ${cObj?.section || ''})`
-          : title;
-
+      if (editingPlanId) {
+        // ACTUALIZACIÓN DE PLAN EXISTENTE
         const planPayload: Partial<RecoveryPlan> = {
+          id: editingPlanId,
           center_id: centerId,
-          course_id: cId,
+          course_id: course.id,
           school_year: schoolYear,
           period,
-          title: cTitle,
-          description: `Plan de recuperación con ${cCandidates.length} registros reprobados.`,
+          title,
+          description: description.trim() || `Plan de recuperación con ${selectedCandidates.length} registros reprobados.`,
           start_date: finalWeeks[0]?.startDate,
           end_date: finalWeeks[finalWeeks.length - 1]?.endDate,
           schedule_weeks: finalWeeks,
@@ -597,7 +591,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
           created_by: userId
         };
 
-        const studentsPayload: Partial<RecoveryPlanStudent>[] = cCandidates.map((c) => {
+        const studentsPayload: Partial<RecoveryPlanStudent>[] = selectedCandidates.map((c) => {
           const assignedWeek = finalWeeks.find((w) => w.weekNumber === c.weekNumber) || finalWeeks[0];
           return {
             student_id: c.studentId,
@@ -610,19 +604,172 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
           };
         });
 
-        await recoveryPlanService.savePlan(planPayload, studentsPayload);
-      }
+        // Limpiar registros previos de estudiantes para este plan antes de guardar los actualizados
+        try {
+          await supabase.from('recovery_plan_students').delete().eq('plan_id', editingPlanId);
+        } catch (delErr) {
+          console.warn('Advertencia limpiando estudiantes previos del plan:', delErr);
+        }
 
-      toast.success(
-        status === 'active'
-          ? `¡Plan de recuperación activado para ${targetCourseIds.length} curso(s)! Se sincronizó con la Agenda y las alertas para padres.`
-          : `Plan guardado como borrador para ${targetCourseIds.length} curso(s).`
-      );
-      setIsCreating(false);
-      await loadCoursePlans();
+        await recoveryPlanService.savePlan(planPayload, studentsPayload);
+
+        toast.success(
+          status === 'active'
+            ? '¡Plan de recuperación actualizado y sincronizado en la Agenda!'
+            : '¡Plan de recuperación actualizado como borrador!'
+        );
+        setIsCreating(false);
+        setEditingPlanId(null);
+        await loadCoursePlans();
+      } else {
+        // Cursos a los que se aplica el plan nuevo
+        const targetCourseIds = targetScope === 'current' ? [course.id] : selectedCourseIds;
+
+        // Crear o actualizar un plan por cada curso seleccionado
+        for (const cId of targetCourseIds) {
+          const cCandidates = selectedCandidates.filter((c) => c.courseId === cId);
+          if (cCandidates.length === 0) continue;
+
+          const cObj = availableCourses.find((c) => c.id === cId) || course;
+          const cTitle = targetCourseIds.length > 1 
+            ? `${title} (${cObj?.grade || ''} ${cObj?.section || ''})`
+            : title;
+
+          const planPayload: Partial<RecoveryPlan> = {
+            center_id: centerId,
+            course_id: cId,
+            school_year: schoolYear,
+            period,
+            title: cTitle,
+            description: description.trim() || `Plan de recuperación con ${cCandidates.length} registros reprobados.`,
+            start_date: finalWeeks[0]?.startDate,
+            end_date: finalWeeks[finalWeeks.length - 1]?.endDate,
+            schedule_weeks: finalWeeks,
+            status,
+            created_by: userId
+          };
+
+          const studentsPayload: Partial<RecoveryPlanStudent>[] = cCandidates.map((c) => {
+            const assignedWeek = finalWeeks.find((w) => w.weekNumber === c.weekNumber) || finalWeeks[0];
+            return {
+              student_id: c.studentId,
+              subject_id: c.subjectId,
+              original_score: c.originalScore,
+              status: 'pending',
+              week_number: c.weekNumber,
+              start_date: assignedWeek?.startDate,
+              end_date: assignedWeek?.endDate
+            };
+          });
+
+          await recoveryPlanService.savePlan(planPayload, studentsPayload);
+        }
+
+        toast.success(
+          status === 'active'
+            ? `¡Plan de recuperación activado para ${targetCourseIds.length} curso(s)! Se sincronizó con la Agenda y las alertas para padres.`
+            : `Plan guardado como borrador para ${targetCourseIds.length} curso(s).`
+        );
+        setIsCreating(false);
+        setEditingPlanId(null);
+        await loadCoursePlans();
+      }
     } catch (e: any) {
       console.error('Error guardando plan masivo:', e);
       toast.error('No se pudo guardar el plan de recuperación.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartCreateNew = () => {
+    setEditingPlanId(null);
+    setTitle(`Plan de Recuperación - ${activePeriod || getCurrentPeriod()}`);
+    setDescription('');
+    setPeriod(activePeriod || getCurrentPeriod());
+    setWeeks([
+      {
+        weekNumber: 1,
+        startDate: '',
+        endDate: '',
+        subjectIds: [],
+        title: 'Semana 1'
+      }
+    ]);
+    setSingleStartDate('');
+    setSingleEndDate('');
+    setIsCreating(true);
+    loadAndComputeCandidates();
+  };
+
+  const handleStartEditPlan = async (p: RecoveryPlan) => {
+    setEditingPlanId(p.id);
+    setTitle(p.title || '');
+    setDescription(p.description || '');
+    setPeriod(p.period || activePeriod || 'P1');
+    setTargetScope('current');
+    setSelectedCourseIds([p.course_id || course?.id]);
+
+    if (p.schedule_weeks && p.schedule_weeks.length > 1) {
+      setPlanMode('weekly');
+      setWeeks(p.schedule_weeks);
+    } else {
+      setPlanMode('single');
+      setSingleStartDate(p.start_date || p.schedule_weeks?.[0]?.startDate || '');
+      setSingleEndDate(p.end_date || p.schedule_weeks?.[0]?.endDate || '');
+      if (p.schedule_weeks && p.schedule_weeks.length > 0) {
+        setWeeks(p.schedule_weeks);
+      }
+    }
+
+    setIsCreating(true);
+    setIsCalculatingCandidates(true);
+    try {
+      const existingStudents = await recoveryPlanService.getPlanStudents(p.id);
+      if (existingStudents && existingStudents.length > 0) {
+        const mapped = existingStudents.map((s) => {
+          const stObj = (state?.students || []).find((x: any) => x.id === s.student_id);
+          const subObj = (subjects || []).find((x: any) => x.id === s.subject_id);
+          return {
+            courseId: s.course_id || p.course_id,
+            courseName: course ? `${course.grade} ${course.section}` : '',
+            studentId: s.student_id,
+            studentName: s.student_name || (stObj ? `${stObj.last_name || ''} ${stObj.name || ''}`.trim() : 'Estudiante'),
+            subjectId: s.subject_id,
+            subjectName: s.subject_name || subObj?.name || 'Asignatura',
+            originalScore: s.original_score || 0,
+            weekNumber: s.week_number || 1,
+            selected: true
+          };
+        });
+        setCandidateEntries(mapped);
+      } else {
+        await loadAndComputeCandidates();
+      }
+    } catch (err) {
+      console.warn('Error loading plan students for editing:', err);
+      await loadAndComputeCandidates();
+    } finally {
+      setIsCalculatingCandidates(false);
+    }
+  };
+
+  const handleDeletePlan = async (planId: string, planTitle: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar "${planTitle}"? Esta acción removerá el plan y sus actividades asociadas.`)) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const ok = await recoveryPlanService.deletePlan(planId);
+      if (ok) {
+        toast.success('Plan de recuperación eliminado correctamente.');
+        await loadCoursePlans();
+      } else {
+        toast.error('No se pudo eliminar el plan.');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al eliminar el plan.');
     } finally {
       setLoading(false);
     }
@@ -670,12 +817,12 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     Planes de Recuperación del Curso
                   </h3>
                   <p className="text-xs text-text-muted font-medium">
-                    Consulta los planes activos, edítalos o crea uno nuevo para este período o para todo el centro.
+                    Consulta los planes activos, edítalos, modifica sus pautas o crea uno nuevo para este período.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsCreating(true)}
+                  onClick={handleStartCreateNew}
                   className="px-5 py-3 bg-brand-blue hover:bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-brand-blue/20 transition-all cursor-pointer active:scale-95"
                 >
                   <Plus size={16} />
@@ -696,32 +843,65 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                   {plans.map((p) => (
                     <div
                       key={p.id}
-                      className="p-5 rounded-2xl bg-brand-bg border border-border-main space-y-3 relative overflow-hidden"
+                      className="p-5 rounded-2xl bg-brand-bg border border-border-main space-y-3 relative overflow-hidden group hover:border-brand-blue/50 transition-all shadow-sm flex flex-col justify-between"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600">
-                          Período {p.period}
-                        </span>
-                        <span
-                          className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
-                            p.status === 'active'
-                              ? 'bg-emerald-500/15 text-emerald-600'
-                              : 'bg-slate-500/15 text-slate-500'
-                          }`}
-                        >
-                          {p.status === 'active' ? '● Activo en Calendario' : '○ Borrador'}
-                        </span>
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600">
+                            Período {p.period}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                                p.status === 'active'
+                                  ? 'bg-emerald-500/15 text-emerald-600'
+                                  : 'bg-slate-500/15 text-slate-500'
+                              }`}
+                            >
+                              {p.status === 'active' ? '● Activo' : '○ Borrador'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditPlan(p)}
+                              className="p-1.5 rounded-lg bg-surface hover:bg-brand-blue hover:text-white text-text-muted transition-all cursor-pointer shadow-xs border border-border-main"
+                              title="Editar este Plan y sus descripciones"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePlan(p.id, p.title)}
+                              className="p-1.5 rounded-lg bg-surface hover:bg-rose-500 hover:text-white text-rose-500 transition-all cursor-pointer shadow-xs border border-border-main"
+                              title="Eliminar este Plan"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <h4 className="text-sm font-black text-text-main leading-snug">{p.title}</h4>
+                        {p.description && (
+                          <p className="text-xs text-text-muted line-clamp-3 leading-relaxed whitespace-pre-line bg-surface/60 p-2.5 rounded-xl border border-border-main/50">
+                            {p.description}
+                          </p>
+                        )}
                       </div>
-                      <h4 className="text-sm font-bold text-text-main">{p.title}</h4>
-                      <p className="text-xs text-text-muted line-clamp-2">{p.description}</p>
                       
-                      <div className="pt-2 border-t border-border-main flex items-center justify-between text-[11px] font-bold text-text-muted">
-                        <span>{p.schedule_weeks?.length || 1} Semana(s) programada(s)</span>
+                      <div className="pt-3 border-t border-border-main flex items-center justify-between text-[11px] font-bold text-text-muted">
+                        <span>{p.schedule_weeks?.length || 1} Semana(s)</span>
                         {p.start_date && (
-                          <span className="text-indigo-600 font-mono">
+                          <span className="text-indigo-600 font-mono text-[10px]">
                             {p.start_date} al {p.end_date}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPlan(p)}
+                          className="text-[11px] font-black text-brand-blue hover:underline flex items-center gap-1 cursor-pointer ml-auto"
+                        >
+                          <Edit3 size={12} />
+                          Editar
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -729,107 +909,144 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
               )}
             </div>
           ) : (
-            /* FORMULARIO DE CREACIÓN DE PLAN */
+            /* FORMULARIO DE CREACIÓN O EDICIÓN DE PLAN */
             <div className="space-y-6">
-              {/* SELECTOR DE ALCANCE: SOLO ESTE CURSO O MÚLTIPLES CURSOS */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50/80 via-surface to-blue-50/80 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 rounded-2xl border border-indigo-200/60 dark:border-indigo-900/40 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 flex items-center gap-1.5">
-                      <Building2 size={14} />
-                      Alcance del Plan de Recuperación
-                    </span>
-                    <h4 className="text-xs sm:text-sm font-bold text-text-main">
-                      ¿Deseas aplicar este plan solo a este curso o masivamente a varios cursos?
-                    </h4>
+              {/* ENCABEZADO DE MODO EDICIÓN / CREACIÓN */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-brand-bg rounded-2xl border border-border-main">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl text-white ${editingPlanId ? 'bg-amber-600' : 'bg-brand-blue'}`}>
+                    {editingPlanId ? <Edit3 size={16} /> : <Plus size={16} />}
                   </div>
-                  <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-main">
-                    <button
-                      type="button"
-                      onClick={() => setTargetScope('current')}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                        targetScope === 'current' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
-                      }`}
-                    >
-                      Solo {course?.grade || 'Este Curso'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTargetScope('multi');
-                        if (selectedCourseIds.length === 0 && course?.id) {
-                          setSelectedCourseIds([course.id]);
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                        targetScope === 'multi' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
-                      }`}
-                    >
-                      Múltiples Cursos
-                    </button>
+                  <div>
+                    <h3 className="text-sm font-black text-text-main uppercase tracking-wider flex items-center gap-2">
+                      {editingPlanId ? 'Editando Plan de Recuperación' : 'Nuevo Plan de Recuperación'}
+                      {editingPlanId && (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                          Modo Edición
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-text-muted font-medium">
+                      {editingPlanId
+                        ? 'Modifica el título, la descripción, fechas, semanas y estudiantes asignados a este plan.'
+                        : 'Define las pautas, cronograma de semanas y estudiantes reprobados que ingresarán al plan.'}
+                    </p>
                   </div>
                 </div>
 
-                {targetScope === 'multi' && (
-                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/60 space-y-2.5 animate-in fade-in duration-150">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold text-text-muted">
-                        Selecciona los cursos que incluirán este plan ({selectedCourseIds.length} seleccionados):
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={handleSelectAllCourses}
-                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
-                        >
-                          Todo el Centro
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSelectPrimaryCourses}
-                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
-                        >
-                          Toda Primaria
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSelectSecondaryCourses}
-                          className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
-                        >
-                          Toda Secundaria
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-36 overflow-y-auto p-2 bg-surface rounded-xl border border-border-main flex flex-wrap gap-1.5 custom-scrollbar">
-                      {availableCourses.map((c) => {
-                        const isChecked = selectedCourseIds.includes(c.id);
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCourseIds((prev) =>
-                                isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                              );
-                            }}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                              isChecked
-                                ? 'bg-indigo-600 text-white border-indigo-600'
-                                : 'bg-brand-bg text-text-muted border-border-main hover:text-text-main'
-                            }`}
-                          >
-                            {isChecked ? <CheckSquare size={13} /> : <Square size={13} />}
-                            <span>{c.grade} "{c.section}"</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCreating(false);
+                    setEditingPlanId(null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl border border-border-main bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-text-muted transition-colors cursor-pointer self-start sm:self-auto"
+                >
+                  Cancelar y Volver
+                </button>
               </div>
 
-              {/* PASO 1: METADATOS BÁSICOS */}
+              {/* SELECTOR DE ALCANCE: SOLO ESTE CURSO O MÚLTIPLES CURSOS (Solo en creación) */}
+              {!editingPlanId && (
+                <div className="p-4 bg-gradient-to-r from-indigo-50/80 via-surface to-blue-50/80 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 rounded-2xl border border-indigo-200/60 dark:border-indigo-900/40 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 flex items-center gap-1.5">
+                        <Building2 size={14} />
+                        Alcance del Plan de Recuperación
+                      </span>
+                      <h4 className="text-xs sm:text-sm font-bold text-text-main">
+                        ¿Deseas aplicar este plan solo a este curso o masivamente a varios cursos?
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-main">
+                      <button
+                        type="button"
+                        onClick={() => setTargetScope('current')}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          targetScope === 'current' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
+                        }`}
+                      >
+                        Solo {course?.grade || 'Este Curso'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetScope('multi');
+                          if (selectedCourseIds.length === 0 && course?.id) {
+                            setSelectedCourseIds([course.id]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          targetScope === 'multi' ? 'bg-indigo-600 text-white shadow-sm' : 'text-text-muted'
+                        }`}
+                      >
+                        Múltiples Cursos
+                      </button>
+                    </div>
+                  </div>
+
+                  {targetScope === 'multi' && (
+                    <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/60 space-y-2.5 animate-in fade-in duration-150">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-text-muted">
+                          Selecciona los cursos que incluirán este plan ({selectedCourseIds.length} seleccionados):
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllCourses}
+                            className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                          >
+                            Todo el Centro
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSelectPrimaryCourses}
+                            className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                          >
+                            Toda Primaria
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSelectSecondaryCourses}
+                            className="px-2 py-1 rounded-lg bg-surface hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-bold text-indigo-600 border border-border-main cursor-pointer"
+                          >
+                            Toda Secundaria
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-36 overflow-y-auto p-2 bg-surface rounded-xl border border-border-main flex flex-wrap gap-1.5 custom-scrollbar">
+                        {availableCourses.map((c) => {
+                          const isChecked = selectedCourseIds.includes(c.id);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCourseIds((prev) =>
+                                  isChecked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                                );
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                                isChecked
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-brand-bg text-text-muted border-border-main hover:text-text-main'
+                              }`}
+                            >
+                              {isChecked ? <CheckSquare size={13} /> : <Square size={13} />}
+                              <span>{c.grade} "{c.section}"</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* PASO 1: METADATOS BÁSICOS Y DESCRIPCIÓN */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase tracking-wider text-text-muted">
@@ -858,6 +1075,21 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ej. Plan de Recuperación Pedagógica P1"
                     className="w-full px-3.5 py-2.5 bg-brand-bg border border-border-main rounded-xl text-xs font-bold text-text-main outline-none focus:ring-2 focus:ring-brand-blue"
+                  />
+                </div>
+
+                {/* ESPACIO PARA DESCRIPCIÓN PEDAGÓGICA DE LA RECUPERACIÓN */}
+                <div className="sm:col-span-3 space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-text-muted flex items-center justify-between">
+                    <span>Descripción y Pautas de la Recuperación</span>
+                    <span className="text-[9px] font-bold text-indigo-500">Visible en la Agenda y para docentes y tutores</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Escribe aquí los objetivos de la recuperación, pautas para los estudiantes y docentes, temas clave a reforzar o indicaciones de entrega..."
+                    className="w-full px-3.5 py-2.5 bg-brand-bg border border-border-main rounded-xl text-xs font-medium text-text-main outline-none focus:ring-2 focus:ring-brand-blue resize-none leading-relaxed"
                   />
                 </div>
               </div>
@@ -1242,7 +1474,10 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
               <div className="pt-4 border-t border-border-main flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsCreating(false)}
+                  onClick={() => {
+                    setIsCreating(false);
+                    setEditingPlanId(null);
+                  }}
                   className="px-4 py-2.5 rounded-xl border border-border-main text-xs font-bold text-text-muted hover:text-text-main transition-colors cursor-pointer"
                 >
                   Volver a Lista de Planes
@@ -1255,7 +1490,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     onClick={() => handleSavePlan('draft')}
                     className="px-4 py-2.5 rounded-xl border border-border-main bg-surface hover:bg-brand-bg text-xs font-black uppercase text-text-main transition-colors disabled:opacity-50 cursor-pointer"
                   >
-                    Guardar Borrador
+                    {editingPlanId ? 'Actualizar como Borrador' : 'Guardar Borrador'}
                   </button>
                   <button
                     type="button"
@@ -1264,7 +1499,7 @@ export const RecoveryPlanModal: React.FC<RecoveryPlanModalProps> = ({
                     className="px-5 py-2.5 bg-brand-blue hover:bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-blue/20 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                   >
                     <Send size={15} />
-                    Activar y Sincronizar Calendario
+                    {editingPlanId ? 'Guardar Cambios y Sincronizar' : 'Activar y Sincronizar Calendario'}
                   </button>
                 </div>
               </div>
